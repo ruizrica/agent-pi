@@ -1,0 +1,37 @@
+default:
+  description: "Understand → Gather → Plan → Execute → Review"
+  review_max_loops: 3
+  phases:
+    - name: understand
+      description: "Clarify requirements"
+      mode: interactive
+      agents: []
+    - name: gather
+      description: "Parallel codebase reconnaissance"
+      mode: parallel
+      agents:
+        - role: scout
+          task_template: "Explore filesystem structure for: $TASK\n\nContext:\n$CONTEXT"
+        - role: scout
+          task_template: "Read docs and configs for: $TASK\n\nContext:\n$CONTEXT"
+        - role: scout
+          task_template: "Find existing patterns for: $TASK\n\nContext:\n$CONTEXT"
+    - name: plan
+      description: "Create implementation plan"
+      mode: sequential
+      agents:
+        - role: planner
+          task_template: "Plan implementation for: $TASK\n\nContext:\n$CONTEXT"
+    - name: execute
+      description: "Implement the plan"
+      mode: parallel
+      agents:
+        - role: builder
+          task_template: "Implement:\n\n$PLAN\n\nContext:\n$CONTEXT"
+    - name: review
+      description: "Audit and remediate"
+      mode: sequential
+      max_iterations: 3
+      agents:
+        - role: reviewer
+          task_template: "Review implementation. State APPROVED or list issues.\n\nPlan:\n$PLAN\n\nContext:\n$CONTEXT"

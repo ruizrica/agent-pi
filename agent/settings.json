@@ -1,0 +1,22 @@
+{
+  "quietStartup": true,
+  "lastChangelogVersion": "0.55.1",
+  "theme": "monochrome-blue",
+  "transport": "sse",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.3-codex-spark",
+  "defaultThinkingLevel": "off",
+  "hideThinkingBlock": true,
+  "steeringMode": "one-at-a-time",
+  "packages": [
+    "extensions/agent-banner.ts",
+    "extensions/pipeline-team.ts",
+    "extensions/session-replay.ts",
+    "extensions/subagent-widget.ts",
+    "extensions/system-select.ts",
+    "extensions/theme-cycler.ts",
+    "extensions/tilldone.ts",
+    "extensions/user-question.ts",
+    "extensions/footer.ts"
+  ]
+}

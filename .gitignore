@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Pi agent runtime
+agent/auth.json
+agent/sessions/
+agent/.pi/agent-sessions/
+agent/pi-crash.log
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

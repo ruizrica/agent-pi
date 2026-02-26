@@ -1,0 +1,251 @@
+// ABOUTME: User Question — Rich interactive UI tool for agent-to-user communication
+// ABOUTME: Split-panel overlay with selectable options (left) and live markdown preview (right)
+
+import { StringEnum } from "@mariozechner/pi-ai";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
+import {
+	Container, Key, Markdown, Spacer, Text,
+	matchesKey, truncateToWidth, visibleWidth,
+} from "@mariozechner/pi-tui";
+import { Type } from "@sinclair/typebox";
+import { applyExtensionDefaults } from "./lib/themeMap.ts";
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface OptionDef {
+	label: string;
+	markdown?: string;
+}
+
+// ── Text helpers ──────────────────────────────────────────────────────
+
+function wordWrap(text: string, width: number): string[] {
+	if (visibleWidth(text) <= width) return [text];
+	const words = text.split(/(\s+)/);
+	const lines: string[] = [];
+	let cur = "";
+	for (const w of words) {
+		if (visibleWidth(cur + w) > width && cur.length > 0) {
+			lines.push(cur);
+			cur = w.trimStart();
+		} else {
+			cur += w;
+		}
+	}
+	if (cur.length > 0) lines.push(cur);
+	return lines;
+}
+
+function padRight(s: string, width: number): string {
+	const vis = visibleWidth(s);
+	if (vis >= width) return truncateToWidth(s, width, "");
+	return s + " ".repeat(width - vis);
+}
+
+function sideBySide(
+	left: string[], right: string[],
+	leftW: number, rightW: number,
+	divider: string,
+): string[] {
+	const max = Math.max(left.length, right.length);
+	const result: string[] = [];
+	for (let i = 0; i < max; i++) {
+		const l = i < left.length ? padRight(left[i], leftW) : " ".repeat(leftW);
+		const r = i < right.length ? truncateToWidth(right[i], rightW, "") : "";
+		result.push(l + divider + r);
+	}
+	return result;
+}
+
+// ── QuestionUI ─────────────────────────────────────────────────────────
+
+class QuestionUI {
+	private selectedIndex = 0;
+
+	constructor(
+		private question: string,
+		private options: OptionDef[],
+		private onSelect: (label: string) => void,
+		private onCancel: () => void,
+	) {}
+
+	handleInput(data: string, tui: any): void {
+		if (matchesKey(data, Key.up)) {
+			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+		} else if (matchesKey(data, Key.down)) {
+			this.selectedIndex = Math.min(this.options.length - 1, this.selectedIndex + 1);
+		} else if (matchesKey(data, Key.enter)) {
+			this.onSelect(this.options[this.selectedIndex].label);
+			return;
+		} else if (matchesKey(data, Key.escape)) {
+			this.onCancel();
+			return;
+		}
+		tui.requestRender();
+	}
+
+	render(width: number, height: number, theme: any): string[] {
+		const container = new Container();
+		const mdTheme = getPiMdTheme();
+
+		// Panel is 90% of terminal width, centered
+		const panelW = Math.max(40, Math.floor(width * 0.9));
+
+		// Header
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		container.addChild(new Text(
+			`${theme.fg("accent", theme.bold(" ASK USER"))} ${theme.fg("dim", "|")} ${theme.fg("success", this.question)}`,
+			1, 0,
+		));
+		container.addChild(new Spacer(1));
+
+		// Split panel dimensions
+		const innerWidth = panelW - 2;
+		const leftW = Math.max(20, Math.floor(innerWidth * 0.3));
+		const rightW = innerWidth - leftW - 3; // 3 for " │ "
+
+		// Left panel: option labels (word-wrapped)
+		const leftLines: string[] = [];
+		const labelW = leftW - 3; // 3 for indicator prefix
+		for (let i = 0; i < this.options.length; i++) {
+			const selected = i === this.selectedIndex;
+			const indicator = selected ? theme.fg("accent", " ▸ ") : "   ";
+			const wrapped = wordWrap(this.options[i].label, labelW);
+			for (let j = 0; j < wrapped.length; j++) {
+				const prefix = j === 0 ? indicator : "   ";
+				const text = selected
+					? theme.bold(theme.fg("accent", wrapped[j]))
+					: theme.fg("dim", wrapped[j]);
+				leftLines.push(prefix + text);
+			}
+		}
+
+		// Right panel: markdown preview of highlighted option
+		const opt = this.options[this.selectedIndex];
+		const mdContent = opt.markdown || opt.label;
+		const rightContainer = new Container();
+		rightContainer.addChild(new Markdown(mdContent, 1, 0, mdTheme));
+		const rightLines = rightContainer.render(rightW);
+
+		// Combine side by side
+		const divider = theme.fg("dim", " │ ");
+		const combined = sideBySide(leftLines, rightLines, leftW, rightW, divider);
+		for (const line of combined) {
+			container.addChild(new Text(line, 1, 0));
+		}
+
+		// Footer
+		container.addChild(new Spacer(1));
+		container.addChild(new Text(
+			theme.fg("dim", " ↑/↓ Navigate • Enter Select • Esc Cancel"),
+			1, 0,
+		));
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+		const panelLines = container.render(panelW);
+
+		// Dark backdrop: center the panel vertically and horizontally
+		const dimBg = "\x1b[48;2;10;10;15m"; // dark background
+		const reset = "\x1b[0m";
+		const darkRow = dimBg + " ".repeat(width) + reset;
+		const padLeft = Math.max(0, Math.floor((width - panelW) / 2));
+		const padLeftStr = dimBg + " ".repeat(padLeft);
+		const padRightCount = Math.max(0, width - panelW - padLeft);
+		const padRightStr = " ".repeat(padRightCount) + reset;
+
+		const topPad = Math.max(1, Math.floor((height - panelLines.length) / 2));
+		const result: string[] = [];
+
+		for (let i = 0; i < topPad; i++) result.push(darkRow);
+		for (const line of panelLines) {
+			result.push(padLeftStr + line + padRightStr);
+		}
+		const bottomPad = Math.max(0, height - topPad - panelLines.length);
+		for (let i = 0; i < bottomPad; i++) result.push(darkRow);
+
+		return result;
+	}
+}
+
+// ── Tool Parameters ────────────────────────────────────────────────────
+
+const AskUserParams = Type.Object({
+	question: Type.String({ description: "The question to ask the user" }),
+	mode: StringEnum(["select", "input", "confirm"] as const),
+	options: Type.Optional(Type.Array(Type.Object({
+		label: Type.String({ description: "Option label shown in the list" }),
+		markdown: Type.Optional(Type.String({ description: "Markdown preview shown when this option is highlighted" })),
+	}), { description: "Options for select mode (required)" })),
+	placeholder: Type.Optional(Type.String({ description: "Placeholder text for input mode" })),
+	detail: Type.Optional(Type.String({ description: "Detail text for confirm mode" })),
+});
+
+// ── Extension ──────────────────────────────────────────────────────────
+
+export default function (pi: ExtensionAPI) {
+	pi.registerTool({
+		name: "ask_user",
+		label: "Ask User",
+		description:
+			"Ask the user a question with rich interactive UI. " +
+			"Three modes: 'select' shows a split-panel overlay with options on the left and a live markdown preview on the right — " +
+			"use markdown to describe layouts, wireframes, or design elements for each option. " +
+			"'input' prompts for free-text entry. 'confirm' asks a yes/no question. " +
+			"For select mode, provide options[] with label and optional markdown for each.",
+		parameters: AskUserParams,
+
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const { question, mode, options, placeholder, detail } = params;
+
+			if (mode === "select") {
+				if (!options || options.length === 0) {
+					return {
+						content: [{ type: "text" as const, text: "Error: options[] required for select mode" }],
+					};
+				}
+
+				const result = await ctx.ui.custom((tui, theme, _kb, done) => {
+					const ui = new QuestionUI(
+						question,
+						options,
+						(label) => done(label),
+						() => done(undefined),
+					);
+					return {
+						render: (w) => ui.render(w, process.stdout.rows || 24, theme),
+						handleInput: (data) => ui.handleInput(data, tui),
+						invalidate: () => {},
+					};
+				});
+
+				const answer = result ?? "[User cancelled]";
+				return {
+					content: [{ type: "text" as const, text: `User selected: ${answer}` }],
+				};
+			}
+
+			if (mode === "input") {
+				const answer = await ctx.ui.input(question, placeholder || "");
+				return {
+					content: [{ type: "text" as const, text: answer ? `User answered: ${answer}` : "[User cancelled]" }],
+				};
+			}
+
+			if (mode === "confirm") {
+				const confirmed = await ctx.ui.confirm(question, detail || "", { timeout: 60000 });
+				return {
+					content: [{ type: "text" as const, text: confirmed ? "User confirmed: Yes" : "User declined: No" }],
+				};
+			}
+
+			return {
+				content: [{ type: "text" as const, text: `Error: unknown mode '${mode}'` }],
+			};
+		},
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		applyExtensionDefaults(import.meta.url, ctx);
+	});
+}

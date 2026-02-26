@@ -1,0 +1,43 @@
+all:
+  - scout
+  - planner
+  - builder
+  - reviewer
+  - tester
+  - red-team
+  - debugger
+  - refactorer
+  - documenter
+  - plan-reviewer
+
+full:
+  - scout
+  - planner
+  - builder
+  - reviewer
+  - tester
+
+plan-build:
+  - planner
+  - builder
+  - reviewer
+
+investigate:
+  - scout
+  - debugger
+  - reviewer
+
+quality:
+  - reviewer
+  - tester
+  - red-team
+
+refactor:
+  - scout
+  - refactorer
+  - reviewer
+
+docs:
+  - scout
+  - documenter
+  - reviewer
