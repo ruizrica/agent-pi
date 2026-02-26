@@ -13,18 +13,20 @@
  *   /agents-team          — switch active team
  *   /agents-list          — list loaded agents
  *   /agents-grid N        — set column count (default 2)
+ *   Ctrl+G                — toggle compact/expanded widget view
  *
  * Usage: pi -e extensions/agent-team.ts -e extensions/footer.ts
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text, type AutocompleteItem, visibleWidth } from "@mariozechner/pi-tui";
+import { Text, type AutocompleteItem, visibleWidth, truncateToWidth } from "@mariozechner/pi-tui";
 import { spawn } from "child_process";
-import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync, appendFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { statusButton } from "./lib/pipeline-render.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -32,6 +34,7 @@ interface AgentDef {
 	name: string;
 	description: string;
 	tools: string;
+	model: string; // full provider/model ID, empty = inherit parent
 	systemPrompt: string;
 	file: string;
 }
@@ -97,6 +100,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
 			name: frontmatter.name,
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
+			model: frontmatter.model || "",
 			systemPrompt: match[2].trim(),
 			file: filePath,
 		};
@@ -151,6 +155,7 @@ export default function (pi: ExtensionAPI) {
 	let widgetCtx: any;
 	let sessionDir = "";
 	let contextWindow = 0;
+	let widgetCompact = true;
 
 	function loadAgents(cwd: string) {
 		const extDir = dirname(fileURLToPath(import.meta.url));
@@ -221,25 +226,16 @@ export default function (pi: ExtensionAPI) {
 		const w = colWidth - 2;
 		const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max - 3) + "..." : s;
 
-		const statusColor = state.status === "idle" ? "dim"
-			: state.status === "running" ? "accent"
-			: state.status === "done" ? "success" : "error";
-		const statusIcon = state.status === "idle" ? "○"
-			: state.status === "running" ? "●"
-			: state.status === "done" ? "✓" : "✗";
-
 		const name = displayName(state.def.name);
-		const nameStr = theme.fg("accent", theme.bold(truncate(name, w)));
 		const pctStr = theme.fg("dim", `${Math.ceil(state.contextPct)}%`);
-		const nameVis = visibleWidth(nameStr);
 		const pctVis = visibleWidth(pctStr);
-		const pad = Math.max(0, w - 1 - nameVis - pctVis); // -1 for leading space
-		const line1 = " " + nameStr + " ".repeat(pad) + pctStr;
+		const pad = Math.max(0, w - 1 - pctVis); // -1 for leading space
+		const line1 = " " + pctStr + " ".repeat(pad);
 
-		const statusStr = `${statusIcon} ${state.status}`;
+		const statusBtn = statusButton(state.status, truncate(name, w - 10), theme);
 		const timeStr = state.status !== "idle" ? ` ${Math.round(state.elapsed / 1000)}s` : "";
-		const statusLine = theme.fg(statusColor, statusStr + timeStr);
-		const statusVisible = statusStr.length + timeStr.length;
+		const statusLine = statusBtn + timeStr;
+		const statusVisible = visibleWidth(statusBtn) + timeStr.length;
 
 		const top = "┌" + "─".repeat(w) + "┐";
 		const bot = "└" + "─".repeat(w) + "┘";
@@ -248,7 +244,7 @@ export default function (pi: ExtensionAPI) {
 
 		return [
 			theme.fg("dim", top),
-			border(line1, 1 + nameVis + pad + pctVis),
+			border(line1, 1 + pctVis),
 			border(" " + statusLine, 1 + statusVisible),
 			theme.fg("dim", bot),
 		];
@@ -258,7 +254,7 @@ export default function (pi: ExtensionAPI) {
 		if (!widgetCtx) return;
 
 		widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
-			const text = new Text("", 0, 1);
+			const text = new Text("", 0, 0);
 
 			return {
 				render(width: number): string[] {
@@ -267,10 +263,48 @@ export default function (pi: ExtensionAPI) {
 						return text.render(width);
 					}
 
+					if (widgetCompact) {
+						const active = Array.from(agentStates.values()).filter(
+							(a) => a.status !== "idle",
+						);
+						if (active.length === 0) {
+							text.setText("");
+							return [];
+						}
+						const abbreviateName = (name: string) => displayName(name);
+						const parts = active.map((a) => {
+							const name = abbreviateName(a.def.name);
+							return statusButton(a.status, name, theme);
+						});
+						const sep = theme.fg("dim", "  ");
+						const right = parts.join(sep);
+						const rightVis = visibleWidth(right);
+
+						const curTask = (globalThis as any).__piCurrentTask as { id: number; text: string } | null;
+						let left = "";
+						let leftVis = 0;
+						if (curTask) {
+							const taskLabel =
+								theme.fg("accent", "● ") +
+								theme.fg("dim", "TASK ") +
+								theme.fg("accent", `#${curTask.id}`) +
+								theme.fg("dim", " ") +
+								theme.fg("success", curTask.text);
+							left = truncateToWidth(taskLabel, Math.max(10, width - rightVis - 2), "…");
+							leftVis = visibleWidth(left);
+						}
+
+						const gap = Math.max(1, width - leftVis - rightVis);
+						text.setText(left + " ".repeat(gap) + right);
+						return text.render(width);
+					}
+
 					const cols = Math.min(gridCols, agentStates.size);
 					const gap = 1;
-					const colWidth = Math.floor((width - gap * (cols - 1)) / cols);
 					const agents = Array.from(agentStates.values());
+					const totalCardsWidth = cols * Math.floor((width - gap * (cols - 1)) / cols) + gap * (cols - 1);
+					const leftPad = Math.max(0, width - totalCardsWidth);
+					const colWidth = Math.floor((width - leftPad - gap * (cols - 1)) / cols);
 					const rows: string[][] = [];
 
 					for (let i = 0; i < agents.length; i += cols) {
@@ -283,11 +317,12 @@ export default function (pi: ExtensionAPI) {
 
 						const cardHeight = cards[0].length;
 						for (let line = 0; line < cardHeight; line++) {
-							rows.push(cards.map(card => card[line] || ""));
+							const row = cards.map(card => card[line] || "").join(" ".repeat(gap));
+							rows.push([" ".repeat(leftPad) + row]);
 						}
 					}
 
-					const output = rows.map(cols => cols.join(" ".repeat(gap)));
+					const output = rows.map(r => r[0]);
 					text.setText(output.join("\n"));
 					return text.render(width);
 				},
@@ -295,7 +330,7 @@ export default function (pi: ExtensionAPI) {
 					text.invalidate();
 				},
 			};
-		}, { placement: "belowEditor" });
+		}, { placement: "aboveEditor" });
 	}
 
 	// ── Dispatch Agent (returns Promise) ─────────
@@ -337,9 +372,26 @@ export default function (pi: ExtensionAPI) {
 			updateWidget();
 		}, 1000);
 
-		const model = ctx.model
-			? `${ctx.model.provider}/${ctx.model.id}`
-			: "openrouter/google/gemini-3-flash-preview";
+		const model = state.def.model
+			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "openrouter/google/gemini-3-flash-preview");
+
+		// #region agent log
+		try {
+			const logDir = "/Users/ricardo/.pi/.cursor";
+			if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+			const ctxModelStr = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : null;
+			appendFileSync(
+				join(logDir, "debug-a6f367.log"),
+				JSON.stringify({
+					sessionId: "a6f367",
+					location: "agent-team.ts:dispatchAgent",
+					message: "dispatch model resolution",
+					data: { agent: agentName, defModel: state.def.model, resolvedModel: model, ctxModel: ctxModelStr },
+					timestamp: Date.now(),
+				}) + "\n"
+			);
+		} catch {}
+		// #endregion
 
 		// Session file for this agent
 		const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
@@ -373,6 +425,7 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			let buffer = "";
+			let stderrBuf = "";
 
 			proc.stdout!.setEncoding("utf-8");
 			proc.stdout!.on("data", (chunk: string) => {
@@ -414,9 +467,25 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			proc.stderr!.setEncoding("utf-8");
-			proc.stderr!.on("data", () => {});
+			proc.stderr!.on("data", (chunk: string) => { stderrBuf += chunk; });
 
 			proc.on("close", (code) => {
+				// #region agent log
+				try {
+					const logDir = "/Users/ricardo/.pi/.cursor";
+					if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+					appendFileSync(
+						join(logDir, "debug-a6f367.log"),
+						JSON.stringify({
+							sessionId: "a6f367",
+							location: "agent-team.ts:dispatchAgent:close",
+							message: "dispatch subprocess closed",
+							data: { agent: agentName, model, exitCode: code, stderr: stderrBuf?.slice(0, 500) || null },
+							timestamp: Date.now(),
+						}) + "\n"
+					);
+				} catch {}
+				// #endregion
 				if (buffer.trim()) {
 					try {
 						const event = JSON.parse(buffer);
@@ -480,6 +549,23 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			const { agent, task } = params as { agent: string; task: string };
 
+			// #region agent log
+			try {
+				const logDir = "/Users/ricardo/.pi/.cursor";
+				if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+				appendFileSync(
+					join(logDir, "debug-a6f367.log"),
+					JSON.stringify({
+						sessionId: "a6f367",
+						location: "agent-team.ts:execute",
+						message: "dispatch_agent tool invoked",
+						data: { agent, task },
+						timestamp: Date.now(),
+					}) + "\n"
+				);
+			} catch {}
+			// #endregion
+
 			try {
 				if (onUpdate) {
 					onUpdate({
@@ -538,17 +624,18 @@ export default function (pi: ExtensionAPI) {
 
 			// Streaming/partial result while agent is still running
 			if (options.isPartial || details.status === "dispatching") {
+				const runningBtn = statusButton("running", details.agent || "?", theme, false);
 				return new Text(
-					theme.fg("accent", `● ${details.agent || "?"}`) +
-					theme.fg("dim", " working..."),
+					runningBtn,
 					0, 0,
 				);
 			}
 
-			const icon = details.status === "done" ? "✓" : "✗";
-			const color = details.status === "done" ? "success" : "error";
+			const status = details.status === "done" ? "done" : "error";
+			const agentLabel = details.agent ?? "?";
+			const statusBtn = statusButton(status, agentLabel, theme, false);
 			const elapsed = typeof details.elapsed === "number" ? Math.round(details.elapsed / 1000) : 0;
-			const header = theme.fg(color, `${icon} ${details.agent}`) +
+			const header = statusBtn +
 				theme.fg("dim", ` ${elapsed}s`);
 
 			if (options.expanded && details.fullOutput) {
@@ -628,12 +715,21 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerShortcut("ctrl+g", {
+		description: "Toggle agent team compact/expanded view",
+		handler: async (ctx) => {
+			widgetCtx = ctx;
+			widgetCompact = !widgetCompact;
+			updateWidget();
+		},
+	});
+
 	// ── System Prompt Override ───────────────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
 		// Build dynamic agent catalog from active team only
 		const agentCatalog = Array.from(agentStates.values())
-			.map(s => `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}`)
+			.map(s => `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}` + (s.def.model ? `\n**Model:** ${s.def.model}` : ""))
 			.join("\n\n");
 
 		const teamMembers = Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ");
@@ -666,6 +762,24 @@ You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agen
 
 ${agentCatalog}`,
 		};
+	});
+
+	// ── Reset agent boxes on new message ───────────────────────────────
+
+	pi.on("input", () => {
+		// When user sends a new message, reset completed/error agents to idle
+		// so the boxes display cleanly for the new task
+		for (const state of agentStates.values()) {
+			if (state.status === "done" || state.status === "error") {
+				state.status = "idle";
+				state.task = "";
+				state.toolCount = 0;
+				state.elapsed = 0;
+				state.lastWork = "";
+				state.contextPct = 0;
+			}
+		}
+		updateWidget();
 	});
 
 	// ── Session Start ────────────────────────────

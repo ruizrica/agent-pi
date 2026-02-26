@@ -31,7 +31,7 @@ import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync } from "fs
 import { join, resolve, basename, dirname } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { renderVerticalTimeline, renderCollapsedTimeline } from "./lib/pipeline-render.ts";
+import { renderVerticalTimeline, renderCollapsedTimeline, statusButton } from "./lib/pipeline-render.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -229,11 +229,12 @@ function parseAgentFile(filePath: string): AgentDef | null {
 	}
 }
 
-function scanAgentDirs(cwd: string): Map<string, AgentDef> {
+function scanAgentDirs(cwd: string, extProjectDir?: string): Map<string, AgentDef> {
 	const dirs = [
 		join(cwd, "agents"),
 		join(cwd, ".claude", "agents"),
 		join(cwd, ".pi", "agents"),
+		...(extProjectDir ? [join(extProjectDir, ".pi", "agents")] : []),
 	];
 
 	const agents = new Map<string, AgentDef>();
@@ -304,11 +305,11 @@ export default function (pi: ExtensionAPI) {
 			mkdirSync(sessionDir, { recursive: true });
 		}
 
-		allAgents = scanAgentDirs(cwd);
-
-		// Look for config in cwd first, fall back to extension's own project dir
 		const extDir = dirname(fileURLToPath(import.meta.url));
 		const extProjectDir = resolve(extDir, "..");
+		allAgents = scanAgentDirs(cwd, extProjectDir);
+
+		// Look for config in cwd first, fall back to extension's own project dir
 		let configPath = join(cwd, ".pi", "agents", "pipeline-team.yaml");
 		if (!existsSync(configPath)) {
 			configPath = join(extProjectDir, ".pi", "agents", "pipeline-team.yaml");
@@ -378,6 +379,14 @@ export default function (pi: ExtensionAPI) {
 			clearPipelineUI();
 			return;
 		}
+		// Only show when agents are actively running
+		const hasActiveWork = phaseStates.some((ps) =>
+			ps.agents.some((a) => a.status === "running"),
+		);
+		if (!hasActiveWork) {
+			clearPipelineUI();
+			return;
+		}
 		updateStatus();
 
 		widgetCtx.ui.setWidget("pipeline-team", (_tui: any, theme: any) => {
@@ -385,6 +394,7 @@ export default function (pi: ExtensionAPI) {
 
 			return {
 				render(width: number): string[] {
+					if (!activeConfig || phaseStates.length === 0) return [];
 					const renderPhases = phaseStates.map(s => ({
 						name: s.def.name,
 						status: s.status,
@@ -410,7 +420,7 @@ export default function (pi: ExtensionAPI) {
 					text.invalidate();
 				},
 			};
-		});
+		}, { placement: "belowEditor" });
 	}
 
 	// ── Subprocess Spawning ──────────────────────
@@ -660,15 +670,10 @@ export default function (pi: ExtensionAPI) {
 
 				const cardBox = new Box(1, 0, (s) => isSelected ? theme.bg("selectedBg", s) : s);
 
-				const statusIcon = item.status === "idle" ? "○"
-					: item.status === "running" ? "●"
-					: item.status === "done" ? "✓" : "✗";
-				const statusColor = item.status === "idle" ? "dim"
-					: item.status === "running" ? "accent"
-					: item.status === "done" ? "success" : "error";
-
+				const agentLabel = displayName(item.role) + " #" + (item.index + 1);
+				const statusBtn = statusButton(item.status, agentLabel, theme);
 				const timeStr = item.elapsed > 0 ? ` ${Math.round(item.elapsed / 1000)}s` : "";
-				const titleLine = `${theme.fg(statusColor, statusIcon)} ${theme.bold(displayName(item.role) + " #" + (item.index + 1))} ${theme.fg("dim", timeStr)}`;
+				const titleLine = `${statusBtn} ${theme.fg("dim", timeStr)}`;
 				cardBox.addChild(new Text(titleLine, 0, 0));
 
 				if (isExpanded && item.output) {
@@ -874,16 +879,17 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (options.isPartial || details.status === "dispatching") {
+				const runningBtn = statusButton("active", details.phase || "?", theme);
 				return new Text(
-					theme.fg("accent", `● ${details.phase || "?"}`) +
+					runningBtn +
 					theme.fg("dim", ` dispatching ${(details.agents || []).length} agents...`),
 					0, 0,
 				);
 			}
 
-			const icon = details.status === "done" ? "✓" : "✗";
-			const color = details.status === "done" ? "success" : "error";
-			const header = theme.fg(color, `${icon} ${details.phase}`) +
+			const status = details.status === "done" ? "done" : "error";
+			const statusBtn = statusButton(status, details.phase, theme);
+			const header = statusBtn +
 				theme.fg("dim", ` ${(details.agents || []).length} agents`);
 
 			if (options.expanded && details.fullOutput) {
@@ -1180,10 +1186,17 @@ ${contextSummary}${planSection}${reviewSection}
 		loadConfig(_ctx.cwd);
 
 		if (pipelineConfigs.length === 0) {
+			activeConfig = null;
+			phaseStates = [];
+			clearPipelineUI();
 			_ctx.ui.notify("No pipelines found in .pi/agents/pipeline-team.yaml", "warning");
 			return;
 		}
 
 		// Opt-in: do NOT auto-activate. User must run /pipeline to start.
+		// Ensure no pipeline UI is shown until user explicitly activates one.
+		activeConfig = null;
+		phaseStates = [];
+		clearPipelineUI();
 	});
 }

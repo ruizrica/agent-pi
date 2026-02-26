@@ -29,6 +29,7 @@ import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync } from "fs
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { statusButton } from "./lib/pipeline-render.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -259,21 +260,14 @@ export default function (pi: ExtensionAPI) {
 		const w = colWidth - 2;
 		const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max - 3) + "..." : s;
 
-		const statusColor = state.status === "pending" ? "dim"
-			: state.status === "running" ? "accent"
-			: state.status === "done" ? "success" : "error";
-		const statusIcon = state.status === "pending" ? "○"
-			: state.status === "running" ? "●"
-			: state.status === "done" ? "✓" : "✗";
-
 		const name = displayName(state.agent);
-		const nameStr = theme.fg("accent", theme.bold(truncate(name, w)));
-		const nameVisible = Math.min(name.length, w);
 
-		const statusStr = `${statusIcon} ${state.status}`;
+		// Map "pending" to "idle" for statusButton
+		const statusForButton = state.status === "pending" ? "idle" : state.status;
+		const statusBtn = statusButton(statusForButton, truncate(name, w - 10), theme);
 		const timeStr = state.status !== "pending" ? ` ${Math.round(state.elapsed / 1000)}s` : "";
-		const statusLine = theme.fg(statusColor, statusStr + timeStr);
-		const statusVisible = statusStr.length + timeStr.length;
+		const statusLine = statusBtn + timeStr;
+		const statusVisible = visibleWidth(statusBtn) + timeStr.length;
 
 		const workRaw = state.lastWork || "";
 		const workText = workRaw ? truncate(workRaw, Math.min(50, w - 1)) : "";
@@ -287,7 +281,6 @@ export default function (pi: ExtensionAPI) {
 
 		return [
 			theme.fg("dim", top),
-			border(" " + nameStr, 1 + nameVisible),
 			border(" " + statusLine, 1 + statusVisible),
 			border(" " + workLine, 1 + workVisible),
 			theme.fg("dim", bot),
@@ -296,7 +289,10 @@ export default function (pi: ExtensionAPI) {
 
 	function updateWidget() {
 		if (!widgetCtx) return;
-
+		// Chain widget hidden — uncomment block below to show
+		widgetCtx.ui.setWidget("agent-chain", undefined);
+		return;
+		/*
 		widgetCtx.ui.setWidget("agent-chain", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -338,6 +334,7 @@ export default function (pi: ExtensionAPI) {
 				},
 			};
 		});
+		*/
 	}
 
 	// ── Run Agent (subprocess) ──────────────────
@@ -578,17 +575,17 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (options.isPartial || details.status === "running") {
+				const runningBtn = statusButton("running", details.chain || "chain", theme);
 				return new Text(
-					theme.fg("accent", `● ${details.chain || "chain"}`) +
-					theme.fg("dim", " running..."),
+					runningBtn,
 					0, 0,
 				);
 			}
 
-			const icon = details.status === "done" ? "✓" : "✗";
-			const color = details.status === "done" ? "success" : "error";
+			const status = details.status === "done" ? "done" : "error";
+			const statusBtn = statusButton(status, details.chain, theme);
 			const elapsed = typeof details.elapsed === "number" ? Math.round(details.elapsed / 1000) : 0;
-			const header = theme.fg(color, `${icon} ${details.chain}`) +
+			const header = statusBtn +
 				theme.fg("dim", ` ${elapsed}s`);
 
 			if (options.expanded && details.fullOutput) {
@@ -775,30 +772,6 @@ ${agentCatalog}
 		// run_chain is registered as a tool — available alongside all default tools
 
 		_ctx.ui.setStatus("agent-chain", `Chain: ${activeChain!.name} (${activeChain!.steps.length} steps)`);
-
-		// Footer: model | chain name | context bar
-		_ctx.ui.setFooter((_tui, theme, _footerData) => ({
-			dispose: () => {},
-			invalidate() {},
-			render(width: number): string[] {
-				const model = _ctx.model?.id || "no-model";
-				const usage = _ctx.getContextUsage();
-				const pct = usage ? usage.percent : 0;
-				const filled = Math.round(pct / 10);
-				const bar = "#".repeat(filled) + "-".repeat(10 - filled);
-
-				const chainLabel = activeChain
-					? theme.fg("accent", activeChain.name)
-					: theme.fg("dim", "no chain");
-
-				const left = theme.fg("dim", ` ${model}`) +
-					theme.fg("muted", " · ") +
-					chainLabel;
-				const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
-				const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
-
-				return [truncateToWidth(left + pad + right, width)];
-			},
-		}));
+		// Footer: use footer.ts only — do not overwrite
 	});
 }

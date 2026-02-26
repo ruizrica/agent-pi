@@ -21,6 +21,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { statusButton } from "./lib/pipeline-render.ts";
 
 interface SubState {
 	id: number;
@@ -67,10 +68,7 @@ export default function (pi: ExtensionAPI) {
 				return {
 					render(width: number): string[] {
 						const lines: string[] = [];
-						const statusColor = state.status === "running" ? "accent"
-							: state.status === "done" ? "success" : "error";
-						const statusIcon = state.status === "running" ? "●"
-							: state.status === "done" ? "✓" : "✗";
+						const statusBtn = statusButton(state.status, "Subagent #" + state.id, theme);
 
 						const taskPreview = state.task.length > 40
 							? state.task.slice(0, 37) + "..."
@@ -81,7 +79,7 @@ export default function (pi: ExtensionAPI) {
 							: "";
 
 						lines.push(
-							theme.fg(statusColor, `${statusIcon} Subagent #${state.id}`) +
+							statusBtn +
 							turnLabel +
 							theme.fg("dim", `  ${taskPreview}`) +
 							theme.fg("dim", `  (${Math.round(state.elapsed / 1000)}s)`) +

@@ -3,6 +3,8 @@
  * ABOUTME: Extracts rendering logic from pipeline-team.ts for testability
  */
 
+import { visibleWidth } from "@mariozechner/pi-tui";
+
 // ── Types ────────────────────────────────────────
 
 export type AgentStatus = "idle" | "running" | "done" | "error";
@@ -27,6 +29,7 @@ export interface PhaseRenderState {
 export interface RenderTheme {
 	fg: (color: string, text: string) => string;
 	bold: (text: string) => string;
+	inverse?: (text: string) => string;
 }
 
 // ── Helpers ──────────────────────────────────────
@@ -43,6 +46,41 @@ const STATUS_ICONS: Record<AgentStatus | PhaseStatus, string> = {
 	done: "✓",
 	error: "✗",
 };
+
+const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/**
+ * Generates a status button label with solid background color and bold white text.
+ * Shows the agent/phase name inside the pill. For running/active status, includes animated braille spinner.
+ */
+export function statusButton(
+	status: AgentStatus | PhaseStatus,
+	label: string,
+	theme: RenderTheme,
+	showAnimation: boolean = true,
+): string {
+	const inv = theme.inverse ? (t: string) => theme.inverse!(t) : (t: string) => t;
+	
+	switch (status) {
+		case "running":
+		case "active": {
+			if (showAnimation) {
+				const frame = BRAILLE_FRAMES[Math.floor(Date.now() / 80) % BRAILLE_FRAMES.length];
+				return inv(theme.fg("accent", theme.bold(` ${frame} ${label} `)));
+			} else {
+				return inv(theme.fg("accent", theme.bold(` ${label} `)));
+			}
+		}
+		case "done":
+			return inv(theme.fg("success", theme.bold(` ${label} `)));
+		case "error":
+			return inv(theme.fg("error", theme.bold(` ${label} `)));
+		case "idle":
+		case "pending":
+		default:
+			return inv(theme.fg("dim", theme.bold(` ${label} `)));
+	}
+}
 
 // ── Main Render Function ─────────────────────────
 
@@ -66,13 +104,13 @@ export function renderVerticalTimeline(
 
 	for (let i = 0; i < phases.length; i++) {
 		const phase = phases[i];
-		const icon = STATUS_ICONS[phase.status];
 		const name = phase.name.toUpperCase();
+		const statusBtn = statusButton(phase.status, name, theme);
 
 		if (phase.status === "done") {
-			// Done: ` ✓ NAME  summary`
-			const prefix = `${INDENT}${icon} ${theme.bold(name)}`;
-			const prefixVisible = INDENT.length + icon.length + 1 + name.length;
+			// Done: ` [NAME]  summary`
+			const prefix = `${INDENT}${statusBtn}`;
+			const prefixVisible = INDENT.length + visibleWidth(statusBtn);
 			if (phase.summary) {
 				const summaryGap = "  ";
 				const maxSummary = width - prefixVisible - summaryGap.length;
@@ -83,9 +121,9 @@ export function renderVerticalTimeline(
 				lines.push(prefix);
 			}
 		} else if (phase.status === "active") {
-			// Active: ` ● NAME  ─────────────`
-			const prefix = `${INDENT}${icon} ${theme.fg("accent", theme.bold(name))}`;
-			const prefixVisible = INDENT.length + icon.length + 1 + name.length;
+			// Active: ` [⠋ NAME]  ─────────────`
+			const prefix = `${INDENT}${statusBtn}`;
+			const prefixVisible = INDENT.length + visibleWidth(statusBtn);
 			const separatorGap = "  ";
 			const separatorLen = Math.max(0, width - prefixVisible - separatorGap.length);
 			const separator = "─".repeat(separatorLen);
@@ -93,16 +131,16 @@ export function renderVerticalTimeline(
 
 			// Agent sub-lines
 			for (const agent of phase.agents) {
-				const agentIcon = STATUS_ICONS[agent.status];
 				const agentName = `${displayName(agent.role)} #${agent.index + 1}`;
+				const agentStatusBtn = statusButton(agent.status, agentName, theme);
 				const workText = agent.lastWork || agent.task || "—";
 				const timeStr = (agent.status === "running" || agent.status === "done" || agent.status === "error") && agent.elapsed > 0
 					? `${Math.round(agent.elapsed / 1000)}s`
 					: "";
 
-				// ` │  ● Agent #1  work...  14s`
-				const prefixStr = `${AGENT_PREFIX}${agentIcon} ${agentName}`;
-				const prefixLen = AGENT_PREFIX.length + agentIcon.length + 1 + agentName.length;
+				// ` │  [⠋ Agent #1]  work...  14s`
+				const prefixStr = `${AGENT_PREFIX}${agentStatusBtn}`;
+				const prefixLen = AGENT_PREFIX.length + visibleWidth(agentStatusBtn);
 				const timeLen = timeStr.length;
 				const gap = "  ";
 				// Available space for work text: width - prefix - gap - time - gap(if time)
@@ -119,8 +157,8 @@ export function renderVerticalTimeline(
 				lines.push(truncate(agentLine, width));
 			}
 		} else {
-			// Pending: ` ○ NAME`
-			const line = `${INDENT}${icon} ${theme.fg("dim", name)}`;
+			// Pending: ` [NAME]`
+			const line = `${INDENT}${statusBtn}`;
 			lines.push(line);
 		}
 
@@ -150,22 +188,26 @@ export function renderCollapsedTimeline(
 	theme: RenderTheme,
 ): string[] {
 	if (phases.length === 0) {
-		return [truncate(" ○ " + theme.fg("dim", "no pipeline"), width)];
+		const idleBtn = statusButton("pending", "no pipeline", theme);
+		return [truncate(idleBtn, width)];
 	}
 
 	const allDone = phases.every(p => p.status === "done");
 	if (allDone) {
-		return [truncate(" ✓ " + theme.fg("muted", "complete"), width)];
+		const doneBtn = statusButton("done", "complete", theme);
+		return [truncate(doneBtn, width)];
 	}
 
 	const active = phases[activeIndex];
 	if (!active) {
-		return [truncate(" ○ " + theme.fg("dim", "no pipeline"), width)];
+		const idleBtn = statusButton("pending", "no pipeline", theme);
+		return [truncate(idleBtn, width)];
 	}
 
 	const agentCount = active.agents.length;
 	const agentSuffix = agentCount > 0 ? ` (${agentCount} agents)` : "";
-	const line = " ● " + theme.fg("accent", active.name.toUpperCase()) + theme.fg("dim", agentSuffix);
+	const activeBtn = statusButton(active.status, active.name.toUpperCase(), theme);
+	const line = activeBtn + theme.fg("dim", agentSuffix);
 	return [truncate(line, width)];
 }
 
