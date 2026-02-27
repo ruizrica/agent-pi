@@ -282,7 +282,7 @@ export default function (pi: ExtensionAPI) {
 							const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
 							const taskLines = renderTaskList(
 								taskList, taskListState, width, availableHeight,
-								{ truncateToWidth, fg: theme.fg },
+								{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t) },
 							);
 							allLines.push(...taskLines);
 						}
