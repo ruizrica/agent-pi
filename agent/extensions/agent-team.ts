@@ -20,10 +20,10 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text, type AutocompleteItem, visibleWidth, truncateToWidth, Container, Spacer, Box, Markdown, matchesKey, Key } from "@mariozechner/pi-tui";
+import { Text, type AutocompleteItem, visibleWidth, truncateToWidth, Container, Spacer, Box, Markdown, matchesKey, Key, type Component } from "@mariozechner/pi-tui";
 import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
 import { spawn } from "child_process";
-import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync, appendFileSync } from "fs";
+import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync, appendFileSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -57,6 +57,17 @@ interface AgentState {
 
 function displayName(name: string): string {
 	return name.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+function abbreviateAgentName(name: string): string {
+	const parts = name.split("-");
+	if (parts.length > 1) {
+		// Multi-word: take first letter of each word and uppercase
+		return parts.map(w => w.charAt(0).toUpperCase()).join("");
+	} else {
+		// Single-word: uppercase the entire name
+		return name.toUpperCase();
+	}
 }
 
 // ── Teams YAML Parser ────────────────────────────
@@ -245,20 +256,20 @@ export default function (pi: ExtensionAPI) {
 						(a) => a.status !== "idle",
 					);
 
+					// Sort: done/error first (left), running last (right) - rightmost will be active if any
+					active.sort((a, b) => {
+						const statusOrder: Record<string, number> = { "done": 0, "error": 0, "running": 1 };
+						const aOrder = statusOrder[a.status] ?? 0;
+						const bOrder = statusOrder[b.status] ?? 0;
+						return aOrder - bOrder;
+					});
+
 					if (widgetCompact) {
 						// Compact mode: show active agents as pills in status bar
 						if (active.length === 0) {
 							text.setText("");
 							return [];
 						}
-						const abbreviateName = (name: string) => displayName(name);
-						const parts = active.map((a) => {
-							const name = abbreviateName(a.def.name);
-							return statusButton(a.status, name, theme);
-						});
-						const sep = theme.fg("dim", "  ");
-						const right = parts.join(sep);
-						const rightVis = visibleWidth(right);
 
 						const curTask = (globalThis as any).__piCurrentTask as { id: number; text: string } | null;
 						let left = "";
@@ -270,8 +281,31 @@ export default function (pi: ExtensionAPI) {
 								theme.fg("accent", `#${curTask.id}`) +
 								theme.fg("dim", " ") +
 								theme.fg("success", curTask.text);
-							left = truncateToWidth(taskLabel, Math.max(10, width - rightVis - 2), "…");
+							left = truncateToWidth(taskLabel, Math.max(10, width - 20), "…");
 							leftVis = visibleWidth(left);
+						}
+
+						// Try with full names first
+						const sep = theme.fg("dim", "  ");
+						let nameFormatter = (name: string) => displayName(name);
+						let parts = active.map((a) => {
+							const name = nameFormatter(a.def.name);
+							return statusButton(a.status, name, theme);
+						});
+						let right = parts.join(sep);
+						let rightVis = visibleWidth(right);
+						
+						// Check if pills fit - reserve at least 1 char gap
+						const availableWidth = width - leftVis - 1;
+						if (rightVis > availableWidth) {
+							// Switch to abbreviated names
+							nameFormatter = abbreviateAgentName;
+							parts = active.map((a) => {
+								const name = nameFormatter(a.def.name);
+								return statusButton(a.status, name, theme);
+							});
+							right = parts.join(sep);
+							rightVis = visibleWidth(right);
 						}
 
 						const gap = Math.max(1, width - leftVis - rightVis);
@@ -299,9 +333,18 @@ export default function (pi: ExtensionAPI) {
 						? selectedAgentIndex 
 						: -1;
 
-					const abbreviateName = (name: string) => displayName(name);
-					const pills = active.map((a, idx) => {
-						const name = abbreviateName(a.def.name);
+					// Add hint text if selection is active
+					let hint = "";
+					if (selectedActiveIndex >= 0) {
+						hint = theme.fg("dim", "  (F3: details, F4: exit)");
+					}
+					const hintVis = visibleWidth(hint);
+
+					// Try with full names first
+					const sep = theme.fg("dim", "  ");
+					let nameFormatter = (name: string) => displayName(name);
+					let pills = active.map((a, idx) => {
+						const name = nameFormatter(a.def.name);
 						const pill = statusButton(a.status, name, theme);
 						
 						// Add selection indicator (border around selected pill)
@@ -312,18 +355,29 @@ export default function (pi: ExtensionAPI) {
 						return pill;
 					});
 
-					const sep = theme.fg("dim", "  ");
-					const pillsLine = pills.join(sep);
-					const pillsVis = visibleWidth(pillsLine);
+					let pillsLine = pills.join(sep);
+					let pillsVis = visibleWidth(pillsLine);
+					let totalVis = pillsVis + hintVis;
 
-					// Add hint text if selection is active
-					let hint = "";
-					if (selectedActiveIndex >= 0) {
-						hint = theme.fg("dim", "  (F3: details, F4: exit)");
+					// Check if pills fit
+					if (totalVis > width) {
+						// Switch to abbreviated names
+						nameFormatter = abbreviateAgentName;
+						pills = active.map((a, idx) => {
+							const name = nameFormatter(a.def.name);
+							const pill = statusButton(a.status, name, theme);
+							
+							// Add selection indicator (border around selected pill)
+							if (idx === selectedActiveIndex) {
+								// Wrap with selection border: [pill]
+								return theme.fg("accent", "[") + pill + theme.fg("accent", "]");
+							}
+							return pill;
+						});
+						pillsLine = pills.join(sep);
+						pillsVis = visibleWidth(pillsLine);
+						totalVis = pillsVis + hintVis;
 					}
-
-					const hintVis = visibleWidth(hint);
-					const totalVis = pillsVis + hintVis;
 					
 					// Right-align pills: pad left side to push pills to the right
 					const padding = Math.max(0, width - totalVis);
@@ -403,10 +457,12 @@ export default function (pi: ExtensionAPI) {
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);
 
 		// Build args — first run creates session, subsequent runs resume
+		const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 		const args = [
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
+			"-e", tasksExtPath,
 			"--model", model,
 			"--tools", state.def.tools,
 			"--thinking", "off",
@@ -426,7 +482,8 @@ export default function (pi: ExtensionAPI) {
 		return new Promise((resolve) => {
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env },
+				env: { ...process.env, PI_SUBAGENT: "1" },
+				cwd: ctx.cwd,
 			});
 
 			let buffer = "";
@@ -510,7 +567,12 @@ export default function (pi: ExtensionAPI) {
 					state.sessionFile = agentSessionFile;
 				}
 
-				const full = textChunks.join("");
+				let full = textChunks.join("");
+				if ((code !== 0 && code !== null) && stderrBuf.trim()) {
+					full = full.trim()
+						? `${full}\n\n--- stderr ---\n${stderrBuf.trim()}`
+						: stderrBuf.trim();
+				}
 				state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
 				updateWidget();
 
@@ -609,13 +671,9 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme) {
 			const agentName = (args as any).agent || "?";
-			const task = (args as any).task || "";
-			const preview = task.length > 60 ? task.slice(0, 57) + "..." : task;
 			return new Text(
 				theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
-				theme.fg("accent", agentName) +
-				theme.fg("dim", " — ") +
-				theme.fg("muted", preview),
+				theme.fg("accent", agentName),
 				0, 0,
 			);
 		},
@@ -720,6 +778,9 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	// ── Audit Command ──────────────────────────────
+
+
 	// ── Agent Detail Overlay ──────────────────────
 
 	// Helper functions for detail view
@@ -735,7 +796,31 @@ export default function (pi: ExtensionAPI) {
 		const lines: string[] = [];
 		let cur = "";
 		for (const w of words) {
-			if (visibleWidth(cur + w) > width && cur.length > 0) {
+			const wordWidth = visibleWidth(w);
+			// If a single word is longer than width, break it
+			if (wordWidth > width) {
+				if (cur.length > 0) {
+					lines.push(cur);
+					cur = "";
+				}
+				// Break long word into chunks
+				let remaining = w;
+				while (remaining.length > 0) {
+					let chunk = "";
+					for (const char of remaining) {
+						if (visibleWidth(chunk + char) > width && chunk.length > 0) {
+							lines.push(chunk);
+							chunk = char;
+						} else {
+							chunk += char;
+						}
+					}
+					if (chunk.length > 0) {
+						cur = chunk;
+					}
+					remaining = "";
+				}
+			} else if (visibleWidth(cur + w) > width && cur.length > 0) {
 				lines.push(cur);
 				cur = w.trimStart();
 			} else {
@@ -763,6 +848,7 @@ export default function (pi: ExtensionAPI) {
 
 	class AgentDetailOverlay {
 		private scrollOffset = 0;
+		private totalContentLines = 0;
 
 		constructor(
 			private agent: AgentState,
@@ -770,14 +856,23 @@ export default function (pi: ExtensionAPI) {
 		) {}
 
 		handleInput(data: string, tui: any): void {
+			// Calculate max scroll based on current content
+			const height = process.stdout.rows || 24;
+			const contentHeight = height - 1; // Reserve 1 line for footer
+			const maxScroll = Math.max(0, this.totalContentLines - contentHeight);
+
 			if (matchesKey(data, Key.up)) {
 				this.scrollOffset = Math.max(0, this.scrollOffset - 1);
 			} else if (matchesKey(data, Key.down)) {
-				this.scrollOffset = Math.max(0, this.scrollOffset + 1);
+				this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
 			} else if (matchesKey(data, Key.pageUp)) {
-				this.scrollOffset = Math.max(0, this.scrollOffset - 10);
+				this.scrollOffset = Math.max(0, this.scrollOffset - Math.max(1, contentHeight - 1));
 			} else if (matchesKey(data, Key.pageDown)) {
-				this.scrollOffset = Math.max(0, this.scrollOffset + 10);
+				this.scrollOffset = Math.min(maxScroll, this.scrollOffset + Math.max(1, contentHeight - 1));
+			} else if (matchesKey(data, Key.home)) {
+				this.scrollOffset = 0;
+			} else if (matchesKey(data, Key.end)) {
+				this.scrollOffset = maxScroll;
 			} else if (matchesKey(data, Key.escape)) {
 				this.onDone();
 				return;
@@ -804,64 +899,109 @@ export default function (pi: ExtensionAPI) {
 			));
 			container.addChild(new Spacer(1));
 
+			// Section header helper - fills width with line characters
+			const sectionHeader = (title: string) => {
+				const label = ` ─── ${title} `;
+				const remaining = Math.max(0, innerWidth - visibleWidth(label));
+				return theme.fg("accent", theme.bold(label + "─".repeat(remaining)));
+			};
+
 			// Metadata section (full width, vertical list)
-			container.addChild(new Text(theme.fg("accent", theme.bold(" ─── METADATA ───")), 1, 0));
-			const formatRow = (label: string, value: string) => {
+			container.addChild(new Text(sectionHeader("METADATA"), 1, 0));
+			const formatRow = (label: string, value: string, valueColor: string = "muted") => {
 				const labelStr = theme.fg("accent", theme.bold(padRight(label + ":", 14)));
-				const valueStr = theme.fg("muted", value);
+				const valueStr = theme.fg(valueColor, value);
 				return labelStr + " " + valueStr;
 			};
 
-			container.addChild(new Text(formatRow("STATUS", this.agent.status.toUpperCase()), 1, 0));
-			container.addChild(new Text(formatRow("MODEL", this.agent.def.model || "(inherit)"), 1, 0));
-			container.addChild(new Text(formatRow("TOOLS", this.agent.def.tools), 1, 0));
-			container.addChild(new Text(formatRow("CONTEXT", `${Math.ceil(this.agent.contextPct)}%`), 1, 0));
-			container.addChild(new Text(formatRow("RUNS", this.agent.runCount.toString()), 1, 0));
-			container.addChild(new Text(formatRow("TOOLS USED", this.agent.toolCount.toString()), 1, 0));
-			container.addChild(new Text(formatRow("FILE", this.agent.def.file), 1, 0));
+			// Helper to add wrapped metadata rows
+			const addWrappedRow = (label: string, value: string, valueColor: string = "muted") => {
+				const labelWidth = 14;
+				const valueWidth = innerWidth - labelWidth - 1;
+				const wrapped = wordWrap(value, valueWidth);
+				for (let i = 0; i < wrapped.length; i++) {
+					const displayLabel = i === 0 ? label : "";
+					container.addChild(new Text(formatRow(displayLabel, wrapped[i], valueColor), 1, 0));
+				}
+			};
+
+			// STATUS - color based on state
+			const statusColorMap: Record<string, string> = { running: "accent", done: "success", error: "error", idle: "dim" };
+			const statusColor = statusColorMap[this.agent.status] || "muted";
+			container.addChild(new Text(formatRow("STATUS", this.agent.status.toUpperCase(), statusColor), 1, 0));
+
+			// DESCRIPTION - if present
+			if (this.agent.def.description) {
+				addWrappedRow("DESCRIPTION", this.agent.def.description, "muted");
+			}
+
+			// MODEL - accent color
+			addWrappedRow("MODEL", this.agent.def.model || "(inherit)", "accent");
+
+			// TOOLS - success color
+			addWrappedRow("TOOLS", this.agent.def.tools, "success");
+
+			// CONTEXT - conditional color based on percentage
+			const pct = Math.ceil(this.agent.contextPct);
+			const ctxColor = pct > 80 ? "error" : pct > 50 ? "warning" : "success";
+			container.addChild(new Text(formatRow("CONTEXT", `${pct}%`, ctxColor), 1, 0));
+
+			// RUNS - accent color
+			container.addChild(new Text(formatRow("RUNS", this.agent.runCount.toString(), "accent"), 1, 0));
+
+			// TOOLS USED - accent color
+			container.addChild(new Text(formatRow("TOOLS USED", this.agent.toolCount.toString(), "accent"), 1, 0));
+
+			// FILE - dim color (path)
+			addWrappedRow("FILE", this.agent.def.file, "dim");
+
+			// SESSION - dim color (path)
 			if (this.agent.sessionFile) {
-				container.addChild(new Text(formatRow("SESSION", this.agent.sessionFile), 1, 0));
+				addWrappedRow("SESSION", this.agent.sessionFile, "dim");
 			}
 			container.addChild(new Spacer(1));
 
 			// System prompt section (full width)
-			container.addChild(new Text(theme.fg("accent", theme.bold(" ─── SYSTEM PROMPT ───")), 1, 0));
+			container.addChild(new Text(sectionHeader("SYSTEM PROMPT"), 1, 0));
 			container.addChild(new Spacer(1));
-			container.addChild(new Markdown(this.agent.def.systemPrompt, 1, 0, mdTheme));
+			// Render system prompt as markdown - it will handle its own wrapping
+			const sysPromptMd = new Markdown(this.agent.def.systemPrompt, 1, 0, mdTheme);
+			container.addChild(sysPromptMd);
 			container.addChild(new Spacer(1));
 
-			// Task section (if present)
+			// Task section (if present) - render as markdown
 			if (this.agent.task) {
-				container.addChild(new Text(theme.fg("accent", theme.bold(" ─── CURRENT TASK ───")), 1, 0));
-				const taskLines = wordWrap(this.agent.task, innerWidth);
-				for (const line of taskLines) {
-					container.addChild(new Text(theme.fg("muted", line), 1, 0));
-				}
+				container.addChild(new Text(sectionHeader("CURRENT TASK"), 1, 0));
+				container.addChild(new Spacer(1));
+				const taskMd = new Markdown(this.agent.task, 1, 0, mdTheme);
+				container.addChild(taskMd);
 				container.addChild(new Spacer(1));
 			}
 
-			// Last work section (if present)
+			// Last work section (if present) - render as markdown
 			if (this.agent.lastWork) {
-				container.addChild(new Text(theme.fg("accent", theme.bold(" ─── LAST WORK ───")), 1, 0));
-				const workLines = wordWrap(this.agent.lastWork, innerWidth);
-				for (const line of workLines) {
-					container.addChild(new Text(theme.fg("muted", line), 1, 0));
-				}
+				container.addChild(new Text(sectionHeader("LAST WORK"), 1, 0));
+				container.addChild(new Spacer(1));
+				const workMd = new Markdown(this.agent.lastWork, 1, 0, mdTheme);
+				container.addChild(workMd);
 				container.addChild(new Spacer(1));
 			}
 
 			// Render all content (without footer)
 			const allLines = container.render(panelW);
+			this.totalContentLines = allLines.length; // Store for handleInput
 			const contentHeight = height - 1; // Reserve 1 line for footer
 			const maxScroll = Math.max(0, allLines.length - contentHeight);
-			this.scrollOffset = Math.min(this.scrollOffset, maxScroll);
+			
+			// Clamp scroll offset to valid range
+			this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
 
 			// Apply scrolling - show content lines, footer always at bottom
 			const visibleContentLines = allLines.slice(this.scrollOffset, this.scrollOffset + contentHeight);
 
 			// Footer (always visible at bottom, separate from scrollable content)
 			const scrollInfo = maxScroll > 0 
-				? ` ↑/↓/PgUp/PgDn Scroll (${this.scrollOffset + 1}-${Math.min(this.scrollOffset + contentHeight, allLines.length)}/${allLines.length}) • Esc Close`
+				? ` ↑/↓/PgUp/PgDn/Home/End Scroll (${this.scrollOffset + 1}-${Math.min(this.scrollOffset + contentHeight, allLines.length)}/${allLines.length}) • Esc Close`
 				: " Esc Close";
 			const footer = theme.fg("dim", scrollInfo);
 			const footerLine = padRight(footer, panelW);
@@ -869,17 +1009,16 @@ export default function (pi: ExtensionAPI) {
 			// Dark backdrop: full screen from top to bottom
 			const dimBg = "\x1b[48;2;10;10;15m";
 			const reset = "\x1b[0m";
-			const padLeftStr = dimBg + "  "; // 2 chars padding
-			const padRightStr = "  " + reset;
 
 			const result: string[] = [];
 			// Render visible content lines from top
+			// Pad each line to panelW before wrapping with background to ensure full coverage
 			for (const line of visibleContentLines) {
-				result.push(padLeftStr + line + padRightStr);
+				result.push(dimBg + "  " + padRight(line, panelW) + "  " + reset);
 			}
 
-			// Add footer at bottom
-			result.push(padLeftStr + footerLine + padRightStr);
+			// Add footer at bottom (already padded to panelW)
+			result.push(dimBg + "  " + footerLine + "  " + reset);
 
 			// Fill remaining height with dark background
 			while (result.length < height) {
@@ -1000,38 +1139,6 @@ export default function (pi: ExtensionAPI) {
 		updateWidget();
 	};
 
-	// Use function keys - universally compatible and reliable
-	pi.registerShortcut("f1", {
-		description: "Select previous agent",
-		handler: selectPrev,
-	});
-
-	pi.registerShortcut("f2", {
-		description: "Select next agent",
-		handler: selectNext,
-	});
-
-	pi.registerShortcut("f3", {
-		description: "Open agent detail view",
-		handler: async (ctx) => {
-			if (!ctx.hasUI) return;
-			// Filter out only idle agents - include completed ones
-			const active = Array.from(agentStates.values()).filter(
-				(a) => a.status !== "idle",
-			);
-			const count = active.length;
-			if (count === 0 || selectedAgentIndex < 0 || selectedAgentIndex >= count) return;
-			const agent = active[selectedAgentIndex];
-			if (!agent) return;
-			await showAgentDetail(ctx, agent);
-		},
-	});
-
-	pi.registerShortcut("f4", {
-		description: "Exit agent selection",
-		handler: exitSelection,
-	});
-
 	// ── System Prompt Override ───────────────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
@@ -1132,5 +1239,28 @@ ${agentCatalog}`,
 		updateWidget();
 
 		// Use footer.ts for footer — do not overwrite; widget uses placement: belowEditor
+
+		// Register nav provider for F-key navigation
+		const providers = ((globalThis as any).__piNavProviders = (globalThis as any).__piNavProviders || []);
+		providers.push({
+			isActive: () => {
+				const active = Array.from(agentStates.values()).filter(a => a.status !== "idle");
+				return active.length > 0;
+			},
+			selectPrev: selectPrev,
+			selectNext: selectNext,
+			showDetail: async (ctx: any) => {
+				if (!ctx.hasUI) return;
+				const active = Array.from(agentStates.values()).filter(
+					(a) => a.status !== "idle",
+				);
+				const count = active.length;
+				if (count === 0 || selectedAgentIndex < 0 || selectedAgentIndex >= count) return;
+				const agent = active[selectedAgentIndex];
+				if (!agent) return;
+				await showAgentDetail(ctx, agent);
+			},
+			exitSelection: exitSelection,
+		});
 	});
 }

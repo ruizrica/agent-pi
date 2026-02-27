@@ -347,10 +347,12 @@ export default function (pi: ExtensionAPI) {
 		const agentSessionFile = join(sessionDir, `chain-${agentKey}.json`);
 		const hasSession = agentSessions.get(agentKey);
 
+		const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 		const args = [
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
+			"-e", tasksExtPath,
 			"--model", model,
 			"--tools", agentDef.tools,
 			"--thinking", "off",
@@ -371,7 +373,7 @@ export default function (pi: ExtensionAPI) {
 		return new Promise((resolve) => {
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env },
+				env: { ...process.env, PI_SUBAGENT: "1" },
 				cwd: ctx.cwd,
 			});
 

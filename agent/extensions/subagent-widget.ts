@@ -20,6 +20,7 @@ const { spawn } = require("child_process") as any;
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
 
@@ -136,19 +137,21 @@ export default function (pi: ExtensionAPI) {
 			? `${ctx.model.provider}/${ctx.model.id}`
 			: "openrouter/google/gemini-3-flash-preview";
 
+		const tasksExtPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 		return new Promise<void>((resolve) => {
 			const proc = spawn("pi", [
 				"--mode", "json",
 				"-p",
 				"--session", state.sessionFile,   // persistent session for /subcont resumption
 				"--no-extensions",
+				"-e", tasksExtPath,
 				"--model", model,
 				"--tools", "read,bash,grep,find,ls",
 				"--thinking", "off",
 				prompt,
 			], {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env },
+				env: { ...process.env, PI_SUBAGENT: "1" },
 			});
 
 			state.proc = proc;

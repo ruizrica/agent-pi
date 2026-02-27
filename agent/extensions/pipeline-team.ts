@@ -451,10 +451,12 @@ export default function (pi: ExtensionAPI) {
 		const agentKey = `pipeline-${agentDef.name.toLowerCase().replace(/\s+/g, "-")}-${agentState.index}`;
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);
 
+		const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 		const args = [
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
+			"-e", tasksExtPath,
 			"--model", model,
 			"--tools", agentDef.tools,
 			"--thinking", "off",
@@ -468,7 +470,7 @@ export default function (pi: ExtensionAPI) {
 		return new Promise((resolvePromise) => {
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env },
+				env: { ...process.env, PI_SUBAGENT: "1" },
 			});
 
 			let buffer = "";

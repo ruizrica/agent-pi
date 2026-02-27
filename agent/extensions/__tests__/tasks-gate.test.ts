@@ -48,3 +48,32 @@ describe("shouldBypassTaskGate", () => {
 		expect(shouldBypassTaskGate("")).toBe(false);
 	});
 });
+
+describe("PI_SUBAGENT env var bypass", () => {
+	function shouldBypassForSubagent(): boolean {
+		return process.env.PI_SUBAGENT === "1";
+	}
+
+	it("should bypass entire gate when PI_SUBAGENT=1", () => {
+		const original = process.env.PI_SUBAGENT;
+		process.env.PI_SUBAGENT = "1";
+		expect(shouldBypassForSubagent()).toBe(true);
+		if (original === undefined) delete process.env.PI_SUBAGENT;
+		else process.env.PI_SUBAGENT = original;
+	});
+
+	it("should NOT bypass when PI_SUBAGENT is unset", () => {
+		const original = process.env.PI_SUBAGENT;
+		delete process.env.PI_SUBAGENT;
+		expect(shouldBypassForSubagent()).toBe(false);
+		if (original !== undefined) process.env.PI_SUBAGENT = original;
+	});
+
+	it("should NOT bypass when PI_SUBAGENT is 0", () => {
+		const original = process.env.PI_SUBAGENT;
+		process.env.PI_SUBAGENT = "0";
+		expect(shouldBypassForSubagent()).toBe(false);
+		if (original === undefined) delete process.env.PI_SUBAGENT;
+		else process.env.PI_SUBAGENT = original;
+	});
+});

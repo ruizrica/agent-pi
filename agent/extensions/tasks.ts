@@ -235,6 +235,8 @@ export default function (pi: ExtensionAPI) {
 	// ── Blocking gate ──────────────────────────────────────────────────
 
 	pi.on("tool_call", async (event, _ctx) => {
+		// Sub-agents manage their own task discipline — don't gate them
+		if (process.env.PI_SUBAGENT === "1") return { block: false };
 		if (event.toolName === "tasks") return { block: false };
 		// Communication, orchestration, and dispatcher tools bypass the gate
 		if (["dispatch_agent", "dispatch_agents", "ask_user", "run_chain"].includes(event.toolName)) return { block: false };
