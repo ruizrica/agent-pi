@@ -34,6 +34,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read /tmp/pi-skill-docs.md to have the freshest reference. Also search the local codebase for existing skill examples.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE SKILL.md with valid frontmatter
 - Include setup scripts if dependencies are needed

@@ -1,37 +1,45 @@
-default:
-  description: "Understand → Gather → Plan → Execute → Review"
+plan-build-review:
+  description: "Plan, implement, and review — the standard development cycle"
   review_max_loops: 3
   phases:
     - name: understand
-      description: "Clarify requirements"
+      description: "Clarify the task and gather context"
       mode: interactive
-      agents: []
-    - name: gather
-      description: "Parallel codebase reconnaissance"
-      mode: parallel
       agents:
         - role: scout
-          task_template: "Explore filesystem structure for: $TASK\n\nContext:\n$CONTEXT"
-        - role: scout
-          task_template: "Read docs and configs for: $TASK\n\nContext:\n$CONTEXT"
-        - role: scout
-          task_template: "Find existing patterns for: $TASK\n\nContext:\n$CONTEXT"
+          task_template: "Explore the codebase and clarify the task. Summarize what needs to be done."
     - name: plan
-      description: "Create implementation plan"
-      mode: sequential
+      description: "Create an implementation plan"
+      mode: interactive
       agents:
         - role: planner
-          task_template: "Plan implementation for: $TASK\n\nContext:\n$CONTEXT"
-    - name: execute
+          task_template: "Create a detailed implementation plan for: $INPUT"
+    - name: build
       description: "Implement the plan"
-      mode: parallel
+      mode: interactive
       agents:
         - role: builder
-          task_template: "Implement:\n\n$PLAN\n\nContext:\n$CONTEXT"
+          task_template: "Implement the following plan:\n\n$INPUT"
     - name: review
-      description: "Audit and remediate"
-      mode: sequential
-      max_iterations: 3
+      description: "Review for quality and correctness"
+      mode: interactive
       agents:
         - role: reviewer
-          task_template: "Review implementation. State APPROVED or list issues.\n\nPlan:\n$PLAN\n\nContext:\n$CONTEXT"
+          task_template: "Review this implementation for bugs, style, and correctness:\n\n$INPUT"
+
+plan-build:
+  description: "Plan then build — fast two-step without review"
+  review_max_loops: 1
+  phases:
+    - name: plan
+      description: "Create implementation plan"
+      mode: interactive
+      agents:
+        - role: planner
+          task_template: "Plan the implementation for: $INPUT"
+    - name: build
+      description: "Implement"
+      mode: interactive
+      agents:
+        - role: builder
+          task_template: "Implement this plan:\n\n$INPUT"

@@ -39,6 +39,10 @@ Once you have research from all experts:
 6. **Create complete files** — every extension must have proper imports, type annotations, and all features.
 7. **Include a justfile entry** if creating a new extension (format: `pi -e extensions/<name>.ts`).
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## What You Can Build
 - **Extensions** (.ts files) — custom tools, event hooks, commands, UI components
 - **Themes** (.json files) — color schemes with all 51 tokens

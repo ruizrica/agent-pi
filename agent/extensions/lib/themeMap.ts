@@ -1,3 +1,5 @@
+// ABOUTME: Per-extension default theme assignments mapping extension filenames to themes.
+// ABOUTME: Each extension calls applyExtensionDefaults() in session_start to load its theme.
 /**
  * themeMap.ts — Per-extension default theme assignments
  *

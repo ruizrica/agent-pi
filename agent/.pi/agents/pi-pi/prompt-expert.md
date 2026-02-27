@@ -62,6 +62,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read /tmp/pi-prompt-docs.md to have the freshest reference. Also search the local codebase (.pi/prompts/) for existing prompt template examples.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE .md files with proper frontmatter
 - Include argument placeholders where appropriate

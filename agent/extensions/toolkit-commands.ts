@@ -1,3 +1,5 @@
+// ABOUTME: Registers toolkit .md files from .pi/commands/ as dynamic Pi slash commands.
+// ABOUTME: Supports inline (inject as user message) and fork (spawn subprocess) execution modes.
 /**
  * Toolkit Commands — Register toolkit command .md files as Pi slash commands
  *
@@ -16,6 +18,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "child_process";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -173,7 +176,7 @@ export default function (pi: ExtensionAPI) {
 						const tools = mapTools(cmd.allowedTools).join(",");
 						const model = _ctx.model
 							? `${_ctx.model.provider}/${_ctx.model.id}`
-							: "openrouter/google/gemini-3-flash-preview";
+							: DEFAULT_SUBAGENT_MODEL;
 
 						const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 						const proc = spawn("pi", [

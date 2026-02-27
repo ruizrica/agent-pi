@@ -1,3 +1,5 @@
+// ABOUTME: Cycles through available themes with Ctrl+X/Q shortcuts and /theme command.
+// ABOUTME: Shows color swatch preview on switch and persists selection to settings.json.
 /**
  * Theme Cycler — Keyboard shortcuts to cycle through available themes
  *
@@ -20,6 +22,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth } from "@mariozechner/pi-tui";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { persistTheme } from "./lib/persist-theme.ts";
 
 export default function (pi: ExtensionAPI) {
 	let currentCtx: ExtensionContext | undefined;
@@ -96,6 +99,7 @@ export default function (pi: ExtensionAPI) {
 		const result = ctx.ui.setTheme(theme.name);
 
 		if (result.success) {
+			persistTheme(theme.name);
 			updateStatus(ctx);
 			showSwatch(ctx);
 			ctx.ui.notify(`${theme.name} (${index + 1}/${themes.length})`, "info");
@@ -136,6 +140,7 @@ export default function (pi: ExtensionAPI) {
 			if (arg) {
 				const result = ctx.ui.setTheme(arg);
 				if (result.success) {
+					persistTheme(arg);
 					updateStatus(ctx);
 					showSwatch(ctx);
 					ctx.ui.notify(`Theme: ${arg}`, "info");
@@ -157,6 +162,7 @@ export default function (pi: ExtensionAPI) {
 			const selectedName = selected.split(/\s/)[0];
 			const result = ctx.ui.setTheme(selectedName);
 			if (result.success) {
+				persistTheme(selectedName);
 				updateStatus(ctx);
 				showSwatch(ctx);
 				ctx.ui.notify(`Theme: ${selectedName}`, "info");

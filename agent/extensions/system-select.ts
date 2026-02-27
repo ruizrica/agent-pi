@@ -1,3 +1,5 @@
+// ABOUTME: Switches the system prompt by selecting agent definitions via /system command.
+// ABOUTME: Scans .pi/agents/ and similar directories for .md files with frontmatter metadata.
 /**
  * System Select — Switch the system prompt via /system
  *
@@ -74,19 +76,20 @@ export default function (pi: ExtensionAPI) {
 		const home = homedir();
 		const cwd = ctx.cwd;
 
+		const agentDir = join(home, ".pi", "agent");
 		const dirs: [string, string][] = [
 			[join(cwd, ".pi", "agents"), ".pi"],
 			[join(cwd, ".claude", "agents"), ".claude"],
 			[join(cwd, ".gemini", "agents"), ".gemini"],
 			[join(cwd, ".codex", "agents"), ".codex"],
-			[join(home, ".pi", "agent", "agents"), "~/.pi"],
+			[join(agentDir, "agents"), "~/.pi/agent"],
+			[join(agentDir, ".pi", "agents"), "~/.pi/agent"],
 			[join(home, ".claude", "agents"), "~/.claude"],
 			[join(home, ".gemini", "agents"), "~/.gemini"],
 			[join(home, ".codex", "agents"), "~/.codex"],
 		];
 
 		const seen = new Set<string>();
-		const sourceCounts: Record<string, number> = {};
 
 		for (const [dir, source] of dirs) {
 			const agents = scanAgents(dir, source);
@@ -95,24 +98,11 @@ export default function (pi: ExtensionAPI) {
 				if (seen.has(key)) continue;
 				seen.add(key);
 				allAgents.push(agent);
-				sourceCounts[source] = (sourceCounts[source] || 0) + 1;
 			}
 		}
 
 		defaultTools = pi.getActiveTools();
 		ctx.ui.setStatus("system-prompt", "System Prompt: Default");
-
-		const loadedSources = Object.entries(sourceCounts)
-			.map(([src, count]) => `${count} from ${src}`)
-			.join(", ");
-		
-		const notifyLines = [];
-		if (allAgents.length > 0) {
-			notifyLines.push(`Loaded ${allAgents.length} agents (${loadedSources})`);
-		}
-		if (notifyLines.length > 0) {
-			ctx.ui.notify(notifyLines.join("\n"), "info");
-		}
 	});
 
 	pi.registerCommand("system", {

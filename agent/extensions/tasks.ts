@@ -1,3 +1,5 @@
+// ABOUTME: Task discipline extension that gates agent tools until tasks are defined.
+// ABOUTME: Three-state lifecycle (idle/inprogress/done) with widget display and completion nudges.
 /**
  * Tasks Extension — Task discipline for the agent
  *

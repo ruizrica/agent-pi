@@ -13,5 +13,10 @@ agent/pi-crash.log
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
+
+# Generated artifacts
+.pi/agent-sessions/
+agent/extensions/coverage/

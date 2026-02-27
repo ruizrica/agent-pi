@@ -1,22 +1,27 @@
 {
   "quietStartup": true,
   "lastChangelogVersion": "0.55.1",
-  "theme": "monochrome-blue",
+  "theme": "midnight-ocean",
   "transport": "sse",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.3-codex-spark",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-opus-4-6",
   "defaultThinkingLevel": "off",
   "hideThinkingBlock": true,
   "steeringMode": "one-at-a-time",
   "packages": [
     "extensions/agent-banner.ts",
+    "extensions/agent-chain.ts",
+    "extensions/agent-team.ts",
     "extensions/pipeline-team.ts",
+    "extensions/session-continue.ts",
     "extensions/session-replay.ts",
     "extensions/subagent-widget.ts",
     "extensions/system-select.ts",
     "extensions/theme-cycler.ts",
-    "extensions/tilldone.ts",
+    "extensions/tasks.ts",
+    "extensions/toolkit-commands.ts",
     "extensions/user-question.ts",
+    "extensions/agent-nav.ts",
     "extensions/footer.ts"
   ]
 }

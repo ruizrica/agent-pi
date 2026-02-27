@@ -1,4 +1,17 @@
 {
+  "name": "user-question-extension",
+  "version": "1.0.0",
+  "description": "Tests for user-question extension",
+  "scripts": {
+    "test": "vitest run --config __tests__/vitest.config.ts",
+    "test:watch": "vitest watch --config __tests__/vitest.config.ts",
+    "test:coverage": "vitest run --coverage --config __tests__/vitest.config.ts"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.6.1",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
+  },
   "dependencies": {
     "yaml": "^2.8.2"
   }

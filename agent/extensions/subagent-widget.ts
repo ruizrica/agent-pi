@@ -1,3 +1,5 @@
+// ABOUTME: Spawns and manages background subagent processes with live status widgets.
+// ABOUTME: Provides /sub, /subcont, /subrm, /subclear commands and subagent_* tools.
 /**
  * Subagent Widget — /sub, /subclear, /subrm, /subcont commands with stacking live widgets
  *
@@ -23,6 +25,36 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
+import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
+import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
+
+// ── Graceful kill helper ─────────────────────────────────────────────────────
+
+/** Send SIGTERM and wait up to `timeoutMs` for exit; escalate to SIGKILL. */
+function killGracefully(proc: any, timeoutMs = 3000): Promise<void> {
+	return new Promise((resolve) => {
+		if (!proc || proc.exitCode !== null) {
+			resolve();
+			return;
+		}
+		let settled = false;
+		const onExit = () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			resolve();
+		};
+		proc.once("exit", onExit);
+		proc.kill("SIGTERM");
+		const timer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			proc.removeListener("exit", onExit);
+			try { proc.kill("SIGKILL"); } catch {}
+			resolve();
+		}, timeoutMs);
+	});
+}
 
 interface SubState {
 	id: number;
@@ -135,7 +167,7 @@ export default function (pi: ExtensionAPI) {
 	): Promise<void> {
 		const model = ctx.model
 			? `${ctx.model.provider}/${ctx.model.id}`
-			: "openrouter/google/gemini-3-flash-preview";
+			: DEFAULT_SUBAGENT_MODEL;
 
 		const tasksExtPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "tasks.ts");
 		return new Promise<void>((resolve) => {
@@ -211,6 +243,8 @@ export default function (pi: ExtensionAPI) {
 				updateWidgets();
 				resolve();
 			});
+
+			proc.on("exit", () => { clearInterval(timer); });
 		});
 	}
 
@@ -294,7 +328,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (state.proc && state.status === "running") {
-				state.proc.kill("SIGTERM");
+				await killGracefully(state.proc);
 			}
 			ctx.ui.setWidget(`sub-${args.id}`, undefined);
 			agents.delete(args.id);
@@ -427,7 +461,7 @@ export default function (pi: ExtensionAPI) {
 
 			// Kill the process if still running
 			if (state.proc && state.status === "running") {
-				state.proc.kill("SIGTERM");
+				await killGracefully(state.proc);
 				ctx.ui.notify(`Subagent #${num} killed and removed.`, "warning");
 			} else {
 				ctx.ui.notify(`Subagent #${num} removed.`, "info");
@@ -446,13 +480,15 @@ export default function (pi: ExtensionAPI) {
 			widgetCtx = ctx;
 
 			let killed = 0;
+			const killPromises: Promise<void>[] = [];
 			for (const [id, state] of Array.from(agents.entries())) {
 				if (state.proc && state.status === "running") {
-					state.proc.kill("SIGTERM");
+					killPromises.push(killGracefully(state.proc));
 					killed++;
 				}
 				ctx.ui.setWidget(`sub-${id}`, undefined);
 			}
+			await Promise.all(killPromises);
 
 			const total = agents.size;
 			agents.clear();
@@ -469,12 +505,16 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
+		const sessDir = path.join(os.homedir(), ".pi", "agent", "sessions", "subagents");
+		cleanOldSessionFiles(sessDir, 7);
+		const killPromises: Promise<void>[] = [];
 		for (const [id, state] of Array.from(agents.entries())) {
 			if (state.proc && state.status === "running") {
-				state.proc.kill("SIGTERM");
+				killPromises.push(killGracefully(state.proc));
 			}
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
+		await Promise.all(killPromises);
 		agents.clear();
 		nextId = 1;
 		widgetCtx = ctx;

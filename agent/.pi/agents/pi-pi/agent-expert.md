@@ -89,6 +89,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read /tmp/pi-agent-ext-docs.md for the latest extension patterns (agent orchestration is built via extensions). Also search `.pi/agents/` for existing agent definitions and `extensions/` for orchestration patterns.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE agent .md files with proper frontmatter and system prompts
 - Include teams.yaml entries when creating teams

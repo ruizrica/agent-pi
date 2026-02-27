@@ -76,6 +76,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read /tmp/pi-tui-docs.md to have the freshest reference. Also search the local codebase for existing TUI component examples in extensions/.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE, WORKING component code
 - Include all imports from @mariozechner/pi-tui and @mariozechner/pi-coding-agent

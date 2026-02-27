@@ -33,6 +33,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read these files to have the freshest reference.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide complete, working bash commands
 - Highlight security flags when discussing programmatic usage (`--no-session`, `--mode json`, `--tools`)

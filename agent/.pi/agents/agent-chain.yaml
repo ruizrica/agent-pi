@@ -16,15 +16,31 @@ plan-build:
     - agent: builder
       prompt: "Based on this plan, implement:\n\n$INPUT"
 
-scout-flow:
-  description: "Triple-scout deep recon — explore, validate, verify"
+full-pipeline:
+  description: "End-to-end pipeline — scout, plan, build, review, test"
   steps:
     - agent: scout
-      prompt: "Explore the codebase and investigate: $INPUT\n\nReport your findings with structure, key files, and patterns."
+      prompt: "Explore the codebase and identify: $INPUT"
+    - agent: planner
+      prompt: "Based on this analysis, create a plan:\n\n$INPUT"
+    - agent: builder
+      prompt: "Implement this plan:\n\n$INPUT"
+    - agent: reviewer
+      prompt: "Review this implementation:\n\n$INPUT"
+    - agent: tester
+      prompt: "Write and run tests for this implementation. Report results.\n\n$INPUT"
+
+investigate-fix:
+  description: "Bug fix flow — investigate, propose fix, implement, review"
+  steps:
     - agent: scout
-      prompt: "Validate and cross-check the following analysis. Look for anything missed, incorrect, or incomplete:\n\n$INPUT\n\nOriginal request: $ORIGINAL"
-    - agent: scout
-      prompt: "Final review pass. Verify the analysis below is accurate and complete. Add any missing details or corrections:\n\n$INPUT\n\nOriginal request: $ORIGINAL"
+      prompt: "Explore the codebase relevant to this bug report:\n\n$INPUT"
+    - agent: debugger
+      prompt: "Investigate this bug and propose a fix. Include reproduction steps and root cause.\n\nContext:\n$INPUT\n\nOriginal request: $ORIGINAL"
+    - agent: builder
+      prompt: "Implement the proposed fix from the debugger. Apply the changes exactly as specified.\n\n$INPUT"
+    - agent: reviewer
+      prompt: "Review this bug fix for correctness and completeness:\n\n$INPUT"
 
 plan-review-plan:
   description: "Iterative planning — plan, critique, then refine with feedback"
@@ -36,14 +52,26 @@ plan-review-plan:
     - agent: planner
       prompt: "Revise and improve your implementation plan based on this critique. Address every issue raised and incorporate the recommendations:\n\nOriginal request: $ORIGINAL\n\nCritique:\n$INPUT"
 
-full-review:
-  description: "End-to-end pipeline — scout, plan, build, and review"
+test-fix:
+  description: "Test-driven fix cycle — add tests, implement, review"
+  steps:
+    - agent: tester
+      prompt: "Write tests for the following requirement or failing behavior. Run existing tests and report status.\n\n$INPUT"
+    - agent: builder
+      prompt: "Implement the changes needed to make these tests pass:\n\n$INPUT"
+    - agent: reviewer
+      prompt: "Review this implementation and test results:\n\n$INPUT"
+
+audit:
+  description: "Comprehensive code audit — scans project, finds issues, generates report and hardening plan"
   steps:
     - agent: scout
-      prompt: "Explore the codebase and identify: $INPUT"
-    - agent: planner
-      prompt: "Based on this analysis, create a plan:\n\n$INPUT"
-    - agent: builder
-      prompt: "Implement this plan:\n\n$INPUT"
+      prompt: "# Phase 0: Project Discovery\n\nBefore touching any code, understand what we're working with.\n\n## Steps\n\n1. **Scan the project root** — Read `package.json`, `Cargo.toml`, `requirements.txt`, `go.mod`, `build.gradle`, `Podfile`, or any manifest files to identify:\n   - Language(s) and runtime (Node.js, Python, Rust, Go, Swift, Kotlin, etc.)\n   - Framework(s) (React, Next.js, Express, FastAPI, Capacitor, Flutter, etc.)\n   - Key dependencies and their versions\n   - Build tooling and bundlers\n\n2. **Map the architecture** — Identify:\n   - Entry points (servers, main files, route handlers, app delegates)\n   - Data layer (databases, ORMs, caches, queues)\n   - External integrations (APIs, SDKs, third-party services)\n   - Auth and session management patterns\n   - Background jobs, workers, or scheduled tasks\n\n3. **Classify the project type** and load the appropriate best-practice lens:\n   - **Web API / Backend Service** → OWASP API Top 10, 12-factor app principles\n   - **Frontend SPA / SSR** → XSS prevention, CSP, bundle security, hydration safety\n   - **Mobile App (iOS/Android/Capacitor)** → Platform security guidelines, secure storage, deep link validation\n   - **CLI Tool / Agent System** → Input sanitization, privilege escalation, subprocess safety\n   - **Library / SDK** → Supply chain safety, API surface minimization, semver discipline\n   - **Monorepo / Multi-service** → Audit each service independently, then cross-service boundaries\n\n4. **Search for current best practices** — Based on the identified stack, search the web for:\n   - `\"{framework} security best practices {current_year}\"`\n   - `\"{language} memory leak patterns\"`\n   - `\"{framework} performance optimization\"`\n   - Known CVEs for detected dependency versions\n   - Official security hardening guides for the framework\n\n$INPUT\n\nReport your findings in a clear, structured format."
     - agent: reviewer
-      prompt: "Review this implementation:\n\n$INPUT"
+      prompt: "# Phase 1: Deep Scan — Memory, Patterns, Performance, Resilience\n\nPerform a methodical, file-by-file audit. For each finding, record: **file path, line number(s), severity (critical/high/medium/low), category, and description.**\n\n**Project Context:**\n$INPUT\n\n## 1.1 Memory Leaks & Resource Management\n\nScan for:\n- **Unclosed resources** — database connections, file handles, streams, sockets, WebSocket connections not properly closed or disposed\n- **Event listener accumulation** — listeners added in loops, on mount, or in constructors without corresponding removal on teardown/unmount/dispose\n- **Uncleared timers** — `setInterval`, `setTimeout`, cron jobs, or polling loops without cleanup\n- **Orphaned subscriptions** — RxJS/Observable/EventEmitter subscriptions without unsubscribe logic\n- **Circular references** — objects referencing each other preventing garbage collection\n- **Cache without eviction** — in-memory caches (`Map`, `Set`, objects) that grow unbounded with no TTL, LRU, or size limit\n- **Closure captures** — closures inadvertently capturing large scopes or DOM references\n- **Buffer accumulation** — streams or buffers that accumulate without draining\n- **Global state pollution** — data appended to global/module-level variables across requests or invocations\n- **Detached DOM nodes** — references to DOM elements that have been removed from the tree (frontend)\n- **Native bridge leaks** — (mobile) native plugin callbacks not cleaned up, Capacitor/Cordova listener leaks\n\n## 1.2 Anti-Patterns & Code Smells\n\nScan for:\n- **Error swallowing** — empty catch blocks, `.catch(() => {})`, ignored promise rejections\n- **Unhandled async** — missing `await`, fire-and-forget promises without error handling, unhandled rejection paths\n- **Race conditions** — shared mutable state accessed from concurrent contexts without synchronization\n- **Callback hell / pyramid of doom** — deeply nested callbacks that should be refactored to async/await or pipelines\n- **God objects / functions** — single files or functions with 500+ lines doing too many things\n- **Magic numbers and strings** — hardcoded values without named constants or configuration\n- **Copy-paste duplication** — repeated code blocks that should be abstracted\n- **Tight coupling** — direct instantiation or deep import chains making testing/mocking impossible\n- **Missing type safety** — `any` types in TypeScript, no input validation, implicit type coercion\n- **Improper null handling** — unchecked nullable values, missing optional chaining, bare property access on potentially undefined objects\n- **Synchronous blocking** — blocking the event loop (Node.js), main thread (mobile), or UI thread with heavy computation\n- **Dead code** — unreachable code, unused imports, commented-out blocks, deprecated feature flags still in codebase\n\n## 1.4 Performance & Reliability\n\nScan for:\n- **N+1 queries** — database calls inside loops instead of batch/join operations\n- **Missing indexes** — queries on unindexed fields (check schema + query patterns)\n- **Unbounded queries** — `SELECT *` or queries without `LIMIT` that could return massive result sets\n- **Missing pagination** — list endpoints that return all records\n- **Redundant re-renders** — (frontend) components re-rendering without memoization, missing `useMemo`/`useCallback`/`React.memo`\n- **Large bundle / payload** — importing entire libraries when only a subset is needed, no tree-shaking, oversized API responses\n- **Missing caching** — repeated expensive computations or network calls without caching layers\n- **No graceful degradation** — missing circuit breakers, retries, fallbacks, or timeout configurations\n- **Missing health checks** — no liveness/readiness endpoints for services\n- **Unoptimized assets** — uncompressed images, unminified JS/CSS in production builds\n\n## 1.5 Resilience & Error Handling\n\nScan for:\n- **Missing error boundaries** — (React) no `ErrorBoundary` components around critical UI sections\n- **Crash-inducing exceptions** — unhandled exceptions that crash the process/app instead of being caught\n- **No retry logic** — network calls to external services without retry + backoff\n- **Missing timeouts** — HTTP requests, database queries, or external calls with no timeout configured\n- **Incomplete cleanup on failure** — transactions not rolled back, temp files not deleted, locks not released on error paths\n- **Silent failures** — operations that fail but the system continues in a corrupt or inconsistent state\n- **Missing validation at boundaries** — no input validation on API endpoints, form submissions, or message handlers\n\nReport findings with file paths, line numbers, severity, category, and description."
+    - agent: red-team
+      prompt: "# Phase 1: Deep Scan — Security Vulnerabilities\n\nPerform a methodical security audit. For each finding, record: **file path, line number(s), severity (critical/high/medium/low), category, and description.**\n\n**Project Context:**\n$INPUT_1\n\n## 1.3 Security Vulnerabilities\n\nScan for:\n- **Injection flaws** — SQL injection, NoSQL injection, command injection, LDAP injection, template injection\n- **XSS vectors** — unsanitized user input rendered in HTML/DOM, `dangerouslySetInnerHTML`, `innerHTML`, `eval()`\n- **Authentication weaknesses** — hardcoded credentials, weak token generation, missing token expiration, insecure session management\n- **Authorization gaps** — missing permission checks, IDOR (Insecure Direct Object References), privilege escalation paths\n- **Secrets exposure** — API keys, tokens, passwords in source code, `.env` files committed, secrets in logs\n- **Insecure data storage** — sensitive data in `localStorage`, `SharedPreferences` without encryption, plaintext storage\n- **Insecure communication** — HTTP instead of HTTPS, missing TLS certificate validation, insecure WebSocket connections\n- **Dependency vulnerabilities** — outdated packages with known CVEs, unpinned versions, untrusted registries\n- **Path traversal** — user-controlled file paths without sanitization\n- **CORS misconfiguration** — overly permissive origins, credentials exposure\n- **CSRF / SSRF** — missing anti-forgery tokens, unvalidated redirect URLs, internal network access via user-supplied URLs\n- **Logging sensitive data** — PII, tokens, or credentials written to logs\n- **Insecure deserialization** — parsing untrusted data (JSON, YAML, pickle, XML) without validation\n- **Rate limiting absence** — no throttling on auth endpoints, API routes, or resource-intensive operations\n\nReport findings with file paths, line numbers, severity, category, and description."
+    - agent: reviewer
+      prompt: "# Phase 2: Findings Report\n\nConsolidate the audit findings into a structured report.\n\n**Phase 1 Findings:**\n\n## Code Quality & Performance Findings\n\n$INPUT_2\n\n## Security Findings\n\n$INPUT_3\n\n## Format\n\n```markdown\n## Audit Findings Report\n\n**Project:** [name]\n**Stack:** [detected languages, frameworks, key deps]\n**Scanned:** [number of files] files across [number of directories] directories\n**Date:** [current date]\n\n### Summary\n\n| Severity | Count |\n|----------|-------|\n| 🔴 Critical | X |\n| 🟠 High     | X |\n| 🟡 Medium   | X |\n| 🔵 Low      | X |\n\n### Critical Findings\n\n#### [CRIT-001] [Title]\n- **File:** `path/to/file.ts:42`\n- **Category:** Memory Leak | Security | Anti-Pattern | Performance | Resilience\n- **Description:** [What's wrong]\n- **Impact:** [What can go wrong if unaddressed]\n- **Evidence:** [Code snippet or reference]\n\n[...repeat for each finding, grouped by severity...]\n```\n\nProduce the complete findings report following this format."
+    - agent: planner
+      prompt: "# Phase 3: Hardening Plan\n\nBased on the findings report, create a prioritized, actionable remediation plan.\n\n**Findings Report:**\n$INPUT\n\n## Format\n\n```markdown\n## Hardening Plan\n\n### Priority 1: Critical Fixes (Do Immediately)\n\n#### [Fix for CRIT-001]\n- **What:** [Concise description of the change]\n- **Where:** `path/to/file.ts`\n- **How:** [Step-by-step implementation approach]\n- **Verification:** [How to confirm the fix works — test, metric, or check]\n\n### Priority 2: High-Impact Improvements (This Sprint)\n[...]\n\n### Priority 3: Medium-Term Hardening (Next 2-4 Weeks)\n[...]\n\n### Priority 4: Long-Term Excellence (Backlog)\n[...]\n\n### Recommended Tooling & Automation\n\n| Purpose | Tool | Notes |\n|---------|------|------|\n| Static analysis | [e.g., ESLint strict config, Semgrep] | [setup notes] |\n| Dependency audit | [e.g., npm audit, Snyk, Dependabot] | [frequency] |\n| Memory profiling | [e.g., Chrome DevTools, Instruments, Valgrind] | [when to run] |\n| Security scanning | [e.g., OWASP ZAP, Trivy, CodeQL] | [CI integration] |\n| Performance monitoring | [e.g., Sentry, Datadog, Lighthouse CI] | [thresholds] |\n\n### Recommended Process Changes\n\n- [ ] Add pre-commit hooks for [specific checks]\n- [ ] Add CI pipeline stages for [security scan, lint, type check]\n- [ ] Establish code review checklist covering [top finding categories]\n- [ ] Schedule recurring dependency audits every [timeframe]\n- [ ] Add monitoring/alerting for [specific metrics from findings]\n```\n\nProduce the complete hardening plan following this format."

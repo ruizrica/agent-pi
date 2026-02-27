@@ -34,6 +34,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Then read /tmp/pi-ext-docs.md to have the freshest reference. Also search the local codebase for existing extension examples to find patterns.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE, WORKING code snippets
 - Include all necessary imports

@@ -55,6 +55,10 @@ firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/m
 
 Search the local codebase for existing settings files and configuration patterns.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - Provide COMPLETE, VALID settings.json snippets
 - Show how project settings override global

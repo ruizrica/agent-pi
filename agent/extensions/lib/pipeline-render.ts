@@ -1,7 +1,5 @@
-/**
- * ABOUTME: Pure render functions for vertical timeline pipeline widget
- * ABOUTME: Extracts rendering logic from pipeline-team.ts for testability
- */
+// ABOUTME: Pure render functions for vertical timeline pipeline widget
+// ABOUTME: Extracts rendering logic from pipeline-team.ts for testability
 
 import { visibleWidth } from "@mariozechner/pi-tui";
 

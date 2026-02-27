@@ -124,6 +124,10 @@ Then read /tmp/pi-keybindings-docs.md to have the freshest reference.
 
 Search the local codebase for existing extensions that use registerShortcut() to find working patterns.
 
+## Constraints
+
+- **Do NOT include any emojis. Emojis are banned.**
+
 ## How to Respond
 - ALWAYS check if the requested key combo is reserved before recommending it
 - ALWAYS warn about macOS compatibility issues with alt/shift combos

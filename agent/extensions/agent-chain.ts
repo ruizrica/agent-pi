@@ -1,3 +1,5 @@
+// ABOUTME: Sequential pipeline orchestrator that chains agent steps with prompt templates.
+// ABOUTME: Each step's output feeds into the next via $INPUT; provides run_chain tool and /chain command.
 /**
  * Agent Chain — Sequential pipeline orchestrator
  *
@@ -31,19 +33,10 @@ import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
+import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
+import { parseChainYaml, type ChainStep, type ChainDef } from "./lib/parse-chain-yaml.ts";
 
 // ── Types ────────────────────────────────────────
-
-interface ChainStep {
-	agent: string;
-	prompt: string;
-}
-
-interface ChainDef {
-	name: string;
-	description: string;
-	steps: ChainStep[];
-}
 
 interface AgentDef {
 	name: string;
@@ -64,74 +57,6 @@ interface StepState {
 
 function displayName(name: string): string {
 	return name.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-}
-
-// ── Chain YAML Parser ────────────────────────────
-
-function parseChainYaml(raw: string): ChainDef[] {
-	const chains: ChainDef[] = [];
-	let current: ChainDef | null = null;
-	let currentStep: ChainStep | null = null;
-
-	for (const line of raw.split("\n")) {
-		// Chain name: top-level key
-		const chainMatch = line.match(/^(\S[^:]*):$/);
-		if (chainMatch) {
-			if (current && currentStep) {
-				current.steps.push(currentStep);
-				currentStep = null;
-			}
-			current = { name: chainMatch[1].trim(), description: "", steps: [] };
-			chains.push(current);
-			continue;
-		}
-
-		// Chain description
-		const descMatch = line.match(/^\s+description:\s+(.+)$/);
-		if (descMatch && current && !currentStep) {
-			let desc = descMatch[1].trim();
-			if ((desc.startsWith('"') && desc.endsWith('"')) ||
-				(desc.startsWith("'") && desc.endsWith("'"))) {
-				desc = desc.slice(1, -1);
-			}
-			current.description = desc;
-			continue;
-		}
-
-		// "steps:" label — skip
-		if (line.match(/^\s+steps:\s*$/) && current) {
-			continue;
-		}
-
-		// Step agent line
-		const agentMatch = line.match(/^\s+-\s+agent:\s+(.+)$/);
-		if (agentMatch && current) {
-			if (currentStep) {
-				current.steps.push(currentStep);
-			}
-			currentStep = { agent: agentMatch[1].trim(), prompt: "" };
-			continue;
-		}
-
-		// Step prompt line
-		const promptMatch = line.match(/^\s+prompt:\s+(.+)$/);
-		if (promptMatch && currentStep) {
-			let prompt = promptMatch[1].trim();
-			if ((prompt.startsWith('"') && prompt.endsWith('"')) ||
-				(prompt.startsWith("'") && prompt.endsWith("'"))) {
-				prompt = prompt.slice(1, -1);
-			}
-			prompt = prompt.replace(/\\n/g, "\n");
-			currentStep.prompt = prompt;
-			continue;
-		}
-	}
-
-	if (current && currentStep) {
-		current.steps.push(currentStep);
-	}
-
-	return chains;
 }
 
 // ── Frontmatter Parser ───────────────────────────
@@ -341,7 +266,7 @@ export default function (pi: ExtensionAPI) {
 	): Promise<{ output: string; exitCode: number; elapsed: number }> {
 		const model = ctx.model
 			? `${ctx.model.provider}/${ctx.model.id}`
-			: "openrouter/google/gemini-3-flash-preview";
+			: DEFAULT_SUBAGENT_MODEL;
 
 		const agentKey = agentDef.name.toLowerCase().replace(/\s+/g, "-");
 		const agentSessionFile = join(sessionDir, `chain-${agentKey}.json`);
@@ -442,6 +367,8 @@ export default function (pi: ExtensionAPI) {
 					elapsed: Date.now() - startTime,
 				});
 			});
+
+			proc.on("exit", () => { clearInterval(timer); });
 		});
 	}
 

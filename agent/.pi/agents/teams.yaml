@@ -1,31 +1,54 @@
+all:
+  - scout
+  - planner
+  - builder
+  - reviewer
+  - tester
+  - red-team
+  - cursor-agent
+  - codex-agent
+  - gemini-agent
+  - qwen-agent
+  - opencode-agent
+  - groq-agent
+  - droid-agent
+  - crush-agent
+
+toolkit:
+  - cursor-agent
+  - codex-agent
+  - gemini-agent
+  - qwen-agent
+  - opencode-agent
+  - groq-agent
+  - droid-agent
+  - crush-agent
+
 full:
   - scout
   - planner
   - builder
   - reviewer
-  - documenter
-  - red-team
+  - tester
 
 plan-build:
   - planner
   - builder
   - reviewer
 
-info:
+investigate:
   - scout
-  - documenter
   - reviewer
 
-frontend:
-  - planner
-  - builder
-  - bowser
+quality:
+  - reviewer
+  - tester
+  - red-team
 
-pi-pi:
-  - ext-expert
-  - theme-expert
-  - skill-expert
-  - config-expert
-  - tui-expert
-  - prompt-expert
-  - agent-expert
+refactor:
+  - scout
+  - reviewer
+
+docs:
+  - scout
+  - reviewer

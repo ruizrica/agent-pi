@@ -1,22 +1,16 @@
+// ABOUTME: Scrollable session timeline replay via /replay command.
+// ABOUTME: Shows conversation history with user/assistant/tool messages in a full-screen overlay.
 import { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { 
-  Box, Text, Markdown, Container, Spacer, 
-  matchesKey, Key, truncateToWidth, getMarkdownTheme 
+import {
+  Box, Text, Markdown, Container, Spacer,
+  matchesKey, Key, truncateToWidth, getMarkdownTheme
 } from "@mariozechner/pi-tui";
 import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
+import { extractContent, buildHistoryItems } from "./lib/session-replay-helpers.ts";
 
-// Minimal shim for timestamp handling if not directly in Message objects
 function formatTime(date: Date): string {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function getElapsedTime(start: Date, end: Date): string {
-    const diffMs = end.getTime() - start.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return `${diffSec}s`;
-    const diffMin = Math.floor(diffSec / 60);
-    return `${diffMin}m ${diffSec % 60}s`;
 }
 
 interface HistoryItem {
@@ -122,74 +116,12 @@ class SessionReplayUI {
     }
 }
 
-function extractContent(entry: any): string {
-    const msg = entry.message;
-    if (!msg) return "";
-    const content = msg.content;
-    if (!content) return "";
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-        return content
-            .map((c: any) => {
-                if (c.type === "text") return c.text || "";
-                if (c.type === "toolCall") return `Tool: ${c.name}(${JSON.stringify(c.arguments).slice(0, 200)})`;
-                return "";
-            })
-            .filter(Boolean)
-            .join("\n");
-    }
-    return JSON.stringify(content).slice(0, 500);
-}
-
 export default function(pi: ExtensionAPI) {
     pi.registerCommand("replay", {
         description: "Show a scrollable timeline of the current session",
         handler: async (args, ctx) => {
             const branch = ctx.sessionManager.getBranch();
-            const items: HistoryItem[] = [];
-
-            let prevTime: Date | null = null;
-
-            for (const entry of branch) {
-                if (entry.type !== "message") continue;
-                const msg = entry.message;
-                if (!msg) continue;
-
-                const ts = msg.timestamp ? new Date(msg.timestamp) : new Date();
-                const elapsed = prevTime ? getElapsedTime(prevTime, ts) : undefined;
-                prevTime = ts;
-
-                const role = msg.role;
-                const text = extractContent(entry);
-                if (!text) continue;
-
-                if (role === "user") {
-                    items.push({
-                        type: "user",
-                        title: "User Prompt",
-                        content: text,
-                        timestamp: ts,
-                        elapsed,
-                    });
-                } else if (role === "assistant") {
-                    items.push({
-                        type: "assistant",
-                        title: "Assistant",
-                        content: text,
-                        timestamp: ts,
-                        elapsed,
-                    });
-                } else if (role === "toolResult") {
-                    const toolName = (msg as any).toolName || "tool";
-                    items.push({
-                        type: "tool",
-                        title: `Tool: ${toolName}`,
-                        content: text,
-                        timestamp: ts,
-                        elapsed,
-                    });
-                }
-            }
+            const items: HistoryItem[] = buildHistoryItems(branch);
 
             if (items.length === 0) {
                 ctx.ui.notify("No session history found.", "warning");
