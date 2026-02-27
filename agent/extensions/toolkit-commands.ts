@@ -14,7 +14,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "child_process";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -24,6 +24,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 
 interface CommandDef {
 	name: string;
+	nameFromFrontmatter: boolean;
 	description: string;
 	argumentHint: string;
 	allowedTools: string[];
@@ -71,9 +72,16 @@ const TOOL_MAP: Record<string, string> = {
 	// Legacy tool names used in session-cleanup.md
 	"mcp__commander__commander_session_cleanup": "commander_session",
 	"mcp__commander__commander_terminal_sessions": "commander_session",
+	// Legacy pre-unification commander tool names (all map to unified commander_task)
+	"mcp__commander__commander_task_lifecycle": "commander_task",
+	"mcp__commander__commander_task_group": "commander_task",
+	"mcp__commander__commander_comment": "commander_task",
+	"mcp__commander__commander_log": "commander_task",
+	// Claude Code tool equivalents
+	"SlashCommand": "skill",
 };
 
-function mapTools(toolList: string[]): string[] {
+export function mapTools(toolList: string[]): string[] {
 	const result: string[] = [];
 	for (const t of toolList) {
 		const mapped = TOOL_MAP[t] ?? t.toLowerCase().replace(/-/g, "_");
@@ -116,10 +124,12 @@ function parseCommandFile(filePath: string): CommandDef | null {
 		}
 
 		const context = (frontmatter.context || "").toLowerCase() === "fork" ? "fork" : "inline";
+		const nameFromFrontmatter = !!frontmatter.name;
 		const name = frontmatter.name || filePath.split("/").pop()?.replace(/\.md$/, "") || "unknown";
 
 		return {
 			name,
+			nameFromFrontmatter,
 			description: desc,
 			argumentHint: frontmatter["argument-hint"] || "",
 			allowedTools,
@@ -133,7 +143,7 @@ function parseCommandFile(filePath: string): CommandDef | null {
 	}
 }
 
-function scanCommandDirs(baseDir: string): CommandDef[] {
+export function scanCommandDirs(baseDir: string): CommandDef[] {
 	const commands: CommandDef[] = [];
 	const seen = new Set<string>();
 
@@ -146,6 +156,12 @@ function scanCommandDirs(baseDir: string): CommandDef[] {
 			} else if (file.name.endsWith(".md")) {
 				const def = parseCommandFile(fullPath);
 				if (def) {
+					if (!def.nameFromFrontmatter) {
+						const relDir = relative(baseDir, d);
+						if (relDir) {
+							def.name = `${relDir.replace(/[\\/]/g, "-")}-${def.name}`;
+						}
+					}
 					const key = def.name.toLowerCase();
 					if (!seen.has(key)) {
 						seen.add(key);
