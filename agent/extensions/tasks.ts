@@ -1,5 +1,5 @@
 // ABOUTME: Task discipline extension that gates agent tools until tasks are defined.
-// ABOUTME: Three-state lifecycle (idle/inprogress/done) with widget display and completion nudges.
+// ABOUTME: Three-state lifecycle (idle/inprogress/done) with widget display and task validation.
 /**
  * Tasks Extension — Task discipline for the agent
  *
@@ -57,7 +57,7 @@ const TasksParams = Type.Object({
 
 // ── Status helpers ─────────────────────────────────────────────────────
 
-const STATUS_ICON: Record<TaskStatus, string> = { idle: "○", inprogress: "●", done: "✓" };
+const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", done: "x" };
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprogress: "done", done: "idle" };
 const STATUS_LABEL: Record<TaskStatus, string> = { idle: "idle", inprogress: "in progress", done: "done" };
 
@@ -282,7 +282,7 @@ export default function (pi: ExtensionAPI) {
 
 		pi.sendMessage(
 			{
-				customType: "tasks-nudge",
+				customType: "task-validation",
 				content: `You still have ${incomplete.length} incomplete task(s):\n\n${taskList}\n\nEither continue working on them or mark them done with \`tasks toggle\`. Don't stop until it's done!`,
 				display: true,
 			},
@@ -548,7 +548,7 @@ export default function (pi: ExtensionAPI) {
 
 			switch (details.action) {
 				case "new-list": {
-					let msg = theme.fg("success", "✓ New list ") + theme.fg("accent", `"${details.listTitle}"`);
+					let msg = theme.fg("success", "New list ") + theme.fg("accent", `"${details.listTitle}"`);
 					if (details.listDescription) {
 						msg += theme.fg("dim", ` — ${details.listDescription}`);
 					}
@@ -586,29 +586,29 @@ export default function (pi: ExtensionAPI) {
 				case "add": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(theme.fg("success", "✓ ") + theme.fg("muted", msg), 0, 0);
+					return new Text(theme.fg("success", msg), 0, 0);
 				}
 
 				case "toggle": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(theme.fg("accent", "⟳ ") + theme.fg("muted", msg), 0, 0);
+					return new Text(theme.fg("accent", msg), 0, 0);
 				}
 
 				case "remove": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(theme.fg("warning", "✕ ") + theme.fg("muted", msg), 0, 0);
+					return new Text(theme.fg("warning", msg), 0, 0);
 				}
 
 				case "update": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(theme.fg("success", "✓ ") + theme.fg("muted", msg), 0, 0);
+					return new Text(theme.fg("success", msg), 0, 0);
 				}
 
 				case "clear":
-					return new Text(theme.fg("success", "✓ ") + theme.fg("muted", "Cleared all tasks"), 0, 0);
+					return new Text(theme.fg("success", "Cleared all tasks"), 0, 0);
 
 				default:
 					return new Text(theme.fg("dim", "done"), 0, 0);
