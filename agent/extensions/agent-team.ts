@@ -1,3 +1,5 @@
+// ABOUTME: Multi-agent team dispatcher with specialist agents and grid dashboard.
+// ABOUTME: Primary agent delegates via dispatch_agent tool; teams defined in .pi/agents/teams.yaml.
 /**
  * Agent Team — Dispatcher-only orchestrator with grid dashboard
  *
@@ -23,11 +25,13 @@ import { Type } from "@sinclair/typebox";
 import { Text, type AutocompleteItem, visibleWidth, truncateToWidth, Container, Spacer, Box, Markdown, matchesKey, Key, type Component } from "@mariozechner/pi-tui";
 import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
 import { spawn } from "child_process";
-import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync, appendFileSync, writeFileSync } from "fs";
+import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
+import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
+import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -285,12 +289,12 @@ export default function (pi: ExtensionAPI) {
 							leftVis = visibleWidth(left);
 						}
 
-						// Try with full names first
+						// Try with full names + model first
 						const sep = theme.fg("dim", "  ");
-						let nameFormatter = (name: string) => displayName(name);
 						let parts = active.map((a) => {
-							const name = nameFormatter(a.def.name);
-							return statusButton(a.status, name, theme);
+							const name = displayName(a.def.name);
+							const model = a.def.model ? ` | ${a.def.model}` : "";
+							return statusButton(a.status, name + model, theme);
 						});
 						let right = parts.join(sep);
 						let rightVis = visibleWidth(right);
@@ -298,10 +302,18 @@ export default function (pi: ExtensionAPI) {
 						// Check if pills fit - reserve at least 1 char gap
 						const availableWidth = width - leftVis - 1;
 						if (rightVis > availableWidth) {
-							// Switch to abbreviated names
-							nameFormatter = abbreviateAgentName;
+							// Try full names without model
 							parts = active.map((a) => {
-								const name = nameFormatter(a.def.name);
+								const name = displayName(a.def.name);
+								return statusButton(a.status, name, theme);
+							});
+							right = parts.join(sep);
+							rightVis = visibleWidth(right);
+						}
+						if (rightVis > availableWidth) {
+							// Switch to abbreviated names (no model)
+							parts = active.map((a) => {
+								const name = abbreviateAgentName(a.def.name);
 								return statusButton(a.status, name, theme);
 							});
 							right = parts.join(sep);
@@ -398,7 +410,7 @@ export default function (pi: ExtensionAPI) {
 		agentName: string,
 		task: string,
 		ctx: any,
-	): Promise<{ output: string; exitCode: number; elapsed: number }> {
+	): Promise<{ output: string; exitCode: number; elapsed: number; model: string }> {
 		const key = agentName.toLowerCase();
 		const state = agentStates.get(key);
 		if (!state) {
@@ -406,6 +418,7 @@ export default function (pi: ExtensionAPI) {
 				output: `Agent "${agentName}" not found. Available: ${Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ")}`,
 				exitCode: 1,
 				elapsed: 0,
+				model: "",
 			});
 		}
 
@@ -414,6 +427,7 @@ export default function (pi: ExtensionAPI) {
 				output: `Agent "${displayName(state.def.name)}" is already running. Wait for it to finish.`,
 				exitCode: 1,
 				elapsed: 0,
+				model: "",
 			});
 		}
 
@@ -432,25 +446,7 @@ export default function (pi: ExtensionAPI) {
 		}, 1000);
 
 		const model = state.def.model
-			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "openrouter/google/gemini-3-flash-preview");
-
-		// #region agent log
-		try {
-			const logDir = "/Users/ricardo/.pi/.cursor";
-			if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-			const ctxModelStr = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : null;
-			appendFileSync(
-				join(logDir, "debug-a6f367.log"),
-				JSON.stringify({
-					sessionId: "a6f367",
-					location: "agent-team.ts:dispatchAgent",
-					message: "dispatch model resolution",
-					data: { agent: agentName, defModel: state.def.model, resolvedModel: model, ctxModel: ctxModelStr },
-					timestamp: Date.now(),
-				}) + "\n"
-			);
-		} catch {}
-		// #endregion
+			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : DEFAULT_SUBAGENT_MODEL);
 
 		// Session file for this agent
 		const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
@@ -532,22 +528,6 @@ export default function (pi: ExtensionAPI) {
 			proc.stderr!.on("data", (chunk: string) => { stderrBuf += chunk; });
 
 			proc.on("close", (code) => {
-				// #region agent log
-				try {
-					const logDir = "/Users/ricardo/.pi/.cursor";
-					if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-					appendFileSync(
-						join(logDir, "debug-a6f367.log"),
-						JSON.stringify({
-							sessionId: "a6f367",
-							location: "agent-team.ts:dispatchAgent:close",
-							message: "dispatch subprocess closed",
-							data: { agent: agentName, model, exitCode: code, stderr: stderrBuf?.slice(0, 500) || null },
-							timestamp: Date.now(),
-						}) + "\n"
-					);
-				} catch {}
-				// #endregion
 				if (buffer.trim()) {
 					try {
 						const event = JSON.parse(buffer);
@@ -585,6 +565,7 @@ export default function (pi: ExtensionAPI) {
 					output: full,
 					exitCode: code ?? 1,
 					elapsed: state.elapsed,
+					model,
 				});
 			});
 
@@ -597,8 +578,11 @@ export default function (pi: ExtensionAPI) {
 					output: `Error spawning agent: ${err.message}`,
 					exitCode: 1,
 					elapsed: Date.now() - startTime,
+					model,
 				});
 			});
+
+			proc.on("exit", () => { clearInterval(state.timer); });
 		});
 	}
 
@@ -615,29 +599,13 @@ export default function (pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			const { agent, task } = params as { agent: string; task: string };
-
-			// #region agent log
-			try {
-				const logDir = "/Users/ricardo/.pi/.cursor";
-				if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-				appendFileSync(
-					join(logDir, "debug-a6f367.log"),
-					JSON.stringify({
-						sessionId: "a6f367",
-						location: "agent-team.ts:execute",
-						message: "dispatch_agent tool invoked",
-						data: { agent, task },
-						timestamp: Date.now(),
-					}) + "\n"
-				);
-			} catch {}
-			// #endregion
+			const defModel = agentStates.get(agent.toLowerCase())?.def.model || "";
 
 			try {
 				if (onUpdate) {
 					onUpdate({
 						content: [{ type: "text", text: `Dispatching to ${agent}...` }],
-						details: { agent, task, status: "dispatching" },
+						details: { agent, task, status: "dispatching", model: defModel },
 					});
 				}
 
@@ -659,21 +627,24 @@ export default function (pi: ExtensionAPI) {
 						elapsed: result.elapsed,
 						exitCode: result.exitCode,
 						fullOutput: result.output,
+						model: result.model,
 					},
 				};
 			} catch (err: any) {
 				return {
 					content: [{ type: "text", text: `Error dispatching to ${agent}: ${err?.message || err}` }],
-					details: { agent, task, status: "error", elapsed: 0, exitCode: 1, fullOutput: "" },
+					details: { agent, task, status: "error", elapsed: 0, exitCode: 1, fullOutput: "", model: defModel },
 				};
 			}
 		},
 
 		renderCall(args, theme) {
 			const agentName = (args as any).agent || "?";
+			const agentModel = agentStates.get(agentName.toLowerCase())?.def.model || "";
+			const modelSuffix = agentModel ? theme.fg("dim", ` | ${agentModel}`) : "";
 			return new Text(
 				theme.fg("toolTitle", theme.bold("dispatch_agent ")) +
-				theme.fg("accent", agentName),
+				theme.fg("accent", agentName) + modelSuffix,
 				0, 0,
 			);
 		},
@@ -685,9 +656,11 @@ export default function (pi: ExtensionAPI) {
 				return new Text(text?.type === "text" ? text.text : "", 0, 0);
 			}
 
+			const modelSuffix = details.model ? ` | ${details.model}` : "";
+
 			// Streaming/partial result while agent is still running
 			if (options.isPartial || details.status === "dispatching") {
-				const runningBtn = statusButton("running", details.agent || "?", theme, false);
+				const runningBtn = statusButton("running", (details.agent || "?") + modelSuffix, theme, false);
 				return new Text(
 					runningBtn,
 					0, 0,
@@ -695,7 +668,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const status = details.status === "done" ? "done" : "error";
-			const agentLabel = details.agent ?? "?";
+			const agentLabel = (details.agent ?? "?") + modelSuffix;
 			const statusBtn = statusButton(status, agentLabel, theme, false);
 			const elapsed = typeof details.elapsed === "number" ? Math.round(details.elapsed / 1000) : 0;
 			const header = statusBtn +
@@ -782,69 +755,6 @@ export default function (pi: ExtensionAPI) {
 
 
 	// ── Agent Detail Overlay ──────────────────────
-
-	// Helper functions for detail view
-	function padRight(s: string, width: number): string {
-		const vis = visibleWidth(s);
-		if (vis >= width) return truncateToWidth(s, width, "");
-		return s + " ".repeat(width - vis);
-	}
-
-	function wordWrap(text: string, width: number): string[] {
-		if (visibleWidth(text) <= width) return [text];
-		const words = text.split(/(\s+)/);
-		const lines: string[] = [];
-		let cur = "";
-		for (const w of words) {
-			const wordWidth = visibleWidth(w);
-			// If a single word is longer than width, break it
-			if (wordWidth > width) {
-				if (cur.length > 0) {
-					lines.push(cur);
-					cur = "";
-				}
-				// Break long word into chunks
-				let remaining = w;
-				while (remaining.length > 0) {
-					let chunk = "";
-					for (const char of remaining) {
-						if (visibleWidth(chunk + char) > width && chunk.length > 0) {
-							lines.push(chunk);
-							chunk = char;
-						} else {
-							chunk += char;
-						}
-					}
-					if (chunk.length > 0) {
-						cur = chunk;
-					}
-					remaining = "";
-				}
-			} else if (visibleWidth(cur + w) > width && cur.length > 0) {
-				lines.push(cur);
-				cur = w.trimStart();
-			} else {
-				cur += w;
-			}
-		}
-		if (cur.length > 0) lines.push(cur);
-		return lines;
-	}
-
-	function sideBySide(
-		left: string[], right: string[],
-		leftW: number, rightW: number,
-		divider: string,
-	): string[] {
-		const max = Math.max(left.length, right.length);
-		const result: string[] = [];
-		for (let i = 0; i < max; i++) {
-			const l = i < left.length ? padRight(left[i], leftW) : " ".repeat(leftW);
-			const r = i < right.length ? truncateToWidth(right[i], rightW, "") : "";
-			result.push(l + divider + r);
-		}
-		return result;
-	}
 
 	class AgentDetailOverlay {
 		private scrollOffset = 0;
@@ -1029,44 +939,6 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function padRight(s: string, width: number): string {
-		const vis = visibleWidth(s);
-		if (vis >= width) return truncateToWidth(s, width, "");
-		return s + " ".repeat(width - vis);
-	}
-
-	function wordWrap(text: string, width: number): string[] {
-		if (visibleWidth(text) <= width) return [text];
-		const words = text.split(/(\s+)/);
-		const lines: string[] = [];
-		let cur = "";
-		for (const w of words) {
-			if (visibleWidth(cur + w) > width && cur.length > 0) {
-				lines.push(cur);
-				cur = w.trimStart();
-			} else {
-				cur += w;
-			}
-		}
-		if (cur.length > 0) lines.push(cur);
-		return lines;
-	}
-
-	function sideBySide(
-		left: string[], right: string[],
-		leftW: number, rightW: number,
-		divider: string,
-	): string[] {
-		const max = Math.max(left.length, right.length);
-		const result: string[] = [];
-		for (let i = 0; i < max; i++) {
-			const l = i < left.length ? padRight(left[i], leftW) : " ".repeat(leftW);
-			const r = i < right.length ? truncateToWidth(right[i], rightW, "") : "";
-			result.push(l + divider + r);
-		}
-		return result;
-	}
-
 	async function showAgentDetail(ctx: any, agent: AgentState) {
 		await ctx.ui.custom((tui, theme, _kb, done) => {
 			const overlay = new AgentDetailOverlay(agent, () => done(undefined));
@@ -1151,8 +1023,8 @@ export default function (pi: ExtensionAPI) {
 
 		return {
 			systemPrompt: `You are a dispatcher agent. You coordinate specialist agents to accomplish tasks.
-You do NOT have direct access to the codebase. You MUST delegate all work through
-agents using the dispatch_agent tool.
+You PREFER delegating codebase work to specialist agents via dispatch_agent,
+but you have direct access to all tools when needed.
 
 ## Active Team: ${activeTeamName}
 Members: ${teamMembers}
@@ -1172,9 +1044,15 @@ You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agen
 - Three modes: "select" (pick from options with markdown preview), "input" (free text), "confirm" (yes/no)
 - If a sub-agent needs user input, it should describe what it needs — then YOU ask the user and relay the answer
 
+## Task Management
+- You have direct access to the \`tasks\` tool — use it yourself, do NOT dispatch agents for task management
+- Use \`tasks new-list\` to start a themed list, \`tasks add\` to add items, \`tasks toggle\` to cycle status
+- Define your plan as tasks BEFORE dispatching agents
+
 ## Rules
-- NEVER try to read, write, or execute code directly — you have no such tools
-- Use dispatch_agent to delegate work and ask_user to get user input
+- PREFER dispatching agents for codebase work — they have specialized knowledge
+- You CAN use codebase tools directly when it's simpler than dispatching
+- Use tasks to manage your work, ask_user for user input, dispatch_agent for delegation
 - You can chain agents: use scout to explore, then builder to implement
 - You can dispatch the same agent multiple times with different tasks
 - Keep tasks focused — one clear objective per dispatch
@@ -1232,8 +1110,7 @@ ${agentCatalog}`,
 			activateTeam(teamNames[0]);
 		}
 
-		// Lock down to dispatcher-only (tool already registered at top level)
-		pi.setActiveTools(["dispatch_agent", "ask_user"]);
+		// All tools remain visible — dispatcher can use any registered tool directly
 
 		_ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
 		updateWidget();
