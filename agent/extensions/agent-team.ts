@@ -55,6 +55,7 @@ interface AgentState {
 	contextPct: number;
 	sessionFile: string | null;
 	runCount: number;
+	resolvedModel: string;
 	timer?: ReturnType<typeof setInterval>;
 }
 
@@ -232,6 +233,7 @@ export default function (pi: ExtensionAPI) {
 				contextPct: 0,
 				sessionFile: existsSync(sessionFile) ? sessionFile : null,
 				runCount: 0,
+				resolvedModel: "",
 			});
 		}
 
@@ -453,6 +455,7 @@ export default function (pi: ExtensionAPI) {
 
 		const model = state.def.model
 			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : DEFAULT_SUBAGENT_MODEL);
+		state.resolvedModel = model;
 
 		// Session file for this agent
 		const agentKey = state.def.name.toLowerCase().replace(/\s+/g, "-");
@@ -848,7 +851,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// MODEL - accent color
-			addWrappedRow("MODEL", this.agent.def.model || "(inherit)", "accent");
+			addWrappedRow("MODEL", this.agent.resolvedModel || this.agent.def.model || "(unknown)", "accent");
 
 			// TOOLS - success color
 			addWrappedRow("TOOLS", this.agent.def.tools, "success");
@@ -1065,6 +1068,18 @@ ${agentCatalog}`,
 		};
 	});
 
+	// ── Reset helpers ─────────────────────────────────────────────────
+
+	function resetAgentState(state: AgentState) {
+		state.status = "idle";
+		state.task = "";
+		state.toolCount = 0;
+		state.elapsed = 0;
+		state.lastWork = "";
+		state.contextPct = 0;
+		state.resolvedModel = "";
+	}
+
 	// ── Reset agent boxes on new message ───────────────────────────────
 
 	pi.on("input", () => {
@@ -1072,13 +1087,22 @@ ${agentCatalog}`,
 		// so the boxes display cleanly for the new task
 		for (const state of agentStates.values()) {
 			if (state.status === "done" || state.status === "error") {
-				state.status = "idle";
-				state.task = "";
-				state.toolCount = 0;
-				state.elapsed = 0;
-				state.lastWork = "";
-				state.contextPct = 0;
+				resetAgentState(state);
 			}
+		}
+		updateWidget();
+	});
+
+	// ── Reset agent boxes on /new ─────────────────────────────────────
+
+	pi.on("session_switch", async (_event, _ctx) => {
+		// /new fires session_switch — clear all agent boxes from previous session
+		if (widgetCtx) {
+			widgetCtx.ui.setWidget("agent-team", undefined);
+		}
+		widgetCtx = _ctx;
+		for (const state of agentStates.values()) {
+			resetAgentState(state);
 		}
 		updateWidget();
 	});
