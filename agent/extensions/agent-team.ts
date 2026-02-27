@@ -271,60 +271,64 @@ export default function (pi: ExtensionAPI) {
 					});
 
 					if (widgetCompact) {
-						// Compact mode: show active agents as pills in status bar
-						if (active.length === 0) {
+						// Compact mode: task list + agent pills
+						const allLines: string[] = [];
+
+						// ── Task list widget ──────────────────────────
+						const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
+						if (taskList && taskList.tasks.length > 0) {
+							const termHeight = process.stdout.rows || 24;
+							// Reserve lines for agent pills (1) + some breathing room
+							const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
+							const taskLines = renderTaskList(
+								taskList, taskListState, width, availableHeight,
+								{ truncateToWidth, fg: theme.fg },
+							);
+							allLines.push(...taskLines);
+						}
+
+						// ── Agent pills line ─────────────────────────
+						if (active.length === 0 && allLines.length === 0) {
 							text.setText("");
 							return [];
 						}
 
-						const curTask = (globalThis as any).__piCurrentTask as { id: number; text: string } | null;
-						let left = "";
-						let leftVis = 0;
-						if (curTask) {
-							const taskLabel =
-								theme.fg("accent", "● ") +
-								theme.fg("dim", "TASK ") +
-								theme.fg("accent", `#${curTask.id}`) +
-								theme.fg("dim", " ") +
-								theme.fg("success", curTask.text);
-							left = truncateToWidth(taskLabel, Math.max(10, width - 20), "…");
-							leftVis = visibleWidth(left);
-						}
+						if (active.length > 0) {
+							if (allLines.length > 0) allLines.push(""); // spacer
 
-						// Try with full names + model first
-						const sep = theme.fg("dim", "  ");
-						let parts = active.map((a) => {
-							const name = displayName(a.def.name);
-							const model = a.def.model ? ` | ${a.def.model}` : "";
-							return statusButton(a.status, name + model, theme);
-						});
-						let right = parts.join(sep);
-						let rightVis = visibleWidth(right);
-						
-						// Check if pills fit - reserve at least 1 char gap
-						const availableWidth = width - leftVis - 1;
-						if (rightVis > availableWidth) {
-							// Try full names without model
-							parts = active.map((a) => {
+							// Try with full names + model first
+							const sep = theme.fg("dim", "  ");
+							let parts = active.map((a) => {
 								const name = displayName(a.def.name);
-								return statusButton(a.status, name, theme);
+								const model = a.def.model ? ` | ${a.def.model}` : "";
+								return statusButton(a.status, name + model, theme);
 							});
-							right = parts.join(sep);
-							rightVis = visibleWidth(right);
-						}
-						if (rightVis > availableWidth) {
-							// Switch to abbreviated names (no model)
-							parts = active.map((a) => {
-								const name = abbreviateAgentName(a.def.name);
-								return statusButton(a.status, name, theme);
-							});
-							right = parts.join(sep);
-							rightVis = visibleWidth(right);
+							let right = parts.join(sep);
+							let rightVis = visibleWidth(right);
+
+							if (rightVis > width) {
+								// Try full names without model
+								parts = active.map((a) => {
+									const name = displayName(a.def.name);
+									return statusButton(a.status, name, theme);
+								});
+								right = parts.join(sep);
+								rightVis = visibleWidth(right);
+							}
+							if (rightVis > width) {
+								// Switch to abbreviated names (no model)
+								parts = active.map((a) => {
+									const name = abbreviateAgentName(a.def.name);
+									return statusButton(a.status, name, theme);
+								});
+								right = parts.join(sep);
+							}
+
+							allLines.push(right);
 						}
 
-						const gap = Math.max(1, width - leftVis - rightVis);
-						text.setText(left + " ".repeat(gap) + right);
-						return text.render(width);
+						text.setText(allLines.join("\n"));
+						return allLines;
 					}
 
 					// Expanded mode: show selectable pills in a row
@@ -1115,8 +1119,51 @@ ${agentCatalog}`,
 
 		// Use footer.ts for footer — do not overwrite; widget uses placement: belowEditor
 
-		// Register nav provider for F-key navigation
+		// Register nav providers for F-key navigation
 		const providers = ((globalThis as any).__piNavProviders = (globalThis as any).__piNavProviders || []);
+
+		// Task list nav provider (first priority when tasks exist)
+		providers.push({
+			isActive: () => {
+				const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
+				return !!(tl && tl.tasks.length > 0);
+			},
+			selectPrev: (ctx: any) => {
+				if (!ctx.hasUI) return;
+				widgetCtx = ctx;
+				const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
+				if (!tl || tl.tasks.length === 0) return;
+				if (taskListState.selectedIndex < 0) {
+					taskListState = navEnter(taskListState, tl.tasks.length);
+				} else {
+					taskListState = navUp(taskListState);
+				}
+				updateWidget();
+			},
+			selectNext: (ctx: any) => {
+				if (!ctx.hasUI) return;
+				widgetCtx = ctx;
+				const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
+				if (!tl || tl.tasks.length === 0) return;
+				if (taskListState.selectedIndex < 0) {
+					taskListState = navEnter(taskListState, tl.tasks.length);
+				} else {
+					taskListState = navDown(taskListState, tl.tasks.length);
+				}
+				updateWidget();
+			},
+			showDetail: async (_ctx: any) => {
+				// Could open /tasks overlay in the future
+			},
+			exitSelection: (ctx: any) => {
+				if (!ctx.hasUI) return;
+				widgetCtx = ctx;
+				taskListState = navExit(taskListState);
+				updateWidget();
+			},
+		});
+
+		// Agent pills nav provider
 		providers.push({
 			isActive: () => {
 				const active = Array.from(agentStates.values()).filter(a => a.status !== "idle");

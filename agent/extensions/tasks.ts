@@ -62,10 +62,24 @@ const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprog
 const STATUS_LABEL: Record<TaskStatus, string> = { idle: "idle", inprogress: "in progress", done: "done" };
 
 export interface CurrentTaskInfo { id: number; text: string }
+export interface TaskListInfo {
+	tasks: { id: number; text: string; status: TaskStatus }[];
+	title?: string;
+	remaining: number;
+	total: number;
+}
+
 const g = globalThis as any;
 function publishCurrentTask(tasks: Task[]) {
 	const cur = tasks.find(t => t.status === "inprogress");
 	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text } as CurrentTaskInfo : null;
+
+	const remaining = tasks.filter(t => t.status !== "done").length;
+	g.__piTaskList = {
+		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
+		remaining,
+		total: tasks.length,
+	} as TaskListInfo;
 }
 
 // ── /tasks overlay component ───────────────────────────────────────────
@@ -198,6 +212,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		refreshWidget(ctx);
+		if (g.__piTaskList) g.__piTaskList.title = listTitle;
 		ctx.ui.setWidget("tasks-list", undefined);
 	};
 
