@@ -23,7 +23,8 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text, visibleWidth, truncateToWidth, Container, Spacer, Markdown, matchesKey, Key } from "@mariozechner/pi-tui";
+import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
 import { spawn } from "child_process";
 import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
@@ -208,6 +209,7 @@ export default function (pi: ExtensionAPI) {
 	// Per-step state for the active chain
 	let stepStates: StepState[] = [];
 	let pendingReset = false;
+	let selectedStepIndex = -1;
 
 	function loadChains(cwd: string) {
 		const extDir = dirname(fileURLToPath(import.meta.url));
@@ -243,6 +245,7 @@ export default function (pi: ExtensionAPI) {
 
 	function activateChain(chain: ChainDef) {
 		activeChain = chain;
+		selectedStepIndex = -1;
 		stepStates = chain.steps.map(s => {
 			const agentDef = allAgents.get(s.agent.toLowerCase());
 			return {
@@ -261,7 +264,7 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Card Rendering ──────────────────────────
 
-	function renderStepLines(state: StepState, width: number, theme: any): string[] {
+	function renderStepLines(state: StepState, index: number, width: number, theme: any): string[] {
 		const name = displayName(state.agent);
 		const statusForButton = state.status === "pending" ? "idle" : state.status;
 		const btn = statusButton(statusForButton, name, theme);
@@ -269,7 +272,11 @@ export default function (pi: ExtensionAPI) {
 			? "  " + theme.fg("dim", `${Math.round(state.elapsed / 1000)}s`)
 			: "";
 		const lines: string[] = [];
-		lines.push(` ${btn}${timeStr}`);
+		let pillLine = ` ${btn}${timeStr}`;
+		if (index === selectedStepIndex) {
+			pillLine = ` ${theme.fg("accent", "[")}${btn}${theme.fg("accent", "]")}${timeStr}`;
+		}
+		lines.push(pillLine);
 		if (state.lastWork && state.status !== "pending") {
 			const prefix = " \u2502  ";
 			const maxWork = width - prefix.length - 1;
@@ -291,6 +298,9 @@ export default function (pi: ExtensionAPI) {
 
 	function updateWidget() {
 		if (!widgetCtx) return;
+		// Only show widget when pipeline is actually running (at least one non-pending step)
+		const hasActiveStep = stepStates.some(s => s.status !== "pending");
+		if (!hasActiveStep) return;
 		widgetCtx.ui.setWidget("agent-chain", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -306,7 +316,7 @@ export default function (pi: ExtensionAPI) {
 					const rule = "─".repeat(Math.max(0, width - chainName.length - 6));
 					outputLines.push(theme.fg("dim", ` ── `) + theme.fg("accent", chainName) + theme.fg("dim", ` ${rule}`));
 					for (let i = 0; i < stepStates.length; i++) {
-						outputLines.push(...renderStepLines(stepStates[i], width, theme));
+						outputLines.push(...renderStepLines(stepStates[i], i, width, theme));
 						if (i < stepStates.length - 1) {
 							outputLines.push(theme.fg("dim", " \u2502"));
 						}
@@ -446,6 +456,7 @@ export default function (pi: ExtensionAPI) {
 		const chainStart = Date.now();
 
 		// Reset all steps to pending
+		selectedStepIndex = -1;
 		stepStates = activeChain.steps.map(s => {
 			const agentDef = allAgents.get(s.agent.toLowerCase());
 			return {
@@ -676,6 +687,9 @@ export default function (pi: ExtensionAPI) {
 			// Run the chain
 			const result = await runChain(task, ctx);
 
+			// Hide chain widget — audit is done, result goes to file
+			widgetCtx.ui.setWidget("agent-chain", undefined);
+
 			if (!result.success) {
 				ctx.ui.notify(`Audit failed: ${result.output.slice(0, 200)}`, "error");
 				return;
@@ -778,6 +792,182 @@ ${agentCatalog}
 		};
 	});
 
+	// ── Step Detail Overlay ──────────────────────
+
+	function padRight(s: string, width: number): string {
+		const vis = visibleWidth(s);
+		if (vis >= width) return truncateToWidth(s, width, "");
+		return s + " ".repeat(width - vis);
+	}
+
+	function wordWrap(text: string, width: number): string[] {
+		if (visibleWidth(text) <= width) return [text];
+		const words = text.split(/(\s+)/);
+		const lines: string[] = [];
+		let cur = "";
+		for (const w of words) {
+			if (visibleWidth(cur + w) > width && cur.length > 0) {
+				lines.push(cur);
+				cur = w.trimStart();
+			} else {
+				cur += w;
+			}
+		}
+		if (cur.length > 0) lines.push(cur);
+		return lines;
+	}
+
+	class StepDetailOverlay {
+		private scrollOffset = 0;
+		private totalContentLines = 0;
+
+		constructor(
+			private step: StepState,
+			private agentDef: AgentDef | null,
+			private onDone: () => void,
+		) {}
+
+		handleInput(data: string, tui: any): void {
+			const height = process.stdout.rows || 24;
+			const contentHeight = height - 1;
+			const maxScroll = Math.max(0, this.totalContentLines - contentHeight);
+
+			if (matchesKey(data, Key.up)) {
+				this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+			} else if (matchesKey(data, Key.down)) {
+				this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
+			} else if (matchesKey(data, Key.pageUp)) {
+				this.scrollOffset = Math.max(0, this.scrollOffset - Math.max(1, contentHeight - 1));
+			} else if (matchesKey(data, Key.pageDown)) {
+				this.scrollOffset = Math.min(maxScroll, this.scrollOffset + Math.max(1, contentHeight - 1));
+			} else if (matchesKey(data, Key.home)) {
+				this.scrollOffset = 0;
+			} else if (matchesKey(data, Key.end)) {
+				this.scrollOffset = maxScroll;
+			} else if (matchesKey(data, Key.escape)) {
+				this.onDone();
+				return;
+			}
+			tui.requestRender();
+		}
+
+		render(width: number, height: number, theme: any): string[] {
+			const container = new Container();
+			const mdTheme = getPiMdTheme();
+			const panelW = width - 4;
+			const innerWidth = panelW - 2;
+
+			// Header with step name pill and status
+			container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+			const name = displayName(this.step.agent);
+			const statusForButton = this.step.status === "pending" ? "idle" : this.step.status;
+			const statusBtn = statusButton(statusForButton, name, theme);
+			const timeStr = this.step.status !== "pending" && this.step.elapsed > 0
+				? ` ${Math.round(this.step.elapsed / 1000)}s` : "";
+			container.addChild(new Text(`${statusBtn}${timeStr}`, 1, 0));
+			container.addChild(new Spacer(1));
+
+			// Section header helper
+			const sectionHeader = (title: string) => {
+				const label = ` ─── ${title} `;
+				const remaining = Math.max(0, innerWidth - visibleWidth(label));
+				return theme.fg("accent", theme.bold(label + "─".repeat(remaining)));
+			};
+
+			// Metadata section
+			container.addChild(new Text(sectionHeader("METADATA"), 1, 0));
+			const formatRow = (label: string, value: string, valueColor: string = "muted") => {
+				const labelStr = theme.fg("accent", theme.bold(padRight(label + ":", 14)));
+				const valueStr = theme.fg(valueColor, value);
+				return labelStr + " " + valueStr;
+			};
+
+			const addWrappedRow = (label: string, value: string, valueColor: string = "muted") => {
+				const labelWidth = 14;
+				const valueWidth = innerWidth - labelWidth - 1;
+				const wrapped = wordWrap(value, valueWidth);
+				for (let i = 0; i < wrapped.length; i++) {
+					const displayLabel = i === 0 ? label : "";
+					container.addChild(new Text(formatRow(displayLabel, wrapped[i], valueColor), 1, 0));
+				}
+			};
+
+			const statusColorMap: Record<string, string> = { running: "accent", done: "success", error: "error", pending: "dim" };
+			const statusColor = statusColorMap[this.step.status] || "muted";
+			container.addChild(new Text(formatRow("STATUS", this.step.status.toUpperCase(), statusColor), 1, 0));
+
+			if (this.step.description) {
+				addWrappedRow("DESCRIPTION", this.step.description, "muted");
+			}
+
+			if (this.agentDef?.tools) {
+				addWrappedRow("TOOLS", this.agentDef.tools, "success");
+			}
+
+			container.addChild(new Spacer(1));
+
+			// System prompt section
+			if (this.agentDef?.systemPrompt) {
+				container.addChild(new Text(sectionHeader("SYSTEM PROMPT"), 1, 0));
+				container.addChild(new Spacer(1));
+				const sysPromptMd = new Markdown(this.agentDef.systemPrompt, 1, 0, mdTheme);
+				container.addChild(sysPromptMd);
+				container.addChild(new Spacer(1));
+			}
+
+			// Last work section
+			if (this.step.lastWork) {
+				container.addChild(new Text(sectionHeader("LAST WORK"), 1, 0));
+				container.addChild(new Spacer(1));
+				const workMd = new Markdown(this.step.lastWork, 1, 0, mdTheme);
+				container.addChild(workMd);
+				container.addChild(new Spacer(1));
+			}
+
+			// Render all content
+			const allLines = container.render(panelW);
+			this.totalContentLines = allLines.length;
+			const contentHeight = height - 1;
+			const maxScroll = Math.max(0, allLines.length - contentHeight);
+			this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+			const visibleContentLines = allLines.slice(this.scrollOffset, this.scrollOffset + contentHeight);
+
+			const scrollInfo = maxScroll > 0
+				? ` \u2191/\u2193/PgUp/PgDn/Home/End Scroll (${this.scrollOffset + 1}-${Math.min(this.scrollOffset + contentHeight, allLines.length)}/${allLines.length}) \u2022 Esc Close`
+				: " Esc Close";
+			const footer = theme.fg("dim", scrollInfo);
+			const footerLine = padRight(footer, panelW);
+
+			const dimBg = "\x1b[48;2;10;10;15m";
+			const reset = "\x1b[0m";
+
+			const result: string[] = [];
+			for (const line of visibleContentLines) {
+				result.push(dimBg + "  " + padRight(line, panelW) + "  " + reset);
+			}
+			result.push(dimBg + "  " + footerLine + "  " + reset);
+			while (result.length < height) {
+				result.push(dimBg + " ".repeat(width) + reset);
+			}
+
+			return result;
+		}
+	}
+
+	async function showStepDetail(ctx: any, step: StepState, agentDef: AgentDef | null) {
+		await ctx.ui.custom((tui: any, theme: any, _kb: any, done: any) => {
+			const overlay = new StepDetailOverlay(step, agentDef, () => done(undefined));
+			return {
+				render: (w: number) => overlay.render(w, process.stdout.rows || 24, theme),
+				handleInput: (data: string) => overlay.handleInput(data, tui),
+				invalidate: () => {},
+			};
+		}, {
+			overlay: true,
+			overlayOptions: { width: "100%" },
+		});
+	}
+
 	// ── Session Start ───────────────────────────
 
 	pi.on("session_start", async (_event, _ctx) => {
@@ -792,6 +982,7 @@ ${agentCatalog}
 		// Reset execution state — widget re-registration deferred to before_agent_start
 		stepStates = [];
 		activeChain = null;
+		selectedStepIndex = -1;
 		pendingReset = true;
 
 		// Wipe chain session files — reset agent context on /new and launch
@@ -819,5 +1010,35 @@ ${agentCatalog}
 
 		_ctx.ui.setStatus("agent-chain", `Chain: ${activeChain!.name} (${activeChain!.steps.length} steps)`);
 		// Footer: use footer.ts only — do not overwrite
+
+		// Register nav provider for F-key navigation
+		const providers = ((globalThis as any).__piNavProviders = (globalThis as any).__piNavProviders || []);
+		providers.push({
+			isActive: () => activeChain !== null && stepStates.length > 0,
+			selectPrev: (_ctx2: any) => {
+				const count = stepStates.length;
+				if (count === 0) { selectedStepIndex = -1; return; }
+				if (selectedStepIndex < 0) selectedStepIndex = count - 1;
+				else selectedStepIndex = (selectedStepIndex - 1 + count) % count;
+				updateWidget();
+			},
+			selectNext: (_ctx2: any) => {
+				const count = stepStates.length;
+				if (count === 0) { selectedStepIndex = -1; return; }
+				if (selectedStepIndex < 0) selectedStepIndex = 0;
+				else selectedStepIndex = (selectedStepIndex + 1) % count;
+				updateWidget();
+			},
+			showDetail: async (ctx: any) => {
+				if (selectedStepIndex < 0 || selectedStepIndex >= stepStates.length) return;
+				const step = stepStates[selectedStepIndex];
+				const agentDef = allAgents.get(step.agent.toLowerCase()) || null;
+				await showStepDetail(ctx, step, agentDef);
+			},
+			exitSelection: (_ctx2: any) => {
+				selectedStepIndex = -1;
+				updateWidget();
+			},
+		});
 	});
 }
