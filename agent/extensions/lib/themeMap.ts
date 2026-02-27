@@ -19,27 +19,27 @@ import { fileURLToPath } from "url";
 // Value = theme name from .pi/themes/<value>.json
 //
 export const THEME_MAP: Record<string, string> = {
-	"agent-banner":       "monochrome-blue",
-	"agent-chain":        "monochrome-blue",
-	"agent-team":         "monochrome-blue",
-	"cross-agent":        "monochrome-blue",
-	"damage-control":     "monochrome-blue",
-	"minimal":            "monochrome-blue",
-	"pi-pi":              "monochrome-blue",
-	"pure-focus":         "monochrome-blue",
-	"purpose-gate":       "monochrome-blue",
-	"session-replay":     "monochrome-blue",
-	"subagent-widget":    "monochrome-blue",
-	"system-select":      "monochrome-blue",
-	"theme-cycler":       "monochrome-blue",
-	"mic":                "monochrome-blue",
-	"pipeline-team":      "monochrome-blue",
-	"tilldone":           "monochrome-blue",
-	"plan-mode":          "monochrome-blue",
-	"tool-counter":       "monochrome-blue",
-	"tool-counter-widget":"monochrome-blue",
-	"footer":             "monochrome-blue",
-	"user-question":      "monochrome-blue",
+	"agent-banner":       "midnight-ocean",
+	"agent-chain":        "midnight-ocean",
+	"agent-team":         "midnight-ocean",
+	"cross-agent":        "midnight-ocean",
+	"damage-control":     "midnight-ocean",
+	"minimal":            "midnight-ocean",
+	"pi-pi":              "midnight-ocean",
+	"pure-focus":         "midnight-ocean",
+	"purpose-gate":       "midnight-ocean",
+	"session-replay":     "midnight-ocean",
+	"subagent-widget":    "midnight-ocean",
+	"system-select":      "midnight-ocean",
+	"theme-cycler":       "midnight-ocean",
+	"mic":                "midnight-ocean",
+	"pipeline-team":      "midnight-ocean",
+	"tasks":              "midnight-ocean",
+	"plan-mode":          "midnight-ocean",
+	"tool-counter":       "midnight-ocean",
+	"tool-counter-widget":"midnight-ocean",
+	"footer":             "midnight-ocean",
+	"user-question":      "midnight-ocean",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -78,13 +78,13 @@ export function applyExtensionTheme(fileUrl: string, ctx: ExtensionContext): boo
 	let themeName = THEME_MAP[name];
 	
 	if (!themeName) {
-		themeName = "monochrome-blue";
+		themeName = "midnight-ocean";
 	}
 
 	const result = ctx.ui.setTheme(themeName);
 
-	if (!result.success && themeName !== "monochrome-blue") {
-		return ctx.ui.setTheme("monochrome-blue").success;
+	if (!result.success && themeName !== "midnight-ocean") {
+		return ctx.ui.setTheme("midnight-ocean").success;
 	}
 	
 	return result.success;

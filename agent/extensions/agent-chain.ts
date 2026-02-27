@@ -23,9 +23,9 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { Text } from "@mariozechner/pi-tui";
 import { spawn } from "child_process";
-import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync } from "fs";
+import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -256,43 +256,28 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Card Rendering ──────────────────────────
 
-	function renderCard(state: StepState, colWidth: number, theme: any): string[] {
-		const w = colWidth - 2;
-		const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max - 3) + "..." : s;
-
+	function renderStepLines(state: StepState, width: number, theme: any): string[] {
 		const name = displayName(state.agent);
-
-		// Map "pending" to "idle" for statusButton
 		const statusForButton = state.status === "pending" ? "idle" : state.status;
-		const statusBtn = statusButton(statusForButton, truncate(name, w - 10), theme);
-		const timeStr = state.status !== "pending" ? ` ${Math.round(state.elapsed / 1000)}s` : "";
-		const statusLine = statusBtn + timeStr;
-		const statusVisible = visibleWidth(statusBtn) + timeStr.length;
-
-		const workRaw = state.lastWork || "";
-		const workText = workRaw ? truncate(workRaw, Math.min(50, w - 1)) : "";
-		const workLine = workText ? theme.fg("muted", workText) : theme.fg("dim", "—");
-		const workVisible = workText ? workText.length : 1;
-
-		const top = "┌" + "─".repeat(w) + "┐";
-		const bot = "└" + "─".repeat(w) + "┘";
-		const border = (content: string, visLen: number) =>
-			theme.fg("dim", "│") + content + " ".repeat(Math.max(0, w - visLen)) + theme.fg("dim", "│");
-
-		return [
-			theme.fg("dim", top),
-			border(" " + statusLine, 1 + statusVisible),
-			border(" " + workLine, 1 + workVisible),
-			theme.fg("dim", bot),
-		];
+		const btn = statusButton(statusForButton, name, theme);
+		const timeStr = state.status !== "pending" && state.elapsed > 0
+			? "  " + theme.fg("dim", `${Math.round(state.elapsed / 1000)}s`)
+			: "";
+		const lines: string[] = [];
+		lines.push(` ${btn}${timeStr}`);
+		if (state.lastWork && state.status !== "pending") {
+			const prefix = " \u2502  ";
+			const maxWork = width - prefix.length - 1;
+			const work = state.lastWork.length > maxWork
+				? state.lastWork.slice(0, maxWork - 3) + "..."
+				: state.lastWork;
+			lines.push(theme.fg("dim", " \u2502") + "  " + theme.fg("muted", work));
+		}
+		return lines;
 	}
 
 	function updateWidget() {
 		if (!widgetCtx) return;
-		// Chain widget hidden — uncomment block below to show
-		widgetCtx.ui.setWidget("agent-chain", undefined);
-		return;
-		/*
 		widgetCtx.ui.setWidget("agent-chain", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -303,29 +288,13 @@ export default function (pi: ExtensionAPI) {
 						return text.render(width);
 					}
 
-					const arrowWidth = 5; // " ──▶ "
-					const cols = stepStates.length;
-					const totalArrowWidth = arrowWidth * (cols - 1);
-					const colWidth = Math.max(12, Math.floor((width - totalArrowWidth) / cols));
-					const arrowRow = 2; // middle of 5-line card (0-indexed)
-
-					const cards = stepStates.map(s => renderCard(s, colWidth, theme));
-					const cardHeight = cards[0].length;
 					const outputLines: string[] = [];
-
-					for (let line = 0; line < cardHeight; line++) {
-						let row = cards[0][line];
-						for (let c = 1; c < cols; c++) {
-							if (line === arrowRow) {
-								row += theme.fg("dim", " ──▶ ");
-							} else {
-								row += " ".repeat(arrowWidth);
-							}
-							row += cards[c][line];
+					for (let i = 0; i < stepStates.length; i++) {
+						outputLines.push(...renderStepLines(stepStates[i], width, theme));
+						if (i < stepStates.length - 1) {
+							outputLines.push(theme.fg("dim", " \u2502"));
 						}
-						outputLines.push(row);
 					}
-
 					text.setText(outputLines.join("\n"));
 					return text.render(width);
 				},
@@ -334,7 +303,6 @@ export default function (pi: ExtensionAPI) {
 				},
 			};
 		});
-		*/
 	}
 
 	// ── Run Agent (subprocess) ──────────────────
@@ -378,6 +346,7 @@ export default function (pi: ExtensionAPI) {
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
 				env: { ...process.env },
+				cwd: ctx.cwd,
 			});
 
 			const timer = setInterval(() => {
@@ -471,15 +440,23 @@ export default function (pi: ExtensionAPI) {
 
 		let input = task;
 		const originalPrompt = task;
+		const stepOutputs: string[] = [];
 
 		for (let i = 0; i < activeChain.steps.length; i++) {
 			const step = activeChain.steps[i];
 			stepStates[i].status = "running";
 			updateWidget();
 
-			const resolvedPrompt = step.prompt
-				.replace(/\$INPUT/g, input)
-				.replace(/\$ORIGINAL/g, originalPrompt);
+			// Resolve prompt: $INPUT (previous step), $ORIGINAL (original task), $INPUT_N (step N output, 1-indexed)
+			let resolvedPrompt = step.prompt
+				.replace(/\$ORIGINAL/g, originalPrompt)
+				.replace(/\$INPUT/g, input);
+			
+			// Replace $INPUT_N with stepOutputs[N-1] (1-indexed)
+			resolvedPrompt = resolvedPrompt.replace(/\$INPUT_(\d+)/g, (_, n) => {
+				const stepIndex = parseInt(n, 10) - 1;
+				return stepIndex >= 0 && stepIndex < stepOutputs.length ? stepOutputs[stepIndex] : "";
+			});
 
 			const agentDef = allAgents.get(step.agent.toLowerCase());
 			if (!agentDef) {
@@ -508,6 +485,7 @@ export default function (pi: ExtensionAPI) {
 			stepStates[i].status = "done";
 			updateWidget();
 
+			stepOutputs.push(result.output);
 			input = result.output;
 		}
 
@@ -648,6 +626,50 @@ export default function (pi: ExtensionAPI) {
 			}).join("\n\n");
 
 			ctx.ui.notify(list, "info");
+		},
+	});
+
+	pi.registerCommand("audit", {
+		description: "Run comprehensive code audit — scans project, finds issues, generates report and hardening plan",
+		handler: async (args, ctx) => {
+			widgetCtx = ctx;
+			const scope = (args || "").trim();
+			const scopeHint = scope ? ` (scope: ${scope})` : "";
+
+			ctx.ui.notify(`Starting code audit${scopeHint}...`, "info");
+
+			// Find audit chain
+			const auditChain = chains.find(c => c.name === "audit");
+			if (!auditChain) {
+				ctx.ui.notify("Audit chain not found in .pi/agents/agent-chain.yaml", "error");
+				return;
+			}
+
+			// Activate the audit chain
+			activateChain(auditChain);
+
+			// Build task string with optional scope
+			const task = scope
+				? `Audit this codebase. Scope: ${scope}`
+				: "Audit this codebase";
+
+			// Run the chain
+			const result = await runChain(task, ctx);
+
+			if (!result.success) {
+				ctx.ui.notify(`Audit failed: ${result.output.slice(0, 200)}`, "error");
+				return;
+			}
+
+			// Write report file
+			const reportPath = join(ctx.cwd, ".pi", "audit-report.md");
+			const reportDir = dirname(reportPath);
+			if (!existsSync(reportDir)) {
+				mkdirSync(reportDir, { recursive: true });
+			}
+			writeFileSync(reportPath, result.output, "utf-8");
+
+			ctx.ui.notify(`Audit complete! Report saved to ${reportPath}`, "success");
 		},
 	});
 
