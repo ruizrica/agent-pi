@@ -254,6 +254,8 @@ const ToolParams = Type.Object({
 
 export default function (pi: ExtensionAPI) {
 	const client = new McpClient(SERVER_PATH, SERVER_ENV);
+	const g = globalThis as any;
+	let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
 	// Helper: ensure connected before calling
 	async function ensureConnected(): Promise<void> {
@@ -287,11 +289,50 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// Lifecycle events
-	pi.on("session_start", async () => {
-		// Lazy connect — will connect on first tool call
+	pi.on("session_start", async (_event, ctx) => {
+		// Fire-and-forget probe — don't block session_start chain
+		// (other extensions like footer.ts must not wait for this)
+		probeCommander(ctx).catch(() => {});
 	});
 
+	async function probeCommander(ctx: any) {
+		try {
+			await client.connect();
+			// Lightweight probe — 3s timeout
+			await client.callTool("commander_session", { operation: "list" }, 3000);
+			g.__piCommanderAvailable = true;
+			g.__piCommanderClient = client;
+			ctx.ui.setStatus("Commander: connected", "commander");
+
+			// Periodic health check (60s)
+			healthCheckTimer = setInterval(async () => {
+				try {
+					if (!client.isConnected()) {
+						await client.connect();
+					}
+					await client.callTool("commander_session", { operation: "list" }, 3000);
+					if (!g.__piCommanderAvailable) {
+						g.__piCommanderAvailable = true;
+						g.__piCommanderClient = client;
+						ctx.ui.setStatus("Commander: connected", "commander");
+					}
+				} catch {
+					g.__piCommanderAvailable = false;
+					ctx.ui.setStatus("Commander: offline", "commander");
+				}
+			}, 60_000);
+		} catch {
+			g.__piCommanderAvailable = false;
+			ctx.ui.setStatus("Commander: offline", "commander");
+		}
+	}
+
 	pi.on("session_shutdown", async () => {
+		if (healthCheckTimer) {
+			clearInterval(healthCheckTimer);
+			healthCheckTimer = undefined;
+		}
+		g.__piCommanderAvailable = false;
 		client.disconnect();
 	});
 }

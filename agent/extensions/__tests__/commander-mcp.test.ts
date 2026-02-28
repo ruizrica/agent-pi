@@ -5,19 +5,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock the MCP client ─────────────────────────────────────────────
 
-const mockConnect = vi.fn();
-const mockCallTool = vi.fn();
-const mockDisconnect = vi.fn();
-const mockIsConnected = vi.fn().mockReturnValue(false);
-
-vi.mock("../lib/mcp-client.ts", () => ({
-	McpClient: vi.fn().mockImplementation(() => ({
-		connect: mockConnect,
-		callTool: mockCallTool,
-		disconnect: mockDisconnect,
-		isConnected: mockIsConnected,
-	})),
+const { mockConnect, mockCallTool, mockDisconnect, mockIsConnected } = vi.hoisted(() => ({
+	mockConnect: vi.fn(),
+	mockCallTool: vi.fn(),
+	mockDisconnect: vi.fn(),
+	mockIsConnected: vi.fn().mockReturnValue(false),
 }));
+
+vi.mock("../lib/mcp-client.ts", () => {
+	class MockMcpClient {
+		connect = mockConnect;
+		callTool = mockCallTool;
+		disconnect = mockDisconnect;
+		isConnected = mockIsConnected;
+	}
+	return { McpClient: MockMcpClient };
+});
 
 // ── Mock ExtensionAPI ───────────────────────────────────────────────
 
@@ -27,6 +30,14 @@ interface RegisteredTool {
 	description: string;
 	parameters: any;
 	execute: (...args: any[]) => any;
+}
+
+function createMockCtx() {
+	return {
+		ui: {
+			setStatus: vi.fn(),
+		},
+	};
 }
 
 function createMockPi() {
@@ -86,7 +97,7 @@ describe("commander-mcp extension", () => {
 		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
 		const result = await taskTool.execute("call-1", { operation: "list" }, new AbortController().signal, vi.fn(), {});
 
-		expect(mockCallTool).toHaveBeenCalledWith("commander_task", { operation: "list" });
+		expect(mockCallTool).toHaveBeenCalledWith("commander_task", { operation: "list" }, undefined);
 		expect(result.content[0].text).toBe("result");
 	});
 
@@ -127,5 +138,110 @@ describe("commander-mcp extension", () => {
 			// All Commander tools mention "OPERATIONS" or "operation"
 			expect(tool.description.toLowerCase()).toContain("operation");
 		}
+	});
+
+	// The probe is fire-and-forget — flush microtasks to let it settle
+	const flush = () => new Promise(r => setTimeout(r, 0));
+
+	describe("availability probe on session_start", () => {
+		it("should set __piCommanderAvailable=true when probe succeeds", async () => {
+			const g = globalThis as any;
+			delete g.__piCommanderAvailable;
+			delete g.__piCommanderClient;
+
+			mockConnect.mockResolvedValue(undefined);
+			mockIsConnected.mockReturnValue(true);
+			mockCallTool.mockResolvedValue({
+				content: [{ type: "text", text: "[]" }],
+			});
+
+			const ctx = createMockCtx();
+			const startHandler = pi._events["session_start"];
+			await startHandler({}, ctx);
+			await flush();
+
+			expect(g.__piCommanderAvailable).toBe(true);
+			expect(g.__piCommanderClient).toBeDefined();
+			expect(ctx.ui.setStatus).toHaveBeenCalledWith(
+				expect.stringContaining("connected"),
+				"commander",
+			);
+		});
+
+		it("should set __piCommanderAvailable=false when probe fails", async () => {
+			const g = globalThis as any;
+			delete g.__piCommanderAvailable;
+			delete g.__piCommanderClient;
+
+			mockConnect.mockRejectedValue(new Error("Connection refused"));
+
+			const ctx = createMockCtx();
+			const startHandler = pi._events["session_start"];
+			await startHandler({}, ctx);
+			await flush();
+
+			expect(g.__piCommanderAvailable).toBe(false);
+			expect(ctx.ui.setStatus).toHaveBeenCalledWith(
+				expect.stringContaining("offline"),
+				"commander",
+			);
+		});
+
+		it("should set __piCommanderAvailable=false when probe call times out", async () => {
+			const g = globalThis as any;
+			delete g.__piCommanderAvailable;
+
+			mockConnect.mockResolvedValue(undefined);
+			mockIsConnected.mockReturnValue(true);
+			mockCallTool.mockRejectedValue(new Error("MCP tool call timeout"));
+
+			const ctx = createMockCtx();
+			const startHandler = pi._events["session_start"];
+			await startHandler({}, ctx);
+			await flush();
+
+			expect(g.__piCommanderAvailable).toBe(false);
+		});
+
+		it("should not block session_start (returns immediately)", async () => {
+			// Mock a slow connect that takes a long time
+			mockConnect.mockImplementation(() => new Promise(() => {})); // never resolves
+
+			const ctx = createMockCtx();
+			const startHandler = pi._events["session_start"];
+
+			// session_start should return immediately despite the slow probe
+			const start = Date.now();
+			await startHandler({}, ctx);
+			const elapsed = Date.now() - start;
+
+			expect(elapsed).toBeLessThan(100);
+		});
+	});
+
+	describe("health check", () => {
+		it("should clear health check timer on session_shutdown", async () => {
+			const g = globalThis as any;
+
+			// Simulate a successful start to create a health check timer
+			mockConnect.mockResolvedValue(undefined);
+			mockIsConnected.mockReturnValue(true);
+			mockCallTool.mockResolvedValue({
+				content: [{ type: "text", text: "[]" }],
+			});
+
+			const ctx = createMockCtx();
+			const startHandler = pi._events["session_start"];
+			await startHandler({}, ctx);
+			await flush();
+
+			// Now shutdown — should clear timer and disconnect
+			const shutdownHandler = pi._events["session_shutdown"];
+			await shutdownHandler({}, ctx);
+			expect(mockDisconnect).toHaveBeenCalled();
+
+			// Verify globals are cleaned up
+			expect(g.__piCommanderAvailable).toBe(false);
+		});
 	});
 });

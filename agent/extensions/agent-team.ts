@@ -462,16 +462,43 @@ export default function (pi: ExtensionAPI) {
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);
 
 		// Build args — first run creates session, subsequent runs resume
-		const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
+		const extDir = dirname(fileURLToPath(import.meta.url));
+		const tasksExtPath = join(extDir, "tasks.ts");
+		const commanderExtPath = join(extDir, "commander-mcp.ts");
+
+		// Resolve tools — append commander tools when Commander is available
+		const g = globalThis as any;
+		const commanderAvailable = !!(g.__piCommanderAvailable && g.__piCommanderClient);
+		let tools = state.def.tools;
+		if (commanderAvailable) {
+			tools = tools + ",commander_task,commander_mailbox";
+		}
+
+		// Build system prompt — append Commander discipline when available
+		let systemPrompt = state.def.systemPrompt;
+		if (commanderAvailable) {
+			const taskIdNote = g.__piCurrentTask?.commanderTaskId !== undefined
+				? `Your Commander task ID is ${g.__piCurrentTask.commanderTaskId} (from PI_COMMANDER_TASK_ID env var).`
+				: "No Commander task ID assigned.";
+			systemPrompt += `\n\n## Commander Task Discipline
+${taskIdNote}
+When PI_COMMANDER_TASK_ID is set:
+- At START: claim the task with commander_task { operation: "claim", task_id: <id>, agent_name: "<your-name>" }
+- During WORK: add comments with commander_task { operation: "comment:add", task_id: <id>, agent_name: "<your-name>", comment: "<progress>" }
+- On SUCCESS: complete with commander_task { operation: "complete", task_id: <id>, result: "<summary>" }
+- On FAILURE: fail with commander_task { operation: "fail", task_id: <id>, error_message: "<what went wrong>" }`;
+		}
+
 		const args = [
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
 			"-e", tasksExtPath,
+			...(commanderAvailable ? ["-e", commanderExtPath] : []),
 			"--model", model,
-			"--tools", state.def.tools,
+			"--tools", tools,
 			"--thinking", "off",
-			"--append-system-prompt", state.def.systemPrompt,
+			"--append-system-prompt", systemPrompt,
 			"--session", agentSessionFile,
 		];
 
@@ -485,9 +512,18 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolve) => {
+			// Build env — include Commander task ID when available
+			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+			if (commanderAvailable) {
+				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
+				if (currentTask?.commanderTaskId !== undefined) {
+					spawnEnv.PI_COMMANDER_TASK_ID = String(currentTask.commanderTaskId);
+				}
+			}
+
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 				cwd: ctx.cwd,
 			});
 

@@ -27,6 +27,17 @@ import { DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, matchesKey, Text, truncateToWidth } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import {
+	localToCommander,
+	parseCommanderTaskId,
+	parseGroupId,
+	lookupMapping,
+	addMapping,
+	removeMapping,
+	clearMappings,
+	emptySyncState,
+	type SyncState,
+} from "./lib/commander-sync.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -45,6 +56,7 @@ interface TasksDetails {
 	listTitle?: string;
 	listDescription?: string;
 	error?: string;
+	syncState?: SyncState;
 }
 
 const TasksParams = Type.Object({
@@ -61,7 +73,7 @@ const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", do
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprogress: "done", done: "idle" };
 const STATUS_LABEL: Record<TaskStatus, string> = { idle: "idle", inprogress: "in progress", done: "done" };
 
-export interface CurrentTaskInfo { id: number; text: string }
+export interface CurrentTaskInfo { id: number; text: string; commanderTaskId?: number }
 export interface TaskListInfo {
 	tasks: { id: number; text: string; status: TaskStatus }[];
 	title?: string;
@@ -70,9 +82,9 @@ export interface TaskListInfo {
 }
 
 const g = globalThis as any;
-function publishCurrentTask(tasks: Task[]) {
+function publishCurrentTask(tasks: Task[], sync: SyncState) {
 	const cur = tasks.find(t => t.status === "inprogress");
-	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text } as CurrentTaskInfo : null;
+	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: lookupMapping(sync, cur.id) } as CurrentTaskInfo : null;
 
 	const remaining = tasks.filter(t => t.status !== "done").length;
 	g.__piTaskList = {
@@ -184,6 +196,15 @@ export default function (pi: ExtensionAPI) {
 	let listTitle: string | undefined;
 	let listDescription: string | undefined;
 	let nudgedThisCycle = false;
+	let syncState: SyncState = emptySyncState();
+
+	// ── Commander sync (fire-and-forget) ────────────────────────────────
+
+	function syncFireAndForget(fn: (client: any) => Promise<void>): void {
+		const g = globalThis as any;
+		if (!g.__piCommanderAvailable || !g.__piCommanderClient) return;
+		fn(g.__piCommanderClient).catch(() => {});
+	}
 
 	// ── Snapshot for details ───────────────────────────────────────────
 
@@ -193,22 +214,24 @@ export default function (pi: ExtensionAPI) {
 		nextId,
 		listTitle,
 		listDescription,
+		syncState: { ...syncState, mappings: [...syncState.mappings] },
 		...(error ? { error } : {}),
 	});
 
 	// ── UI refresh ─────────────────────────────────────────────────────
 
 	const refreshWidget = (_ctx: ExtensionContext) => {
-		publishCurrentTask(tasks);
+		publishCurrentTask(tasks, syncState);
 	};
 
 	const refreshUI = (ctx: ExtensionContext) => {
+		const syncIndicator = (globalThis as any).__piCommanderAvailable ? "(synced)" : "(local)";
 		if (tasks.length === 0) {
-			ctx.ui.setStatus("Tasks: none", "tasks");
+			ctx.ui.setStatus(`Tasks: none ${syncIndicator}`, "tasks");
 		} else {
 			const remaining = tasks.filter((t) => t.status !== "done").length;
 			const label = listTitle ? listTitle : "Tasks";
-			ctx.ui.setStatus(`${label}: ${tasks.length} tasks (${remaining} remaining)`, "tasks");
+			ctx.ui.setStatus(`${label}: ${tasks.length} tasks (${remaining} remaining) ${syncIndicator}`, "tasks");
 		}
 
 		refreshWidget(ctx);
@@ -223,6 +246,7 @@ export default function (pi: ExtensionAPI) {
 		nextId = 1;
 		listTitle = undefined;
 		listDescription = undefined;
+		syncState = emptySyncState();
 
 		for (const entry of ctx.sessionManager.getBranch()) {
 			if (entry.type !== "message") continue;
@@ -235,6 +259,7 @@ export default function (pi: ExtensionAPI) {
 				nextId = details.nextId;
 				listTitle = details.listTitle;
 				listDescription = details.listDescription;
+				if (details.syncState) syncState = details.syncState;
 			}
 		}
 
@@ -353,10 +378,34 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
+					// Cancel any previously synced tasks before resetting
+					if (syncState.mappings.length > 0) {
+						syncFireAndForget(async (client) => {
+							for (const m of syncState.mappings) {
+								await client.callTool("commander_task", { operation: "update", task_id: m.commanderId, status: "cancelled" });
+							}
+						});
+					}
+
 					tasks = [];
 					nextId = 1;
 					listTitle = params.text;
 					listDescription = params.description || undefined;
+					syncState = emptySyncState();
+
+					// Sync: create Commander group for the new list
+					syncFireAndForget(async (client) => {
+						const res = await client.callTool("commander_task", {
+							operation: "group:create",
+							group_name: listTitle,
+							initiative_summary: listDescription || listTitle,
+							total_waves: 1,
+							working_directory: process.cwd(),
+							tasks: [],
+						});
+						const gid = parseGroupId(res);
+						if (gid !== undefined) syncState = { ...syncState, groupId: gid };
+					});
 
 					const result = {
 						content: [{
@@ -399,6 +448,21 @@ export default function (pi: ExtensionAPI) {
 						tasks.push(t);
 						added.push(t);
 					}
+
+					// Sync: create Commander tasks for each added item
+					for (const t of added) {
+						syncFireAndForget(async (client) => {
+							const res = await client.callTool("commander_task", {
+								operation: "create",
+								description: t.text,
+								working_directory: process.cwd(),
+								...(syncState.groupId ? { group_id: syncState.groupId } : {}),
+							});
+							const cid = parseCommanderTaskId(res);
+							if (cid !== undefined) syncState = addMapping(syncState, t.id, cid);
+						});
+					}
+
 					const msg = added.length === 1
 						? `Added task #${added[0].id}: ${added[0].text}`
 						: `Added ${added.length} tasks: ${added.map((t) => `#${t.id}`).join(", ")}`;
@@ -443,6 +507,29 @@ export default function (pi: ExtensionAPI) {
 						msg += `\n(Auto-paused ${demoted.map((t) => `#${t.id}`).join(", ")} → idle. Only one task can be in progress at a time.)`;
 					}
 
+					// Sync: update Commander task status
+					syncFireAndForget(async (client) => {
+						const cid = lookupMapping(syncState, task.id);
+						if (cid === undefined) return;
+						await client.callTool("commander_task", {
+							operation: "update",
+							task_id: cid,
+							status: localToCommander(task.status),
+						});
+					});
+					// Sync demoted tasks back to pending
+					for (const d of demoted) {
+						syncFireAndForget(async (client) => {
+							const cid = lookupMapping(syncState, d.id);
+							if (cid === undefined) return;
+							await client.callTool("commander_task", {
+								operation: "update",
+								task_id: cid,
+								status: "pending",
+							});
+						});
+					}
+
 					const result = {
 						content: [{
 							type: "text" as const,
@@ -469,6 +556,19 @@ export default function (pi: ExtensionAPI) {
 						};
 					}
 					const removed = tasks.splice(idx, 1)[0];
+
+					// Sync: cancel Commander task
+					syncFireAndForget(async (client) => {
+						const cid = lookupMapping(syncState, removed.id);
+						if (cid === undefined) return;
+						await client.callTool("commander_task", {
+							operation: "update",
+							task_id: cid,
+							status: "cancelled",
+						});
+					});
+					syncState = removeMapping(syncState, removed.id);
+
 					const result = {
 						content: [{ type: "text" as const, text: `Removed task #${removed.id}: ${removed.text}` }],
 						details: makeDetails("remove"),
@@ -523,10 +623,25 @@ export default function (pi: ExtensionAPI) {
 					}
 
 					const count = tasks.length;
+
+					// Sync: cancel all mapped Commander tasks
+					if (syncState.mappings.length > 0) {
+						syncFireAndForget(async (client) => {
+							for (const m of syncState.mappings) {
+								await client.callTool("commander_task", {
+									operation: "update",
+									task_id: m.commanderId,
+									status: "cancelled",
+								});
+							}
+						});
+					}
+
 					tasks = [];
 					nextId = 1;
 					listTitle = undefined;
 					listDescription = undefined;
+					syncState = clearMappings(syncState);
 
 					const result = {
 						content: [{ type: "text" as const, text: `Cleared ${count} task(s)` }],
