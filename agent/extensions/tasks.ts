@@ -30,7 +30,6 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import {
 	localToCommander,
 	parseCommanderTaskId,
-	parseGroupId,
 	lookupMapping,
 	addMapping,
 	removeMapping,
@@ -38,6 +37,10 @@ import {
 	emptySyncState,
 	shouldCreateGroup,
 	isExternalSyncActive,
+	markGroupCreationInFlight,
+	parseGroupCreateResult,
+	buildGroupCreatePayload,
+	applyGroupCreateResult,
 	type SyncState,
 } from "./lib/commander-sync.ts";
 
@@ -261,7 +264,9 @@ export default function (pi: ExtensionAPI) {
 				nextId = details.nextId;
 				listTitle = details.listTitle;
 				listDescription = details.listDescription;
-				if (details.syncState) syncState = details.syncState;
+				if (details.syncState) {
+					syncState = { ...details.syncState, groupCreationInFlight: false };
+				}
 			}
 		}
 
@@ -395,21 +400,7 @@ export default function (pi: ExtensionAPI) {
 					listDescription = params.description || undefined;
 					syncState = emptySyncState();
 
-					// Sync: create Commander group for the new list (skip if external sync owns it)
-					if (!isExternalSyncActive() && shouldCreateGroup(syncState)) {
-						syncFireAndForget(async (client) => {
-							const res = await client.callTool("commander_task", {
-								operation: "group:create",
-								group_name: listTitle,
-								initiative_summary: listDescription || listTitle,
-								total_waves: 1,
-								working_directory: process.cwd(),
-								tasks: [],
-							});
-							const gid = parseGroupId(res);
-							if (gid !== undefined) syncState = { ...syncState, groupId: gid };
-						});
-					}
+					// Group creation deferred to first `add` — avoids empty tasks[] rejection
 
 					const result = {
 						content: [{
@@ -453,20 +444,44 @@ export default function (pi: ExtensionAPI) {
 						added.push(t);
 					}
 
-					// Sync: create Commander tasks for each added item (skip if external sync owns it)
+					// Sync: create Commander tasks (skip if external sync owns it)
 					if (!isExternalSyncActive()) {
-						for (const t of added) {
+						if (shouldCreateGroup(syncState)) {
+							// Path A: no group yet — batch all tasks into a single group:create
+							syncState = markGroupCreationInFlight(syncState);
+							const localIds = added.map((t) => t.id);
+							const payload = buildGroupCreatePayload(
+								listTitle || "Tasks",
+								listDescription || listTitle || "Tasks",
+								added.map((t) => t.text),
+								process.cwd(),
+							);
 							syncFireAndForget(async (client) => {
-								const res = await client.callTool("commander_task", {
-									operation: "create",
-									description: t.text,
-									working_directory: process.cwd(),
-									...(syncState.groupId ? { group_id: syncState.groupId } : {}),
-								});
-								const cid = parseCommanderTaskId(res);
-								if (cid !== undefined) syncState = addMapping(syncState, t.id, cid);
+								const res = await client.callTool("commander_task", payload);
+								const parsed = parseGroupCreateResult(res);
+								if (parsed) {
+									syncState = applyGroupCreateResult(syncState, localIds, parsed);
+								} else {
+									syncState = { ...syncState, groupCreationInFlight: false };
+								}
 							});
+						} else if (syncState.groupId !== undefined) {
+							// Path B: group exists — add individual tasks with group_id
+							for (const t of added) {
+								syncFireAndForget(async (client) => {
+									const res = await client.callTool("commander_task", {
+										operation: "create",
+										description: t.text,
+										working_directory: process.cwd(),
+										group_id: syncState.groupId,
+									});
+									const cid = parseCommanderTaskId(res);
+									if (cid !== undefined) syncState = addMapping(syncState, t.id, cid);
+								});
+							}
 						}
+						// If groupCreationInFlight but no groupId yet, tasks are dropped
+						// (race window — the group:create hasn't returned yet)
 					}
 
 					const msg = added.length === 1
