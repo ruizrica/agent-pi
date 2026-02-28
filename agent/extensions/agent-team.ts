@@ -472,6 +472,17 @@ export default function (pi: ExtensionAPI) {
 		// Resolve tools — append commander tools when Commander is available
 		const g = globalThis as any;
 		const commanderAvailable = !!(g.__piCommanderAvailable && g.__piCommanderClient);
+
+		// Commander lifecycle: fire-and-forget helper (mirrors tasks.ts pattern)
+		function commanderSync(fn: (client: any) => Promise<void>): void {
+			if (!g.__piCommanderAvailable || !g.__piCommanderClient) return;
+			fn(g.__piCommanderClient).catch(() => {});
+		}
+
+		// Hoist for use in pre-dispatch claim + post-dispatch reconciliation
+		const agentName = state.def.name;
+		const taskId = commanderAvailable ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
+
 		let tools = state.def.tools;
 		if (commanderAvailable) {
 			tools = tools + ",commander_task,commander_mailbox,commander_orchestration";
@@ -480,8 +491,6 @@ export default function (pi: ExtensionAPI) {
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
 		if (commanderAvailable) {
-			const agentName = state.def.name;
-			const taskId = g.__piCurrentTask?.commanderTaskId;
 			const hasTask = taskId !== undefined;
 			const idStr = hasTask ? String(taskId) : "<id>";
 
@@ -533,6 +542,25 @@ On FAILURE:
 				if (currentTask?.commanderTaskId !== undefined) {
 					spawnEnv.PI_COMMANDER_TASK_ID = String(currentTask.commanderTaskId);
 				}
+			}
+
+			// Pre-dispatch: claim task in Commander before spawning
+			if (commanderAvailable && taskId !== undefined) {
+				commanderSync(async (client) => {
+					await client.callTool("commander_task", {
+						operation: "claim",
+						task_id: taskId,
+						agent_name: agentName,
+					});
+					await client.callTool("commander_mailbox", {
+						operation: "send",
+						from_agent: agentName,
+						to_agent: "commander",
+						body: `Starting task ${taskId}`,
+						message_type: "status",
+						task_id: taskId,
+					});
+				});
 			}
 
 			const proc = spawn("pi", args, {
@@ -628,6 +656,37 @@ On FAILURE:
 				}
 				state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
 				updateWidget();
+
+				// Post-dispatch: reconcile Commander task to terminal state
+				if (commanderAvailable && taskId !== undefined) {
+					const summary = textChunks.join("").trim().split("\n").pop() || agentName;
+					if (state.status === "done") {
+						commanderSync(async (client) => {
+							await client.callTool("commander_task", {
+								operation: "complete",
+								task_id: taskId,
+								result: summary,
+							});
+							await client.callTool("commander_mailbox", {
+								operation: "send",
+								from_agent: agentName,
+								to_agent: "commander",
+								body: `Task complete: ${summary}`,
+								message_type: "status",
+								task_id: taskId,
+							});
+						});
+					} else {
+						const errMsg = stderrBuf.trim() || summary || "Agent exited with error";
+						commanderSync(async (client) => {
+							await client.callTool("commander_task", {
+								operation: "fail",
+								task_id: taskId,
+								error_message: errMsg,
+							});
+						});
+					}
+				}
 
 				ctx.ui.notify(
 					`${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
