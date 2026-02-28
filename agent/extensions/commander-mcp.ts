@@ -275,7 +275,7 @@ export default function (pi: ExtensionAPI) {
 			async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 				try {
 					await ensureConnected();
-					const isLightweight = ["commander_add_log", "commander_mailbox"].includes(tool.name);
+					const isLightweight = tool.name === "commander_mailbox";
 					const timeoutMs = isLightweight ? 15000 : undefined;
 					const result = await client.callTool(tool.name, params as Record<string, unknown>, timeoutMs);
 					return result;

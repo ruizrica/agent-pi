@@ -132,6 +132,32 @@ describe("commander-mcp extension", () => {
 		expect(mockDisconnect).toHaveBeenCalled();
 	});
 
+	describe("lightweight timeout", () => {
+		beforeEach(() => {
+			mockIsConnected.mockReturnValue(true);
+			mockCallTool.mockResolvedValue({
+				content: [{ type: "text", text: "ok" }],
+			});
+		});
+
+		it("should use 15s timeout for commander_mailbox", async () => {
+			const mailboxTool = pi._tools.find(t => t.name === "commander_mailbox")!;
+			await mailboxTool.execute("call-1", { operation: "send" }, new AbortController().signal, vi.fn(), {});
+
+			expect(mockCallTool).toHaveBeenCalledWith("commander_mailbox", { operation: "send" }, 15000);
+		});
+
+		it("should use default timeout for non-mailbox tools", async () => {
+			const nonMailboxTools = pi._tools.filter(t => t.name !== "commander_mailbox");
+			for (const tool of nonMailboxTools) {
+				mockCallTool.mockClear();
+				await tool.execute("call-1", { operation: "list" }, new AbortController().signal, vi.fn(), {});
+
+				expect(mockCallTool).toHaveBeenCalledWith(tool.name, { operation: "list" }, undefined);
+			}
+		});
+	});
+
 	it("should have meaningful descriptions for all tools", () => {
 		for (const tool of pi._tools) {
 			expect(tool.description.length).toBeGreaterThan(50);
