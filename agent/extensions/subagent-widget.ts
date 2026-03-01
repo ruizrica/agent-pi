@@ -28,6 +28,22 @@ import { statusButton } from "./lib/pipeline-render.ts";
 import { subagentTitle, renderSubagentWidget, parseSubName } from "./lib/subagent-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
+import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
+import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
+
+// ── Commander availability ───────────────────────────────────────────────────
+
+function isCommanderAvailable(): boolean {
+	const g = globalThis as any;
+	return g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+}
+
+function getCommanderClient(): any | undefined {
+	const g = globalThis as any;
+	if (!isCommanderAvailable()) return undefined;
+	return g.__piCommanderClient;
+}
 
 // ── Graceful kill helper ─────────────────────────────────────────────────────
 
@@ -69,6 +85,8 @@ interface SubState {
 	turnCount: number;     // increments each time /subcont continues this agent
 	summary?: string;      // pre-written summary shown in widget (no markdown)
 	proc?: any;            // active ChildProcess ref (for kill on /subrm)
+	commanderTaskId?: number;  // pre-assigned Commander task ID
+	autoRemove?: boolean;      // auto-remove widget ~30s after done (default: true)
 }
 
 export default function (pi: ExtensionAPI) {
@@ -141,26 +159,67 @@ export default function (pi: ExtensionAPI) {
 		state: SubState,
 		prompt: string,
 		ctx: any,
+		peerNames?: string[],
 	): Promise<void> {
 		const model = ctx.model
 			? `${ctx.model.provider}/${ctx.model.id}`
 			: DEFAULT_SUBAGENT_MODEL;
 
-		const tasksExtPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "tasks.ts");
+		const extDir = path.dirname(fileURLToPath(import.meta.url));
+		const tasksExtPath = path.join(extDir, "tasks.ts");
+		const commanderExtPath = path.join(extDir, "commander-mcp.ts");
+
+		// Commander integration
+		const commanderAvail = isCommanderAvailable();
+		const cmdTaskId = state.commanderTaskId;
+
+		let tools = "read,bash,grep,find,ls";
+		const extensions = ["-e", tasksExtPath];
+		if (commanderAvail) {
+			tools += ",commander_task,commander_mailbox,commander_orchestration";
+			extensions.push("-e", commanderExtPath);
+		}
+
+		// Build system prompt with Commander discipline
+		const systemPromptArgs: string[] = [];
+		if (commanderAvail) {
+			const cmdPrompt = buildCommanderPrompt({
+				agentName: `SA-${state.id}-${state.name}`,
+				taskId: cmdTaskId,
+				enableMailboxChat: !!(peerNames && peerNames.length > 0),
+				peerNames,
+			});
+			systemPromptArgs.push("--append-system-prompt", cmdPrompt);
+		}
+
+		// Pre-claim: parent claims Commander task on behalf of subagent
+		if (commanderAvail && cmdTaskId !== undefined) {
+			const client = getCommanderClient();
+			if (client) {
+				preClaimTask(client, cmdTaskId, `SA-${state.id}-${state.name}`).catch(() => {});
+			}
+		}
+
+		const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+		if (commanderAvail && cmdTaskId !== undefined) {
+			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
+		}
+
 		return new Promise<void>((resolve) => {
 			const proc = spawn("pi", [
 				"--mode", "json",
 				"-p",
 				"--session", state.sessionFile,   // persistent session for /subcont resumption
 				"--no-extensions",
-				"-e", tasksExtPath,
+				...extensions,
 				"--model", model,
-				"--tools", "read,bash,grep,find,ls",
+				"--tools", tools,
 				"--thinking", "off",
+				...systemPromptArgs,
 				prompt,
 			], {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 			});
 
 			state.proc = proc;
@@ -197,6 +256,21 @@ export default function (pi: ExtensionAPI) {
 				state.proc = undefined;
 				updateWidgets();
 
+				// Post-dispatch: reconcile Commander task to terminal state
+				if (commanderAvail && cmdTaskId !== undefined) {
+					const client = getCommanderClient();
+					if (client) {
+						const agentLabel = `SA-${state.id}-${state.name}`;
+						const summary = state.textChunks.join("").trim().split("\n").pop() || agentLabel;
+						if (state.status === "done") {
+							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch(() => {});
+						} else {
+							const errMsg = summary || "Agent exited with error";
+							postFailTask(client, cmdTaskId, errMsg).catch(() => {});
+						}
+					}
+				}
+
 				const result = state.textChunks.join("");
 				ctx.ui.notify(
 					`SA${state.id} (${state.name}) ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
@@ -208,6 +282,16 @@ export default function (pi: ExtensionAPI) {
 					content: `SA${state.id} (${state.name})${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} finished "${prompt}" in ${Math.round(state.elapsed / 1000)}s.\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
 					display: true,
 				}, { deliverAs: "followUp", triggerTurn: true });
+
+				// Auto-remove widget after 30s (default behavior)
+				if (state.autoRemove !== false) {
+					setTimeout(() => {
+						if (agents.has(state.id) && state.status !== "running") {
+							ctx.ui.setWidget(`sub-${state.id}`, undefined);
+							agents.delete(state.id);
+						}
+					}, 30_000);
+				}
 
 				resolve();
 			});
@@ -234,6 +318,8 @@ export default function (pi: ExtensionAPI) {
 			task: Type.String({ description: "The complete task description for the subagent to perform" }),
 			name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT)" })),
 			summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
+			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;
@@ -249,6 +335,8 @@ export default function (pi: ExtensionAPI) {
 				sessionFile: makeSessionFile(id),
 				turnCount: 1,
 				summary: args.summary,
+				commanderTaskId: args.commanderTaskId,
+				autoRemove: args.autoRemove,
 			};
 			agents.set(id, state);
 			updateWidgets();
@@ -258,6 +346,88 @@ export default function (pi: ExtensionAPI) {
 
 			return {
 				content: [{ type: "text", text: `SA${id} (${state.name}) spawned and running in background.` }],
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "subagent_create_batch",
+		description: "Spawn multiple subagents at once with optional Commander task group. Pre-creates Commander tasks to avoid race conditions where multiple agents try to claim the same task.",
+		parameters: Type.Object({
+			agents: Type.Array(Type.Object({
+				task: Type.String({ description: "The complete task description for the subagent" }),
+				name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT)" })),
+				summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
+			}), { description: "Array of agent definitions to spawn" }),
+			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~30s after done (default: true)" })),
+		}),
+		execute: async (callId, args, _signal, _onUpdate, ctx) => {
+			widgetCtx = ctx;
+			const defs = args.agents;
+			if (!defs || defs.length === 0) {
+				return { content: [{ type: "text", text: "Error: No agents specified." }] };
+			}
+
+			// Build states for all agents
+			const states: SubState[] = defs.map((def: any) => {
+				const id = nextId++;
+				return {
+					id,
+					status: "running" as const,
+					name: (def.name || "AGENT").toUpperCase(),
+					task: def.task,
+					textChunks: [],
+					toolCount: 0,
+					elapsed: 0,
+					sessionFile: makeSessionFile(id),
+					turnCount: 1,
+					summary: def.summary,
+					autoRemove: args.autoRemove,
+				};
+			});
+
+			// Try to create Commander task group for all agents at once
+			const client = getCommanderClient();
+			if (client && isCommanderAvailable()) {
+				const groupName = args.groupName || `subagent-batch-${Date.now()}`;
+				const taskTexts = defs.map((def: any) => def.task);
+				const payload = buildGroupCreatePayload(
+					groupName,
+					`Batch subagent group: ${groupName}`,
+					taskTexts,
+					process.cwd(),
+				);
+				try {
+					const result = await client.callTool("commander_task", payload);
+					const parsed = parseGroupCreateResult(result);
+					if (parsed && parsed.taskIds.length >= states.length) {
+						for (let i = 0; i < states.length; i++) {
+							states[i].commanderTaskId = parsed.taskIds[i];
+						}
+					}
+				} catch {
+					// Commander group creation failed — proceed without task IDs
+				}
+			}
+
+			// Collect peer names for mailbox banter
+			const peerNames = states.map(s => `SA-${s.id}-${s.name}`);
+
+			// Register and spawn all agents
+			for (const state of states) {
+				agents.set(state.id, state);
+			}
+			updateWidgets();
+
+			for (const state of states) {
+				const peers = peerNames.filter(n => n !== `SA-${state.id}-${state.name}`);
+				spawnAgent(state, state.task, ctx, peers);
+			}
+
+			const ids = states.map(s => `SA${s.id} (${s.name})`).join(", ");
+			return {
+				content: [{ type: "text", text: `Batch spawned ${states.length} subagents: ${ids}` }],
 			};
 		},
 	});

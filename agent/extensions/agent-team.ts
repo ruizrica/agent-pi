@@ -33,6 +33,8 @@ import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
+import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 
 // ── Types ────────────────────────────────────────
@@ -494,25 +496,7 @@ export default function (pi: ExtensionAPI) {
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
 		if (commanderAvailable) {
-			const hasTask = taskId !== undefined;
-			const idStr = hasTask ? String(taskId) : "<id>";
-
-			systemPrompt += `\n\n## Commander Task Discipline
-You are agent "${canonicalName}".${hasTask ? ` Your Commander task ID is ${taskId}.` : ""}
-${hasTask ? `At START:
-- Claim: commander_task { operation: "claim", task_id: ${idStr}, agent_name: "${canonicalName}" }
-- Notify: commander_mailbox { operation: "send", from_agent: "${canonicalName}", to_agent: "commander", body: "Starting task ${idStr}", message_type: "status", task_id: ${idStr} }
-
-During WORK:
-- Log progress: commander_task { operation: "log", task_id: ${idStr}, message: "<progress>", level: "info" }
-- For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${canonicalName}" }
-
-On SUCCESS:
-- Notify: commander_mailbox { operation: "send", from_agent: "${canonicalName}", to_agent: "commander", body: "Task complete: <summary>", message_type: "status", task_id: ${idStr} }
-- Complete: commander_task { operation: "complete", task_id: ${idStr}, result: "<summary>" }
-
-On FAILURE:
-- Fail: commander_task { operation: "fail", task_id: ${idStr}, error_message: "<what went wrong>" }` : "No Commander task assigned. Commander tools are available if needed."}`;
+			systemPrompt += buildCommanderPrompt({ agentName: canonicalName, taskId });
 		}
 
 		const args = [
@@ -549,21 +533,7 @@ On FAILURE:
 
 			// Pre-dispatch: claim task in Commander before spawning
 			if (commanderAvailable && taskId !== undefined) {
-				commanderSync(async (client) => {
-					await client.callTool("commander_task", {
-						operation: "claim",
-						task_id: taskId,
-						agent_name: canonicalName,
-					});
-					await client.callTool("commander_mailbox", {
-						operation: "send",
-						from_agent: canonicalName,
-						to_agent: "commander",
-						body: `Starting task ${taskId}`,
-						message_type: "status",
-						task_id: taskId,
-					});
-				});
+				commanderSync((client) => preClaimTask(client, taskId, canonicalName));
 			}
 
 			const proc = spawn("pi", args, {
@@ -664,30 +634,10 @@ On FAILURE:
 				if (commanderAvailable && taskId !== undefined) {
 					const summary = textChunks.join("").trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
-						commanderSync(async (client) => {
-							await client.callTool("commander_task", {
-								operation: "complete",
-								task_id: taskId,
-								result: summary,
-							});
-							await client.callTool("commander_mailbox", {
-								operation: "send",
-								from_agent: canonicalName,
-								to_agent: "commander",
-								body: `Task complete: ${summary}`,
-								message_type: "status",
-								task_id: taskId,
-							});
-						});
+						commanderSync((client) => postCompleteTask(client, taskId, canonicalName, summary));
 					} else {
 						const errMsg = stderrBuf.trim() || summary || "Agent exited with error";
-						commanderSync(async (client) => {
-							await client.callTool("commander_task", {
-								operation: "fail",
-								task_id: taskId,
-								error_message: errMsg,
-							});
-						});
+						commanderSync((client) => postFailTask(client, taskId, errMsg));
 					}
 				}
 
