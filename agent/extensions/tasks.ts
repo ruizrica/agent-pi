@@ -774,7 +774,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (details.error) {
-				return new Text(outputLine(theme, "error", theme.fg("error", `Error: ${details.error}`)), 0, 0);
+				return new Text(outputLine(theme, "error", `Error: ${details.error}`), 0, 0);
 			}
 
 			const taskList = details.tasks;
@@ -789,7 +789,7 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				case "list": {
-					if (taskList.length === 0) return new Text(outputLine(theme, "accent", theme.fg("dim", "No tasks")), 0, 0);
+					if (taskList.length === 0) return new Text(outputLine(theme, "accent", "No tasks"), 0, 0);
 
 					let listText = "";
 					if (details.listTitle) {
@@ -820,32 +820,32 @@ export default function (pi: ExtensionAPI) {
 				case "add": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(outputLine(theme, "success", theme.fg("success", msg)), 0, 0);
+					return new Text(outputLine(theme, "success", msg), 0, 0);
 				}
 
 				case "toggle": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(outputLine(theme, "accent", theme.fg("accent", msg)), 0, 0);
+					return new Text(outputLine(theme, "accent", msg), 0, 0);
 				}
 
 				case "remove": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(outputLine(theme, "warning", theme.fg("warning", msg)), 0, 0);
+					return new Text(outputLine(theme, "warning", msg), 0, 0);
 				}
 
 				case "update": {
 					const text = result.content[0];
 					const msg = text?.type === "text" ? text.text : "";
-					return new Text(outputLine(theme, "success", theme.fg("success", msg)), 0, 0);
+					return new Text(outputLine(theme, "success", msg), 0, 0);
 				}
 
 				case "clear":
-					return new Text(outputLine(theme, "success", theme.fg("success", "Cleared all tasks")), 0, 0);
+					return new Text(outputLine(theme, "success", "Cleared all tasks"), 0, 0);
 
 				default:
-					return new Text(outputLine(theme, "dim", theme.fg("dim", "done")), 0, 0);
+					return new Text(outputLine(theme, "dim", "done"), 0, 0);
 			}
 		},
 	});

@@ -166,7 +166,7 @@ export default function (pi: ExtensionAPI) {
 		renderResult(result, _options, theme) {
 			const text = result.content[0];
 			const msg = text?.type === "text" ? text.text : "";
-			return new Text(outputLine(theme, "success", theme.fg("success", msg)), 0, 0);
+			return new Text(outputLine(theme, "success", msg), 0, 0);
 		},
 	});
 

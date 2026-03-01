@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pi Agent Workflow — How It Works &amp; Why It's Slow</title>
+<style>
+/* ── Reset & Base ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a14;
+  --bg-surface: #10101c;
+  --bg-card: #161626;
+  --bg-hover: #1c1c32;
+  --border: #2a2a44;
+  --border-accent: #4a4a8a;
+  --text: #c8c8e0;
+  --text-muted: #8888aa;
+  --text-dim: #5a5a7a;
+  --accent: #7c8cf8;
+  --accent-glow: #7c8cf840;
+  --green: #4ade80;
+  --green-dim: #22543d;
+  --yellow: #facc15;
+  --yellow-dim: #713f12;
+  --red: #f87171;
+  --red-dim: #7f1d1d;
+  --orange: #fb923c;
+  --cyan: #22d3ee;
+  --pink: #f472b6;
+  --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.65;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--bg-card); padding: 2px 6px; border-radius: 4px; color: var(--cyan); }
+pre { font-family: var(--mono); font-size: 0.85em; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+
+/* ── Layout ───────────────────────────────────────────── */
+.container { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+header {
+  text-align: center;
+  padding: 60px 0 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+header h1 { font-size: 2.2em; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+header .subtitle { color: var(--text-muted); font-size: 1.1em; margin-top: 8px; }
+
+h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  color: #fff;
+  margin: 48px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+h2 .section-num { color: var(--accent); margin-right: 8px; font-weight: 400; }
+
+h3 { font-size: 1.15em; font-weight: 600; color: var(--text); margin: 24px 0 8px; }
+p { margin: 8px 0 16px; }
+ul, ol { margin: 8px 0 16px; padding-left: 24px; }
+li { margin: 4px 0; }
+li::marker { color: var(--text-dim); }
+
+/* ── Cards ────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 16px 0;
+}
+.card-accent { border-color: var(--border-accent); }
+.card h3 { margin-top: 0; }
+
+/* ── Collapsible Sections ─────────────────────────────── */
+.collapsible { margin: 16px 0; }
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.collapsible-header:hover { background: var(--bg-hover); border-color: var(--border-accent); }
+.collapsible-header .chevron {
+  color: var(--accent);
+  font-size: 0.85em;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+.collapsible.open .chevron { transform: rotate(90deg); }
+.collapsible-header .title { font-weight: 600; color: #fff; flex: 1; }
+.collapsible-header .badge {
+  font-size: 0.75em;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.collapsible-body {
+  display: none;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: var(--bg-surface);
+}
+.collapsible.open .collapsible-body { display: block; }
+.collapsible.open .collapsible-header { border-radius: 10px 10px 0 0; }
+
+/* ── Flow Diagram (SVG-based) ─────────────────────────── */
+.diagram-container { margin: 24px 0; overflow-x: auto; }
+.diagram-container svg { display: block; margin: 0 auto; }
+
+/* ── Timeline ─────────────────────────────────────────── */
+.timeline { position: relative; margin: 24px 0; padding-left: 32px; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.2s;
+}
+.timeline-item:hover { border-color: var(--border-accent); }
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -26px;
+  top: 22px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--bg);
+}
+.timeline-item.active::before { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.timeline-item .phase-name { font-weight: 700; color: #fff; font-size: 1.05em; }
+.timeline-item .phase-mode { font-family: var(--mono); font-size: 0.8em; color: var(--text-dim); margin-left: 8px; }
+.timeline-item .phase-desc { color: var(--text-muted); margin-top: 4px; }
+.timeline-item .phase-time {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--yellow);
+  margin-top: 8px;
+}
+
+/* ── Bottleneck callouts ──────────────────────────────── */
+.bottleneck {
+  border-left: 3px solid var(--red);
+  padding: 12px 16px;
+  background: var(--red-dim);
+  border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+.bottleneck .label { font-weight: 700; color: var(--red); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; }
+.bottleneck p { margin: 4px 0 0; color: var(--text); }
+
+.perf-note {
+  border-left: 3px solid var(--yellow);
+  padding: 12px 16px;
+  background: var(--yellow-dim);
+  border-radius: 0 8px 8px 0;
+  margin: 12px 0;
+}
+.perf-note .label { font-weight: 700; color: var(--yellow); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; }
+.perf-note p { margin: 4px 0 0; color: var(--text); }
+
+/* ── Side-by-side comparison ──────────────────────────── */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+@media (max-width: 700px) {
+  .comparison { grid-template-columns: 1fr; }
+}
+.comparison .col { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+.comparison .col h4 { color: #fff; margin-bottom: 12px; font-size: 1em; }
+.comparison .col.fast { border-color: var(--green); }
+.comparison .col.fast h4 { color: var(--green); }
+.comparison .col.slow { border-color: var(--red); }
+.comparison .col.slow h4 { color: var(--red); }
+
+/* ── File map ─────────────────────────────────────────── */
+.file-map { margin: 16px 0; }
+.file-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.file-entry:hover { background: var(--bg-hover); }
+.file-entry:last-child { border-bottom: none; }
+.file-entry .path { font-family: var(--mono); font-size: 0.85em; color: var(--cyan); white-space: nowrap; min-width: 280px; flex-shrink: 0; }
+.file-entry .desc { color: var(--text-muted); font-size: 0.9em; }
+
+/* ── Pills / Tags ─────────────────────────────────────── */
+.pill {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.75em;
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.pill.green { border-color: var(--green); color: var(--green); }
+.pill.yellow { border-color: var(--yellow); color: var(--yellow); }
+.pill.red { border-color: var(--red); color: var(--red); }
+.pill.accent { border-color: var(--accent); color: var(--accent); }
+
+/* ── Animated flow arrows ─────────────────────────────── */
+@keyframes flowPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.flow-arrow { animation: flowPulse 2s ease-in-out infinite; }
+.flow-arrow:nth-child(2) { animation-delay: 0.3s; }
+.flow-arrow:nth-child(3) { animation-delay: 0.6s; }
+
+/* ── Table of Contents ────────────────────────────────── */
+.toc {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 28px;
+  margin: 24px 0;
+}
+.toc h3 { color: var(--text-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+.toc ol { list-style: none; padding: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin: 6px 0; }
+.toc li::before { content: counter(toc) "."; color: var(--accent); margin-right: 8px; font-family: var(--mono); font-size: 0.9em; }
+.toc a { color: var(--text); transition: color 0.15s; }
+.toc a:hover { color: var(--accent); text-decoration: none; }
+
+/* ── Timing bar chart ─────────────────────────────────── */
+.timing-bars { margin: 16px 0; }
+.timing-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.timing-bar .bar-label {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--text-muted);
+  min-width: 160px;
+  text-align: right;
+}
+.timing-bar .bar-track {
+  flex: 1;
+  height: 24px;
+  background: var(--bg);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+.timing-bar .bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 0.75em;
+  color: #fff;
+  white-space: nowrap;
+  transition: width 0.6s ease;
+}
+.timing-bar .bar-fill.red { background: linear-gradient(90deg, var(--red-dim), var(--red)); }
+.timing-bar .bar-fill.yellow { background: linear-gradient(90deg, var(--yellow-dim), var(--yellow)); color: #000; }
+.timing-bar .bar-fill.green { background: linear-gradient(90deg, var(--green-dim), var(--green)); color: #000; }
+.timing-bar .bar-fill.accent { background: linear-gradient(90deg, #2a2a5a, var(--accent)); }
+
+/* ── Animations ───────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn 0.4s ease; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- HEADER -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<header>
+  <h1>Pi Agent Workflow</h1>
+  <p class="subtitle">How the agent works, where time goes, and why it feels slow</p>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TABLE OF CONTENTS -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<nav class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#architecture">Architecture Overview</a></li>
+    <li><a href="#pipelines">The Three Pipeline Systems</a></li>
+    <li><a href="#flow">Request Flow</a></li>
+    <li><a href="#pipeline-deep-dive">Pipeline Deep Dive: The 5 Phases</a></li>
+    <li><a href="#subprocess">Subprocess Spawning</a></li>
+    <li><a href="#slow">Why It's Slow &mdash; Bottleneck Analysis</a></li>
+    <li><a href="#comparison">Simple vs Pipeline: Side-by-Side</a></li>
+    <li><a href="#files">Key Files Reference</a></li>
+  </ol>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 1. ARCHITECTURE OVERVIEW -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="architecture">
+<h2><span class="section-num">1.</span> Architecture Overview</h2>
+
+<p>Pi is an <strong>extension-based agent system</strong> built on <code>@mariozechner/pi-coding-agent</code>. There is no single entry point &mdash; behavior is composed from extensions loaded via <code>settings.json</code>.</p>
+
+<div class="card">
+  <h3>Core Concept: Extensions All the Way Down</h3>
+  <p>Each <code>.ts</code> file in <code>agent/extensions/</code> is an extension that receives an <code>ExtensionAPI</code> object. Extensions register:</p>
+  <ul>
+    <li><strong>Tools</strong> &mdash; callable by the LLM (e.g., <code>run_chain</code>, <code>dispatch_agent</code>)</li>
+    <li><strong>Commands</strong> &mdash; user slash commands (e.g., <code>/chain</code>, <code>/pipeline</code>)</li>
+    <li><strong>Shortcuts</strong> &mdash; keyboard bindings (e.g., <code>Ctrl+B</code>, <code>Ctrl+G</code>)</li>
+    <li><strong>Event handlers</strong> &mdash; lifecycle hooks (<code>session_start</code>, <code>before_agent_start</code>, <code>tool_call</code>)</li>
+    <li><strong>Widgets</strong> &mdash; live TUI components rendered in the terminal</li>
+  </ul>
+</div>
+
+<div class="card card-accent">
+  <h3>The Primary Agent</h3>
+  <p>The primary <code>pi</code> process is an <strong>orchestrator only</strong>. Its <code>before_agent_start</code> hook injects a system prompt that says:</p>
+  <pre><code>"You are a dispatcher agent. You coordinate specialist agents..."
+"You PREFER delegating codebase work to specialist agents via dispatch_agent"</code></pre>
+  <p>The primary agent <em>can</em> use tools directly, but is prompted to delegate. Every delegation spawns a new <code>pi</code> subprocess.</p>
+</div>
+
+<p>The extension loading order from <code>settings.json</code>:</p>
+<pre><code>{
+  "defaultModel": "claude-opus-4-6",
+  "defaultProvider": "anthropic",
+  "packages": [
+    "extensions/agent-banner.ts",
+    "extensions/agent-chain.ts",
+    "extensions/agent-team.ts",
+    "extensions/pipeline-team.ts",
+    "extensions/session-replay.ts",
+    "extensions/subagent-widget.ts",
+    "extensions/system-select.ts",
+    "extensions/theme-cycler.ts",
+    "extensions/tasks.ts",
+    "extensions/commander-mcp.ts",
+    "extensions/toolkit-commands.ts",
+    "extensions/user-question.ts",
+    "extensions/agent-nav.ts",
+    "extensions/footer.ts"
+  ]
+}</code></pre>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 2. THE THREE PIPELINE SYSTEMS -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="pipelines">
+<h2><span class="section-num">2.</span> The Three Pipeline Systems</h2>
+
+<p>Pi has three distinct orchestration modes. Only one is active at a time, selected via commands.</p>
+
+<div class="collapsible open" onclick="toggleCollapsible(this)">
+  <div class="collapsible-header">
+    <span class="chevron">&#9654;</span>
+    <span class="title">Chain &mdash; Sequential Pipeline</span>
+    <span class="badge">agent-chain.ts</span>
+  </div>
+  <div class="collapsible-body">
+    <p><strong>Pattern:</strong> Step 1 &rarr; Step 2 &rarr; Step 3 &rarr; ... (output feeds forward as <code>$INPUT</code>)</p>
+    <p><strong>Tool:</strong> <code>run_chain</code> &mdash; executes the entire chain sequentially</p>
+    <p><strong>Config:</strong> <code>.pi/agents/agent-chain.yaml</code> defines chain names and step sequences</p>
+    <p><strong>How it works:</strong></p>
+    <ol>
+      <li>User's prompt enters Step 1 as <code>$ORIGINAL</code></li>
+      <li>Step 1's output becomes <code>$INPUT</code> for Step 2</li>
+      <li>Each step spawns a fresh <code>pi</code> subprocess with the step's agent definition</li>
+      <li>Agents maintain session context via JSON session files in <code>.pi/agent-sessions/</code></li>
+    </ol>
+    <p><strong>Use case:</strong> Repeatable workflows like code audits (scout &rarr; analyze &rarr; report)</p>
+  </div>
+</div>
+
+<div class="collapsible" onclick="toggleCollapsible(this)">
+  <div class="collapsible-header">
+    <span class="chevron">&#9654;</span>
+    <span class="title">Team &mdash; Parallel Dispatch</span>
+    <span class="badge">agent-team.ts</span>
+  </div>
+  <div class="collapsible-body">
+    <p><strong>Pattern:</strong> Primary dispatches specialist agents on demand (parallel or sequential)</p>
+    <p><strong>Tool:</strong> <code>dispatch_agent</code> &mdash; sends one task to one specialist</p>
+    <p><strong>Config:</strong> <code>.pi/agents/teams.yaml</code> defines team compositions; agent definitions in <code>agents/*.md</code></p>
+    <p><strong>How it works:</strong></p>
+    <ol>
+      <li>Primary analyzes user's request and breaks it into sub-tasks</li>
+      <li>Each sub-task is dispatched to the right specialist (scout, builder, reviewer, etc.)</li>
+      <li>The LLM decides dispatch order &mdash; can run multiple agents concurrently</li>
+      <li>Each dispatch spawns a new <code>pi</code> subprocess</li>
+    </ol>
+    <p><strong>Use case:</strong> Flexible task delegation where the LLM chooses the strategy</p>
+  </div>
+</div>
+
+<div class="collapsible" onclick="toggleCollapsible(this)">
+  <div class="collapsible-header">
+    <span class="chevron">&#9654;</span>
+    <span class="title">Pipeline-Team &mdash; 5-Phase Hybrid</span>
+    <span class="badge">pipeline-team.ts</span>
+  </div>
+  <div class="collapsible-body">
+    <p><strong>Pattern:</strong> Fixed 5-phase pipeline with mixed interactive/parallel/sequential phases</p>
+    <p><strong>Tools:</strong> <code>advance_phase</code>, <code>dispatch_agents</code>, <code>pipeline_status</code></p>
+    <p><strong>Config:</strong> <code>.pi/agents/pipeline-team.yaml</code></p>
+    <p><strong>Phases:</strong></p>
+    <ol>
+      <li><strong>UNDERSTAND</strong> (interactive) &mdash; Primary talks to user, clarifies task</li>
+      <li><strong>GATHER</strong> (parallel) &mdash; Scout agents explore the codebase concurrently</li>
+      <li><strong>PLAN</strong> (sequential) &mdash; Planner creates implementation plan from gathered context</li>
+      <li><strong>EXECUTE</strong> (parallel) &mdash; Builder agents implement the plan</li>
+      <li><strong>REVIEW</strong> (loop) &mdash; Reviewer audits, primary decides approve or re-dispatch</li>
+    </ol>
+    <p><strong>Use case:</strong> Complex features requiring structured multi-agent collaboration</p>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 3. REQUEST FLOW -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="flow">
+<h2><span class="section-num">3.</span> Request Flow</h2>
+
+<p>Here's what happens when you type a message and press Enter:</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 800 520" width="800" height="520" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="520" fill="#0a0a14" rx="12"/>
+
+  <!-- Step 1: User Input -->
+  <rect x="300" y="20" width="200" height="44" rx="8" fill="#161626" stroke="#7c8cf8" stroke-width="1.5"/>
+  <text x="400" y="48" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="14" font-weight="600">User Input</text>
+
+  <!-- Arrow 1 -->
+  <line x1="400" y1="64" x2="400" y2="90" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 2: Extension Events -->
+  <rect x="240" y="90" width="320" height="44" rx="8" fill="#161626" stroke="#4a4a8a" stroke-width="1"/>
+  <text x="400" y="112" text-anchor="middle" fill="#c8c8e0" font-family="system-ui" font-size="13">
+    <tspan fill="#7c8cf8">input</tspan> event &#8594;
+    <tspan fill="#7c8cf8">before_agent_start</tspan> &#8594; system prompt
+  </text>
+
+  <!-- Arrow 2 -->
+  <line x1="400" y1="134" x2="400" y2="158" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 3: Task Gate -->
+  <rect x="260" y="158" width="280" height="44" rx="8" fill="#1c1c32" stroke="#f87171" stroke-width="1.5"/>
+  <text x="400" y="180" text-anchor="middle" fill="#f87171" font-family="system-ui" font-size="13" font-weight="600">Task Gate (tasks.ts)</text>
+  <text x="400" y="195" text-anchor="middle" fill="#8888aa" font-family="system-ui" font-size="11">Must define tasks before tools work</text>
+
+  <!-- Arrow 3 -->
+  <line x1="400" y1="202" x2="400" y2="226" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 4: LLM Decision -->
+  <rect x="270" y="226" width="260" height="44" rx="8" fill="#161626" stroke="#facc15" stroke-width="1.5"/>
+  <text x="400" y="248" text-anchor="middle" fill="#facc15" font-family="system-ui" font-size="13" font-weight="600">LLM Decides: Direct or Delegate?</text>
+  <text x="400" y="263" text-anchor="middle" fill="#8888aa" font-family="system-ui" font-size="11">claude-opus-4-6 via Anthropic API</text>
+
+  <!-- Branch: Direct -->
+  <line x1="320" y1="270" x2="180" y2="310" stroke="#4ade80" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <rect x="60" y="310" width="240" height="44" rx="8" fill="#161626" stroke="#4ade80" stroke-width="1"/>
+  <text x="180" y="332" text-anchor="middle" fill="#4ade80" font-family="system-ui" font-size="13" font-weight="600">Direct: Use Own Tools</text>
+  <text x="180" y="347" text-anchor="middle" fill="#8888aa" font-family="system-ui" font-size="11">read, write, bash, grep, etc.</text>
+
+  <!-- Branch: Delegate -->
+  <line x1="480" y1="270" x2="620" y2="310" stroke="#f87171" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <rect x="500" y="310" width="240" height="44" rx="8" fill="#161626" stroke="#f87171" stroke-width="1"/>
+  <text x="620" y="332" text-anchor="middle" fill="#f87171" font-family="system-ui" font-size="13" font-weight="600">Delegate: Spawn Subprocess</text>
+  <text x="620" y="347" text-anchor="middle" fill="#8888aa" font-family="system-ui" font-size="11">dispatch_agent / run_chain</text>
+
+  <!-- Subprocess detail -->
+  <line x1="620" y1="354" x2="620" y2="380" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <rect x="480" y="380" width="280" height="80" rx="8" fill="#10101c" stroke="#4a4a8a" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="620" y="402" text-anchor="middle" fill="#8888aa" font-family="monospace" font-size="12">$ pi --mode json -p \</text>
+  <text x="620" y="418" text-anchor="middle" fill="#8888aa" font-family="monospace" font-size="12">  --model openrouter/gemini-3-flash \</text>
+  <text x="620" y="434" text-anchor="middle" fill="#8888aa" font-family="monospace" font-size="12">  --tools read,grep,bash \</text>
+  <text x="620" y="450" text-anchor="middle" fill="#8888aa" font-family="monospace" font-size="12">  "task description"</text>
+
+  <!-- Both converge to output -->
+  <line x1="180" y1="354" x2="340" y2="490" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="620" y1="460" x2="460" y2="490" stroke="#4a4a8a" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <rect x="300" y="480" width="200" height="36" rx="8" fill="#161626" stroke="#7c8cf8" stroke-width="1.5"/>
+  <text x="400" y="504" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="14" font-weight="600">Response to User</text>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#4a4a8a"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 4. PIPELINE DEEP DIVE -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="pipeline-deep-dive">
+<h2><span class="section-num">4.</span> Pipeline Deep Dive: The 5 Phases</h2>
+
+<p>When using <code>pipeline-team.ts</code>, every task walks through up to 5 sequential phases. Here's what each does and where time is spent:</p>
+
+<div class="timeline">
+  <div class="timeline-item active">
+    <div><span class="phase-name">UNDERSTAND</span><span class="phase-mode">interactive</span></div>
+    <div class="phase-desc">Primary agent converses with the user to clarify the task. No subprocesses spawned.</div>
+    <div class="phase-time">~5-30s (depends on back-and-forth)</div>
+    <p style="margin-top:8px;">The LLM must call <code>advance_phase</code> with a summary before moving on. Even for clear tasks, this involves at least one LLM round-trip to produce the summary.</p>
+  </div>
+
+  <div class="timeline-item">
+    <div><span class="phase-name">GATHER</span><span class="phase-mode">parallel</span></div>
+    <div class="phase-desc">Scout agents explore the codebase concurrently. Multiple <code>pi</code> subprocesses spawned.</div>
+    <div class="phase-time">~10-40s (2-5 scouts in parallel)</div>
+    <div class="bottleneck">
+      <div class="label">Bottleneck: Subprocess Startup</div>
+      <p>Each scout spawns a new <code>pi</code> process. Startup cost: ~2-3s per process (Node.js boot + extension loading + API handshake).</p>
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div><span class="phase-name">PLAN</span><span class="phase-mode">sequential</span></div>
+    <div class="phase-desc">Planner agent synthesizes gathered context into an implementation plan. Single subprocess.</div>
+    <div class="phase-time">~15-45s (one agent, potentially multiple LLM turns)</div>
+    <p style="margin-top:8px;">The <code>$CONTEXT</code> variable carries all accumulated context (capped at 15,000 chars). Planner's output is stored as <code>$PLAN</code> for the execute phase.</p>
+  </div>
+
+  <div class="timeline-item">
+    <div><span class="phase-name">EXECUTE</span><span class="phase-mode">parallel</span></div>
+    <div class="phase-desc">Builder agents implement the plan. Multiple subprocesses for independent tasks.</div>
+    <div class="phase-time">~20-120s (depends on task complexity)</div>
+    <div class="perf-note">
+      <div class="label">Performance Note</div>
+      <p>Builders use <code>openrouter/google/gemini-3-flash-preview</code> by default (from <code>lib/defaults.ts</code>). Cheaper and faster than Opus, but still requires subprocess spawn overhead.</p>
+    </div>
+  </div>
+
+  <div class="timeline-item">
+    <div><span class="phase-name">REVIEW</span><span class="phase-mode">loop</span></div>
+    <div class="phase-desc">Reviewer audits implementation. If issues found: loop back to dispatch fixes. Max loops configurable.</div>
+    <div class="phase-time">~10-60s per loop iteration</div>
+    <div class="bottleneck">
+      <div class="label">Bottleneck: Review Loop</div>
+      <p>Each review iteration spawns a new subprocess AND requires the primary LLM to decide approve/reject. Worst case: multiple review loops, each adding 20-60s.</p>
+    </div>
+  </div>
+</div>
+
+<h3>Typical Timing Breakdown (Medium Task)</h3>
+<div class="timing-bars">
+  <div class="timing-bar">
+    <div class="bar-label">UNDERSTAND</div>
+    <div class="bar-track"><div class="bar-fill accent" style="width: 10%">~10s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">GATHER (3 scouts)</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 25%">~25s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">PLAN</div>
+    <div class="bar-track"><div class="bar-fill accent" style="width: 20%">~20s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">EXECUTE (2 builders)</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 35%">~35s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">REVIEW</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 15%">~15s</div></div>
+  </div>
+</div>
+<p style="color: var(--text-muted); font-size: 0.9em;">Total: ~105s for a medium complexity task through the full pipeline.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 5. SUBPROCESS SPAWNING -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="subprocess">
+<h2><span class="section-num">5.</span> Subprocess Spawning</h2>
+
+<p>Every agent dispatch creates a new <code>pi</code> process. This is the fundamental mechanism for all three pipeline systems.</p>
+
+<div class="card">
+  <h3>What happens on every <code>spawn("pi", args)</code></h3>
+  <pre><code>// From agent-team.ts:dispatchAgent and agent-chain.ts:runAgent
+const proc = spawn("pi", [
+  "--mode", "json",       // JSON event streaming output
+  "-p",                   // Pipe mode (no interactive TUI)
+  "--no-extensions",      // Don't load parent's extensions
+  "-e", "tasks.ts",       // Only load task discipline
+  "--model", model,       // e.g. "openrouter/google/gemini-3-flash-preview"
+  "--tools", tools,       // e.g. "read,grep,find,ls,bash,write,edit"
+  "--thinking", "off",
+  "--append-system-prompt", systemPrompt,
+  "--session", sessionFile,
+  task                    // The actual task text
+], {
+  env: { ...process.env, PI_SUBAGENT: "1" },
+});</code></pre>
+</div>
+
+<h3>Subprocess Lifecycle</h3>
+<div class="timing-bars">
+  <div class="timing-bar">
+    <div class="bar-label">Node.js startup</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 15%">~0.5s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Extension loading</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 20%">~0.5-1s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Session restore</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 15%">~0.3-1s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">API handshake</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 15%">~0.5s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Task gate ceremony</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 20%">~1-2s</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Actual work</div>
+    <div class="bar-track"><div class="bar-fill green" style="width: 80%">variable</div></div>
+  </div>
+</div>
+
+<div class="bottleneck">
+  <div class="label">Overhead per subprocess: ~2-5s before any real work begins</div>
+  <p>A pipeline with 5 sequential agents pays this cost 5 times. Parallel agents pay it once (wall clock) but consume more total resources.</p>
+</div>
+
+<div class="card">
+  <h3>Task Gate Overhead</h3>
+  <p>Even subagents load <code>tasks.ts</code> (though gating is disabled for <code>PI_SUBAGENT=1</code> subprocesses for dispatch/chain tools). However, the <code>tasks.ts</code> extension still initializes and the agent still receives the task discipline system prompt, adding overhead to every subprocess.</p>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 6. WHY IT'S SLOW -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="slow">
+<h2><span class="section-num">6.</span> Why It's Slow &mdash; Bottleneck Analysis</h2>
+
+<div class="bottleneck">
+  <div class="label">#1: Every Task Spawns Subprocesses</div>
+  <p>The primary agent is prompted to delegate. Even asking "what files are in this directory?" can trigger a subprocess spawn if the LLM decides to dispatch a scout. Each subprocess has ~2-5s startup overhead.</p>
+</div>
+
+<div class="bottleneck">
+  <div class="label">#2: Pipeline Has 5 Sequential Phases</div>
+  <p>When using pipeline-team, every task walks through UNDERSTAND &rarr; GATHER &rarr; PLAN &rarr; EXECUTE &rarr; REVIEW. Even simple changes go through all five phases. There's no "fast path" for trivial tasks.</p>
+</div>
+
+<div class="bottleneck">
+  <div class="label">#3: No Caching</div>
+  <p>Every API call is fresh. If a scout explores <code>src/utils/</code> in the GATHER phase, that knowledge doesn't persist efficiently to the EXECUTE phase &mdash; it's serialized as text context (<code>$CONTEXT</code>) capped at 15,000 chars.</p>
+</div>
+
+<div class="bottleneck">
+  <div class="label">#4: Primary Agent Has No Tools (By Prompt)</div>
+  <p>While technically the primary has access to all tools, the system prompt says <em>"You PREFER delegating codebase work to specialist agents."</em> This means even simple reads/edits get delegated, incurring subprocess overhead.</p>
+</div>
+
+<div class="bottleneck">
+  <div class="label">#5: MCP Overhead (Commander)</div>
+  <p>Commander MCP adds a JSON-RPC subprocess (<code>commander-mcp</code>) that proxies calls over WebSocket. Every task management operation is a JSON-RPC roundtrip through this bridge: Pi &rarr; stdio &rarr; commander-mcp &rarr; WebSocket &rarr; Commander server.</p>
+</div>
+
+<div class="bottleneck">
+  <div class="label">#6: Task Gating Ceremony</div>
+  <p>The <code>tasks.ts</code> extension <strong>blocks all tool calls</strong> until the agent defines tasks via <code>tasks new-list</code> / <code>tasks add</code>. This means every interaction starts with at least one LLM turn just to define tasks before any real work begins.</p>
+</div>
+
+<h3>Where Time Actually Goes</h3>
+<p>For a typical "add a function to utils.ts" task using the full pipeline:</p>
+
+<div class="timing-bars">
+  <div class="timing-bar">
+    <div class="bar-label">LLM inference</div>
+    <div class="bar-track"><div class="bar-fill green" style="width: 40%">~40%</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Subprocess overhead</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 25%">~25%</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">Task gate ceremony</div>
+    <div class="bar-track"><div class="bar-fill red" style="width: 15%">~15%</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">API latency</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 12%">~12%</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">File I/O</div>
+    <div class="bar-track"><div class="bar-fill accent" style="width: 5%">~5%</div></div>
+  </div>
+  <div class="timing-bar">
+    <div class="bar-label">MCP roundtrips</div>
+    <div class="bar-track"><div class="bar-fill yellow" style="width: 3%">~3%</div></div>
+  </div>
+</div>
+
+<p><strong>Key insight:</strong> ~40% of total time is non-inference overhead. Subprocess spawning and task ceremony account for the majority of that overhead.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 7. SIDE-BY-SIDE COMPARISON -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="comparison">
+<h2><span class="section-num">7.</span> Simple vs Pipeline: Side-by-Side</h2>
+
+<p>Compare what happens for the same task: <em>"Read utils.ts and add an isEmpty function"</em></p>
+
+<div class="comparison">
+  <div class="col fast">
+    <h4>Direct (agent works alone)</h4>
+    <ol>
+      <li><span class="pill green">~0s</span> User sends message</li>
+      <li><span class="pill green">~2s</span> LLM reads utils.ts directly</li>
+      <li><span class="pill green">~3s</span> LLM writes the function</li>
+      <li><span class="pill green">~1s</span> Response shown</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Total: ~6s</strong></p>
+  </div>
+
+  <div class="col slow">
+    <h4>Pipeline (full 5-phase)</h4>
+    <ol>
+      <li><span class="pill red">~5s</span> UNDERSTAND: LLM clarifies task, calls advance_phase</li>
+      <li><span class="pill red">~3s</span> Task gate: define tasks before proceeding</li>
+      <li><span class="pill red">~15s</span> GATHER: Spawn scout subprocess to read utils.ts</li>
+      <li><span class="pill red">~20s</span> PLAN: Spawn planner to create implementation plan</li>
+      <li><span class="pill red">~25s</span> EXECUTE: Spawn builder to write the function</li>
+      <li><span class="pill red">~15s</span> REVIEW: Spawn reviewer to check the code</li>
+      <li><span class="pill yellow">~2s</span> Primary summarizes for user</li>
+    </ol>
+    <p style="margin-top:12px;"><strong>Total: ~85s</strong> (14x slower)</p>
+  </div>
+</div>
+
+<div class="perf-note">
+  <div class="label">The Chain system is smarter</div>
+  <p>The <code>agent-chain.ts</code> system prompt explicitly tells the LLM: <em>"Simple one-off commands: reading a file, checking status, listing contents &mdash; just do it directly."</em> The pipeline-team has no such guidance &mdash; it always goes through all 5 phases.</p>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 8. KEY FILES REFERENCE -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section id="files">
+<h2><span class="section-num">8.</span> Key Files Reference</h2>
+
+<div class="card">
+  <div class="file-map">
+    <div class="file-entry">
+      <div class="path">agent/settings.json</div>
+      <div class="desc">Primary agent config: model, provider, extension loading order, theme</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/agent-chain.ts</div>
+      <div class="desc">Sequential pipeline orchestrator. Chains agent steps with prompt templates. Provides <code>run_chain</code> tool.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/agent-team.ts</div>
+      <div class="desc">Multi-agent team dispatcher with grid dashboard. Provides <code>dispatch_agent</code> tool.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/pipeline-team.ts</div>
+      <div class="desc">5-phase hybrid pipeline (UNDERSTAND &rarr; GATHER &rarr; PLAN &rarr; EXECUTE &rarr; REVIEW). Provides <code>advance_phase</code>, <code>dispatch_agents</code>.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/tasks.ts</div>
+      <div class="desc">Task discipline extension. Gates all tool calls until tasks are defined. Three-state lifecycle: idle &rarr; inprogress &rarr; done.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/commander-mcp.ts</div>
+      <div class="desc">Bridge exposing Commander MCP tools as native Pi tools. Spawns commander-mcp subprocess, proxies JSON-RPC over stdio.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/toolkit-commands.ts</div>
+      <div class="desc">Registers toolkit .md files from <code>.pi/commands/</code> as dynamic slash commands. Supports inline and fork execution modes.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/lib/mcp-client.ts</div>
+      <div class="desc">Generic JSON-RPC 2.0 client over stdio. Spawns MCP server subprocess and manages request/response lifecycle.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">agent/extensions/lib/defaults.ts</div>
+      <div class="desc">Default subagent model: <code>openrouter/google/gemini-3-flash-preview</code>. Used when agent .md files don't specify a model.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">.pi/agents/*.md</div>
+      <div class="desc">Agent definitions with frontmatter (name, description, tools, model) and system prompt body.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">.pi/agents/agent-chain.yaml</div>
+      <div class="desc">Chain definitions: named sequences of agent steps with prompt templates using <code>$INPUT</code> / <code>$ORIGINAL</code>.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">.pi/agents/teams.yaml</div>
+      <div class="desc">Team compositions: named groups of agents that can be activated together.</div>
+    </div>
+    <div class="file-entry">
+      <div class="path">.pi/agents/pipeline-team.yaml</div>
+      <div class="desc">Pipeline configs: phase definitions with mode (interactive/parallel/sequential) and agent assignments.</div>
+    </div>
+  </div>
+</div>
+</section>
+
+</div><!-- /.container -->
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- JavaScript -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script>
+function toggleCollapsible(el) {
+  // Don't toggle if click was inside the body
+  if (event && event.target.closest('.collapsible-body')) return;
+  el.classList.toggle('open');
+}
+
+// Animate timing bars on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelectorAll('.bar-fill').forEach(bar => {
+        const width = bar.style.width;
+        bar.style.width = '0%';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            bar.style.width = width;
+          });
+        });
+      });
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.2 });
+
+document.querySelectorAll('.timing-bars').forEach(el => observer.observe(el));
+
+// Smooth scroll for TOC links
+document.querySelectorAll('.toc a').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+</script>
+</body>
+</html>

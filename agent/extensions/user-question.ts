@@ -387,14 +387,14 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (details.cancelled) {
-				return new Text(outputLine(theme, "dim", theme.fg("dim", "[Cancelled]")), 0, 0);
+				return new Text(outputLine(theme, "dim", "[Cancelled]"), 0, 0);
 			}
 
 			if (details.mode === "confirm") {
 				const color = details.answer === "Yes" ? "success" : "warning";
 				const bar = details.answer === "Yes" ? "success" : "warning";
 				const label = details.answer === "Yes" ? "Confirmed" : "Declined";
-				return new Text(outputLine(theme, bar, theme.fg(color, label)), 0, 0);
+				return new Text(outputLine(theme, bar, label), 0, 0);
 			}
 
 			// select or input
@@ -410,12 +410,12 @@ export default function (pi: ExtensionAPI) {
 					.map((l) => theme.fg("muted", "  " + l))
 					.join("\n");
 				return new Text(
-					outputLine(theme, "accent", theme.fg("accent", summary)) + "\n" + preview,
+					outputLine(theme, "accent", summary) + "\n" + preview,
 					0, 0,
 				);
 			}
 
-			return new Text(outputLine(theme, "accent", theme.fg("accent", summary)), 0, 0);
+			return new Text(outputLine(theme, "accent", summary), 0, 0);
 		},
 	});
 

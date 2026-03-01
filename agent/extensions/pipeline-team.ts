@@ -661,7 +661,7 @@ export default function (pi: ExtensionAPI) {
 		renderResult(result, _options, theme) {
 			const text = result.content[0];
 			const msg = text?.type === "text" ? text.text : "";
-			return new Text(outputLine(theme, "success", theme.fg("success", msg)), 0, 0);
+			return new Text(outputLine(theme, "success", msg), 0, 0);
 		},
 	});
 
@@ -820,7 +820,7 @@ export default function (pi: ExtensionAPI) {
 		},
 
 		renderCall(_args, theme) {
-			return new Text(outputLine(theme, "accent", theme.fg("toolTitle", theme.bold("pipeline_status"))), 0, 0);
+			return new Text(outputLine(theme, "accent", theme.bold("pipeline_status")), 0, 0);
 		},
 
 		renderResult(result, _options, theme) {

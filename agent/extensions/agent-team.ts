@@ -726,7 +726,7 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme) {
 			return new Text(
-				outputLine(theme, "accent", theme.fg("dim", "dispatching:")),
+				outputLine(theme, "accent", "dispatching:"),
 				0, 0,
 			);
 		},

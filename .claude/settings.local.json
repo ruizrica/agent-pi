@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pi:*)",
+      "Bash(grep:*)",
+      "Bash(NODE_PATH=./node_modules node:*)",
+      "Bash(cargo test:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(ls:*)",
+      "Bash(git stash:*)",
+      "Bash(for file in agent/extensions/agent-banner.ts agent/extensions/agent-chain.ts agent/extensions/pipeline-team.ts agent/extensions/session-replay.ts agent/extensions/subagent-widget.ts agent/extensions/system-select.ts agent/extensions/theme-cycler.ts agent/extensions/toolkit-commands.ts agent/extensions/user-question.ts)",
+      "Bash(do)",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(then)",
+      "Bash(if grep -A 20 \"session_start\" \"$file\")",
+      "Bash(fi)",
+      "Bash(done)"
+    ]
+  }
+}
