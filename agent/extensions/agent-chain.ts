@@ -170,6 +170,7 @@ export default function (pi: ExtensionAPI) {
 
 	function activateChain(chain: ChainDef) {
 		activeChain = chain;
+		(globalThis as any).__piActiveChain = chain.name;
 		selectedStepIndex = -1;
 		stepStates = chain.steps.map(s => {
 			const agentDef = allAgents.get(s.agent.toLowerCase());
@@ -656,6 +657,10 @@ export default function (pi: ExtensionAPI) {
 			updateWidget();
 		}
 
+		// Mode gate: only fire when mode is CHAIN (or unset for backward compat)
+		const mode = (globalThis as any).__piCurrentMode;
+		if (mode && mode !== "CHAIN") return {};
+
 		if (!activeChain) return {};
 
 		const flow = activeChain.steps.map(s => displayName(s.agent)).join(" → ");
@@ -683,6 +688,16 @@ export default function (pi: ExtensionAPI) {
 				return `### ${displayName(agentDef.name)}\n${agentDef.description}\n**Tools:** ${agentDef.tools}\n**Role:** ${agentDef.systemPrompt}`;
 			})
 			.join("\n\n");
+
+		const commanderAvailable = !!(globalThis as any).__piCommanderAvailable;
+		const commanderSection = commanderAvailable ? `
+
+## Commander Integration
+Commander is available. Use these tools when appropriate:
+- \`commander_session { operation: "file:open", file_path: <path> }\` — display key files in Commander's floating viewer
+- \`commander_task\` — track tasks in the Commander dashboard
+- \`commander_mailbox\` — broadcast status updates to the dashboard
+- Use file:open to show chain results or audit reports` : "";
 
 		return {
 			systemPrompt: `You are an agent with a sequential pipeline called "${activeChain.name}" at your disposal.${desc}
@@ -717,7 +732,7 @@ ${agentCatalog}
 ## Guidelines
 - Use your judgment — if it's quick, just do it; if it's real work, run the chain
 - Keep chain tasks focused and clearly described
-- You can mix direct work and chain runs in the same conversation`,
+- You can mix direct work and chain runs in the same conversation${commanderSection}`,
 		};
 	});
 
@@ -911,6 +926,7 @@ ${agentCatalog}
 		// Reset execution state — widget re-registration deferred to before_agent_start
 		stepStates = [];
 		activeChain = null;
+		(globalThis as any).__piActiveChain = null;
 		selectedStepIndex = -1;
 		pendingReset = true;
 

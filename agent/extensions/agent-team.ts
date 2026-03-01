@@ -482,7 +482,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Hoist for use in pre-dispatch claim + post-dispatch reconciliation
-		const agentName = state.def.name;
+		const canonicalName = state.def.name;
 		const taskId = commanderAvailable ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
 
 		let tools = state.def.tools;
@@ -497,17 +497,17 @@ export default function (pi: ExtensionAPI) {
 			const idStr = hasTask ? String(taskId) : "<id>";
 
 			systemPrompt += `\n\n## Commander Task Discipline
-You are agent "${agentName}".${hasTask ? ` Your Commander task ID is ${taskId}.` : ""}
+You are agent "${canonicalName}".${hasTask ? ` Your Commander task ID is ${taskId}.` : ""}
 ${hasTask ? `At START:
-- Claim: commander_task { operation: "claim", task_id: ${idStr}, agent_name: "${agentName}" }
-- Notify: commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "commander", body: "Starting task ${idStr}", message_type: "status", task_id: ${idStr} }
+- Claim: commander_task { operation: "claim", task_id: ${idStr}, agent_name: "${canonicalName}" }
+- Notify: commander_mailbox { operation: "send", from_agent: "${canonicalName}", to_agent: "commander", body: "Starting task ${idStr}", message_type: "status", task_id: ${idStr} }
 
 During WORK:
 - Log progress: commander_task { operation: "log", task_id: ${idStr}, message: "<progress>", level: "info" }
-- For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${agentName}" }
+- For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${canonicalName}" }
 
 On SUCCESS:
-- Notify: commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "commander", body: "Task complete: <summary>", message_type: "status", task_id: ${idStr} }
+- Notify: commander_mailbox { operation: "send", from_agent: "${canonicalName}", to_agent: "commander", body: "Task complete: <summary>", message_type: "status", task_id: ${idStr} }
 - Complete: commander_task { operation: "complete", task_id: ${idStr}, result: "<summary>" }
 
 On FAILURE:
@@ -552,11 +552,11 @@ On FAILURE:
 					await client.callTool("commander_task", {
 						operation: "claim",
 						task_id: taskId,
-						agent_name: agentName,
+						agent_name: canonicalName,
 					});
 					await client.callTool("commander_mailbox", {
 						operation: "send",
-						from_agent: agentName,
+						from_agent: canonicalName,
 						to_agent: "commander",
 						body: `Starting task ${taskId}`,
 						message_type: "status",
@@ -661,7 +661,7 @@ On FAILURE:
 
 				// Post-dispatch: reconcile Commander task to terminal state
 				if (commanderAvailable && taskId !== undefined) {
-					const summary = textChunks.join("").trim().split("\n").pop() || agentName;
+					const summary = textChunks.join("").trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
 						commanderSync(async (client) => {
 							await client.callTool("commander_task", {
@@ -671,7 +671,7 @@ On FAILURE:
 							});
 							await client.callTool("commander_mailbox", {
 								operation: "send",
-								from_agent: agentName,
+								from_agent: canonicalName,
 								to_agent: "commander",
 								body: `Task complete: ${summary}`,
 								message_type: "status",
@@ -1144,12 +1144,26 @@ On FAILURE:
 	// ── System Prompt Override ───────────────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
+		// Mode gate: only fire when mode is TEAM (or unset for backward compat)
+		const mode = (globalThis as any).__piCurrentMode;
+		if (mode && mode !== "TEAM") return {};
+
 		// Build dynamic agent catalog from active team only
 		const agentCatalog = Array.from(agentStates.values())
 			.map(s => `### ${displayName(s.def.name)}\n**Dispatch as:** \`${s.def.name}\`\n${s.def.description}\n**Tools:** ${s.def.tools}` + (s.def.model ? `\n**Model:** ${s.def.model}` : ""))
 			.join("\n\n");
 
 		const teamMembers = Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ");
+
+		const commanderAvailable = !!(globalThis as any).__piCommanderAvailable;
+		const commanderSection = commanderAvailable ? `
+
+## Commander Integration
+Commander is available. Use these tools when appropriate:
+- \`commander_session { operation: "file:open", file_path: <path> }\` — display key files in Commander's floating viewer
+- \`commander_task\` — track tasks in the Commander dashboard
+- \`commander_mailbox\` — broadcast status updates to the dashboard
+- Use file:open to show dispatched agent results or task lists` : "";
 
 		return {
 			systemPrompt: `You coordinate specialist agents but also work directly when appropriate.
@@ -1189,7 +1203,7 @@ You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agen
 
 ## Agents
 
-${agentCatalog}`,
+${agentCatalog}${commanderSection}`,
 		};
 	});
 

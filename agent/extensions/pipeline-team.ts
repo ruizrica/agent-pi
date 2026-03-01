@@ -197,6 +197,7 @@ export default function (pi: ExtensionAPI) {
 
 	function activatePipeline(config: PipelineConfig) {
 		activeConfig = config;
+		(globalThis as any).__piActivePipeline = config.name;
 		currentPhaseIndex = 0;
 		taskSummary = "";
 		accContext = "";
@@ -891,6 +892,7 @@ export default function (pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			widgetCtx = ctx;
 			activeConfig = null;
+			(globalThis as any).__piActivePipeline = null;
 			phaseStates = [];
 			clearPipelineUI();
 			ctx.ui.notify("Pipeline deactivated. Use /pipeline to select one.", "info");
@@ -940,6 +942,10 @@ export default function (pi: ExtensionAPI) {
 	// ── System Prompt (dynamic per-phase) ────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
+		// Mode gate: only fire when mode is PIPELINE (or unset for backward compat)
+		const mode = (globalThis as any).__piCurrentMode;
+		if (mode && mode !== "PIPELINE") return {};
+
 		if (!activeConfig || phaseStates.length === 0) return {};
 
 		const phase = phaseStates[currentPhaseIndex];
@@ -1032,6 +1038,16 @@ After reviewing the output:
 - Max review loops: ${activeConfig.review_max_loops}`;
 		}
 
+		const commanderAvailable = !!(globalThis as any).__piCommanderAvailable;
+		const commanderSection = commanderAvailable ? `
+
+## Commander Integration
+Commander is available. Use these tools when appropriate:
+- \`commander_session { operation: "file:open", file_path: <path> }\` — display key files in Commander's floating viewer
+- \`commander_task\` — track tasks in the Commander dashboard
+- \`commander_mailbox\` — broadcast status updates to the dashboard
+- Use file:open to show pipeline plans, phase results, or review reports` : "";
+
 		return {
 			systemPrompt: `You are orchestrating a pipeline called "${activeConfig.name}".
 You have full codebase tools AND pipeline tools (advance_phase, dispatch_agents, pipeline_status).
@@ -1061,7 +1077,7 @@ ${contextSummary}${planSection}${reviewSection}
 - \`advance_phase\`: Move to next phase (required summary of what was done)
 - \`dispatch_agents\`: Send agents to work (array of {role, task})
 - \`pipeline_status\`: Check current pipeline state
-- Plus all standard codebase tools (read, write, edit, bash, etc.)`,
+- Plus all standard codebase tools (read, write, edit, bash, etc.)${commanderSection}`,
 		};
 	});
 
@@ -1098,6 +1114,7 @@ ${contextSummary}${planSection}${reviewSection}
 		// Opt-in: do NOT auto-activate. User must run /pipeline to start.
 		// Ensure no pipeline UI is shown until user explicitly activates one.
 		activeConfig = null;
+		(globalThis as any).__piActivePipeline = null;
 		phaseStates = [];
 		clearPipelineUI();
 	});
