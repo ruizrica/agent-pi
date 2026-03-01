@@ -18,6 +18,7 @@ import {
 	parseGroupCreateResult,
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
+	updateMappingStatus,
 	type CommanderTaskMapping,
 	type SyncState,
 } from "../lib/commander-sync.ts";
@@ -452,5 +453,67 @@ describe("applyGroupCreateResult", () => {
 			{ localId: 10, commanderId: 200 },
 			{ localId: 1, commanderId: 101 },
 		]);
+	});
+});
+
+describe("updateMappingStatus", () => {
+	it("should set lastSyncedStatus on matching mapping", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: 7,
+			groupCreationInFlight: false,
+			mappings: [{ localId: 1, commanderId: 42 }],
+		};
+		const updated = updateMappingStatus(state, 1, "inprogress");
+		expect(updated.mappings[0].lastSyncedStatus).toBe("inprogress");
+	});
+
+	it("should not mutate the original state", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: 7,
+			groupCreationInFlight: false,
+			mappings: [{ localId: 1, commanderId: 42 }],
+		};
+		const updated = updateMappingStatus(state, 1, "done");
+		expect(state.mappings[0]).not.toHaveProperty("lastSyncedStatus");
+		expect(updated.mappings[0].lastSyncedStatus).toBe("done");
+	});
+
+	it("should be a no-op for unknown localId", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: 7,
+			groupCreationInFlight: false,
+			mappings: [{ localId: 1, commanderId: 42 }],
+		};
+		const updated = updateMappingStatus(state, 99, "done");
+		expect(updated.mappings).toEqual(state.mappings);
+	});
+
+	it("should preserve other mappings unchanged", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: 7,
+			groupCreationInFlight: false,
+			mappings: [
+				{ localId: 1, commanderId: 42 },
+				{ localId: 2, commanderId: 43, lastSyncedStatus: "idle" },
+			],
+		};
+		const updated = updateMappingStatus(state, 1, "inprogress");
+		expect(updated.mappings[0].lastSyncedStatus).toBe("inprogress");
+		expect(updated.mappings[1].lastSyncedStatus).toBe("idle");
+	});
+
+	it("should overwrite existing lastSyncedStatus", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: 7,
+			groupCreationInFlight: false,
+			mappings: [{ localId: 1, commanderId: 42, lastSyncedStatus: "idle" }],
+		};
+		const updated = updateMappingStatus(state, 1, "done");
+		expect(updated.mappings[0].lastSyncedStatus).toBe("done");
 	});
 });

@@ -9,6 +9,7 @@ export type CommanderStatus = "pending" | "working" | "completed" | "failed" | "
 export interface CommanderTaskMapping {
 	localId: number;
 	commanderId: number;
+	lastSyncedStatus?: LocalStatus;
 }
 
 export interface SyncState {
@@ -96,6 +97,15 @@ export function removeMapping(state: SyncState, localId: number): SyncState {
 
 export function clearMappings(state: SyncState): SyncState {
 	return { ...state, mappings: [], groupId: undefined, groupCreationInFlight: false };
+}
+
+export function updateMappingStatus(state: SyncState, localId: number, status: LocalStatus): SyncState {
+	return {
+		...state,
+		mappings: state.mappings.map(m =>
+			m.localId === localId ? { ...m, lastSyncedStatus: status } : m,
+		),
+	};
 }
 
 // ── Idempotency guards ──────────────────────────────────────────────

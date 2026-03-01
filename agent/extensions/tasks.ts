@@ -41,6 +41,7 @@ import {
 	parseGroupCreateResult,
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
+	updateMappingStatus,
 	type SyncState,
 } from "./lib/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
@@ -100,6 +101,7 @@ function publishCurrentTask(tasks: Task[], sync: SyncState) {
 		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
 		remaining,
 		total: tasks.length,
+		__syncState: sync,
 	} as TaskListInfo;
 }
 
@@ -476,6 +478,9 @@ export default function (pi: ExtensionAPI) {
 								const parsed = parseGroupCreateResult(res);
 								if (parsed) {
 									syncState = applyGroupCreateResult(syncState, localIds, parsed);
+									for (const lid of localIds) {
+										syncState = updateMappingStatus(syncState, lid, "idle");
+									}
 								} else {
 									syncState = { ...syncState, groupCreationInFlight: false };
 								}
@@ -491,7 +496,10 @@ export default function (pi: ExtensionAPI) {
 										group_id: syncState.groupId,
 									});
 									const cid = parseCommanderTaskId(res);
-									if (cid !== undefined) syncState = addMapping(syncState, t.id, cid);
+									if (cid !== undefined) {
+										syncState = addMapping(syncState, t.id, cid);
+										syncState = updateMappingStatus(syncState, t.id, "idle");
+									}
 								});
 							}
 						}
@@ -553,6 +561,7 @@ export default function (pi: ExtensionAPI) {
 								task_id: cid,
 								status: localToCommander(task.status),
 							});
+							syncState = updateMappingStatus(syncState, task.id, task.status);
 						});
 						// Sync demoted tasks back to pending
 						for (const d of demoted) {
@@ -564,6 +573,7 @@ export default function (pi: ExtensionAPI) {
 									task_id: cid,
 									status: "pending",
 								});
+								syncState = updateMappingStatus(syncState, d.id, "idle");
 							});
 						}
 					}
