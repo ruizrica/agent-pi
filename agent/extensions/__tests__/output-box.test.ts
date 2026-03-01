@@ -1,8 +1,8 @@
 // ABOUTME: Tests for output-box utility — outputLine, outputBox, formatToolbox
-// ABOUTME: Validates bar chars, color names, ANSI bg codes, and TOOLBOX format
+// ABOUTME: Validates bar chars, color names, and TOOLBOX format
 
 import { describe, it, expect } from "vitest";
-import { outputLine, outputBox, formatToolbox, BAR, BODY_BG, RESET, type BarColor, type ToolCallSummary } from "../lib/output-box.ts";
+import { outputLine, outputBox, formatToolbox, BAR, type BarColor, type ToolCallSummary } from "../lib/output-box.ts";
 
 function makeFakeTheme() {
 	return {
@@ -44,14 +44,9 @@ describe("outputLine", () => {
 		expect(line).toContain("[warning]" + BAR);
 	});
 
-	it("includes ANSI bg code", () => {
+	it("does not include ANSI bg code", () => {
 		const line = outputLine(theme, "accent", "hello");
-		expect(line).toContain(BODY_BG);
-	});
-
-	it("includes ANSI reset code", () => {
-		const line = outputLine(theme, "accent", "hello");
-		expect(line).toContain(RESET);
+		expect(line).not.toContain("\x1b[48;2;");
 	});
 
 	it("includes the content text", () => {
@@ -89,9 +84,9 @@ describe("outputBox", () => {
 		}
 	});
 
-	it("each line has bg code", () => {
+	it("each line has no bg code", () => {
 		const lines = outputBox(theme, "accent", ["x"]);
-		expect(lines[0]).toContain(BODY_BG);
+		expect(lines[0]).not.toContain("\x1b[48;2;");
 	});
 });
 

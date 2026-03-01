@@ -1,4 +1,4 @@
-// ABOUTME: Standardized output box utility — colored left bar + dark bg for extension output
+// ABOUTME: Standardized output box utility — colored left bar for extension output
 // ABOUTME: Used by renderCall/renderResult and widgets for consistent visual formatting
 
 /** Theme interface matching RenderTheme from pipeline-render.ts */
@@ -18,18 +18,12 @@ export interface ToolCallSummary {
 /** Two full-block chars for the left bar */
 export const BAR = "\u2588\u2588";
 
-/** ANSI 24-bit background: dark blue-gray (#111520) */
-export const BODY_BG = "\x1b[48;2;17;21;32m";
-
-/** ANSI reset all attributes */
-export const RESET = "\x1b[0m";
-
 /**
- * Render a single output line with colored left bar and dark background.
- * Format: `BG BAR SPACE content RESET`
+ * Render a single output line with colored left bar.
+ * Format: `BAR SPACE content`
  */
 export function outputLine(theme: OutputBoxTheme, bar: BarColor, content: string): string {
-	return `${BODY_BG}${theme.fg(bar, BAR)} ${content}${RESET}`;
+	return `${theme.fg(bar, BAR)} ${content}`;
 }
 
 /**
