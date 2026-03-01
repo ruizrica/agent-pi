@@ -47,7 +47,7 @@ import {
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { enqueueOrExecute } from "./lib/commander-ready.ts";
-import { addRetry } from "./lib/commander-tracker.ts";
+import { addRetry, isFullySynced } from "./lib/commander-tracker.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -553,17 +553,60 @@ export default function (pi: ExtensionAPI) {
 
 					// Sync: update Commander task status (skip if external sync owns it)
 					if (!isExternalSyncActive()) {
-						syncToCommander("task-toggle", async (client) => {
+						const gate = g.__piCommanderGate;
+						const client = g.__piCommanderClient;
+
+						if (gate?.state === "available" && client) {
+							// Commander available: await sync for per-task verification
 							const cid = lookupMapping(syncState, task.id);
-							if (cid === undefined) return;
-							await client.callTool("commander_task", {
-								operation: "update",
-								task_id: cid,
-								status: localToCommander(task.status),
+							if (cid !== undefined) {
+								try {
+									await client.callTool("commander_task", {
+										operation: "update",
+										task_id: cid,
+										status: localToCommander(task.status),
+									});
+									syncState = updateMappingStatus(syncState, task.id, task.status);
+								} catch {
+									// Direct sync failed — queue for retry
+									syncToCommander("task-toggle-retry", async (c) => {
+										await c.callTool("commander_task", {
+											operation: "update",
+											task_id: cid,
+											status: localToCommander(task.status),
+										});
+										syncState = updateMappingStatus(syncState, task.id, task.status);
+									});
+								}
+							}
+
+							// On completion: verify all tasks are synced
+							if (task.status === "done") {
+								const synced = isFullySynced(
+									tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
+									syncState.mappings,
+								);
+								if (!synced) {
+									const tracker = g.__piCommanderTracker;
+									if (tracker?.reconcileNow) tracker.reconcileNow();
+									msg += "\n(Triggering Commander sync for remaining tasks)";
+								}
+							}
+						} else {
+							// Commander unavailable: fire-and-forget (existing behavior)
+							syncToCommander("task-toggle", async (client) => {
+								const cid = lookupMapping(syncState, task.id);
+								if (cid === undefined) return;
+								await client.callTool("commander_task", {
+									operation: "update",
+									task_id: cid,
+									status: localToCommander(task.status),
+								});
+								syncState = updateMappingStatus(syncState, task.id, task.status);
 							});
-							syncState = updateMappingStatus(syncState, task.id, task.status);
-						});
-						// Sync demoted tasks back to pending
+						}
+
+						// Demoted tasks: fire-and-forget (automatic side effect)
 						for (const d of demoted) {
 							syncToCommander("task-demote", async (client) => {
 								const cid = lookupMapping(syncState, d.id);

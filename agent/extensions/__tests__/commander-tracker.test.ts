@@ -7,6 +7,7 @@ import {
 	addRetry,
 	popRetries,
 	computeReconcileActions,
+	isFullySynced,
 	type TrackerState,
 	type ReconcileAction,
 } from "../lib/commander-tracker.ts";
@@ -214,5 +215,44 @@ describe("computeReconcileActions", () => {
 			localStatus: "done",
 			commanderStatus: "completed",
 		});
+	});
+});
+
+describe("isFullySynced", () => {
+	it("returns true when all tasks are mapped and statuses match", () => {
+		const localTasks = [
+			{ id: 1, text: "Task one", status: "idle" },
+			{ id: 2, text: "Task two", status: "inprogress" },
+		];
+		const mappings = [
+			{ localId: 1, commanderId: 100, lastSyncedStatus: "idle" as const },
+			{ localId: 2, commanderId: 101, lastSyncedStatus: "inprogress" as const },
+		];
+		expect(isFullySynced(localTasks, mappings)).toBe(true);
+	});
+
+	it("returns false when unmapped tasks exist", () => {
+		const localTasks = [
+			{ id: 1, text: "Mapped", status: "idle" },
+			{ id: 2, text: "Unmapped", status: "idle" },
+		];
+		const mappings = [
+			{ localId: 1, commanderId: 100, lastSyncedStatus: "idle" as const },
+		];
+		expect(isFullySynced(localTasks, mappings)).toBe(false);
+	});
+
+	it("returns false when mapped task has status drift", () => {
+		const localTasks = [
+			{ id: 1, text: "Drifted", status: "inprogress" },
+		];
+		const mappings = [
+			{ localId: 1, commanderId: 100, lastSyncedStatus: "idle" as const },
+		];
+		expect(isFullySynced(localTasks, mappings)).toBe(false);
+	});
+
+	it("returns true for empty task list", () => {
+		expect(isFullySynced([], [])).toBe(true);
 	});
 });

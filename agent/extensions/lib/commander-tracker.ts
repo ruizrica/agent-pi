@@ -100,3 +100,12 @@ export function computeReconcileActions(
 
 	return actions;
 }
+
+// ── Full-sync check ────────────────────────────────────────────────
+
+export function isFullySynced(
+	localTasks: { id: number; text: string; status: string }[],
+	mappings: { localId: number; commanderId: number; lastSyncedStatus?: LocalStatus }[],
+): boolean {
+	return computeReconcileActions(localTasks, mappings).length === 0;
+}
