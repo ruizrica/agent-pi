@@ -52,25 +52,25 @@ export function renderSubagentWidget(
 		: state.status === "done" ? "✓ "
 		: "✗ ";
 
-	const taskPreview = state.task.length > 40
-		? state.task.slice(0, 37) + "..."
-		: state.task;
-
 	const turnLabel = state.turnCount > 1
 		? ` · Turn ${state.turnCount}`
 		: "";
 
+	// Line 1: spinner + title + summary (if any) + stats
+	const summaryPart = state.summary ? ` ${state.summary}` : "";
 	lines.push(
 		theme.bold(spinner + title) +
 		turnLabel +
-		`  ${taskPreview}` +
-		`  (${Math.round(state.elapsed / 1000)}s)` +
+		summaryPart +
+		` | (${Math.round(state.elapsed / 1000)}s)` +
 		` | Tools: ${state.toolCount}`
 	);
 
-	if (state.summary) {
-		lines.push(`  ${state.summary}`);
-	}
+	// Line 2: task preview
+	const taskPreview = state.task.length > 40
+		? state.task.slice(0, 37) + "..."
+		: state.task;
+	lines.push(`  ${taskPreview}`);
 
 	return { lines, borderCount: 1 };
 }

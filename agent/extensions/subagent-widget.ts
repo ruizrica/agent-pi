@@ -102,10 +102,16 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Widget rendering ──────────────────────────────────────────────────────
 
-	/** Convert a foreground ANSI escape to a background ANSI escape (38→48). */
-	function fgAnsiToBgAnsi(fgAnsi: string): string {
-		return fgAnsi.replace(/\x1b\[38;/g, "\x1b[48;");
-	}
+	// ── Dark background colors for subagent status ───────────────────────────
+	// Standard dark shades that keep white text readable on any terminal.
+	const STATUS_BG: Record<string, string> = {
+		running: "\x1b[48;2;26;58;92m",   // dark steel blue
+		done:    "\x1b[48;2;35;50;55m",    // dark teal-gray
+		error:   "\x1b[48;2;70;35;35m",    // dark muted red
+	};
+	const RESET_BG = "\x1b[49m";
+	const WHITE_BOLD = "\x1b[1;97m";  // bold bright white text
+	const RESET_ALL = "\x1b[0m";
 
 	function updateWidgets() {
 		if (!widgetCtx) return;
@@ -113,33 +119,30 @@ export default function (pi: ExtensionAPI) {
 		for (const [id, state] of Array.from(agents.entries())) {
 			const key = `sub-${id}`;
 			widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
-				// Pick the status color name for the background
-				const colorName = state.status === "done" ? "success"
-					: state.status === "error" ? "error" : "accent";
-
-				// Build a bgFn that paints the entire line with the status color background
 				const bgFn = (text: string): string => {
-					const bgAnsi = fgAnsiToBgAnsi(theme.getFgAnsi(colorName));
-					return `${bgAnsi}${text}\x1b[49m`;
+					const bg = STATUS_BG[state.status] || STATUS_BG.running;
+					return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 				};
 
-				const box = new Box(1, 0, bgFn);
+				// paddingX=1, paddingY=1 → one blank line top & bottom inside the box
+				const box = new Box(1, 1, bgFn);
 				const content = new Text("", 0, 0);
 				box.addChild(content);
 
 				return {
 					render(width: number): string[] {
-						// Re-derive bgFn each render in case status changed
-						const curColor = state.status === "done" ? "success"
-							: state.status === "error" ? "error" : "accent";
+						// Update bgFn each render to reflect current status
 						box.setBgFn((text: string): string => {
-							const bgAnsi = fgAnsiToBgAnsi(theme.getFgAnsi(curColor));
-							return `${bgAnsi}${text}\x1b[49m`;
+							const bg = STATUS_BG[state.status] || STATUS_BG.running;
+							return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 						});
 
 						const result = renderSubagentWidget(state, width, theme);
 						content.setText(result.lines.join("\n"));
-						return box.render(width);
+						// Render the box, then append a blank spacer line for visual separation
+						const rendered = box.render(width);
+						rendered.push("");
+						return rendered;
 					},
 					invalidate() {
 						box.invalidate();

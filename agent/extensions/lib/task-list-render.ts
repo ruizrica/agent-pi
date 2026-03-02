@@ -124,7 +124,8 @@ export function renderTaskList(
 	const lines: string[] = [];
 
 	// ── Header ────────────────────────────────────────────────────
-	const headerLabel = `  Tasks ${taskList.remaining}/${taskList.total}`;
+	const doneCount = taskList.total - taskList.remaining;
+	const headerLabel = `  Tasks ${doneCount}/${taskList.total}`;
 	const scrollRight = [above, below].filter(Boolean).join(" ");
 	const headerLine = fg("text", headerLabel)
 		+ (scrollRight ? " ".repeat(Math.max(1, width - headerLabel.length - scrollRight.length - 2)) + fg("muted", scrollRight) + "  " : "");

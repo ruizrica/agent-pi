@@ -294,10 +294,11 @@ describe("renderTaskList", () => {
 		expect(result.length).toBe(5);
 	});
 
-	it("shows remaining/total in header", () => {
+	it("shows done/total in header", () => {
 		const tasks = makeTasks(5);
+		// makeTasks(5): 1 done out of 5 → "1/5"
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, mockDeps);
-		expect(result[0]).toContain("4/5");
+		expect(result[0]).toContain("1/5");
 	});
 
 	it("shows selection marker on selected task", () => {
