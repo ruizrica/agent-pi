@@ -85,20 +85,20 @@ describe("modeColor", () => {
 		expect(modeColor("PLAN")).toBe("accent");
 	});
 
-	it("returns thinkingText for SPEC", () => {
-		expect(modeColor("SPEC")).toBe("thinkingText");
+	it("returns accent for SPEC", () => {
+		expect(modeColor("SPEC")).toBe("accent");
 	});
 
-	it("returns success for PIPELINE", () => {
-		expect(modeColor("PIPELINE")).toBe("success");
+	it("returns accent for PIPELINE", () => {
+		expect(modeColor("PIPELINE")).toBe("accent");
 	});
 
-	it("returns warning for TEAM", () => {
-		expect(modeColor("TEAM")).toBe("warning");
+	it("returns accent for TEAM", () => {
+		expect(modeColor("TEAM")).toBe("accent");
 	});
 
-	it("returns error for CHAIN", () => {
-		expect(modeColor("CHAIN")).toBe("error");
+	it("returns accent for CHAIN", () => {
+		expect(modeColor("CHAIN")).toBe("accent");
 	});
 });
 
@@ -111,19 +111,19 @@ describe("modeTextAnsi", () => {
 		expect(modeTextAnsi("PLAN")).toBe("\x1b[1;97m");
 	});
 
-	it("returns dark gray for SPEC (light bg)", () => {
-		expect(modeTextAnsi("SPEC")).toBe("\x1b[1;30m");
+	it("returns bold white for SPEC (blue bg)", () => {
+		expect(modeTextAnsi("SPEC")).toBe("\x1b[1;97m");
 	});
 
-	it("returns dark gray for PIPELINE (light bg)", () => {
-		expect(modeTextAnsi("PIPELINE")).toBe("\x1b[1;30m");
+	it("returns bold white for PIPELINE (blue bg)", () => {
+		expect(modeTextAnsi("PIPELINE")).toBe("\x1b[1;97m");
 	});
 
-	it("returns dark gray for TEAM (light bg)", () => {
-		expect(modeTextAnsi("TEAM")).toBe("\x1b[1;30m");
+	it("returns bold white for TEAM (blue bg)", () => {
+		expect(modeTextAnsi("TEAM")).toBe("\x1b[1;97m");
 	});
 
-	it("returns bold white for CHAIN (dark bg)", () => {
+	it("returns bold white for CHAIN (blue bg)", () => {
 		expect(modeTextAnsi("CHAIN")).toBe("\x1b[1;97m");
 	});
 });

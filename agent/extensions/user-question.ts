@@ -12,6 +12,7 @@ import { Type } from "@sinclair/typebox";
 import { outputLine } from "./lib/output-box.ts";
 import { buildAskUserDetails, type AskUserDetails } from "./lib/ask-user-details.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { renderPanelBackdrop } from "./lib/panel-backdrop.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ function sideBySide(
 
 class QuestionUI {
 	private selectedIndex = 0;
+	private contentScrollOffset = 0;
 
 	constructor(
 		private question: string,
@@ -107,10 +109,17 @@ class QuestionUI {
 		const leftW = Math.max(20, Math.floor(innerWidth * 0.3));
 		const rightW = innerWidth - leftW - 3; // 3 for " │ "
 
-		// Left panel: option labels (word-wrapped)
+		// Chrome lines: 2 borders + header + 2 spacers + footer = 6
+		const chromeLines = 6;
+		const minPadding = 2;
+		const maxContentLines = Math.max(1, height - chromeLines - minPadding);
+
+		// Left panel: option labels (word-wrapped), tracking line offsets
 		const leftLines: string[] = [];
+		const optionLineOffsets: number[] = [];
 		const labelW = leftW - 3; // 3 for indicator prefix
 		for (let i = 0; i < this.options.length; i++) {
+			optionLineOffsets.push(leftLines.length);
 			const selected = i === this.selectedIndex;
 			const indicator = selected ? theme.fg("accent", " ▸ ") : "   ";
 			const wrapped = wordWrap(this.options[i].label, labelW);
@@ -133,40 +142,47 @@ class QuestionUI {
 		// Combine side by side
 		const divider = theme.fg("dim", " │ ");
 		const combined = sideBySide(leftLines, rightLines, leftW, rightW, divider);
-		for (const line of combined) {
+
+		// Clamp content to available height with auto-scroll
+		let visibleCombined: string[];
+		let scrollInfo = "";
+		if (combined.length > maxContentLines) {
+			const selectedStart = optionLineOffsets[this.selectedIndex] ?? 0;
+			if (selectedStart < this.contentScrollOffset) {
+				this.contentScrollOffset = selectedStart;
+			} else if (selectedStart >= this.contentScrollOffset + maxContentLines) {
+				this.contentScrollOffset = selectedStart - maxContentLines + 1;
+			}
+			this.contentScrollOffset = Math.max(0, Math.min(
+				this.contentScrollOffset,
+				combined.length - maxContentLines,
+			));
+			visibleCombined = combined.slice(
+				this.contentScrollOffset,
+				this.contentScrollOffset + maxContentLines,
+			);
+			const end = this.contentScrollOffset + visibleCombined.length;
+			scrollInfo = ` (${this.contentScrollOffset + 1}-${end}/${combined.length})`;
+		} else {
+			this.contentScrollOffset = 0;
+			visibleCombined = combined;
+		}
+
+		for (const line of visibleCombined) {
 			container.addChild(new Text(line, 1, 0));
 		}
 
 		// Footer
 		container.addChild(new Spacer(1));
 		container.addChild(new Text(
-			theme.fg("dim", " ↑/↓ Navigate • Enter Select • Esc Cancel"),
+			theme.fg("dim", ` ↑/↓ Navigate • Enter Select • Esc Cancel${scrollInfo}`),
 			1, 0,
 		));
 		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
 
 		const panelLines = container.render(panelW);
 
-		// Dark backdrop: center the panel vertically and horizontally
-		const dimBg = "\x1b[48;2;10;10;15m"; // dark background
-		const reset = "\x1b[0m";
-		const darkRow = dimBg + " ".repeat(width) + reset;
-		const padLeft = Math.max(0, Math.floor((width - panelW) / 2));
-		const padLeftStr = dimBg + " ".repeat(padLeft);
-		const padRightCount = Math.max(0, width - panelW - padLeft);
-		const padRightStr = " ".repeat(padRightCount) + reset;
-
-		const topPad = Math.max(1, Math.floor((height - panelLines.length) / 2));
-		const result: string[] = [];
-
-		for (let i = 0; i < topPad; i++) result.push(darkRow);
-		for (const line of panelLines) {
-			result.push(padLeftStr + line + padRightStr);
-		}
-		const bottomPad = Math.max(0, height - topPad - panelLines.length);
-		for (let i = 0; i < bottomPad; i++) result.push(darkRow);
-
-		return result;
+		return renderPanelBackdrop(panelLines, panelW, width, height);
 	}
 }
 
@@ -240,26 +256,7 @@ class ConfirmUI {
 
 		const panelLines = container.render(panelW);
 
-		// Dark backdrop: center the panel vertically and horizontally
-		const dimBg = "\x1b[48;2;10;10;15m";
-		const reset = "\x1b[0m";
-		const darkRow = dimBg + " ".repeat(width) + reset;
-		const padLeft = Math.max(0, Math.floor((width - panelW) / 2));
-		const padLeftStr = dimBg + " ".repeat(padLeft);
-		const padRightCount = Math.max(0, width - panelW - padLeft);
-		const padRightStr = " ".repeat(padRightCount) + reset;
-
-		const topPad = Math.max(1, Math.floor((height - panelLines.length) / 2));
-		const result: string[] = [];
-
-		for (let i = 0; i < topPad; i++) result.push(darkRow);
-		for (const line of panelLines) {
-			result.push(padLeftStr + line + padRightStr);
-		}
-		const bottomPad = Math.max(0, height - topPad - panelLines.length);
-		for (let i = 0; i < bottomPad; i++) result.push(darkRow);
-
-		return result;
+		return renderPanelBackdrop(panelLines, panelW, width, height);
 	}
 }
 

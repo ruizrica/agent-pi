@@ -17,10 +17,10 @@ const MODE_FILE = "/tmp/pi-current-mode.txt";
 const ANSI_BG: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: "\x1b[44m",       // blue bg
-	SPEC: "\x1b[46m",       // cyan bg
-	PIPELINE: "\x1b[42m",   // green bg
-	TEAM: "\x1b[43m",       // yellow bg
-	CHAIN: "\x1b[41m",      // red bg
+	SPEC: "\x1b[44m",       // blue bg
+	PIPELINE: "\x1b[44m",   // blue bg
+	TEAM: "\x1b[44m",       // blue bg
+	CHAIN: "\x1b[44m",      // blue bg
 };
 const RESET = "\x1b[0m";
 
@@ -65,6 +65,12 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	// Expose refresh function so other extensions (e.g. agent-team) can re-pin
+	// the mode-block as the last aboveEditor widget (closest to the editor input).
+	function refreshModeBlock(ctx: ExtensionContext) {
+		updateWidgets(currentMode, ctx);
+	}
+
 	function setMode(mode: Mode, ctx: ExtensionContext) {
 		currentMode = mode;
 		(globalThis as any).__piCurrentMode = mode;
@@ -75,6 +81,9 @@ export default function (pi: ExtensionAPI) {
 		if (ctx.hasUI) {
 			ctx.ui.setStatus("mode", modeLabel(mode));
 		}
+
+		// Publish refresh callback so other aboveEditor widgets can re-pin the mode bar
+		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
 
 		updateWidgets(mode, ctx);
 	}
@@ -192,6 +201,7 @@ export default function (pi: ExtensionAPI) {
 		applyExtensionDefaults(import.meta.url, ctx);
 		currentMode = "NORMAL";
 		(globalThis as any).__piCurrentMode = "NORMAL";
+		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
 		try { writeFileSync(MODE_FILE, "NORMAL", "utf-8"); } catch {}
 		if (ctx.hasUI) {
 			ctx.ui.setStatus("mode", "");

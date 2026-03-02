@@ -2,6 +2,7 @@
 // Comprehensive unit and integration tests covering all modes, helpers, UI behavior, and edge cases
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { renderPanelBackdrop } from "../lib/panel-backdrop.ts";
 
 // ── Helper Functions (Extracted from user-question.ts) ──────────────────
 
@@ -75,6 +76,7 @@ interface OptionDef {
 
 class QuestionUI {
 	private selectedIndex = 0;
+	private contentScrollOffset = 0;
 
 	constructor(
 		private question: string,
@@ -107,14 +109,58 @@ class QuestionUI {
 	}
 
 	render(width: number, height: number, theme: any): string[] {
-		const lines: string[] = [];
-
-		// Panel dimensions (simplified from original)
 		const panelW = Math.max(40, Math.floor(width * 0.9));
 		const innerWidth = panelW - 2;
 		const leftW = Math.max(20, Math.floor(innerWidth * 0.3));
 
-		// Header
+		// Chrome lines: border-top + header + spacer + spacer + footer + border-bottom = 6
+		const chromeLines = 6;
+		const minPadding = 2;
+		const maxContentLines = Math.max(1, height - chromeLines - minPadding);
+
+		// Build all option lines, tracking where each option starts
+		const allContentLines: string[] = [];
+		const optionLineOffsets: number[] = [];
+		const labelW = Math.max(1, leftW - 3);
+		for (let i = 0; i < this.options.length; i++) {
+			optionLineOffsets.push(allContentLines.length);
+			const selected = i === this.selectedIndex;
+			const indicator = selected ? " > " : "   ";
+			const wrapped = wordWrap(this.options[i].label, labelW);
+			for (let j = 0; j < wrapped.length; j++) {
+				const prefix = j === 0 ? indicator : "   ";
+				const text = wrapped[j];
+				allContentLines.push("│" + prefix + text);
+			}
+		}
+
+		// Auto-scroll to keep selected option visible
+		let visibleContent: string[];
+		let scrollInfo = "";
+		if (allContentLines.length > maxContentLines) {
+			const selectedStart = optionLineOffsets[this.selectedIndex] ?? 0;
+			if (selectedStart < this.contentScrollOffset) {
+				this.contentScrollOffset = selectedStart;
+			} else if (selectedStart >= this.contentScrollOffset + maxContentLines) {
+				this.contentScrollOffset = selectedStart - maxContentLines + 1;
+			}
+			this.contentScrollOffset = Math.max(0, Math.min(
+				this.contentScrollOffset,
+				allContentLines.length - maxContentLines,
+			));
+			visibleContent = allContentLines.slice(
+				this.contentScrollOffset,
+				this.contentScrollOffset + maxContentLines,
+			);
+			const end = this.contentScrollOffset + visibleContent.length;
+			scrollInfo = ` (${this.contentScrollOffset + 1}-${end}/${allContentLines.length})`;
+		} else {
+			this.contentScrollOffset = 0;
+			visibleContent = allContentLines;
+		}
+
+		// Assemble panel
+		const lines: string[] = [];
 		lines.push("┌" + "─".repeat(Math.max(1, panelW - 2)) + "┐");
 		const headerText = "ASK USER | " + this.question;
 		lines.push(
@@ -124,35 +170,73 @@ class QuestionUI {
 					: headerText)
 		);
 		lines.push("│");
+		lines.push(...visibleContent);
+		lines.push("│");
+		lines.push("│ ↑/↓ Navigate • Enter Select • Esc Cancel" + scrollInfo);
+		lines.push("└" + "─".repeat(Math.max(1, panelW - 2)) + "┘");
 
-		// Options
-		const labelW = Math.max(1, leftW - 3);
-		for (let i = 0; i < this.options.length; i++) {
-			const selected = i === this.selectedIndex;
-			const indicator = selected ? " > " : "   ";
-			const wrapped = wordWrap(this.options[i].label, labelW);
-			for (let j = 0; j < wrapped.length; j++) {
-				const prefix = j === 0 ? indicator : "   ";
-				const text = wrapped[j];
-				lines.push("│" + prefix + text);
-			}
+		return renderPanelBackdrop(lines, panelW, width, height);
+	}
+}
+
+// ── Mock ConfirmUI for Testing ─────────────────────────────────────────
+
+class ConfirmUI {
+	private selectedIndex = 0; // 0 = Yes, 1 = No
+
+	constructor(
+		private question: string,
+		private detail: string,
+		private onConfirm: (yes: boolean) => void,
+		private onCancel: () => void,
+	) {}
+
+	handleInput(data: string, tui: any): void {
+		if (data === "left") {
+			this.selectedIndex = 0;
+		} else if (data === "right") {
+			this.selectedIndex = 1;
+		} else if (data === "enter") {
+			this.onConfirm(this.selectedIndex === 0);
+			return;
+		} else if (data === "escape") {
+			this.onCancel();
+			return;
 		}
+		tui?.requestRender?.();
+	}
+
+	render(width: number, height: number, theme: any): string[] {
+		const lines: string[] = [];
+		const panelW = Math.max(40, Math.floor(width * 0.9));
+
+		// Header
+		lines.push("┌" + "─".repeat(Math.max(1, panelW - 2)) + "┐");
+		lines.push("│ CONFIRM | " + this.question);
+		lines.push("│");
+
+		// Detail body
+		if (this.detail) {
+			for (const dl of this.detail.split("\n")) {
+				lines.push("│ " + dl);
+			}
+			lines.push("│");
+		}
+
+		// Yes/No buttons
+		const labels = ["Yes", "No"];
+		const optParts = labels.map((label, i) => {
+			const selected = i === this.selectedIndex;
+			return selected ? `> ${label}` : `  ${label}`;
+		});
+		lines.push("│ " + optParts.join("   "));
 
 		// Footer
 		lines.push("│");
-		lines.push("│ ↑/↓ Navigate • Enter Select • Esc Cancel");
+		lines.push("│ ←/→ Toggle • Enter Confirm • Esc Cancel");
 		lines.push("└" + "─".repeat(Math.max(1, panelW - 2)) + "┘");
 
-		// Center the panel (simplified)
-		const topPad = Math.max(0, Math.floor((height - lines.length) / 2));
-		const result: string[] = [];
-
-		for (let i = 0; i < topPad; i++) {
-			result.push("");
-		}
-		result.push(...lines);
-
-		return result;
+		return renderPanelBackdrop(lines, panelW, width, height);
 	}
 }
 
@@ -1128,6 +1212,88 @@ describe("Callbacks", () => {
 		ui.handleInput("enter", tui);
 
 		expect(onSelect).toHaveBeenCalledWith("Third");
+	});
+});
+
+// ── Height Clamping Tests ───────────────────────────────────────────────
+
+describe("QuestionUI - Height Clamping", () => {
+	const theme = { fg: (_c: string, s: string) => s, bold: (s: string) => s };
+
+	it("render returns exactly height lines for normal content", () => {
+		const options: OptionDef[] = [{ label: "A" }, { label: "B" }];
+		const ui = new QuestionUI("Q", options, vi.fn(), vi.fn());
+		const result = ui.render(120, 24, theme);
+		expect(result).toHaveLength(24);
+	});
+
+	it("render returns exactly height lines with many options", () => {
+		const options: OptionDef[] = Array.from({ length: 50 }, (_, i) => ({
+			label: `Option ${i + 1}`,
+		}));
+		const ui = new QuestionUI("Choose", options, vi.fn(), vi.fn());
+		const result = ui.render(120, 24, theme);
+		expect(result).toHaveLength(24);
+	});
+
+	it("render returns exactly height lines with very small terminal", () => {
+		const options: OptionDef[] = [{ label: "A" }, { label: "B" }, { label: "C" }];
+		const ui = new QuestionUI("Q", options, vi.fn(), vi.fn());
+		const result = ui.render(80, 5, theme);
+		expect(result).toHaveLength(5);
+	});
+
+	it("never exceeds height even with long wrapped labels", () => {
+		const longLabel = "This is a very long option label that will wrap to many lines when displayed in a narrow terminal";
+		const options: OptionDef[] = Array.from({ length: 20 }, () => ({
+			label: longLabel,
+		}));
+		const ui = new QuestionUI("Q", options, vi.fn(), vi.fn());
+		const result = ui.render(60, 15, theme);
+		expect(result).toHaveLength(15);
+	});
+
+	it("selected option stays visible after scrolling down", () => {
+		const options: OptionDef[] = Array.from({ length: 50 }, (_, i) => ({
+			label: `Option ${i + 1}`,
+		}));
+		const ui = new QuestionUI("Choose", options, vi.fn(), vi.fn());
+		const tui = { requestRender: vi.fn() };
+
+		// Navigate to option 30
+		for (let i = 0; i < 29; i++) ui.handleInput("down", tui);
+		expect(ui.getSelectedIndex()).toBe(29);
+
+		const result = ui.render(120, 24, theme);
+		expect(result).toHaveLength(24);
+		// The selected option text should appear in the rendered output
+		const rendered = result.join("\n");
+		expect(rendered).toContain("Option 30");
+	});
+});
+
+// ── ConfirmUI Height Clamping Tests ─────────────────────────────────────
+
+describe("ConfirmUI - Height Clamping", () => {
+	const theme = { fg: (_c: string, s: string) => s, bold: (s: string) => s };
+
+	it("render returns exactly height lines for normal content", () => {
+		const ui = new ConfirmUI("Delete file?", "Are you sure?", vi.fn(), vi.fn());
+		const result = ui.render(120, 24, theme);
+		expect(result).toHaveLength(24);
+	});
+
+	it("render returns exactly height lines with very long detail", () => {
+		const longDetail = Array.from({ length: 100 }, (_, i) => `Detail line ${i}`).join("\n");
+		const ui = new ConfirmUI("Confirm?", longDetail, vi.fn(), vi.fn());
+		const result = ui.render(120, 20, theme);
+		expect(result).toHaveLength(20);
+	});
+
+	it("render returns exactly height lines with tiny terminal", () => {
+		const ui = new ConfirmUI("OK?", "Some detail", vi.fn(), vi.fn());
+		const result = ui.render(80, 5, theme);
+		expect(result).toHaveLength(5);
 	});
 });
 

@@ -19,10 +19,10 @@ export function prevMode(current: Mode): Mode {
 const MODE_COLORS: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: "accent",
-	SPEC: "thinkingText",
-	PIPELINE: "success",
-	TEAM: "warning",
-	CHAIN: "error",
+	SPEC: "accent",
+	PIPELINE: "accent",
+	TEAM: "accent",
+	CHAIN: "accent",
 };
 
 /** Theme color name for a mode. NORMAL returns empty string (no color). */
@@ -36,9 +36,9 @@ const BOLD_DARK = "\x1b[1;30m";
 const MODE_TEXT_ANSI: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: BOLD_WHITE,
-	SPEC: BOLD_DARK,
-	PIPELINE: BOLD_DARK,
-	TEAM: BOLD_DARK,
+	SPEC: BOLD_WHITE,
+	PIPELINE: BOLD_WHITE,
+	TEAM: BOLD_WHITE,
 	CHAIN: BOLD_WHITE,
 };
 

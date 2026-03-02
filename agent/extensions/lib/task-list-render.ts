@@ -126,7 +126,7 @@ export function renderTaskList(
 	// ── Header ────────────────────────────────────────────────────
 	const headerLabel = `  Tasks ${taskList.remaining}/${taskList.total}`;
 	const scrollRight = [above, below].filter(Boolean).join(" ");
-	const headerLine = fg("dim", headerLabel)
+	const headerLine = fg("text", headerLabel)
 		+ (scrollRight ? " ".repeat(Math.max(1, width - headerLabel.length - scrollRight.length - 2)) + fg("muted", scrollRight) + "  " : "");
 	lines.push(trunc(headerLine, width, ""));
 

@@ -294,7 +294,10 @@ export default function (pi: ExtensionAPI) {
 							);
 							const taskBg = "\x1b[48;5;236m";
 							const taskReset = "\x1b[0m";
+							const emptyPad = taskBg + padRight("", width) + taskReset;
+							allLines.push(emptyPad);
 							allLines.push(...taskLines.map(l => taskBg + padRight(l, width) + taskReset));
+							allLines.push(emptyPad);
 						}
 
 						// ── Agent pills line ─────────────────────────
@@ -418,6 +421,10 @@ export default function (pi: ExtensionAPI) {
 				},
 			};
 		}, { placement: "aboveEditor" });
+
+		// Re-pin mode bar as the last aboveEditor widget so it stays directly above the editor input.
+		// Without this, the agent-team widget (tasks) would render between the mode bar and the editor.
+		(globalThis as any).__piRefreshModeBlock?.();
 	}
 
 	// ── Dispatch Agent (returns Promise) ─────────

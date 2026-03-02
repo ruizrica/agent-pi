@@ -14,7 +14,8 @@
       "Bash(then)",
       "Bash(if grep -A 20 \"session_start\" \"$file\")",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(git commit:*)"
     ]
   }
 }
