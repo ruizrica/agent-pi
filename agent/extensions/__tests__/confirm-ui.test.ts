@@ -1,5 +1,5 @@
-// ABOUTME: Tests for ConfirmUI overlay — keyboard navigation, rendering, and callbacks
-// ABOUTME: Validates Yes/No toggle via left/right arrows, Enter confirms, Escape cancels
+// ABOUTME: Tests for ConfirmUI overlay — keyboard navigation, rendering, scrolling, and callbacks
+// ABOUTME: Validates Yes/No toggle via left/right, up/down scroll, Enter confirms, Escape cancels
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 class ConfirmUI {
 	private selectedIndex = 0; // 0 = Yes, 1 = No
+	private scrollOffset = 0;
 
 	constructor(
 		private question: string,
@@ -20,6 +21,10 @@ class ConfirmUI {
 			this.selectedIndex = 0;
 		} else if (data === "right") {
 			this.selectedIndex = 1;
+		} else if (data === "up") {
+			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+		} else if (data === "down") {
+			this.scrollOffset += 1; // clamped during render
 		} else if (data === "enter") {
 			this.onConfirm(this.selectedIndex === 0);
 			return;
@@ -38,9 +43,19 @@ class ConfirmUI {
 		return this.selectedIndex === 0 ? "Yes" : "No";
 	}
 
+	getScrollOffset(): number {
+		return this.scrollOffset;
+	}
+
 	render(width: number, height: number, theme: any): string[] {
 		const lines: string[] = [];
-		const panelW = Math.max(40, Math.floor(width * 0.9));
+		// Compact panel: 60% width, capped at 80 cols, min 40
+		const panelW = Math.min(width, Math.max(40, Math.min(80, Math.floor(width * 0.6))));
+
+		// Chrome budget: top border + header + spacer + spacer + buttons + spacer + help + bottom border = 8
+		const chromeLines = this.detail ? 9 : 8;
+		const minPadding = 2;
+		const maxBodyLines = Math.max(1, height - chromeLines - minPadding);
 
 		// Header
 		lines.push("┌" + "─".repeat(Math.max(1, panelW - 2)) + "┐");
@@ -53,27 +68,46 @@ class ConfirmUI {
 		);
 		lines.push("│");
 
-		// Detail/markdown content
+		// Detail/markdown content — height-clamped with scroll support
 		if (this.detail) {
-			for (const line of this.detail.split("\n")) {
+			const detailLines = this.detail.split("\n");
+
+			let visibleDetail: string[];
+			if (detailLines.length > maxBodyLines) {
+				this.scrollOffset = Math.max(0, Math.min(
+					this.scrollOffset,
+					detailLines.length - maxBodyLines,
+				));
+				visibleDetail = detailLines.slice(
+					this.scrollOffset,
+					this.scrollOffset + maxBodyLines,
+				);
+			} else {
+				this.scrollOffset = 0;
+				visibleDetail = detailLines;
+			}
+
+			for (const line of visibleDetail) {
 				lines.push("│ " + line);
 			}
 			lines.push("│");
 		}
 
-		// Options: Yes / No
+		// Centered Yes / No buttons
 		const labels = ["Yes", "No"];
 		const optLine = labels
 			.map((label, i) => {
 				const selected = i === this.selectedIndex;
-				return selected ? ` > ${label} ` : `   ${label} `;
+				return selected ? `▸ ${label}` : `  ${label}`;
 			})
-			.join("  ");
-		lines.push("│" + optLine);
+			.join("      ");
+		lines.push("│  " + optLine);
 
 		// Footer
 		lines.push("│");
-		lines.push("│ ←/→ Toggle • Enter Confirm • Esc Cancel");
+		const scrollHint = this.detail && this.detail.split("\n").length > maxBodyLines
+			? "↑/↓ Scroll • " : "";
+		lines.push("│ " + scrollHint + "←/→ Toggle • Enter Confirm • Esc Cancel");
 		lines.push("└" + "─".repeat(Math.max(1, panelW - 2)) + "┘");
 
 		// Center vertically
@@ -158,18 +192,32 @@ describe("ConfirmUI - Keyboard Navigation", () => {
 		expect(cancelledCalled).toBe(true);
 	});
 
-	it("should ignore up/down arrows", () => {
+	it("should scroll down with down arrow", () => {
+		const tui = { requestRender: vi.fn() };
+		ui.handleInput("down", tui);
+		expect(ui.getScrollOffset()).toBe(1);
+		expect(tui.requestRender).toHaveBeenCalled();
+	});
+
+	it("should scroll up with up arrow", () => {
+		const tui = { requestRender: vi.fn() };
+		ui.handleInput("down", tui);
+		ui.handleInput("down", tui);
+		ui.handleInput("up", tui);
+		expect(ui.getScrollOffset()).toBe(1);
+	});
+
+	it("should not scroll above 0", () => {
 		const tui = { requestRender: vi.fn() };
 		ui.handleInput("up", tui);
-		expect(ui.getSelectedIndex()).toBe(0);
-		ui.handleInput("down", tui);
-		expect(ui.getSelectedIndex()).toBe(0);
+		expect(ui.getScrollOffset()).toBe(0);
 	});
 
 	it("should ignore unrecognized keys", () => {
 		const tui = { requestRender: vi.fn() };
 		ui.handleInput("x", tui);
 		expect(ui.getSelectedIndex()).toBe(0);
+		expect(ui.getScrollOffset()).toBe(0);
 	});
 
 	it("should handle input without tui object", () => {
@@ -247,6 +295,80 @@ describe("ConfirmUI - Rendering", () => {
 		const ui = new ConfirmUI("OK?", "detail", vi.fn(), vi.fn());
 		const result = ui.render(40, 10, theme);
 		expect(result.length).toBeGreaterThan(0);
+	});
+
+	it("should use compact panel width (60% capped at 80)", () => {
+		const ui = new ConfirmUI("OK?", "", vi.fn(), vi.fn());
+		// At width=200, 60% = 120, capped at 80
+		const result = ui.render(200, 24, theme);
+		const rendered = result.join("\n");
+		// Panel border should be 80 cols: "┌" + 78 dashes + "┐"
+		expect(rendered).toContain("─".repeat(78));
+	});
+
+	it("should clamp long detail and show scroll hint", () => {
+		// 50 lines of detail in a height=15 terminal should clamp
+		const longDetail = Array.from({ length: 50 }, (_, i) => `Line ${i}`).join("\n");
+		const ui = new ConfirmUI("OK?", longDetail, vi.fn(), vi.fn());
+		const result = ui.render(120, 15, theme);
+		const rendered = result.join("\n");
+		// Should show scroll hint since content overflows
+		expect(rendered).toContain("↑/↓ Scroll");
+		// Should NOT contain all 50 lines
+		expect(rendered).not.toContain("Line 49");
+	});
+
+	it("should not show scroll hint when detail fits", () => {
+		const ui = new ConfirmUI("OK?", "Short detail", vi.fn(), vi.fn());
+		const result = ui.render(120, 24, theme);
+		const rendered = result.join("\n");
+		expect(rendered).not.toContain("↑/↓ Scroll");
+	});
+
+	it("should always show Yes/No buttons even with long detail", () => {
+		const longDetail = Array.from({ length: 100 }, (_, i) => `Line ${i}`).join("\n");
+		const ui = new ConfirmUI("OK?", longDetail, vi.fn(), vi.fn());
+		const result = ui.render(120, 15, theme);
+		const rendered = result.join("\n");
+		expect(rendered).toContain("Yes");
+		expect(rendered).toContain("No");
+	});
+});
+
+// ── Scrolling ────────────────────────────────────────────────────────
+
+describe("ConfirmUI - Scrolling", () => {
+	const theme = {
+		fg: (_color: string, text: string) => text,
+		bold: (text: string) => text,
+	};
+
+	it("should clamp scroll offset during render when content fits", () => {
+		const ui = new ConfirmUI("OK?", "short", vi.fn(), vi.fn());
+		const tui = { requestRender: vi.fn() };
+		// Artificially scroll down
+		ui.handleInput("down", tui);
+		ui.handleInput("down", tui);
+		// Render should clamp scrollOffset back to 0 since content fits
+		ui.render(120, 24, theme);
+		expect(ui.getScrollOffset()).toBe(0);
+	});
+
+	it("should allow scrolling through long content", () => {
+		const longDetail = Array.from({ length: 50 }, (_, i) => `Line ${i}`).join("\n");
+		const ui = new ConfirmUI("OK?", longDetail, vi.fn(), vi.fn());
+		const tui = { requestRender: vi.fn() };
+
+		ui.handleInput("down", tui);
+		ui.handleInput("down", tui);
+		ui.handleInput("down", tui);
+
+		// Render to apply clamping
+		const result = ui.render(120, 15, theme);
+		const rendered = result.join("\n");
+
+		// Should have scrolled — Line 0 may not be visible, but later lines should be
+		expect(rendered).toContain("Line 3");
 	});
 });
 

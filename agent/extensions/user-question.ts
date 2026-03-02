@@ -190,6 +190,7 @@ class QuestionUI {
 
 class ConfirmUI {
 	private selectedIndex = 0; // 0 = Yes, 1 = No
+	private scrollOffset = 0;
 
 	constructor(
 		private question: string,
@@ -203,6 +204,10 @@ class ConfirmUI {
 			this.selectedIndex = 0;
 		} else if (matchesKey(data, Key.right)) {
 			this.selectedIndex = 1;
+		} else if (matchesKey(data, Key.up)) {
+			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+		} else if (matchesKey(data, Key.down)) {
+			this.scrollOffset += 1; // clamped during render
 		} else if (matchesKey(data, Key.enter)) {
 			this.onConfirm(this.selectedIndex === 0);
 			return;
@@ -214,11 +219,46 @@ class ConfirmUI {
 	}
 
 	render(width: number, height: number, theme: any): string[] {
-		const container = new Container();
 		const mdTheme = getPiMdTheme();
 
-		// Panel is 90% of terminal width, centered
-		const panelW = Math.min(width, Math.max(40, Math.floor(width * 0.9)));
+		// Compact panel: 60% width, capped at 80 cols, min 40
+		const panelW = Math.min(width, Math.max(40, Math.min(80, Math.floor(width * 0.6))));
+
+		// Chrome budget: top border + header + spacer + spacer + buttons + spacer + help + bottom border = 8
+		// With detail present, add 1 more spacer after detail body
+		const chromeLines = this.detail ? 9 : 8;
+		const minPadding = 2;
+		const maxBodyLines = Math.max(1, height - chromeLines - minPadding);
+
+		// Pre-render detail markdown to measure and clamp it
+		let bodyLines: string[] = [];
+		if (this.detail) {
+			const bodyContainer = new Container();
+			bodyContainer.addChild(new Markdown(this.detail, 1, 0, mdTheme));
+			bodyLines = bodyContainer.render(panelW);
+		}
+
+		// Scroll support for long detail content
+		let visibleBody: string[];
+		let scrollInfo = "";
+		if (bodyLines.length > maxBodyLines) {
+			this.scrollOffset = Math.max(0, Math.min(
+				this.scrollOffset,
+				bodyLines.length - maxBodyLines,
+			));
+			visibleBody = bodyLines.slice(
+				this.scrollOffset,
+				this.scrollOffset + maxBodyLines,
+			);
+			const end = this.scrollOffset + visibleBody.length;
+			scrollInfo = ` (${this.scrollOffset + 1}-${end}/${bodyLines.length})`;
+		} else {
+			this.scrollOffset = 0;
+			visibleBody = bodyLines;
+		}
+
+		// Assemble final panel with clamped content
+		const container = new Container();
 
 		// Header
 		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
@@ -228,13 +268,15 @@ class ConfirmUI {
 		));
 		container.addChild(new Spacer(1));
 
-		// Body: full-width markdown rendering of detail text
+		// Body: height-clamped, scrollable detail text
 		if (this.detail) {
-			container.addChild(new Markdown(this.detail, 1, 0, mdTheme));
+			for (const line of visibleBody) {
+				container.addChild(new Text(line, 0, 0));
+			}
 			container.addChild(new Spacer(1));
 		}
 
-		// Footer options: Yes / No side by side
+		// Centered Yes / No buttons
 		const labels = ["Yes", "No"];
 		const optParts = labels.map((label, i) => {
 			const selected = i === this.selectedIndex;
@@ -242,14 +284,16 @@ class ConfirmUI {
 			const text = selected
 				? theme.bold(theme.fg("accent", label))
 				: theme.fg("dim", label);
-			return " " + indicator + text + " ";
+			return indicator + text;
 		});
-		container.addChild(new Text(optParts.join("   "), 1, 0));
+		const btnRow = "  " + optParts.join("      ") + "  ";
+		container.addChild(new Text(btnRow, 1, 0));
 
 		// Footer help
 		container.addChild(new Spacer(1));
+		const scrollHint = bodyLines.length > maxBodyLines ? "↑/↓ Scroll • " : "";
 		container.addChild(new Text(
-			theme.fg("dim", " ←/→ Toggle • Enter Confirm • Esc Cancel"),
+			theme.fg("dim", ` ${scrollHint}←/→ Toggle • Enter Confirm • Esc Cancel${scrollInfo}`),
 			1, 0,
 		));
 		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
