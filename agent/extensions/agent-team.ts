@@ -497,9 +497,10 @@ export default function (pi: ExtensionAPI) {
 		const taskId = commanderAvailable ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
 
 		let tools = state.def.tools;
-		if (commanderAvailable) {
-			tools = tools + ",commander_task,commander_mailbox,commander_orchestration";
-		}
+		// Commander tools are extension-registered (not built-in), so they must NOT
+		// go in --tools (which only accepts built-in names and warns on unknowns).
+		// Loading the commander-mcp extension via -e is sufficient — pi auto-activates
+		// all extension tools via includeAllExtensionTools.
 
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;

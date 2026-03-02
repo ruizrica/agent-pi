@@ -194,7 +194,9 @@ export default function (pi: ExtensionAPI) {
 		let tools = "read,bash,grep,find,ls";
 		const extensions = ["-e", tasksExtPath];
 		if (commanderAvail) {
-			tools += ",commander_task,commander_mailbox,commander_orchestration";
+			// Commander tools are extension-registered (not built-in), so they must NOT
+			// go in --tools (which only accepts built-in names and warns on unknowns).
+			// Loading the extension is sufficient — pi auto-activates all extension tools.
 			extensions.push("-e", commanderExtPath);
 		}
 
