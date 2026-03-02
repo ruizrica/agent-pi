@@ -1,5 +1,5 @@
-// ABOUTME: Standardized output box utility — colored left bar for extension output
-// ABOUTME: Used by renderCall/renderResult and widgets for consistent visual formatting
+// ABOUTME: Output formatting utility for extension output
+// ABOUTME: Used by renderCall/renderResult and widgets for consistent text formatting
 
 /** Theme interface matching RenderTheme from pipeline-render.ts */
 export interface OutputBoxTheme {
@@ -15,33 +15,28 @@ export interface ToolCallSummary {
 	hint?: string;
 }
 
-/** Two full-block chars for the left bar */
-export const BAR = "\u2588\u2588";
-
 /**
- * Render a single output line with colored left bar.
- * Format: `BAR SPACE content`
+ * Render a single output line (plain, no colored bar).
  */
-export function outputLine(theme: OutputBoxTheme, bar: BarColor, content: string): string {
-	return `${theme.fg(bar, BAR)} ${content}`;
+export function outputLine(_theme: OutputBoxTheme, _bar: BarColor, content: string): string {
+	return content;
 }
 
 /**
- * Wrap multiple lines in a consistent output box — each line gets the bar + bg.
+ * Wrap multiple lines — returns them as-is (no colored bar).
  */
-export function outputBox(theme: OutputBoxTheme, bar: BarColor, lines: string[]): string[] {
-	return lines.map(line => outputLine(theme, bar, line));
+export function outputBox(_theme: OutputBoxTheme, _bar: BarColor, lines: string[]): string[] {
+	return lines;
 }
 
 /**
  * Format a compact TOOLBOX summary line.
- * Example: `██ TOOLBOX: GREP (3x) src/auth.ts, READ (1x) config.json`
+ * Example: `TOOLBOX: GREP (3x) src/auth.ts, READ (1x) config.json`
  */
 export function formatToolbox(theme: OutputBoxTheme, tools: ToolCallSummary[]): string {
 	const parts = tools.map(t => {
 		const entry = `${t.name} (${t.count}x)`;
 		return t.hint ? `${entry} ${t.hint}` : entry;
 	});
-	const content = theme.bold("TOOLBOX") + ": " + parts.join(", ");
-	return outputLine(theme, "accent", content);
+	return theme.bold("TOOLBOX") + ": " + parts.join(", ");
 }

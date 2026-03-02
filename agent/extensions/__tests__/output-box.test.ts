@@ -1,8 +1,8 @@
 // ABOUTME: Tests for output-box utility — outputLine, outputBox, formatToolbox
-// ABOUTME: Validates bar chars, color names, and TOOLBOX format
+// ABOUTME: Validates plain text output formatting (no colored bars)
 
 import { describe, it, expect } from "vitest";
-import { outputLine, outputBox, formatToolbox, BAR, type BarColor, type ToolCallSummary } from "../lib/output-box.ts";
+import { outputLine, outputBox, formatToolbox, type ToolCallSummary } from "../lib/output-box.ts";
 
 function makeFakeTheme() {
 	return {
@@ -14,34 +14,14 @@ function makeFakeTheme() {
 describe("outputLine", () => {
 	const theme = makeFakeTheme();
 
-	it("includes the bar character", () => {
+	it("returns the content text", () => {
 		const line = outputLine(theme, "accent", "hello");
-		expect(line).toContain(BAR);
+		expect(line).toBe("hello");
 	});
 
-	it("uses accent color for the bar", () => {
-		const line = outputLine(theme, "accent", "hello");
-		expect(line).toContain("[accent]" + BAR);
-	});
-
-	it("uses success color for the bar", () => {
-		const line = outputLine(theme, "success", "hello");
-		expect(line).toContain("[success]" + BAR);
-	});
-
-	it("uses error color for the bar", () => {
-		const line = outputLine(theme, "error", "hello");
-		expect(line).toContain("[error]" + BAR);
-	});
-
-	it("uses dim color for the bar", () => {
-		const line = outputLine(theme, "dim", "hello");
-		expect(line).toContain("[dim]" + BAR);
-	});
-
-	it("uses warning color for the bar", () => {
-		const line = outputLine(theme, "warning", "hello");
-		expect(line).toContain("[warning]" + BAR);
+	it("returns content without any bar characters", () => {
+		const line = outputLine(theme, "accent", "my content");
+		expect(line).not.toContain("\u2588");
 	});
 
 	it("does not include ANSI bg code", () => {
@@ -49,16 +29,11 @@ describe("outputLine", () => {
 		expect(line).not.toContain("\x1b[48;2;");
 	});
 
-	it("includes the content text", () => {
-		const line = outputLine(theme, "accent", "my content");
-		expect(line).toContain("my content");
-	});
-
-	it("places bar before content", () => {
-		const line = outputLine(theme, "accent", "hello");
-		const barIdx = line.indexOf(BAR);
-		const contentIdx = line.indexOf("hello");
-		expect(barIdx).toBeLessThan(contentIdx);
+	it("works with all bar color types", () => {
+		for (const color of ["accent", "success", "error", "dim", "warning"] as const) {
+			const line = outputLine(theme, color, "test");
+			expect(line).toBe("test");
+		}
 	});
 });
 
@@ -70,21 +45,20 @@ describe("outputBox", () => {
 		expect(lines).toHaveLength(3);
 	});
 
-	it("each line has the bar", () => {
+	it("returns lines without bar characters", () => {
 		const lines = outputBox(theme, "success", ["a", "b"]);
 		for (const line of lines) {
-			expect(line).toContain(BAR);
+			expect(line).not.toContain("\u2588");
 		}
 	});
 
-	it("each line uses the same bar color", () => {
-		const lines = outputBox(theme, "error", ["a", "b"]);
-		for (const line of lines) {
-			expect(line).toContain("[error]" + BAR);
-		}
+	it("preserves original content", () => {
+		const lines = outputBox(theme, "error", ["first line", "second line"]);
+		expect(lines[0]).toBe("first line");
+		expect(lines[1]).toBe("second line");
 	});
 
-	it("each line has no bg code", () => {
+	it("has no bg code", () => {
 		const lines = outputBox(theme, "accent", ["x"]);
 		expect(lines[0]).not.toContain("\x1b[48;2;");
 	});
@@ -119,15 +93,9 @@ describe("formatToolbox", () => {
 		expect(result).toContain("config.json");
 	});
 
-	it("has the bar", () => {
+	it("does not include bar characters", () => {
 		const tools: ToolCallSummary[] = [{ name: "GREP", count: 1 }];
 		const result = formatToolbox(theme, tools);
-		expect(result).toContain(BAR);
-	});
-
-	it("uses accent bar color", () => {
-		const tools: ToolCallSummary[] = [{ name: "GREP", count: 1 }];
-		const result = formatToolbox(theme, tools);
-		expect(result).toContain("[accent]" + BAR);
+		expect(result).not.toContain("\u2588");
 	});
 });
