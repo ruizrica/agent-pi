@@ -8,7 +8,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { truncateToWidth } from "@mariozechner/pi-tui";
 import { basename, dirname } from "node:path";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { shouldBlockForCompaction } from "./lib/context-gate.ts";
+import { shouldBlockForCompaction, COMPACT_THRESHOLD } from "./lib/context-gate.ts";
 
 /** Turn a model name like "Claude 4 Opus" into "opus 4" */
 function shortModelName(name: string | undefined): string {
@@ -36,8 +36,6 @@ interface CompactState {
 	status: "idle" | "requested" | "done" | "failed";
 	startPercent: number;
 	startTime: number;
-	startModel: string;
-	startDir: string;
 	lastNoticeAt: number;
 }
 
@@ -45,14 +43,13 @@ let compactState: CompactState = {
 	status: "idle",
 	startPercent: 0,
 	startTime: 0,
-	startModel: "",
-	startDir: "",
 	lastNoticeAt: 0,
 };
 
-const AUTO_COMPACT_COOLDOWN_MS = 20_000;
-const REQUEST_TTL_MS = 120_000;
-const DONE_TARGET_PERCENT = 75;
+const AUTO_COMPACT_COOLDOWN_MS = 10_000;
+const REQUEST_TTL_MS = 90_000;
+const RECOVERY_TARGET_PERCENT = COMPACT_THRESHOLD - 1;
+const AUTO_COMPACT_COMMANDS = ["/compact-min", "/compact"] as const;
 
 function padRight(value: string, width: number): string {
 	return value.length >= width ? value.slice(0, width) : `${value}${" ".repeat(width - value.length)}`;
@@ -89,23 +86,20 @@ function requestAutoCompact(ctx: ExtensionContext, pi: ExtensionAPI): void {
 		status: "requested",
 		startPercent: Math.round(usage.percent),
 		startTime: now,
-		startModel: shortModelName(ctx.model?.name),
-		startDir: shortDir(ctx.cwd),
 		lastNoticeAt: now,
 	};
 
 	ctx.ui.notify(
 		compactBox("Auto-Compaction Started", [
-			`Usage crossed threshold at ${Math.round(usage.percent)}%.`,
-			`Starting compact flow before context-sensitive work resumes.`,
+			`Usage at ${Math.round(usage.percent)}% reached block threshold.`,
+			`Launching compact flow before context-sensitive work resumes.`,
 			...connectionInfo(ctx, usage.percent),
 		]),
 		"warning",
 	);
 
 	void (async () => {
-		const commands = ["/compact-min", "/compact"];
-		for (const cmd of commands) {
+		for (const cmd of AUTO_COMPACT_COMMANDS) {
 			try {
 				await pi.sendMessage(
 					{ content: cmd, display: true },
@@ -137,7 +131,7 @@ function finalizeCompactStatus(ctx: ExtensionContext): void {
 
 	const percent = Math.round(usage.percent);
 	const now = Date.now();
-	if (percent <= DONE_TARGET_PERCENT) {
+	if (percent <= RECOVERY_TARGET_PERCENT) {
 		compactState.status = "done";
 		ctx.ui.notify(
 			compactBox("Auto-Compaction Complete", [
@@ -201,11 +195,8 @@ export default function (pi: ExtensionAPI) {
 		const usage = ctx.getContextUsage();
 		const result = shouldBlockForCompaction(usage?.percent);
 
-		if (result.level !== "ok") {
-			requestAutoCompact(ctx, pi);
-		}
-
 		if (result.block) {
+			requestAutoCompact(ctx, pi);
 			return { block: true, reason: result.reason };
 		}
 
@@ -225,10 +216,11 @@ export default function (pi: ExtensionAPI) {
 					`Context at ${Math.round(usage?.percent ?? 0)}% — consider running /compact soon`,
 					"warning",
 				);
-				requestAutoCompact(ctx, pi);
 			}
 		} else if (result.level === "ok") {
 			warnedThisTurn = false;
+		} else if (result.block) {
+			requestAutoCompact(ctx, pi);
 		}
 
 		finalizeCompactStatus(ctx);

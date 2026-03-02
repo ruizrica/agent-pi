@@ -47,7 +47,7 @@ describe("footer auto-compaction behavior", () => {
 		delete process.env.PI_SUBAGENT;
 	});
 
-	it("auto-runs /compact-min and blocks tool calls at BLOCK_THRESHOLD", async () => {
+	it("auto-runs /compact-min and blocks tool calls at BLOCK threshold", async () => {
 		const { handlers, pi, sendMessage } = createExtension();
 		const extension = await import("../footer.ts");
 		extension.default(pi);
@@ -70,26 +70,19 @@ describe("footer auto-compaction behavior", () => {
 		expect(notify).toHaveBeenCalledWith(expect.stringContaining("Auto-Compaction Started"), "warning");
 	});
 
-	it("warn-level context triggers auto compaction without blocking", async () => {
+	it("warn-level context only warns and does not auto-trigger compaction", async () => {
 		const { handlers, pi, sendMessage } = createExtension();
 		const extension = await import("../footer.ts");
 		extension.default(pi);
 
 		const notify = vi.fn();
-		const ctx = createContext({ percent: 80, ui: notify });
-		const result = await handlers["tool_call"]("tool_call", ctx);
-
-		expect(result).toEqual({ block: false });
+		await handlers["before_agent_start"]("before_agent_start", createContext({ percent: 80, ui: notify }));
+		expect(notify).toHaveBeenCalledWith(expect.stringContaining("consider running /compact soon"), "warning");
 		await tick();
-		expect(sendMessage).toHaveBeenCalledTimes(1);
-		expect(sendMessage).toHaveBeenCalledWith(
-			{ content: "/compact-min", display: true },
-			{ deliverAs: "user", triggerTurn: true },
-		);
-		expect(notify).toHaveBeenCalledWith(expect.stringContaining("Auto-Compaction Started"), "warning");
+		expect(sendMessage).not.toHaveBeenCalled();
 	});
 
-	it("reports compact-complete when context recovers below threshold after request", async () => {
+	it("reports compact-complete when context recovers below warning threshold after request", async () => {
 		const { handlers, pi, sendMessage } = createExtension();
 		const extension = await import("../footer.ts");
 		extension.default(pi);
@@ -99,7 +92,7 @@ describe("footer auto-compaction behavior", () => {
 		await tick();
 		expect(sendMessage).toHaveBeenCalledTimes(1);
 
-		await handlers["before_agent_start"]("before_agent_start", createContext({ percent: 72, ui: notify }));
+		await handlers["before_agent_start"]("before_agent_start", createContext({ percent: 79, ui: notify }));
 		expect(notify).toHaveBeenCalledWith(expect.stringContaining("Auto-Compaction Complete"), "success");
 	});
 });
