@@ -1,5 +1,5 @@
 // ABOUTME: Pipeline-Team — Hybrid sequential pipeline with parallel agent dispatch
-// ABOUTME: Combines agent-chain (sequential phases) with agent-team (parallel dispatch) plus Ctrl+B overlay
+// ABOUTME: Combines agent-chain (sequential phases) with agent-team (parallel dispatch) plus Alt+P overlay
 /**
  *
  * Pipeline: UNDERSTAND → GATHER → PLAN → EXECUTE → REVIEW
@@ -955,9 +955,9 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// ── Ctrl+B Shortcut ─────────────────────────
+	// ── Alt+P Shortcut ──────────────────────────
 
-	pi.registerShortcut("ctrl+b", {
+	pi.registerShortcut("alt+p", {
 		description: "Toggle pipeline widget collapse/expand",
 		handler: async (ctx) => {
 			widgetCtx = ctx;

@@ -56,21 +56,20 @@ export function renderSubagentWidget(
 		? ` · Turn ${state.turnCount}`
 		: "";
 
-	// Line 1: spinner + title + summary (if any) + stats
-	const summaryPart = state.summary ? ` ${state.summary}` : "";
+	// Line 1: spinner + title + stats (summary shown on line 2)
 	lines.push(
 		theme.bold(spinner + title) +
 		turnLabel +
-		summaryPart +
 		` | (${Math.round(state.elapsed / 1000)}s)` +
 		` | Tools: ${state.toolCount}`
 	);
 
-	// Line 2: task preview
-	const taskPreview = state.task.length > 40
-		? state.task.slice(0, 37) + "..."
-		: state.task;
-	lines.push(`  ${taskPreview}`);
+	// Line 2: summary (current activity) or task preview as fallback
+	const detail = state.summary || state.task;
+	const detailPreview = detail.length > 40
+		? detail.slice(0, 37) + "..."
+		: detail;
+	lines.push(`  ${detailPreview}`);
 
 	return { lines, borderCount: 1 };
 }

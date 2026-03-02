@@ -91,6 +91,7 @@ export default function (pi: ExtensionAPI) {
 	const agents: Map<number, SubState> = new Map();
 	let nextId = 1;
 	let widgetCtx: any;
+	const widgetBoxes = new Map<number, { invalidate: () => void }>();
 
 	// ── Session file helpers ──────────────────────────────────────────────────
 
@@ -113,43 +114,40 @@ export default function (pi: ExtensionAPI) {
 	const WHITE_BOLD = "\x1b[1;97m";  // bold bright white text
 	const RESET_ALL = "\x1b[0m";
 
-	function updateWidgets() {
+	function registerWidget(state: SubState) {
 		if (!widgetCtx) return;
+		const key = `sub-${state.id}`;
+		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
+			const bgFn = (text: string): string => {
+				const bg = STATUS_BG[state.status] || STATUS_BG.running;
+				return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
+			};
 
-		for (const [id, state] of Array.from(agents.entries())) {
-			const key = `sub-${id}`;
-			widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
-				const bgFn = (text: string): string => {
-					const bg = STATUS_BG[state.status] || STATUS_BG.running;
-					return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
-				};
+			const box = new Box(1, 1, bgFn);
+			const content = new Text("", 0, 0);
+			box.addChild(content);
+			widgetBoxes.set(state.id, { invalidate: () => box.invalidate() });
 
-				// paddingX=1, paddingY=1 → one blank line top & bottom inside the box
-				const box = new Box(1, 1, bgFn);
-				const content = new Text("", 0, 0);
-				box.addChild(content);
+			return {
+				render(width: number): string[] {
+					box.setBgFn((text: string): string => {
+						const bg = STATUS_BG[state.status] || STATUS_BG.running;
+						return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
+					});
 
-				return {
-					render(width: number): string[] {
-						// Update bgFn each render to reflect current status
-						box.setBgFn((text: string): string => {
-							const bg = STATUS_BG[state.status] || STATUS_BG.running;
-							return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
-						});
+					const result = renderSubagentWidget(state, width, theme);
+					content.setText(result.lines.join("\n"));
+					return box.render(width);
+				},
+				invalidate() {
+					box.invalidate();
+				},
+			};
+		});
+	}
 
-						const result = renderSubagentWidget(state, width, theme);
-						content.setText(result.lines.join("\n"));
-						// Render the box, then append a blank spacer line for visual separation
-						const rendered = box.render(width);
-						rendered.push("");
-						return rendered;
-					},
-					invalidate() {
-						box.invalidate();
-					},
-				};
-			});
-		}
+	function invalidateWidget(id: number) {
+		widgetBoxes.get(id)?.invalidate();
 	}
 
 	// ── Streaming helpers ─────────────────────────────────────────────────────
@@ -164,11 +162,11 @@ export default function (pi: ExtensionAPI) {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === "text_delta") {
 					state.textChunks.push(delta.delta || "");
-					updateWidgets();
+					invalidateWidget(state.id);
 				}
 			} else if (type === "tool_execution_start") {
 				state.toolCount++;
-				updateWidgets();
+				invalidateWidget(state.id);
 			}
 		} catch {}
 	}
@@ -247,7 +245,7 @@ export default function (pi: ExtensionAPI) {
 			const startTime = Date.now();
 			const timer = setInterval(() => {
 				state.elapsed = Date.now() - startTime;
-				updateWidgets();
+				invalidateWidget(state.id);
 			}, 1000);
 
 			let buffer = "";
@@ -264,7 +262,7 @@ export default function (pi: ExtensionAPI) {
 			proc.stderr!.on("data", (chunk: string) => {
 				if (chunk.trim()) {
 					state.textChunks.push(chunk);
-					updateWidgets();
+					invalidateWidget(state.id);
 				}
 			});
 
@@ -274,7 +272,7 @@ export default function (pi: ExtensionAPI) {
 				state.elapsed = Date.now() - startTime;
 				state.status = code === 0 ? "done" : "error";
 				state.proc = undefined;
-				updateWidgets();
+				invalidateWidget(state.id);
 
 				// Post-dispatch: reconcile Commander task to terminal state
 				if (commanderAvail && cmdTaskId !== undefined) {
@@ -308,6 +306,7 @@ export default function (pi: ExtensionAPI) {
 					setTimeout(() => {
 						if (agents.has(state.id) && state.status !== "running") {
 							ctx.ui.setWidget(`sub-${state.id}`, undefined);
+							widgetBoxes.delete(state.id);
 							agents.delete(state.id);
 						}
 					}, 30_000);
@@ -321,7 +320,7 @@ export default function (pi: ExtensionAPI) {
 				state.status = "error";
 				state.proc = undefined;
 				state.textChunks.push(`Error: ${err.message}`);
-				updateWidgets();
+				invalidateWidget(state.id);
 				resolve();
 			});
 
@@ -359,7 +358,7 @@ export default function (pi: ExtensionAPI) {
 				autoRemove: args.autoRemove,
 			};
 			agents.set(id, state);
-			updateWidgets();
+			registerWidget(state);
 
 			// Fire-and-forget
 			spawnAgent(state, args.task, ctx);
@@ -437,8 +436,8 @@ export default function (pi: ExtensionAPI) {
 			// Register and spawn all agents
 			for (const state of states) {
 				agents.set(state.id, state);
+				registerWidget(state);
 			}
-			updateWidgets();
 
 			for (const state of states) {
 				const peers = peerNames.filter(n => n !== `SA-${state.id}-${state.name}`);
@@ -474,7 +473,7 @@ export default function (pi: ExtensionAPI) {
 			state.textChunks = [];
 			state.elapsed = 0;
 			state.turnCount++;
-			updateWidgets();
+			invalidateWidget(state.id);
 
 			ctx.ui.notify(`Continuing SA${args.id} (${state.name}) Turn ${state.turnCount}…`, "info");
 			spawnAgent(state, args.prompt, ctx);
@@ -502,6 +501,7 @@ export default function (pi: ExtensionAPI) {
 				await killGracefully(state.proc);
 			}
 			ctx.ui.setWidget(`sub-${args.id}`, undefined);
+			widgetBoxes.delete(args.id);
 			agents.delete(args.id);
 
 			return {
@@ -563,7 +563,7 @@ export default function (pi: ExtensionAPI) {
 				turnCount: 1,
 			};
 			agents.set(id, state);
-			updateWidgets();
+			registerWidget(state);
 
 			// Fire-and-forget
 			spawnAgent(state, parsed.task, ctx);
@@ -609,7 +609,7 @@ export default function (pi: ExtensionAPI) {
 			state.textChunks = [];
 			state.elapsed = 0;
 			state.turnCount++;
-			updateWidgets();
+			invalidateWidget(state.id);
 
 			ctx.ui.notify(`Continuing SA${num} (${state.name}) Turn ${state.turnCount}…`, "info");
 
@@ -646,6 +646,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			ctx.ui.setWidget(`sub-${num}`, undefined);
+			widgetBoxes.delete(num);
 			agents.delete(num);
 		},
 	});
@@ -670,6 +671,7 @@ export default function (pi: ExtensionAPI) {
 
 			const total = agents.size;
 			agents.clear();
+			widgetBoxes.clear();
 			nextId = 1;
 
 			const msg = total === 0
@@ -694,6 +696,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		await Promise.all(killPromises);
 		agents.clear();
+		widgetBoxes.clear();
 		nextId = 1;
 		widgetCtx = ctx;
 	});

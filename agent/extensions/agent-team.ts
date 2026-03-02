@@ -16,7 +16,7 @@
  *   /agents-list          — list loaded agents
  *   /agents-grid N        — set column count (default 2)
  *   /agents-clear         — clear agent team widget from screen
- *   Ctrl+G                — toggle compact/expanded widget view
+ *   Alt+G                 — toggle compact/expanded widget view
  *
  * Usage: pi -e extensions/agent-team.ts -e extensions/footer.ts
  */
@@ -1067,7 +1067,7 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	pi.registerShortcut("ctrl+g", {
+	pi.registerShortcut("alt+g", {
 		description: "Toggle agent team compact/expanded view",
 		handler: async (ctx) => {
 			widgetCtx = ctx;

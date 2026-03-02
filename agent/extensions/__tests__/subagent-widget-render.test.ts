@@ -52,20 +52,20 @@ describe("renderSubagentWidget", () => {
 		expect(errorResult.lines[0]).toContain("✗");
 	});
 
-	it("shows summary on the title line", () => {
+	it("shows summary on line 2 instead of task when present", () => {
 		const state = makeState({ summary: "Code quality check passed" });
 		const result = renderSubagentWidget(state, 80, theme);
 
-		// Summary appears on line 1 (title line), task on line 2
-		expect(result.lines[0]).toContain("Code quality check passed");
-		expect(result.lines[1]).toContain("do something");
+		// Summary replaces task on line 2; title line has no summary
+		expect(result.lines[0]).not.toContain("Code quality check passed");
+		expect(result.lines[1]).toContain("Code quality check passed");
 	});
 
-	it("always shows task preview on line 2", () => {
+	it("falls back to task preview on line 2 when no summary", () => {
 		const state = makeState({ summary: undefined });
 		const result = renderSubagentWidget(state, 80, theme);
 
-		// Title line + task line = 2 lines always
+		// Title line + detail line = 2 lines always
 		expect(result.lines).toHaveLength(2);
 		expect(result.lines[1]).toContain("do something");
 	});
