@@ -467,7 +467,19 @@ export default function (pi: ExtensionAPI) {
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
 		if (commanderAvailable) {
-			systemPrompt += buildCommanderPrompt({ agentName: canonicalName, taskId });
+			// Gather peer names for inter-agent mailbox communication
+			const peerNames: string[] = [];
+			for (const [name] of agentStates) {
+				if (name !== canonicalName.toLowerCase()) {
+					peerNames.push(name);
+				}
+			}
+			systemPrompt += buildCommanderPrompt({
+				agentName: canonicalName,
+				taskId,
+				enableMailboxChat: true,
+				peerNames,
+			});
 		}
 
 		const args = [

@@ -31,14 +31,36 @@ On FAILURE:
 - Fail: commander_task { operation: "fail", task_id: ${idStr}, error_message: "<what went wrong>" }` : "No Commander task assigned. Commander tools are available if needed."}`;
 
 	if (enableMailboxChat) {
-		prompt += `\n\n## Inter-Agent Communication
-You can message your fellow agents via commander_mailbox.`;
+		prompt += `\n\n## Inter-Agent Mailbox Communication (REQUIRED)
+You MUST use the mailbox (commander_mailbox) for all inter-agent communication.
+The mailbox is your primary channel for coordinating with other agents.`;
 		if (peerNames && peerNames.length > 0) {
-			prompt += ` Your peers are: ${peerNames.join(", ")}.`;
+			prompt += `\nYour active peers: ${peerNames.join(", ")}.`;
 		}
 		prompt += `
-Be supportive and encouraging — warm but professional. Celebrate wins, offer help when you can.
-Check your inbox periodically with commander_mailbox { operation: "inbox", agent_name: "${agentName}" }`;
+
+MAILBOX PROTOCOL:
+1. CHECK INBOX at the start of your work and periodically during long tasks:
+   commander_mailbox { operation: "inbox", agent_name: "${agentName}" }
+2. REPLY to any messages from peers — always acknowledge and respond.
+3. SEND STATUS to peers when you start, hit milestones, or finish:
+   commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "<peer>", body: "<update>", message_type: "status" }
+4. ASK FOR HELP if you encounter something another agent might know about:
+   commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "<peer>", body: "<question>", message_type: "question" }
+5. SHARE RESULTS when you discover useful information other agents should know.
+
+COMMUNICATION STYLE:
+- Be warm, professional, and collaborative. You are part of a team.
+- Keep messages concise and actionable.
+- Celebrate peer wins, offer help when you can.
+- ABSOLUTELY NO EMOJIS anywhere — they are banned in all messages, comments, and output.
+
+WHEN TO MESSAGE PEERS:
+- When starting work that might overlap with or affect a peer's task.
+- When you find information relevant to another agent's work.
+- When you need input or a decision from another agent.
+- When you complete work that unblocks or relates to a peer's task.
+- When you see a question in your inbox — always reply.`;
 	}
 
 	return prompt;
