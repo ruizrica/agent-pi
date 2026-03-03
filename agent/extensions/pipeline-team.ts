@@ -43,6 +43,7 @@ interface AgentDef {
 	name: string;
 	description: string;
 	tools: string;
+	model: string; // full provider/model ID, empty = use default
 	systemPrompt: string;
 }
 
@@ -94,6 +95,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
 			name: frontmatter.name,
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
+			model: frontmatter.model || "",
 			systemPrompt: match[2].trim(),
 		};
 	} catch {
@@ -322,9 +324,10 @@ export default function (pi: ExtensionAPI) {
 			updateWidget();
 		}, 1000);
 
-		const model = ctx.model
-			? `${ctx.model.provider}/${ctx.model.id}`
-			: DEFAULT_SUBAGENT_MODEL;
+		// Use agent's defined model or fall back to default subagent model.
+		// NOTE: We intentionally do NOT inherit the parent model. Each agent
+		// should use its explicitly defined model or the lightweight default.
+		const model = agentDef.model || DEFAULT_SUBAGENT_MODEL;
 
 		const agentKey = `pipeline-${agentDef.name.toLowerCase().replace(/\s+/g, "-")}-${agentState.index}`;
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);

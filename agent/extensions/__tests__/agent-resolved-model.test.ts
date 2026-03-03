@@ -21,18 +21,19 @@ interface AgentState {
 	resolvedModel: string;
 }
 
-const DEFAULT_SUBAGENT_MODEL = "anthropic/claude-sonnet-4-20250514";
+const DEFAULT_SUBAGENT_MODEL = "openrouter/google/gemini-3-flash-preview";
 
 /**
  * Mirrors model resolution logic from agent-team.ts dispatchAgent().
  * Resolves the effective model for an agent, storing it on state.
+ * NOTE: We intentionally do NOT inherit the parent model. Each agent
+ * should use its explicitly defined model or the lightweight default.
  */
 function resolveModel(
 	state: AgentState,
-	parentModel: { provider: string; id: string } | null,
+	_parentModel: { provider: string; id: string } | null,
 ): string {
-	const model = state.def.model
-		|| (parentModel ? `${parentModel.provider}/${parentModel.id}` : DEFAULT_SUBAGENT_MODEL);
+	const model = state.def.model || DEFAULT_SUBAGENT_MODEL;
 	state.resolvedModel = model;
 	return model;
 }
@@ -71,14 +72,15 @@ describe("resolvedModel", () => {
 		expect(state.resolvedModel).toBe("openai/gpt-4o");
 	});
 
-	it("inherits parent model when agent model is empty", () => {
+	it("uses default subagent model when agent model is empty (ignores parent)", () => {
 		const state = makeState({ def: { name: "planner", model: "" } });
 		const model = resolveModel(state, { provider: "anthropic", id: "claude-opus-4-20250514" });
-		expect(model).toBe("anthropic/claude-opus-4-20250514");
-		expect(state.resolvedModel).toBe("anthropic/claude-opus-4-20250514");
+		// Should NOT inherit the parent model — should use the lightweight default
+		expect(model).toBe(DEFAULT_SUBAGENT_MODEL);
+		expect(state.resolvedModel).toBe(DEFAULT_SUBAGENT_MODEL);
 	});
 
-	it("falls back to default when no parent model", () => {
+	it("uses default when no parent model and no agent model", () => {
 		const state = makeState({ def: { name: "tester", model: "" } });
 		const model = resolveModel(state, null);
 		expect(model).toBe(DEFAULT_SUBAGENT_MODEL);
@@ -89,7 +91,7 @@ describe("resolvedModel", () => {
 		const state = makeState({
 			def: { name: "builder", model: "" },
 			status: "done",
-			resolvedModel: "anthropic/claude-opus-4-20250514",
+			resolvedModel: DEFAULT_SUBAGENT_MODEL,
 		});
 		resetAgentState(state);
 		expect(state.resolvedModel).toBe("");
@@ -98,11 +100,11 @@ describe("resolvedModel", () => {
 	it("detail view uses resolvedModel over def.model", () => {
 		const state = makeState({
 			def: { name: "planner", model: "" },
-			resolvedModel: "anthropic/claude-opus-4-20250514",
+			resolvedModel: DEFAULT_SUBAGENT_MODEL,
 		});
 		// Mirrors the detail view display logic
 		const display = state.resolvedModel || state.def.model || "(unknown)";
-		expect(display).toBe("anthropic/claude-opus-4-20250514");
+		expect(display).toBe(DEFAULT_SUBAGENT_MODEL);
 	});
 
 	it("detail view falls back to def.model when resolvedModel empty", () => {

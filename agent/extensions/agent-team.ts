@@ -30,7 +30,7 @@ import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { outputLine } from "./lib/output-box.ts";
+
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
@@ -428,8 +428,10 @@ export default function (pi: ExtensionAPI) {
 			invalidateAgentWidget(state);
 		}, 1000);
 
-		const model = state.def.model
-			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : DEFAULT_SUBAGENT_MODEL);
+		// Use agent's defined model or fall back to default subagent model.
+		// NOTE: We intentionally do NOT inherit the parent model. Each agent
+		// should use its explicitly defined model or the lightweight default.
+		const model = state.def.model || DEFAULT_SUBAGENT_MODEL;
 		state.resolvedModel = model;
 
 		// Session file for this agent
@@ -712,13 +714,6 @@ export default function (pi: ExtensionAPI) {
 			}
 		},
 
-		renderCall(args, theme) {
-			return new Text(
-				outputLine(theme, "accent", "dispatching:"),
-				0, 0,
-			);
-		},
-
 		renderResult(result, options, theme) {
 			const details = result.details as any;
 			if (!details) {
@@ -726,40 +721,19 @@ export default function (pi: ExtensionAPI) {
 				return new Text(text?.type === "text" ? text.text : "", 0, 0);
 			}
 
-			// Map status to subagent-style render state
-			const mapStatus = (s: string): "running" | "done" | "error" => {
-				if (s === "done") return "done";
-				if (s === "dispatching") return "running";
-				if (s === "error") return "error";
-				return "running";
-			};
+			const agent = (details.agent || "?").toLowerCase();
+			const model = details.model || "";
+			const elapsed = typeof details.elapsed === "number" ? Math.round(details.elapsed / 1000) : 0;
+			const status = details.status || "done";
 
-			const renderState: import("./lib/subagent-render.ts").SubRenderState = {
-				id: 0,
-				status: mapStatus(details.status),
-				name: (details.agent || "?").toUpperCase(),
-				task: details.task || "",
-				toolCount: 0,
-				elapsed: typeof details.elapsed === "number" ? details.elapsed : 0,
-				turnCount: 1,
-				summary: details.task || undefined,
-				model: details.model || undefined,
-			};
+			// Single line: dim "dispatching:" + bright white agent | model + dim elapsed
+			const DIM = "\x1b[90m";
+			const BRIGHT = "\x1b[1;97m";
+			const RST = "\x1b[0m";
+			const RED = "\x1b[91m";
 
-			// Determine background color based on status
-			const DISPATCH_BG: Record<string, string> = {
-				running: "\x1b[48;2;26;58;92m",
-				done:    "\x1b[48;2;35;50;55m",
-				error:   "\x1b[48;2;70;35;35m",
-			};
-			const bgFn = (text: string): string => {
-				const bg = DISPATCH_BG[renderState.status] || DISPATCH_BG.running;
-				return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
-			};
-
-			const box = new Box(1, 1, bgFn);
-			const content = new Text("", 0, 0);
-			box.addChild(content);
+			const statusPrefix = status === "error" ? `${RED}✗${RST} ` : "";
+			const line = `${statusPrefix}${DIM}dispatching:${RST} ${BRIGHT}${agent}${RST}${model ? ` ${DIM}|${RST} ${BRIGHT}${model}${RST}` : ""} ${DIM}${elapsed}s${RST}`;
 
 			if (options.expanded && details.fullOutput) {
 				const output = details.fullOutput.length > 4000
@@ -767,34 +741,12 @@ export default function (pi: ExtensionAPI) {
 					: details.fullOutput;
 				const mdTheme = getPiMdTheme();
 				const container = new Container();
-
-				// Subagent-style box for the header
-				const headerBox = new Box(1, 1, bgFn);
-				const headerContent = new Text("", 0, 0);
-				headerBox.addChild(headerContent);
-				container.addChild({
-					render(width: number): string[] {
-						headerBox.setBgFn(bgFn);
-						const widgetResult = renderSubagentWidget(renderState, width, theme);
-						headerContent.setText(widgetResult.lines.join("\n"));
-						return headerBox.render(width);
-					},
-					invalidate() { headerBox.invalidate(); },
-				} as Component);
-
+				container.addChild(new Text(line, 0, 0));
 				container.addChild(new Markdown(output, 2, 0, mdTheme));
 				return container;
 			}
 
-			return {
-				render(width: number): string[] {
-					box.setBgFn(bgFn);
-					const widgetResult = renderSubagentWidget(renderState, width, theme);
-					content.setText(widgetResult.lines.join("\n"));
-					return box.render(width);
-				},
-				invalidate() { box.invalidate(); },
-			} as Component;
+			return new Text(line, 0, 0);
 		},
 	});
 

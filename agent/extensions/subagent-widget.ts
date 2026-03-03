@@ -178,9 +178,10 @@ export default function (pi: ExtensionAPI) {
 		ctx: any,
 		peerNames?: string[],
 	): Promise<void> {
-		// Model priority: 1) caller-specified override, 2) parent model, 3) default
-		const model = state.model
-			|| (ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : DEFAULT_SUBAGENT_MODEL);
+		// Model priority: 1) caller-specified override, 2) default subagent model
+		// NOTE: We intentionally do NOT inherit the parent model. Each subagent
+		// should use its explicitly specified model or the lightweight default.
+		const model = state.model || DEFAULT_SUBAGENT_MODEL;
 		state.model = model;
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
@@ -339,7 +340,7 @@ export default function (pi: ExtensionAPI) {
 			task: Type.String({ description: "The complete task description for the subagent to perform" }),
 			name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT)" })),
 			summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
-			model: Type.Optional(Type.String({ description: "Model to use (e.g. 'anthropic/claude-haiku-4-5', 'grok-4-fast'). Defaults to parent model." })),
+			model: Type.Optional(Type.String({ description: "Model to use (e.g. 'anthropic/claude-haiku-4-5', 'grok-4-fast'). Defaults to lightweight subagent model." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
 		}),

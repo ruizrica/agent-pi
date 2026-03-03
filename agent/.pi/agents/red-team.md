@@ -1,7 +1,6 @@
 ---
 name: red-team
-# model: anthropic/claude-haiku-4-5
-# Omit model to inherit parent (fixes API/model config issues). Uncomment to use Haiku.
+model: anthropic/claude-haiku-4-5
 description: Security and adversarial testing — finds vulnerabilities and failure modes
 tools: read,bash,grep,find,ls
 ---
