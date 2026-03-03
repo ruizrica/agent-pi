@@ -341,6 +341,10 @@ export default function (pi: ExtensionAPI) {
 	// ── Auto-nudge on agent_end ────────────────────────────────────────
 
 	pi.on("agent_end", async (_event, _ctx) => {
+		// Sub-agents are managed by their parent — skip nudge to avoid
+		// injecting a user message that can break tool_use/tool_result pairing
+		if (process.env.PI_SUBAGENT === "1") return;
+
 		const incomplete = tasks.filter((t) => t.status !== "done");
 		if (incomplete.length === 0 || nudgedThisCycle) return;
 

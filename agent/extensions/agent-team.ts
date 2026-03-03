@@ -38,6 +38,7 @@ import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts"
 import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
+import { renderSubagentWidget } from "./lib/subagent-render.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -64,6 +65,9 @@ interface AgentState {
 	timer?: ReturnType<typeof setInterval>;
 	_warnSent?: boolean;
 	_criticalWarned?: boolean;
+	widgetId: number;           // unique ID for subagent-style widget
+	textChunks: string[];       // streaming text for widget summary
+	summary?: string;           // short summary shown in widget
 }
 
 // ── Display Name Helper ──────────────────────────
@@ -183,6 +187,18 @@ export default function (pi: ExtensionAPI) {
 	let widgetCompact = true;
 	let selectedAgentIndex = -1; // -1 = no selection
 	let taskListState: TaskListState = { selectedIndex: -1, scrollOffset: 0 };
+	let nextWidgetId = 1;
+	const agentWidgetBoxes = new Map<number, { invalidate: () => void }>();
+
+	// ── Dark background colors for agent status (matches subagent-widget) ────
+	const STATUS_BG: Record<string, string> = {
+		running: "\x1b[48;2;26;58;92m",   // dark steel blue
+		done:    "\x1b[48;2;35;50;55m",    // dark teal-gray
+		error:   "\x1b[48;2;70;35;35m",    // dark muted red
+	};
+	const RESET_BG = "\x1b[49m";
+	const WHITE_BOLD = "\x1b[1;97m";  // bold bright white text
+	const RESET_ALL = "\x1b[0m";
 
 	function loadAgents(cwd: string) {
 		const extDir = dirname(fileURLToPath(import.meta.url));
@@ -241,6 +257,9 @@ export default function (pi: ExtensionAPI) {
 				sessionFile: existsSync(sessionFile) ? sessionFile : null,
 				runCount: 0,
 				resolvedModel: "",
+				widgetId: nextWidgetId++,
+				textChunks: [],
+				summary: undefined,
 			});
 		}
 
@@ -249,179 +268,115 @@ export default function (pi: ExtensionAPI) {
 		gridCols = size <= 3 ? size : size === 4 ? 2 : 3;
 	}
 
-	// ── Grid Rendering ───────────────────────────
+	// ── Per-Agent Widget Rendering (subagent-style) ──────────────────
 
-	// No longer needed - we're using pills only
+	function registerAgentWidget(state: AgentState) {
+		if (!widgetCtx) return;
+		const key = `agent-${state.widgetId}`;
+		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
+			const bgFn = (text: string): string => {
+				const bg = STATUS_BG[state.status] || STATUS_BG.running;
+				return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
+			};
+
+			const box = new Box(1, 1, bgFn);
+			const content = new Text("", 0, 0);
+			box.addChild(content);
+			agentWidgetBoxes.set(state.widgetId, { invalidate: () => box.invalidate() });
+
+			return {
+				render(width: number): string[] {
+					box.setBgFn((text: string): string => {
+						const bg = STATUS_BG[state.status] || STATUS_BG.running;
+						return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
+					});
+
+					const renderState = {
+						id: state.widgetId,
+						status: state.status as "running" | "done" | "error",
+						name: state.def.name.toUpperCase(),
+						task: state.task,
+						toolCount: state.toolCount,
+						elapsed: state.elapsed,
+						turnCount: state.runCount,
+						summary: state.summary,
+					};
+					const result = renderSubagentWidget(renderState, width, theme);
+					content.setText(result.lines.join("\n"));
+					return box.render(width);
+				},
+				invalidate() {
+					box.invalidate();
+				},
+			};
+		});
+	}
+
+	function invalidateAgentWidget(state: AgentState) {
+		agentWidgetBoxes.get(state.widgetId)?.invalidate();
+	}
+
+	function removeAgentWidget(state: AgentState) {
+		if (!widgetCtx) return;
+		widgetCtx.ui.setWidget(`agent-${state.widgetId}`, undefined);
+		agentWidgetBoxes.delete(state.widgetId);
+	}
+
+	function removeAllAgentWidgets() {
+		if (!widgetCtx) return;
+		for (const state of agentStates.values()) {
+			widgetCtx.ui.setWidget(`agent-${state.widgetId}`, undefined);
+		}
+		agentWidgetBoxes.clear();
+	}
+
+	// ── Combined Widget (task list only) ──────────────────────────────
 
 	function updateWidget() {
 		if (!widgetCtx) return;
 
-		widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
-			const text = new Text("", 0, 0);
+		// Task list widget (above editor)
+		const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
+		if (taskList && taskList.tasks.length > 0) {
+			widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
+				const text = new Text("", 0, 0);
 
-			return {
-				render(width: number): string[] {
-					if (agentStates.size === 0) {
-						text.setText(theme.fg("dim", "No agents found. Add .md files to agents/"));
-						return text.render(width);
-					}
-
-					// Filter out only idle agents - show all others including completed ones
-					const active = Array.from(agentStates.values()).filter(
-						(a) => a.status !== "idle",
-					);
-
-					// Sort: done/error first (left), running last (right) - rightmost will be active if any
-					active.sort((a, b) => {
-						const statusOrder: Record<string, number> = { "done": 0, "error": 0, "running": 1 };
-						const aOrder = statusOrder[a.status] ?? 0;
-						const bOrder = statusOrder[b.status] ?? 0;
-						return aOrder - bOrder;
-					});
-
-					if (widgetCompact) {
-						// Compact mode: task list + agent pills
-						const allLines: string[] = [];
-
-						// ── Task list widget ──────────────────────────
-						const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
-						if (taskList && taskList.tasks.length > 0) {
-							const termHeight = process.stdout.rows || 24;
-							// Reserve lines for agent pills (1) + some breathing room
-							const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
-							const taskLines = renderTaskList(
-								taskList, taskListState, width, availableHeight,
-								{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t) },
-							);
-							const taskBg = "\x1b[48;5;236m";
-							const taskReset = "\x1b[0m";
-							const emptyPad = taskBg + padRight("", width) + taskReset;
-							allLines.push(emptyPad);
-							allLines.push(...taskLines.map(l => taskBg + padRight(l, width) + taskReset));
-							allLines.push(emptyPad);
-						}
-
-						// ── Agent pills line ─────────────────────────
-						if (active.length === 0 && allLines.length === 0) {
+				return {
+					render(width: number): string[] {
+						const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
+						if (!tl || tl.tasks.length === 0) {
 							text.setText("");
 							return [];
 						}
 
-						if (active.length > 0) {
-							if (allLines.length > 0) allLines.push(""); // spacer
-
-							// Try with full names + model first
-							const sep = theme.fg("dim", "  ");
-							let parts = active.map((a) => {
-								const name = displayName(a.def.name);
-								const model = a.def.model ? ` | ${a.def.model}` : "";
-								return statusButton(a.status, name + model, theme);
-							});
-							let right = parts.join(sep);
-							let rightVis = visibleWidth(right);
-
-							if (rightVis > width) {
-								// Try full names without model
-								parts = active.map((a) => {
-									const name = displayName(a.def.name);
-									return statusButton(a.status, name, theme);
-								});
-								right = parts.join(sep);
-								rightVis = visibleWidth(right);
-							}
-							if (rightVis > width) {
-								// Switch to abbreviated names (no model)
-								parts = active.map((a) => {
-									const name = abbreviateAgentName(a.def.name);
-									return statusButton(a.status, name, theme);
-								});
-								right = parts.join(sep);
-							}
-
-							allLines.push(right);
-						}
+						const termHeight = process.stdout.rows || 24;
+						const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
+						const taskLines = renderTaskList(
+							tl, taskListState, width, availableHeight,
+							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t) },
+						);
+						const taskBg = "\x1b[48;5;236m";
+						const taskReset = "\x1b[0m";
+						const emptyPad = taskBg + padRight("", width) + taskReset;
+						const allLines: string[] = [];
+						allLines.push(emptyPad);
+						allLines.push(...taskLines.map(l => taskBg + padRight(l, width) + taskReset));
+						allLines.push(emptyPad);
 
 						text.setText(allLines.join("\n"));
 						return allLines;
-					}
+					},
+					invalidate() {
+						text.invalidate();
+					},
+				};
+			}, { placement: "aboveEditor" });
+		} else {
+			// No task list — remove the combined widget
+			widgetCtx.ui.setWidget("agent-team", undefined);
+		}
 
-					// Expanded mode: show selectable pills in a row
-					if (active.length === 0) {
-						// Reset selection if no agents available
-						if (selectedAgentIndex >= 0) {
-							selectedAgentIndex = -1;
-						}
-						text.setText(theme.fg("dim", "No agents available. Press F1/F2 to navigate when agents are running."));
-						return text.render(width);
-					}
-
-					// Reset selection if it's out of bounds (agent completed)
-					if (selectedAgentIndex >= active.length) {
-						selectedAgentIndex = -1;
-					}
-
-					// Map selectedAgentIndex to filtered active agents
-					const selectedActiveIndex = selectedAgentIndex >= 0 && selectedAgentIndex < active.length 
-						? selectedAgentIndex 
-						: -1;
-
-					// Add hint text if selection is active
-					let hint = "";
-					if (selectedActiveIndex >= 0) {
-						hint = theme.fg("dim", "  (F3: details, F4: exit)");
-					}
-					const hintVis = visibleWidth(hint);
-
-					// Try with full names first
-					const sep = theme.fg("dim", "  ");
-					let nameFormatter = (name: string) => displayName(name);
-					let pills = active.map((a, idx) => {
-						const name = nameFormatter(a.def.name);
-						const pill = statusButton(a.status, name, theme);
-						
-						// Add selection indicator (border around selected pill)
-						if (idx === selectedActiveIndex) {
-							// Wrap with selection border: [pill]
-							return theme.fg("accent", "[") + pill + theme.fg("accent", "]");
-						}
-						return pill;
-					});
-
-					let pillsLine = pills.join(sep);
-					let pillsVis = visibleWidth(pillsLine);
-					let totalVis = pillsVis + hintVis;
-
-					// Check if pills fit
-					if (totalVis > width) {
-						// Switch to abbreviated names
-						nameFormatter = abbreviateAgentName;
-						pills = active.map((a, idx) => {
-							const name = nameFormatter(a.def.name);
-							const pill = statusButton(a.status, name, theme);
-							
-							// Add selection indicator (border around selected pill)
-							if (idx === selectedActiveIndex) {
-								// Wrap with selection border: [pill]
-								return theme.fg("accent", "[") + pill + theme.fg("accent", "]");
-							}
-							return pill;
-						});
-						pillsLine = pills.join(sep);
-						pillsVis = visibleWidth(pillsLine);
-						totalVis = pillsVis + hintVis;
-					}
-					
-					// Right-align pills: pad left side to push pills to the right
-					const padding = Math.max(0, width - totalVis);
-					const output = " ".repeat(padding) + pillsLine + hint;
-					text.setText(output);
-					return text.render(width);
-				},
-				invalidate() {
-					text.invalidate();
-				},
-			};
-		}, { placement: "aboveEditor" });
+		// Individual agent widgets are managed separately via registerAgentWidget/invalidateAgentWidget
 
 		// Re-pin mode bar as the last aboveEditor widget so it stays directly above the editor input.
 		// Without this, the agent-team widget (tasks) would render between the mode bar and the editor.
@@ -460,13 +415,16 @@ export default function (pi: ExtensionAPI) {
 		state.toolCount = 0;
 		state.elapsed = 0;
 		state.lastWork = "";
+		state.textChunks = [];
+		state.summary = undefined;
 		state.runCount++;
+		registerAgentWidget(state);
 		updateWidget();
 
 		const startTime = Date.now();
 		state.timer = setInterval(() => {
 			state.elapsed = Date.now() - startTime;
-			updateWidget();
+			invalidateAgentWidget(state);
 		}, 1000);
 
 		const model = state.def.model
@@ -568,14 +526,16 @@ export default function (pi: ExtensionAPI) {
 							const delta = event.assistantMessageEvent;
 							if (delta?.type === "text_delta") {
 								textChunks.push(delta.delta || "");
+								state.textChunks.push(delta.delta || "");
 								const full = textChunks.join("");
 								const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
 								state.lastWork = last;
-								updateWidget();
+								state.summary = last;
+								invalidateAgentWidget(state);
 							}
 						} else if (event.type === "tool_execution_start") {
 							state.toolCount++;
-							updateWidget();
+							invalidateAgentWidget(state);
 						} else if (event.type === "message_end") {
 							const msg = event.message;
 							if (msg?.usage && contextWindow > 0) {
@@ -588,14 +548,14 @@ export default function (pi: ExtensionAPI) {
 									state._criticalWarned = true;
 									ctx.ui.notify(`${displayName(state.def.name)} context at ${Math.round(state.contextPct)}% — risk of context loss`, "warning");
 								}
-								updateWidget();
+								invalidateAgentWidget(state);
 							}
 						} else if (event.type === "agent_end") {
 							const msgs = event.messages || [];
 							const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
 							if (last?.usage && contextWindow > 0) {
 								state.contextPct = ((last.usage.input || 0) / contextWindow) * 100;
-								updateWidget();
+								invalidateAgentWidget(state);
 							}
 						}
 					} catch {}
@@ -638,7 +598,16 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 				state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
-				updateWidget();
+				state.summary = state.lastWork;
+				invalidateAgentWidget(state);
+
+				// Auto-remove widget ~30s after done
+				const widgetId = state.widgetId;
+				setTimeout(() => {
+					if (state.status !== "running") {
+						removeAgentWidget(state);
+					}
+				}, 30_000);
 
 				// Post-dispatch: reconcile Commander task to terminal state
 				if (commanderAvailable && taskId !== undefined) {
@@ -668,7 +637,16 @@ export default function (pi: ExtensionAPI) {
 				clearInterval(state.timer);
 				state.status = "error";
 				state.lastWork = `Error: ${err.message}`;
-				updateWidget();
+				state.summary = state.lastWork;
+				invalidateAgentWidget(state);
+
+				// Auto-remove widget ~30s after error
+				setTimeout(() => {
+					if (state.status !== "running") {
+						removeAgentWidget(state);
+					}
+				}, 30_000);
+
 				resolve({
 					output: `Error spawning agent: ${err.message}`,
 					exitCode: 1,
@@ -850,6 +828,9 @@ export default function (pi: ExtensionAPI) {
 			widgetCtx = ctx;
 			ctx.ui.setWidget("agent-team", undefined);
 
+			// Remove all individual agent widgets
+			removeAllAgentWidgets();
+
 			// Reset all agent states to idle so the widget can reappear on next dispatch
 			for (const state of agentStates.values()) {
 				if (state.status === "done" || state.status === "error") {
@@ -860,6 +841,8 @@ export default function (pi: ExtensionAPI) {
 					state.lastWork = "";
 					state.contextPct = 0;
 					state.resolvedModel = "";
+					state.textChunks = [];
+					state.summary = undefined;
 				}
 			}
 			selectedAgentIndex = -1;
@@ -1201,15 +1184,18 @@ ${agentCatalog}${commanderSection}`,
 		state.lastWork = "";
 		state.contextPct = 0;
 		state.resolvedModel = "";
+		state.textChunks = [];
+		state.summary = undefined;
 	}
 
 	// ── Reset agent boxes on new message ───────────────────────────────
 
 	pi.on("input", () => {
 		// When user sends a new message, reset completed/error agents to idle
-		// so the boxes display cleanly for the new task
+		// and remove their individual widgets so boxes display cleanly for the new task
 		for (const state of agentStates.values()) {
 			if (state.status === "done" || state.status === "error") {
+				removeAgentWidget(state);
 				resetAgentState(state);
 			}
 		}
@@ -1223,6 +1209,7 @@ ${agentCatalog}${commanderSection}`,
 		if (widgetCtx) {
 			widgetCtx.ui.setWidget("agent-team", undefined);
 		}
+		removeAllAgentWidgets();
 		widgetCtx = _ctx;
 		for (const state of agentStates.values()) {
 			resetAgentState(state);
@@ -1238,6 +1225,7 @@ ${agentCatalog}${commanderSection}`,
 		if (widgetCtx) {
 			widgetCtx.ui.setWidget("agent-team", undefined);
 		}
+		removeAllAgentWidgets();
 		widgetCtx = _ctx;
 		contextWindow = _ctx.model?.contextWindow || 0;
 
