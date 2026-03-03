@@ -225,21 +225,68 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet: "Compact → clear → restore: fresh context with full memory",
 		promptGuidelines: [
 			"Use cycle_memory when context usage is high (>70%) or the user asks to compact/cycle/refresh memory.",
-			"After cycle_memory runs, the session will restart — your next response will be in the fresh session.",
+			"After cycle_memory completes, you will have a fresh context window with full memory of what happened.",
 		],
 		parameters: CycleParams,
-		async execute(_toolCallId, params: { instructions?: string }, _signal, _onUpdate, _ctx) {
-			const args = params.instructions ?? "";
-			pi.sendUserMessage(`/cycle ${args}`.trim(), { deliverAs: "followUp" });
+		async execute(_toolCallId, params: { instructions?: string }, _signal, _onUpdate, ctx) {
+			const customInstructions = params.instructions?.trim() || undefined;
+
+			// Compact directly using ctx.compact() — same approach as footer auto-compaction.
+			// The session_before_compact hook saves daily log + session state automatically.
+			const compactionResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+				ctx.compact({
+					customInstructions: customInstructions
+						?? "Create a comprehensive summary preserving all goals, decisions, progress, file changes, and context needed to continue work seamlessly.",
+					onComplete: () => {
+						resolve({ success: true });
+					},
+					onError: (err: Error) => {
+						resolve({ success: false, error: err.message });
+					},
+				});
+			});
+
+			if (!compactionResult.success) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Memory cycle failed: ${compactionResult.error}. Try /compact manually.`,
+						},
+					],
+					details: { status: "failed", error: compactionResult.error },
+				};
+			}
+
+			// Read restored context for the agent
+			const sessionState = readSessionState(ctx.cwd);
+			const recentLogs = readRecentLogs();
+			const parts = buildRestorationContent(sessionState);
+
+			if (recentLogs) {
+				parts.push("", recentLogs);
+			}
+
+			// Send a follow-up message to nudge the agent to continue working
+			pi.sendMessage(
+				{
+					customType: "memory-cycle-resume",
+					content: "Memory cycle complete. Context compacted and restored. Continue where you left off — resume the task you were working on.",
+					display: false,
+				},
+				{ deliverAs: "followUp", triggerTurn: true },
+			);
+
+			ctx.ui.notify("Memory Cycle complete — context compacted and restored", "success");
 
 			return {
 				content: [
 					{
 						type: "text",
-						text: "Memory cycle queued. The session will compact, clear, and restore momentarily.",
+						text: `Memory cycle complete. Context compacted and memory preserved.\n\n${parts.join("\n")}`,
 					},
 				],
-				details: { status: "queued", instructions: params.instructions },
+				details: { status: "complete", instructions: params.instructions },
 			};
 		},
 	});
