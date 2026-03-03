@@ -21,7 +21,7 @@ interface AgentState {
 	resolvedModel: string;
 }
 
-const DEFAULT_SUBAGENT_MODEL = "openrouter/google/gemini-3-flash-preview";
+const DEFAULT_SUBAGENT_MODEL = "anthropic/claude-haiku-4-5-20251001";
 
 /**
  * Mirrors model resolution logic from agent-team.ts dispatchAgent().
