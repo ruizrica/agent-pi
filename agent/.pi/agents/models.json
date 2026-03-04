@@ -1,0 +1,32 @@
+{
+  "default": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "agents": {
+    "scout": {
+      "provider": "x-ai",
+      "model": "grok-4.1-fast"
+    },
+    "builder": {
+      "provider": "mercury",
+      "model": "mercury-2"
+    },
+    "reviewer": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-6"
+    },
+    "planner": {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview"
+    },
+    "tester": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    },
+    "red-team": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    }
+  }
+}

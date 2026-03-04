@@ -20,4 +20,9 @@ agent/pi-crash.log
 # Generated artifacts
 .pi/agent-sessions/
 .pi/debug-captures/
+.pi/web-test-captures/
 agent/extensions/coverage/
+
+# Secrets
+agent/extensions/web-test-worker/.env
+agent/extensions/web-test-worker/node_modules/

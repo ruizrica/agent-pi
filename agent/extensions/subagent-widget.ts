@@ -29,6 +29,7 @@ import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
 import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
+import { scanAgentDefs, resolveAgentByName, loadAgentModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
 
@@ -93,6 +94,14 @@ export default function (pi: ExtensionAPI) {
 	let nextId = 1;
 	let widgetCtx: any;
 	const widgetBoxes = new Map<number, { invalidate: () => void }>();
+
+	// ── Agent definition registry (loaded from .md files + models.json) ───────
+	// Maps lowercase agent names to their definitions. Model assignments come from
+	// .pi/agents/models.json — not from .md frontmatter. When subagent_create is
+	// called with a name matching a known agent, we auto-apply that agent's
+	// configured model, tools, and system prompt.
+	let knownAgents: Map<string, AgentDef> = new Map();
+	let modelsConfig: AgentModelsConfig | null = null;
 
 	// ── Session file helpers ──────────────────────────────────────────────────
 
@@ -178,10 +187,14 @@ export default function (pi: ExtensionAPI) {
 		ctx: any,
 		peerNames?: string[],
 	): Promise<void> {
-		// Model priority: 1) caller-specified override, 2) default subagent model
-		// NOTE: We intentionally do NOT inherit the parent model. Each subagent
-		// should use its explicitly specified model or the lightweight default.
-		const model = state.model || DEFAULT_SUBAGENT_MODEL;
+		// Model resolution priority:
+		// 1) Caller-specified override (state.model set by tool call)
+		// 2) Agent definition model (from .md file, resolved via models.json)
+		// 3) models.json agent entry (even without .md file)
+		// 4) models.json default entry
+		const agentDef = resolveAgentByName(state.name, knownAgents);
+		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
+		const model = state.model || agentDef?.model || configModel || DEFAULT_SUBAGENT_MODEL;
 		state.model = model;
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
@@ -194,7 +207,8 @@ export default function (pi: ExtensionAPI) {
 		const commanderAvail = isCommanderAvailable();
 		const cmdTaskId = state.commanderTaskId;
 
-		let tools = "read,bash,grep,find,ls";
+		// Tools: use agent definition tools if available, else default set
+		let tools = agentDef?.tools || "read,bash,grep,find,ls";
 		const extensions = ["-e", tasksExtPath, "-e", footerExtPath, "-e", memoryCycleExtPath];
 		if (commanderAvail) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
@@ -203,8 +217,11 @@ export default function (pi: ExtensionAPI) {
 			extensions.push("-e", commanderExtPath);
 		}
 
-		// Build system prompt with Commander discipline
+		// Build system prompt: agent definition prompt + Commander discipline
 		const systemPromptArgs: string[] = [];
+		if (agentDef?.systemPrompt) {
+			systemPromptArgs.push("--append-system-prompt", agentDef.systemPrompt);
+		}
 		if (commanderAvail) {
 			const cmdPrompt = buildCommanderPrompt({
 				agentName: `SA-${state.id}-${state.name}`,
@@ -337,12 +354,12 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_create",
-		description: "Spawn a background subagent to perform a task. Returns the subagent ID immediately while it runs in the background. Results will be delivered as a follow-up message when finished.",
+		description: "Spawn a background subagent to perform a task. Returns the subagent ID immediately while it runs in the background. Results will be delivered as a follow-up message when finished.\n\nWhen `name` matches a known agent definition (scout, builder, reviewer, planner, tester, red-team), that agent's configured model, tools, and system prompt are automatically applied. Only set `model` to override the agent's default.",
 		parameters: Type.Object({
 			task: Type.String({ description: "The complete task description for the subagent to perform" }),
-			name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT)" })),
+			name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT). If this matches a known agent definition, that agent's model/tools/prompt are auto-applied." })),
 			summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
-			model: Type.Optional(Type.String({ description: "Model to use (e.g. 'anthropic/claude-haiku-4-5', 'x-ai/grok-4.1-fast'). Defaults to lightweight subagent model." })),
+			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
 		}),
@@ -378,13 +395,13 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_create_batch",
-		description: "Spawn multiple subagents at once with optional Commander task group. Pre-creates Commander tasks to avoid race conditions where multiple agents try to claim the same task.",
+		description: "Spawn multiple subagents at once with optional Commander task group. Pre-creates Commander tasks to avoid race conditions where multiple agents try to claim the same task.\n\nWhen an agent's `name` matches a known agent definition, that agent's configured model, tools, and system prompt are automatically applied.",
 		parameters: Type.Object({
 			agents: Type.Array(Type.Object({
 				task: Type.String({ description: "The complete task description for the subagent" }),
-				name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT)" })),
+				name: Type.Optional(Type.String({ description: "Short role label (e.g. REVIEWER, SCOUT). If this matches a known agent definition, that agent's model/tools/prompt are auto-applied." })),
 				summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
-				model: Type.Optional(Type.String({ description: "Model override for this agent (e.g. 'anthropic/claude-haiku-4-5')" })),
+				model: Type.Optional(Type.String({ description: "Model override. Only set to override the agent definition's default model." })),
 			}), { description: "Array of agent definitions to spawn" }),
 			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~30s after done (default: true)" })),
@@ -708,5 +725,12 @@ export default function (pi: ExtensionAPI) {
 		widgetBoxes.clear();
 		nextId = 1;
 		widgetCtx = ctx;
+
+		// Load model config from .pi/agents/models.json, then scan agent .md files.
+		// Models come from the JSON config; .md files provide tools + system prompts.
+		const extDir = path.dirname(fileURLToPath(import.meta.url));
+		const extProjectDir = path.resolve(extDir, "..");
+		modelsConfig = loadAgentModelsConfig(ctx.cwd || process.cwd(), extProjectDir);
+		knownAgents = scanAgentDefs(ctx.cwd || process.cwd(), extProjectDir, modelsConfig);
 	});
 }

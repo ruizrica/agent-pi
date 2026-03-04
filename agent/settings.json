@@ -27,7 +27,8 @@
     "extensions/agent-nav.ts",
     "extensions/footer.ts",
     "extensions/memory-cycle.ts",
-    "extensions/message-integrity-guard.ts"
+    "extensions/message-integrity-guard.ts",
+    "extensions/web-test.ts"
   ],
   "editorPaddingX": 2,
   "showHardwareCursor": true,

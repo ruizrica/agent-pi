@@ -1,6 +1,5 @@
 ---
 name: builder
-model: anthropic/claude-haiku-4-5
 description: Implementation and code generation — writes clean, minimal code following existing patterns
 tools: read,write,edit,bash,grep,find,ls
 ---

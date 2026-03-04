@@ -1,6 +1,5 @@
 ---
 name: tester
-model: anthropic/claude-haiku-4-5
 description: Test writing and execution — creates comprehensive tests and validates implementations
 tools: read,bash,grep,find,ls
 ---

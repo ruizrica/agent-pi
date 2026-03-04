@@ -1,6 +1,5 @@
 ---
 name: planner
-model: gemini-3.1-pro-preview
 description: Architecture and implementation planning — produces actionable step-by-step plans
 tools: read,grep,find,ls
 ---

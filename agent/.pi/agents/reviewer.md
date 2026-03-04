@@ -1,6 +1,5 @@
 ---
 name: reviewer
-model: claude-opus-4-6
 description: Code review and quality checks — finds bugs, security issues, and style problems
 tools: read,bash,grep,find,ls
 ---

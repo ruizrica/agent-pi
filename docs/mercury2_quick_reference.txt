@@ -1,0 +1,104 @@
+===================================================================
+MERCURY 2 API - QUICK REFERENCE CARD
+===================================================================
+
+ENDPOINT:
+  POST https://web-api-proxy.inceptionlabs.ai/v1/playground
+
+REQUIRED HEADERS:
+  Content-Type: application/json
+  Origin: https://www.inceptionlabs.ai
+  Referer: https://www.inceptionlabs.ai/
+  User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+AUTHENTICATION:
+  None (header-based validation only)
+
+MODELS AVAILABLE:
+  - mercury-2
+
+MINIMAL REQUEST:
+  {
+    "model": "mercury-2",
+    "messages": [{"role": "user", "content": "your message"}],
+    "stream": true
+  }
+
+FULL REQUEST WITH OPTIONS:
+  {
+    "model": "mercury-2",
+    "messages": [{"role": "user", "content": "your message"}],
+    "max_tokens": 8000,
+    "stream": true,
+    "diffusing": false,
+    "reasoning_effort": "instant"
+  }
+
+REASONING EFFORT VALUES:
+  - instant (default, fast)
+  - low
+  - medium
+  - high (slower, more thorough)
+
+RESPONSE FORMAT (Streaming):
+  Server-Sent Events
+  data: {"choices":[{"delta":{"content":"token"}}]}
+  data: [DONE]
+
+RESPONSE FORMAT (Non-Streaming):
+  JSON object (exact format undocumented)
+
+FEATURES:
+  - Streaming responses (SSE)
+  - Configurable reasoning effort
+  - Diffusing mode (intermediate outputs)
+  - Configurable token limits
+
+LIMITATIONS:
+  - No API key system
+  - Single model
+  - No official documentation accessible
+  - Unknown rate limits
+  - NOT OpenAI-compatible
+
+TYPICAL USE CASE:
+  1. Set up headers with Origin/Referer
+  2. POST JSON with messages
+  3. Stream responses using SSE parser
+  4. Stop when receiving [DONE]
+
+PYTHON QUICK START:
+  import requests
+  url = "https://web-api-proxy.inceptionlabs.ai/v1/playground"
+  headers = {
+    "Content-Type": "application/json",
+    "Origin": "https://www.inceptionlabs.ai",
+    "Referer": "https://www.inceptionlabs.ai/",
+    "User-Agent": "Mozilla/5.0..."
+  }
+  payload = {
+    "model": "mercury-2",
+    "messages": [{"role": "user", "content": "hi"}],
+    "stream": true,
+    "diffusing": false
+  }
+  response = requests.post(url, headers=headers, json=payload, stream=True)
+  for line in response.iter_lines():
+    if line and line.startswith(b"data: "):
+      content = line[6:].decode('utf-8')
+      if content == "[DONE]": break
+      print(content)
+
+CURL EXAMPLE:
+  curl -X POST https://web-api-proxy.inceptionlabs.ai/v1/playground \
+    -H "Content-Type: application/json" \
+    -H "Origin: https://www.inceptionlabs.ai" \
+    -H "Referer: https://www.inceptionlabs.ai/" \
+    -d '{"model":"mercury-2","messages":[{"role":"user","content":"hello"}]}'
+
+SOURCES:
+  - GitHub: github.com/yjyrichard/mercury-chat
+  - Demo: mercury-chat-theta.vercel.app
+  - Website: inceptionlabs.ai
+
+===================================================================

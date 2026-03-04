@@ -33,6 +33,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
+import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
 import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
@@ -109,7 +110,7 @@ function parseTeamsYaml(raw: string): Record<string, string[]> {
 
 // ── Frontmatter Parser ───────────────────────────
 
-function parseAgentFile(filePath: string): AgentDef | null {
+function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): AgentDef | null {
 	try {
 		const raw = readFileSync(filePath, "utf-8");
 		const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -125,11 +126,24 @@ function parseAgentFile(filePath: string): AgentDef | null {
 
 		if (!frontmatter.name) return null;
 
+		// Model resolution: models.json > frontmatter fallback > empty
+		let model = "";
+		if (modelsConfig) {
+			const key = frontmatter.name.toLowerCase();
+			const entry = modelsConfig.agents[key];
+			if (entry) {
+				model = resolveAgentModelString(frontmatter.name, modelsConfig);
+			}
+		}
+		if (!model && frontmatter.model) {
+			model = frontmatter.model;
+		}
+
 		return {
 			name: frontmatter.name,
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
-			model: frontmatter.model || "",
+			model,
 			systemPrompt: match[2].trim(),
 			file: filePath,
 		};
@@ -138,7 +152,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
 	}
 }
 
-function scanAgentDirs(cwd: string, extProjectDir?: string): AgentDef[] {
+function scanAgentDirs(cwd: string, extProjectDir?: string, modelsConfig?: AgentModelsConfig): AgentDef[] {
 	const dirs = [
 		join(cwd, "agents"),
 		join(cwd, ".claude", "agents"),
@@ -158,7 +172,7 @@ function scanAgentDirs(cwd: string, extProjectDir?: string): AgentDef[] {
 					if (file.isDirectory()) {
 						scan(fullPath);
 					} else if (file.name.endsWith(".md")) {
-						const def = parseAgentFile(fullPath);
+						const def = parseAgentFile(fullPath, modelsConfig);
 						if (def && !seen.has(def.name.toLowerCase())) {
 							seen.add(def.name.toLowerCase());
 							agents.push(def);
@@ -210,8 +224,9 @@ export default function (pi: ExtensionAPI) {
 			mkdirSync(sessionDir, { recursive: true });
 		}
 
-		// Load all agent definitions
-		allAgentDefs = scanAgentDirs(cwd, extProjectDir);
+		// Load model config from .pi/agents/models.json, then scan agent .md files
+		const modelsConfig = loadAgentModelsConfig(cwd, extProjectDir);
+		allAgentDefs = scanAgentDirs(cwd, extProjectDir, modelsConfig);
 
 		// Load teams from .pi/agents/teams.yaml (fallback to extension project dir)
 		let teamsPath = join(cwd, ".pi", "agents", "teams.yaml");

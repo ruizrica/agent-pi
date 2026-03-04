@@ -1,0 +1,8 @@
+name = "pi-web-test"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+account_id = "f480061746aebedc3a99362ce838ca63"
+
+[browser]
+binding = "BROWSER"

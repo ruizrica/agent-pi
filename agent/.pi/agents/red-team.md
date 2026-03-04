@@ -1,6 +1,5 @@
 ---
 name: red-team
-model: anthropic/claude-haiku-4-5
 description: Security and adversarial testing — finds vulnerabilities and failure modes
 tools: read,bash,grep,find,ls
 ---

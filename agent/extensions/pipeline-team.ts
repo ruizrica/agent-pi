@@ -35,6 +35,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { outputLine, outputBox, type BarColor } from "./lib/output-box.ts";
 import { renderVerticalTimeline, renderCollapsedTimeline, statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
+import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
 
 // ── Types ────────────────────────────────────────
@@ -75,7 +76,7 @@ function displayName(name: string): string {
 
 // ── Frontmatter Parser (reused from agent-team) ──
 
-function parseAgentFile(filePath: string): AgentDef | null {
+function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): AgentDef | null {
 	try {
 		const raw = readFileSync(filePath, "utf-8");
 		const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -91,11 +92,24 @@ function parseAgentFile(filePath: string): AgentDef | null {
 
 		if (!frontmatter.name) return null;
 
+		// Model resolution: models.json > frontmatter fallback > empty
+		let model = "";
+		if (modelsConfig) {
+			const key = frontmatter.name.toLowerCase();
+			const entry = modelsConfig.agents[key];
+			if (entry) {
+				model = resolveAgentModelString(frontmatter.name, modelsConfig);
+			}
+		}
+		if (!model && frontmatter.model) {
+			model = frontmatter.model;
+		}
+
 		return {
 			name: frontmatter.name,
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
-			model: frontmatter.model || "",
+			model,
 			systemPrompt: match[2].trim(),
 		};
 	} catch {
@@ -103,7 +117,7 @@ function parseAgentFile(filePath: string): AgentDef | null {
 	}
 }
 
-function scanAgentDirs(cwd: string, extProjectDir?: string): Map<string, AgentDef> {
+function scanAgentDirs(cwd: string, extProjectDir?: string, modelsConfig?: AgentModelsConfig): Map<string, AgentDef> {
 	const dirs = [
 		join(cwd, "agents"),
 		join(cwd, ".claude", "agents"),
@@ -119,7 +133,7 @@ function scanAgentDirs(cwd: string, extProjectDir?: string): Map<string, AgentDe
 			for (const file of readdirSync(dir)) {
 				if (!file.endsWith(".md")) continue;
 				const fullPath = resolve(dir, file);
-				const def = parseAgentFile(fullPath);
+				const def = parseAgentFile(fullPath, modelsConfig);
 				if (def && !agents.has(def.name.toLowerCase())) {
 					agents.set(def.name.toLowerCase(), def);
 				}
@@ -181,7 +195,10 @@ export default function (pi: ExtensionAPI) {
 
 		const extDir = dirname(fileURLToPath(import.meta.url));
 		const extProjectDir = resolve(extDir, "..");
-		allAgents = scanAgentDirs(cwd, extProjectDir);
+
+		// Load model config from .pi/agents/models.json, then scan agent .md files
+		const modelsConfig = loadAgentModelsConfig(cwd, extProjectDir);
+		allAgents = scanAgentDirs(cwd, extProjectDir, modelsConfig);
 
 		// Look for config in cwd first, fall back to extension's own project dir
 		let configPath = join(cwd, ".pi", "agents", "pipeline-team.yaml");
