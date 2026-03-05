@@ -387,17 +387,23 @@ function isAllowlisted(text: string, allowlist: string[]): boolean {
 }
 
 /**
- * Scan a bash command for dangerous patterns.
- * Returns all matched threats (may be multiple per command).
+ * Split a command string on shell chaining operators (; && || |).
+ * Preserves pipes for pattern matching (curl|bash), but splits on
+ * standalone semicolons and logical operators.
+ * Returns individual sub-commands for separate scanning.
  */
-export function scanCommand(cmd: string, policy: SecurityPolicy): ThreatResult[] {
-	if (!policy.settings.enabled) return [];
+function splitChainedCommands(cmd: string): string[] {
+	// Split on ; && || but NOT on | alone (pipes are part of patterns like curl|bash)
+	// Also handle newlines as command separators
+	const parts = cmd.split(/\s*(?:;\s*|&&\s*|\|\|\s*|\n)\s*/);
+	return parts.map((p) => p.trim()).filter(Boolean);
+}
 
+/**
+ * Scan a single command segment against all blocked/exfiltration patterns.
+ */
+function scanSingleCommand(trimmed: string, policy: SecurityPolicy): ThreatResult[] {
 	const threats: ThreatResult[] = [];
-	const trimmed = cmd.trim();
-
-	// Check allowlist first
-	if (isAllowlisted(trimmed, policy.allowlist.commands)) return [];
 
 	// Scan against blocked commands
 	for (const rule of policy.blocked_commands) {
@@ -430,6 +436,38 @@ export function scanCommand(cmd: string, policy: SecurityPolicy): ThreatResult[]
 	}
 
 	return threats;
+}
+
+/**
+ * Scan a bash command for dangerous patterns.
+ * Splits on chain operators (; && ||) so "safe_cmd; rm -rf /" is caught.
+ * Returns all matched threats (may be multiple per command).
+ */
+export function scanCommand(cmd: string, policy: SecurityPolicy): ThreatResult[] {
+	if (!policy.settings.enabled) return [];
+
+	const trimmed = cmd.trim();
+	if (trimmed.length === 0) return [];
+
+	// First scan the FULL command (catches patterns that span operators, e.g. curl ... | bash)
+	if (!isAllowlisted(trimmed, policy.allowlist.commands)) {
+		const fullThreats = scanSingleCommand(trimmed, policy);
+		if (fullThreats.length > 0) return fullThreats;
+	}
+
+	// Then split on chain operators and scan each sub-command independently
+	// This catches: "echo ok; rm -rf /", "safe && sudo bad", etc.
+	const parts = splitChainedCommands(trimmed);
+	if (parts.length <= 1) return []; // Already scanned above
+
+	const allThreats: ThreatResult[] = [];
+	for (const part of parts) {
+		if (isAllowlisted(part, policy.allowlist.commands)) continue;
+		const partThreats = scanSingleCommand(part, policy);
+		allThreats.push(...partThreats);
+	}
+
+	return allThreats;
 }
 
 /**
