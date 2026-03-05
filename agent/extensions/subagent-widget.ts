@@ -266,9 +266,11 @@ export default function (pi: ExtensionAPI) {
 			state.proc = proc;
 
 			const startTime = Date.now();
+			const isScout = (globalThis as any).__piScoutId === state.id;
 			const timer = setInterval(() => {
 				state.elapsed = Date.now() - startTime;
 				invalidateWidget(state.id);
+				if (isScout) publishScoutStatus(state);
 			}, 1000);
 
 			let buffer = "";
@@ -297,10 +299,14 @@ export default function (pi: ExtensionAPI) {
 				state.proc = undefined;
 				invalidateWidget(state.id);
 
-				// If this is the pre-spawned scout and it errored, clear the global
-				// so the main agent falls back to working directly
-				if (state.status === "error" && (globalThis as any).__piScoutId === state.id) {
-					(globalThis as any).__piScoutId = undefined;
+				// If this is the pre-spawned scout, publish status for the footer pill
+				if ((globalThis as any).__piScoutId === state.id) {
+					publishScoutStatus(state);
+					// If errored, clear the global so the main agent falls back
+					if (state.status === "error") {
+						(globalThis as any).__piScoutId = undefined;
+						(globalThis as any).__piScoutStatus = undefined;
+					}
 				}
 
 				// Post-dispatch: reconcile Commander task to terminal state
@@ -735,6 +741,15 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Pre-spawn scout helper ────────────────────────────────────────────────
 
+	/** Publish scout status to globalThis so the footer can render a pill. */
+	function publishScoutStatus(state: SubState) {
+		(globalThis as any).__piScoutStatus = {
+			status: state.status,
+			model: state.model || "",
+			elapsed: state.elapsed,
+		};
+	}
+
 	function preSpawnScout(ctx: any) {
 		// Only pre-spawn if scout agent definition exists
 		const scoutDef = resolveAgentByName("scout", knownAgents);
@@ -756,10 +771,11 @@ export default function (pi: ExtensionAPI) {
 			standby: true,         // suppress follow-up message on warmup completion
 		};
 		agents.set(id, state);
-		registerWidget(state);
+		// No registerWidget — scout shows as a footer pill, not a stacking widget
 
 		// Store scout ID globally so mode prompts can reference it
 		(globalThis as any).__piScoutId = id;
+		publishScoutStatus(state);
 
 		// Spawn with a minimal warmup prompt — establishes the session file
 		spawnAgent(state, "You are now on standby. Respond with exactly: Ready.", ctx);
@@ -782,8 +798,9 @@ export default function (pi: ExtensionAPI) {
 		nextId = 1;
 		widgetCtx = ctx;
 
-		// Clear stale scout ID from previous session
+		// Clear stale scout state from previous session
 		(globalThis as any).__piScoutId = undefined;
+		(globalThis as any).__piScoutStatus = undefined;
 
 		// Load model config from .pi/agents/models.json, then scan agent .md files.
 		// Models come from the JSON config; .md files provide tools + system prompts.
@@ -813,8 +830,9 @@ export default function (pi: ExtensionAPI) {
 		nextId = 1;
 		widgetCtx = ctx;
 
-		// Clear stale scout ID
+		// Clear stale scout state
 		(globalThis as any).__piScoutId = undefined;
+		(globalThis as any).__piScoutStatus = undefined;
 
 		// Re-spawn scout for the new session
 		preSpawnScout(ctx);

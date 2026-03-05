@@ -1,21 +1,30 @@
-# Scout Agent Always-Ready Workflow
+# Scout Status Pill in Footer
 
 ## Goal
-When in NORMAL mode, pre-spawn a scout subagent at session start so it's always ready. When the main agent needs to gather context (read files, explore codebase, search for information), it delegates to the scout instead of doing it directly. The main agent still handles direct responses, planning, and tool usage for non-recon tasks.
+Add a compact scout agent status indicator to the far right of the footer status line (below the editor input). Single line, same colored background as subagent widgets, showing: animation + agent name + model name. The animation conveys whether the scout is active (spinning) or idle (checkmark). No "Standing by" text — the animation itself communicates state.
 
-## Architecture
-- **Where**: `subagent-widget.ts` (pre-spawn logic) + `mode-prompts.ts` (NORMAL prompt update)
-- **How**: On `session_start`, automatically spawn a scout subagent with `autoRemove: false` so it persists. Update NORMAL mode system prompt to instruct the agent to use the scout for context-gathering via `subagent_continue`.
-- **Key insight**: The scout uses a persistent session file, so `subagent_continue` works to give it new tasks. We spawn it once with a "standby" task, and the main agent continues it with real work as needed.
+## Design
+
+Current footer: ` opus 4 | 73% | Github-Work/pi-agent `
+
+New footer:  ` opus 4 | 73% | Github-Work/pi-agent          ⠋ SCOUT | grok-4.1-fast `
+                                                               ^^^^^^^^^^^^^^^^^^^^^^^^
+                                                               colored pill, right-aligned
+
+- The pill is right-aligned with the same dark steel blue/teal-gray background as subagent widgets
+- Animation: braille spinner when running, checkmark when done/idle, X on error
+- Shows: `{spinner} SCOUT | {short-model-name}`
+- Colored background matches STATUS_BG from subagent-widget (running=steel blue, done=teal-gray, error=red)
+
+## Scope
+- This is ONLY for NORMAL mode's pre-spawned scout (reads `__piScoutId` and scout state from `__piScoutStatus`)
+- Does NOT change subagent-widget.ts rendering or behavior
+- Lives entirely in footer.ts, reading scout state from a global
 
 ## Implementation Steps
 
-- [x] 1. **Add pre-spawn scout logic in `subagent-widget.ts`** — In the `session_start` handler, after loading agent defs, auto-spawn a scout subagent with a standby prompt. Store its ID in a global (`__piScoutId`) so the main agent's system prompt can reference it. Set `autoRemove: false` so it doesn't disappear after 30s.
+- [ ] 1. **Publish scout state from `subagent-widget.ts`** — Set `globalThis.__piScoutStatus` with `{ status, model, elapsed }` that updates as the scout runs. This is a lightweight global the footer can read without coupling to subagent internals. Update it in the `spawnAgent` close handler and timer interval for the pre-spawned scout only.
 
-- [x] 2. **Update NORMAL mode prompt in `mode-prompts.ts`** — Modify `buildNormalPrompt()` to add a new `scoutId` option. When a scout is pre-spawned, add instructions telling the agent to use `subagent_continue` with the scout's ID for any context-gathering work (reading files, searching code, exploring architecture) instead of doing it directly. The agent should still work directly for responses, edits, and tool calls that aren't recon.
+- [ ] 2. **Add scout pill rendering in `footer.ts`** — In the footer's `render()` function, check for `__piScoutId` and `__piScoutStatus`. If present, render a right-aligned colored pill with the braille animation, "SCOUT", and the model name. Use the same STATUS_BG ANSI codes from subagent-widget. Calculate available width = total width - left content width - pill width, fill gap with spaces.
 
-- [x] 3. **Wire the scout ID into `mode-cycler.ts`** — In the `before_agent_start` handler for NORMAL mode, read `__piScoutId` from globalThis and pass it to `buildNormalPrompt()`.
-
-- [x] 4. **Handle scout lifecycle edge cases** — If the scout errors out or its session breaks, the main agent should be able to fall back to working directly. Add a check: if the scout's status is "error", clear the global and the prompt won't reference it. Also handle `/new` (session_switch) to re-spawn the scout.
-
-- [x] 5. **Test the workflow** — Verify: (a) scout spawns on session start, (b) NORMAL mode prompt includes scout instructions, (c) main agent delegates reads/searches to scout, (d) scout errors don't break the main workflow.
+- [ ] 3. **Test and verify** — Run test suite, verify no regressions.
