@@ -184,10 +184,12 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (_event, _ctx) => {
 		if (currentMode === "NORMAL") {
 			const g = globalThis as any;
+			const scoutId = typeof g.__piScoutId === "number" ? g.__piScoutId : null;
 			return { systemPrompt: buildNormalPrompt({
 				commanderAvailable: !!g.__piCommanderAvailable,
 				activeChain: g.__piActiveChain || null,
 				activePipeline: g.__piActivePipeline || null,
+				scoutId,
 			})};
 		}
 		if (currentMode === "PLAN") return { systemPrompt: PLAN_PROMPT };

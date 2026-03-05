@@ -87,6 +87,7 @@ interface SubState {
 	commanderTaskId?: number;  // pre-assigned Commander task ID
 	autoRemove?: boolean;      // auto-remove widget ~30s after done (default: true)
 	model?: string;            // resolved model string for display
+	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 }
 
 export default function (pi: ExtensionAPI) {
@@ -296,6 +297,12 @@ export default function (pi: ExtensionAPI) {
 				state.proc = undefined;
 				invalidateWidget(state.id);
 
+				// If this is the pre-spawned scout and it errored, clear the global
+				// so the main agent falls back to working directly
+				if (state.status === "error" && (globalThis as any).__piScoutId === state.id) {
+					(globalThis as any).__piScoutId = undefined;
+				}
+
 				// Post-dispatch: reconcile Commander task to terminal state
 				if (commanderAvail && cmdTaskId !== undefined) {
 					const client = getCommanderClient();
@@ -312,16 +319,23 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				const result = state.textChunks.join("");
-				ctx.ui.notify(
-					`SA${state.id} (${state.name}) ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
-					state.status === "done" ? "success" : "error"
-				);
 
-				pi.sendMessage({
-					customType: "subagent-result",
-					content: `SA${state.id} (${state.name})${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} finished "${prompt}" in ${Math.round(state.elapsed / 1000)}s.\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
-					display: true,
-				}, { deliverAs: "followUp", triggerTurn: true });
+				// Standby spawns (warmup) suppress notification and follow-up message
+				if (!state.standby) {
+					ctx.ui.notify(
+						`SA${state.id} (${state.name}) ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
+						state.status === "done" ? "success" : "error"
+					);
+
+					pi.sendMessage({
+						customType: "subagent-result",
+						content: `SA${state.id} (${state.name})${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} finished "${prompt}" in ${Math.round(state.elapsed / 1000)}s.\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
+						display: true,
+					}, { deliverAs: "followUp", triggerTurn: true });
+				} else {
+					// Clear standby flag after warmup completes — next use is real work
+					state.standby = false;
+				}
 
 				// Auto-remove widget after 30s (default behavior)
 				if (state.autoRemove !== false) {
@@ -499,6 +513,11 @@ export default function (pi: ExtensionAPI) {
 			state.textChunks = [];
 			state.elapsed = 0;
 			state.turnCount++;
+
+			// Re-register widget if it was removed (e.g. after standby warmup auto-remove)
+			if (!widgetBoxes.has(state.id)) {
+				registerWidget(state);
+			}
 			invalidateWidget(state.id);
 
 			ctx.ui.notify(`Continuing SA${args.id} (${state.name}) Turn ${state.turnCount}…`, "info");
@@ -635,6 +654,11 @@ export default function (pi: ExtensionAPI) {
 			state.textChunks = [];
 			state.elapsed = 0;
 			state.turnCount++;
+
+			// Re-register widget if it was removed (e.g. after auto-remove)
+			if (!widgetBoxes.has(state.id)) {
+				registerWidget(state);
+			}
 			invalidateWidget(state.id);
 
 			ctx.ui.notify(`Continuing SA${num} (${state.name}) Turn ${state.turnCount}…`, "info");
@@ -709,6 +733,38 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Session lifecycle ─────────────────────────────────────────────────────
 
+	// ── Pre-spawn scout helper ────────────────────────────────────────────────
+
+	function preSpawnScout(ctx: any) {
+		// Only pre-spawn if scout agent definition exists
+		const scoutDef = resolveAgentByName("scout", knownAgents);
+		if (!scoutDef) return;
+
+		const id = nextId++;
+		const state: SubState = {
+			id,
+			status: "running",
+			name: "SCOUT",
+			task: "Warming up — standing by for recon tasks.",
+			textChunks: [],
+			toolCount: 0,
+			elapsed: 0,
+			sessionFile: makeSessionFile(id),
+			turnCount: 1,
+			summary: "Standing by...",
+			autoRemove: false,     // keep widget alive — scout persists across tasks
+			standby: true,         // suppress follow-up message on warmup completion
+		};
+		agents.set(id, state);
+		registerWidget(state);
+
+		// Store scout ID globally so mode prompts can reference it
+		(globalThis as any).__piScoutId = id;
+
+		// Spawn with a minimal warmup prompt — establishes the session file
+		spawnAgent(state, "You are now on standby. Respond with exactly: Ready.", ctx);
+	}
+
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 		const sessDir = path.join(os.homedir(), ".pi", "agent", "sessions", "subagents");
@@ -726,11 +782,41 @@ export default function (pi: ExtensionAPI) {
 		nextId = 1;
 		widgetCtx = ctx;
 
+		// Clear stale scout ID from previous session
+		(globalThis as any).__piScoutId = undefined;
+
 		// Load model config from .pi/agents/models.json, then scan agent .md files.
 		// Models come from the JSON config; .md files provide tools + system prompts.
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
 		const extProjectDir = path.resolve(extDir, "..");
 		modelsConfig = loadAgentModelsConfig(ctx.cwd || process.cwd(), extProjectDir);
 		knownAgents = scanAgentDefs(ctx.cwd || process.cwd(), extProjectDir, modelsConfig);
+
+		// Pre-spawn scout subagent so it's always ready for recon tasks
+		preSpawnScout(ctx);
+	});
+
+	// ── /new resets — re-spawn scout for the new session ──────────────────────
+
+	pi.on("session_switch", async (_event, ctx) => {
+		// Kill running subagents and clear all widgets
+		const killPromises: Promise<void>[] = [];
+		for (const [id, state] of Array.from(agents.entries())) {
+			if (state.proc && state.status === "running") {
+				killPromises.push(killGracefully(state.proc));
+			}
+			ctx.ui.setWidget(`sub-${id}`, undefined);
+		}
+		await Promise.all(killPromises);
+		agents.clear();
+		widgetBoxes.clear();
+		nextId = 1;
+		widgetCtx = ctx;
+
+		// Clear stale scout ID
+		(globalThis as any).__piScoutId = undefined;
+
+		// Re-spawn scout for the new session
+		preSpawnScout(ctx);
 	});
 }

@@ -20,6 +20,7 @@ export interface NormalPromptOpts {
 	commanderAvailable: boolean;
 	activeChain: string | null;
 	activePipeline: string | null;
+	scoutId?: number | null;
 }
 
 /** NORMAL mode prompt — teaches the agent to classify tasks and call set_mode. */
@@ -36,7 +37,38 @@ export function buildNormalPrompt(opts: NormalPromptOpts): string {
 		: `\n## Commander Integration
 Commander is offline. Tasks are tracked locally only. Commander tools will soft-fail silently.`;
 
+	// Scout delegation section — when a scout is pre-spawned and ready
+	const scoutSection = opts.scoutId != null ? `
+
+## Scout Agent (ALWAYS use for context gathering)
+A scout subagent (SA${opts.scoutId}) is pre-spawned and ready. **ALWAYS delegate context-gathering work to the scout** instead of doing it yourself.
+
+### What to delegate to the scout:
+- Reading files, exploring directory structures
+- Searching for patterns, symbols, or text in the codebase (grep, find)
+- Understanding architecture, tracing code paths, mapping dependencies
+- Any investigation or information-gathering task
+
+### How to use the scout:
+\`\`\`
+subagent_continue { id: ${opts.scoutId}, prompt: "Read the file at src/index.ts and summarize its exports" }
+\`\`\`
+The scout runs in the background. When it finishes, its findings are delivered as a follow-up message. Then you can respond to the user with the information.
+
+### What YOU still do directly:
+- Respond to the user (synthesize scout findings, answer questions)
+- Write/edit files, run commands, make code changes
+- Plan, create tasks, manage workflow
+- Call set_mode for complex tasks
+- Any action that modifies the codebase
+
+### Important:
+- Do NOT use Read, Bash (for reading), grep, find, or ls yourself — send those to the scout
+- You CAN still use Bash for running tests, builds, or commands that modify things
+- If the scout errors, fall back to doing the work directly` : "";
+
 	return `You are in NORMAL mode. Classify the incoming task and select the best execution mode.
+${scoutSection}
 
 ## Mode Selection Guide
 
@@ -52,7 +84,7 @@ Commander is offline. Tasks are tracked locally only. Commander tools will soft-
 ## How to Decide
 
 1. Read the user's request.
-2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.
+2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.${opts.scoutId != null ? "\n   - For simple reads/lookups, delegate to the scout and relay the answer." : ""}
 3. Otherwise, call \`set_mode\` immediately with the best mode and include a \`reason\`.
    Explain your choice in your response — no need to ask for permission first.
 4. After calling set_mode, define your tasks with \`tasks new-list\` + \`tasks add\`${opts.commanderAvailable ? " (auto-synced to Commander). Send a \`commander_mailbox\` status update when starting work." : "."}
