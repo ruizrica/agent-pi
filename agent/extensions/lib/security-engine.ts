@@ -438,9 +438,15 @@ function scanSingleCommand(trimmed: string, policy: SecurityPolicy): ThreatResul
 	return threats;
 }
 
+/** Detect shell metacharacters that indicate command chaining or subshells */
+const SHELL_CHAIN_PATTERN = /[;&|`\n]|\$\(/;
+
 /**
  * Scan a bash command for dangerous patterns.
  * Splits on chain operators (; && ||) so "safe_cmd; rm -rf /" is caught.
+ * CRITICAL: Commands containing shell chain operators are NEVER fully allowlisted —
+ * each sub-command is checked independently. This prevents "cat foo; rm -rf /"
+ * from being allowlisted by "cat .*".
  * Returns all matched threats (may be multiple per command).
  */
 export function scanCommand(cmd: string, policy: SecurityPolicy): ThreatResult[] {
@@ -449,25 +455,31 @@ export function scanCommand(cmd: string, policy: SecurityPolicy): ThreatResult[]
 	const trimmed = cmd.trim();
 	if (trimmed.length === 0) return [];
 
-	// First scan the FULL command (catches patterns that span operators, e.g. curl ... | bash)
-	if (!isAllowlisted(trimmed, policy.allowlist.commands)) {
+	const hasChainOps = SHELL_CHAIN_PATTERN.test(trimmed);
+
+	// If command contains chain operators, ALWAYS split and scan each part.
+	// Never allowlist compound commands — "cat foo; rm -rf /" must not be
+	// bypassed by "cat .*" in the allowlist.
+	if (hasChainOps) {
+		// Still scan the FULL string for patterns that span pipes (curl ... | bash)
 		const fullThreats = scanSingleCommand(trimmed, policy);
 		if (fullThreats.length > 0) return fullThreats;
+
+		// Split and scan each sub-command independently
+		const parts = splitChainedCommands(trimmed);
+		const allThreats: ThreatResult[] = [];
+		for (const part of parts) {
+			if (isAllowlisted(part, policy.allowlist.commands)) continue;
+			const partThreats = scanSingleCommand(part, policy);
+			allThreats.push(...partThreats);
+		}
+		return allThreats;
 	}
 
-	// Then split on chain operators and scan each sub-command independently
-	// This catches: "echo ok; rm -rf /", "safe && sudo bad", etc.
-	const parts = splitChainedCommands(trimmed);
-	if (parts.length <= 1) return []; // Already scanned above
+	// Simple command (no chaining) — allowlist check is safe here
+	if (isAllowlisted(trimmed, policy.allowlist.commands)) return [];
 
-	const allThreats: ThreatResult[] = [];
-	for (const part of parts) {
-		if (isAllowlisted(part, policy.allowlist.commands)) continue;
-		const partThreats = scanSingleCommand(part, policy);
-		allThreats.push(...partThreats);
-	}
-
-	return allThreats;
+	return scanSingleCommand(trimmed, policy);
 }
 
 /**

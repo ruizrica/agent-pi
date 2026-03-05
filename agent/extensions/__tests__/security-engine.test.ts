@@ -705,6 +705,28 @@ describe("command chaining bypass prevention", () => {
 		const threats = scanCommand("echo ok\nrm -rf /tmp", policy);
 		expect(threats.length).toBeGreaterThan(0);
 	});
+
+	it("CRITICAL: allowlist must NOT bypass chained dangerous commands", () => {
+		// "cat .*" is in the allowlist, but "cat foo; rm -rf /" must still be caught
+		const threats = scanCommand("cat foo; rm -rf /", policy);
+		expect(threats.length).toBeGreaterThan(0);
+		expect(threats[0].category).toBe("destructive");
+	});
+
+	it("CRITICAL: allowlisted prefix + semicolon + sudo must be caught", () => {
+		const threats = scanCommand("grep test file.txt; sudo rm -rf /", policy);
+		expect(threats.length).toBeGreaterThan(0);
+	});
+
+	it("CRITICAL: allowlisted prefix + && + printenv must be caught", () => {
+		const threats = scanCommand("ls -la && printenv", policy);
+		expect(threats.length).toBeGreaterThan(0);
+	});
+
+	it("should detect subshell notation as chain operator", () => {
+		const threats = scanCommand("echo $(rm -rf /)", policy);
+		expect(threats.length).toBeGreaterThan(0);
+	});
 });
 
 describe("edge cases", () => {

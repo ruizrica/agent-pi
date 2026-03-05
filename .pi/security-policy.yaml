@@ -119,6 +119,12 @@ blocked_commands:
     severity: block
     category: destructive
 
+  # Nested shell execution (hides inner commands from scanning)
+  - pattern: "(bash|sh|zsh)\\s+(-c|--command)\\s+"
+    description: "Nested shell execution (bash -c / sh -c)"
+    severity: warn
+    category: remote_exec
+
   # Command obfuscation detection
   - pattern: "\\$\\(echo\\s+.*\\|\\s*base64\\s+-d\\)"
     description: "Base64-decoded command execution"
@@ -164,6 +170,22 @@ blocked_commands:
   - pattern: "perl\\s+(-e)\\s+.*\\b(system|exec|`)\\b"
     description: "Perl inline code with shell execution"
     severity: warn
+    category: remote_exec
+
+  # Hex/printf encoded command execution
+  - pattern: "echo\\s+(-e\\s+)?.*\\\\x.*\\|\\s*(bash|sh|zsh)"
+    description: "Hex-encoded command piped to shell"
+    severity: block
+    category: remote_exec
+
+  - pattern: "printf\\s+.*\\\\x.*\\|\\s*(bash|sh|zsh)"
+    description: "Printf hex-encoded command piped to shell"
+    severity: block
+    category: remote_exec
+
+  - pattern: "xxd\\s+.*\\|\\s*(bash|sh|zsh)"
+    description: "xxd decoded command piped to shell"
+    severity: block
     category: remote_exec
 
   # History/log tampering
@@ -393,11 +415,11 @@ allowlist:
     - "yarn .*"
     - "pnpm .*"
     - "bun .*"
-    - "node .*"
-    - "deno .*"
+    - "node [a-zA-Z0-9_./@-]+(\\.js|\\.mjs|\\.cjs|\\.ts).*"
+    - "deno [a-zA-Z0-9_./@-]+(\\.(ts|js|mjs)).*"
     - "cargo .*"
-    - "python .*"
-    - "pip .*"
+    - "python[23]? [a-zA-Z0-9_./@-]+\\.py.*"
+    - "pip[23]? .*"
     - "brew .*"
     - "make .*"
     - "cmake .*"
@@ -420,8 +442,10 @@ allowlist:
     - "cp .*"
     - "mv .*"
     - "touch .*"
-    - "tee .*"
-    - "sed .*"
+    # tee is NOT broadly allowlisted — tee can write to arbitrary paths.
+    # Safe tee usage won't match blocked patterns.
+    # sed and awk are NOT broadly allowlisted — sed -i can write to protected paths.
+    # Safe sed/awk usage won't match any blocked patterns anyway.
     - "awk .*"
     - "jq .*"
     - "which .*"
