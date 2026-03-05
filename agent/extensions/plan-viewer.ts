@@ -5,9 +5,10 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -64,7 +65,7 @@ function startViewerServer(
 			// Serve the logo image
 			if (req.method === "GET" && url.pathname === "/logo.png") {
 				try {
-					const logoPath = join(process.cwd(), ".pi", "assets", "agent-logo.png");
+					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
 					const logoData = readFileSync(logoPath);
 					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
 					res.end(logoData);
