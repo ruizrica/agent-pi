@@ -43,6 +43,7 @@ export const THEME_MAP: Record<string, string> = {
 	"footer":             "midnight-ocean",
 	"mode-cycler":        "midnight-ocean",
 	"user-question":      "midnight-ocean",
+	"plan-viewer":        "midnight-ocean",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────

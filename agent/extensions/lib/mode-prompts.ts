@@ -79,9 +79,22 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 - Include verification steps in the plan
 - Keep the plan minimal — only what's needed
 
-### Phase 3: Approve
-- Present the plan to the user for approval before implementing
-- If the user requests changes, revise the plan
+### Phase 2b: Follow-up Questions (when needed)
+- If clarification is needed before planning, write questions to a markdown file
+- Use numbered list format: \`1. What framework should we use? _Default: React_\`
+- Include sensible defaults in \`_Default: value_\` format where possible
+- Call \`show_plan\` in questions mode to collect answers:
+  \`show_plan { file_path: ".context/questions.md", title: "Clarifying Questions", mode: "questions" }\`
+- The user can answer each question inline and submit
+- Use the returned answers to refine your plan
+
+### Phase 3: Present & Approve
+- Write the plan to .context/todo.md first
+- ALWAYS call \`show_plan\` to open the interactive plan viewer:
+  \`show_plan { file_path: ".context/todo.md", title: "Implementation Plan" }\`
+- The user can review, edit, reorder, and approve/decline the plan in the viewer
+- If the user approves, an approval message is automatically sent — proceed to Phase 4
+- If the user declines, ask for feedback and revise the plan
 - Do NOT proceed until the plan is approved
 
 ### Phase 4: Implement
@@ -92,7 +105,7 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 
 ## Rules
 - Never start coding without a plan
-- Never skip approval
+- Never skip approval — ALWAYS use show_plan to present the plan
 - Keep changes minimal and focused
 
 ## Commander Integration (ALWAYS use when connected)
@@ -115,11 +128,13 @@ Create a dated spec folder:
 Save the user's raw idea to planning/initialization.md
 
 ### Phase 2: Shape Requirements
-Use AskUserQuestion to gather requirements:
+Write follow-up questions to planning/questions.md, then present with show_plan:
 - Generate 4-8 numbered clarifying questions with sensible defaults
 - Frame as "I'm assuming X, is that correct?"
+- Use \`_Default: value_\` format for defaults
 - Always include a visual assets request (planning/visuals/)
 - Always include a reusability check for existing code
+- Call \`show_plan { file_path: "planning/questions.md", title: "Requirements", mode: "questions" }\`
 - Process answers, check for visual files, ask follow-ups if needed
 Save results to planning/requirements.md
 

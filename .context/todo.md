@@ -1,90 +1,111 @@
-# /debug-capture Extension — Implementation Plan
+# Plan Viewer — Interactive Markdown Plan Viewer/Editor for Plan Mode
 
 ## Overview
-A Pi extension that uses [charmbracelet/vhs](https://github.com/charmbracelet/vhs) to capture screenshots and GIFs of Pi's TUI, so the agent can visually inspect UI rendering via `Read` on the resulting PNG files.
-
-## Key Findings from Research
-- VHS is installed locally (`/opt/homebrew/bin/vhs`), deps `ttyd` + `ffmpeg` present
-- `Screenshot subdir/file.png` works (must use subdirectory paths, not bare filenames)
-- `Wait+Screen /regex/` works for waiting on specific output before capturing
-- `Read` tool can display PNG images — **confirmed the full pipeline works end-to-end**
-- VHS uses a virtual terminal that renders ANSI escape codes faithfully (colors, backgrounds, box-drawing)
-- Pi supports `pi -p` (print/non-interactive mode) for scripted execution
+A standalone Photon extension (`plan-viewer.ts`) that provides an interactive rendered markdown viewer/editor window. When Plan Mode completes a plan (written to `.context/todo.md`), the agent calls a `show_plan` tool to open a fullscreen overlay displaying the plan as beautifully rendered markdown. The user can review, edit, reorder, and approve the plan inline.
 
 ## Architecture
 
-### File: `agent/extensions/debug-capture.ts`
-
-A standalone extension that registers:
-1. **`/debug-capture <scenario>`** command — generates a `.tape` file, runs VHS, outputs screenshot paths
-2. **`debug_capture` tool** — same thing but callable by the agent programmatically during work
+### File Structure
+```
+agent/extensions/
+  plan-viewer.ts              ← Main extension (tool + overlay + command)
+  lib/plan-viewer-render.ts   ← Rendering helpers (markdown view, edit mode)
+  lib/plan-viewer-editor.ts   ← Inline editing logic (reorder, edit items, add sections)
+```
 
 ### How It Works
-
 ```
-User or Agent: /debug-capture "launch pi and add 3 tasks"
-                    │
-                    ▼
-        ┌──────────────────────┐
-        │ Generate .tape file  │  (dynamic tape from scenario description)
-        │ with Screenshot cmds │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │   Run `vhs tape`     │  (spawn subprocess)
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │ Return PNG paths     │  (agent can `Read` them to see the UI)
-        └──────────────────────┘
+Agent writes plan to .context/todo.md
+         │
+         ▼
+Agent calls `show_plan` tool (file_path, title?)
+         │
+         ▼
+┌─────────────────────────────────────────────┐
+│  Fullscreen Overlay — Plan Viewer           │
+│                                             │
+│  ┌─── Rendered Markdown View ─────────┐     │
+│  │ # Implementation Plan              │     │
+│  │                                    │     │
+│  │ ## Phase 1: Setup                  │     │
+│  │ ☐ 1. Create extension file         │     │
+│  │ ☐ 2. Register tool + command       │     │
+│  │                                    │     │
+│  │ ## Phase 2: Build                  │     │
+│  │ ☐ 3. Implement overlay renderer    │     │
+│  │ ☐ 4. Add edit capabilities         │     │
+│  └────────────────────────────────────┘     │
+│                                             │
+│  [e] Edit  [r] Reorder  [m] Markdown View   │
+│  [s] Save to Desktop  [c] Copy  [Esc] Close │
+│  [Enter] Approve & Close                    │
+└─────────────────────────────────────────────┘
+         │
+         ▼
+Tool returns: "User approved plan" / "User edited plan: <changes>"
+              / "User declined plan"
 ```
 
-### Tape Generation Strategy
+### Key Features
+1. **Rendered Markdown View** — Uses Pi's built-in `Markdown` component from `@mariozechner/pi-tui`
+2. **Checkbox Interaction** — `[ ]` / `[x]` items are navigable, toggle with Space
+3. **Inline Edit** — Press `e` on a line to edit it in-place (text input overlay)
+4. **Reorder Mode** — Press `r` to enter reorder mode; use ↑/↓+Enter to move items
+5. **Add Section** — Press `a` to add a new section heading or list item
+6. **Raw Markdown Toggle** — Press `m` to switch between rendered and raw markdown view
+7. **Save to Desktop** — Press `s` to write the markdown file to `~/Desktop/plan-<timestamp>.md`
+8. **Copy to Clipboard** — Press `c` to copy markdown content to system clipboard
+9. **Approve/Decline** — Enter to approve, Esc to close without approval
+10. **Scroll** — ↑/↓, PgUp/PgDn, Home/End for navigation
 
-Two modes:
-1. **Predefined scenarios** — built-in tape templates for common Pi states (task list, pipeline, subagent widgets, mode switching). Fast, reliable.
-2. **Custom commands** — user provides raw shell commands to type into the VHS terminal. Flexible, manual.
-
-### Predefined Scenarios
-
-| Scenario | What it captures |
-|---|---|
-| `tasks` | Launch pi, create a task list with sample tasks, screenshot the task widget |
-| `modes` | Cycle through NORMAL→PLAN→TEAM→PIPELINE, screenshot each |
-| `footer` | Launch pi, screenshot the footer bar |
-| `theme <name>` | Launch pi with a specific theme, screenshot |
-| `custom <cmds>` | Run arbitrary commands in a shell, screenshot the result |
-
-### Output Location
-- `.pi/debug-captures/` directory (gitignored)
-- Timestamped: `capture-2024-03-03-124500.png`
-- Also produces a `.gif` for animated scenarios
+---
 
 ## Implementation Steps
 
-- [ ] 1. Create `agent/extensions/debug-capture.ts` with extension boilerplate
-  - Register `/debug-capture` command with argument completions
-  - Register `debug_capture` tool (so agent can call it programmatically)
-  
-- [ ] 2. Implement tape generation engine
-  - `generateTape(scenario, options)` → string (tape file contents)
-  - Handle predefined scenarios with template functions
-  - Handle custom commands mode
-  - Always include `Screenshot` at key moments
-  - Use `Wait+Screen /regex/` for reliable timing
+- [x] 1. **Create `lib/plan-viewer-editor.ts`** — Plan data model and editing logic
+  - Parse markdown into structured sections + items
+  - Support: toggle checkbox, edit item text, reorder items, add section, add item
+  - Serialize back to markdown string
+  - Pure functions, no UI — testable independently
 
-- [ ] 3. Implement VHS runner
-  - Write tape to temp file
-  - Spawn `vhs` subprocess
-  - Capture stdout/stderr for error reporting
-  - Return paths to generated screenshots/GIFs
+- [x] 2. **Create `lib/plan-viewer-render.ts`** — Rendering helpers
+  - Rendered markdown view using Pi's `Markdown` + `Container` + `Spacer` components
+  - Cursor highlighting for current item (navigation)
+  - Status bar / footer rendering with keybind hints
+  - Raw markdown view (plain text with syntax highlighting)
+  - Handle view mode switching (rendered ↔ raw)
 
-- [ ] 4. Wire up command + tool to tape generator + runner
-  - `/debug-capture tasks` → generates tape → runs VHS → returns screenshot paths
-  - `debug_capture` tool returns paths in result content so agent can `Read` them
+- [x] 3. **Create `plan-viewer.ts`** — Main extension file
+  - **`show_plan` tool**: Opens the overlay, returns user's decision (approved/edited/declined)
+    - Parameters: `file_path` (string, required), `title` (string, optional)
+    - Reads the markdown file content
+    - Opens fullscreen overlay via `ctx.ui.custom`
+    - Returns structured result with user action and final markdown content
+  - **`/plan` command**: Opens the overlay for the current `.context/todo.md` or a given file
+  - **Overlay class `PlanViewerOverlay`**:
+    - Modes: `view` (rendered markdown), `raw` (raw text), `edit` (inline editing), `reorder` 
+    - Scrolling (↑/↓/PgUp/PgDn/Home/End)
+    - Keyboard dispatch to mode-specific handlers
+    - Footer bar with context-sensitive keybinds
+  - Register in session_start with theme defaults
 
-- [ ] 5. Add to settings.json packages list
+- [x] 4. **Update Plan Mode prompt** — In `lib/mode-prompts.ts`
+  - Add instruction to use `show_plan` tool when presenting plan to user
+  - Template: "After writing plan to .context/todo.md, call show_plan to present it"
+  - Keep backward compatible — still works if tool call is skipped
 
-- [ ] 6. Test with a real capture of Pi's TUI
+- [x] 5. **Register in settings.json** — Add `extensions/plan-viewer.ts` to packages array
+
+- [x] 6. **Wire up clipboard + file save utilities**
+  - `pbcopy` (macOS) for clipboard
+  - Write to `~/Desktop/plan-YYYY-MM-DD-HHMMSS.md`
+  - Notify user via `ctx.ui.notify` on success/failure
+
+- [x] 7. **Test the full flow end-to-end**
+  - Switch to Plan Mode (Shift+Tab)
+  - Ask agent to plan something
+  - Verify overlay opens with rendered markdown
+  - Test: scroll, toggle checkboxes, edit item, reorder, add section
+  - Test: save to desktop, copy to clipboard
+  - Test: approve and decline flows
+  - Verify tool result is correct in both cases

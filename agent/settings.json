@@ -1,6 +1,6 @@
 {
   "quietStartup": true,
-  "lastChangelogVersion": "0.55.4",
+  "lastChangelogVersion": "0.56.1",
   "theme": "midnight-ocean",
   "transport": "sse",
   "defaultProvider": "anthropic",
@@ -28,7 +28,8 @@
     "extensions/footer.ts",
     "extensions/memory-cycle.ts",
     "extensions/message-integrity-guard.ts",
-    "extensions/web-test.ts"
+    "extensions/web-test.ts",
+    "extensions/plan-viewer.ts"
   ],
   "editorPaddingX": 2,
   "showHardwareCursor": true,
