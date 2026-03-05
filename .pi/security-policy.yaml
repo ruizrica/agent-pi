@@ -119,6 +119,53 @@ blocked_commands:
     severity: block
     category: destructive
 
+  # Command obfuscation detection
+  - pattern: "\\$\\(echo\\s+.*\\|\\s*base64\\s+-d\\)"
+    description: "Base64-decoded command execution"
+    severity: block
+    category: remote_exec
+
+  - pattern: "echo\\s+.*\\|\\s*base64\\s+-d\\s*\\|\\s*(bash|sh|zsh)"
+    description: "Base64 decode piped to shell"
+    severity: block
+    category: remote_exec
+
+  - pattern: "eval\\s+[\"'].*[\"']"
+    description: "Eval with string argument (potential obfuscation)"
+    severity: warn
+    category: remote_exec
+
+  - pattern: "\\beval\\s+\\$"
+    description: "Eval of variable (potential obfuscation)"
+    severity: block
+    category: remote_exec
+
+  - pattern: "\\$\\{.*\\}.*rm\\s+"
+    description: "Variable expansion before rm command"
+    severity: block
+    category: destructive
+
+  # Inline code execution with nested dangerous commands
+  - pattern: "python[23]?\\s+(-c|--command)\\s+.*(os\\.system|subprocess|exec\\(|eval\\(|__import__)"
+    description: "Python inline code with shell execution"
+    severity: warn
+    category: remote_exec
+
+  - pattern: "node\\s+(-e|--eval)\\s+.*(execSync|exec\\(|spawn|child_process|require\\(.child_process)"
+    description: "Node.js inline code with shell execution"
+    severity: warn
+    category: remote_exec
+
+  - pattern: "ruby\\s+(-e)\\s+.*\\b(system|exec|`)\\b"
+    description: "Ruby inline code with shell execution"
+    severity: warn
+    category: remote_exec
+
+  - pattern: "perl\\s+(-e)\\s+.*\\b(system|exec|`)\\b"
+    description: "Perl inline code with shell execution"
+    severity: warn
+    category: remote_exec
+
   # History/log tampering
   - pattern: "history\\s+-c"
     description: "Clearing shell history"
@@ -172,6 +219,17 @@ exfiltration_patterns:
 # File paths that should be protected from write/edit operations.
 # Read is warn-only (agent needs to read for context).
 protected_paths:
+  # Security policy self-protection (CRITICAL)
+  - pattern: "security-policy\\.ya?ml$"
+    severity: block
+    category: tampering
+    description: "Security policy file (self-protection)"
+
+  - pattern: "security-audit\\.log"
+    severity: block
+    category: tampering
+    description: "Security audit log (tamper protection)"
+
   # SSH keys and config
   - pattern: "(\\.ssh|ssh)/(id_|authorized_keys|known_hosts|config)"
     severity: block

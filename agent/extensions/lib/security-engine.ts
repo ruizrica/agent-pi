@@ -286,6 +286,11 @@ function normalizeRules(arr: any): PolicyRule[] {
 /** Compiled regex cache to avoid recompiling on every scan */
 const regexCache = new Map<string, RegExp>();
 
+/** Clear the regex cache (called on policy reload to drop stale patterns) */
+export function clearRegexCache(): void {
+	regexCache.clear();
+}
+
 function getRegex(pattern: string, flags = "i"): RegExp {
 	const key = `${pattern}::${flags}`;
 	let re = regexCache.get(key);
@@ -310,6 +315,9 @@ function escapeRegex(str: string): string {
  * Searches: .pi/security-policy.yaml, then ~/.pi/agent/.pi/security-policy.yaml
  */
 export function loadPolicy(projectRoot: string): SecurityPolicy {
+	// Clear regex cache on reload to drop stale compiled patterns
+	clearRegexCache();
+
 	const candidates = [
 		join(projectRoot, ".pi", "security-policy.yaml"),
 		join(homedir(), ".pi", "agent", ".pi", "security-policy.yaml"),
