@@ -87,7 +87,8 @@ ${scoutSection}
 2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.${opts.scoutId != null ? "\n   - For simple reads/lookups, delegate to the scout and relay the answer." : ""}
 3. Otherwise, call \`set_mode\` immediately with the best mode and include a \`reason\`.
    Explain your choice in your response — no need to ask for permission first.
-4. After calling set_mode, define your tasks with \`tasks new-list\` + \`tasks add\`${opts.commanderAvailable ? " (auto-synced to Commander). Send a \`commander_mailbox\` status update when starting work." : "."}
+4. After calling set_mode, define your tasks with \`tasks new-list\` + \`tasks add\`.
+   If the task list has 4+ steps, add a final task: "Present completion report" (using \`show_report\`)${opts.commanderAvailable ? " (auto-synced to Commander). Send a \`commander_mailbox\` status update when starting work." : "."}
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -135,10 +136,17 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 - Mark items complete in .context/todo.md as you go
 - If you discover the plan needs adjustment, stop and re-plan
 
+### Phase 5: Completion Report (when plan has 4+ steps)
+- After all implementation tasks are done, call \`show_report\` to open the completion report viewer
+- Pass a \`summary\` describing the work done and a \`title\` for the report
+- The user can review diffs, rollback individual files, or rollback all changes
+- Example: \`show_report { title: "Feature Complete", summary: "Implemented X, Y, Z..." }\`
+
 ## Rules
 - Never start coding without a plan
 - Never skip approval — ALWAYS use show_plan to present the plan
 - Keep changes minimal and focused
+- For plans with 4+ steps, ALWAYS present a completion report at the end
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS display your plan: \`commander_session { operation: "file:open", file_path: ".context/todo.md" }\`
