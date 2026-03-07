@@ -30,7 +30,8 @@
     "extensions/message-integrity-guard.ts",
     "extensions/security-guard.ts",
     "extensions/web-test.ts",
-    "extensions/plan-viewer.ts"
+    "extensions/plan-viewer.ts",
+    "extensions/secure.ts"
   ],
   "editorPaddingX": 2,
   "showHardwareCursor": true,
