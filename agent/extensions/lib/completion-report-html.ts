@@ -203,6 +203,83 @@ export function generateCompletionReportHTML(opts: {
     color: var(--text-muted);
     font-size: 14px;
   }
+  .markdown-body .table-wrap {
+    margin: 16px 0 !important;
+    overflow-x: auto !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background: var(--surface) !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02) !important;
+  }
+  .markdown-body table,
+  .markdown-body table.ui-table {
+    display: table !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    width: 100% !important;
+    min-width: 520px !important;
+    margin: 0 !important;
+    font-size: 13px !important;
+    background: var(--surface) !important;
+    color: var(--text-muted) !important;
+  }
+  .markdown-body table thead,
+  .markdown-body table thead tr,
+  .markdown-body table.ui-table thead,
+  .markdown-body table.ui-table thead tr {
+    background: var(--surface2) !important;
+  }
+  .markdown-body table tbody,
+  .markdown-body table.ui-table tbody {
+    background: var(--surface) !important;
+  }
+  .markdown-body table th,
+  .markdown-body table td,
+  .markdown-body table.ui-table th,
+  .markdown-body table.ui-table td {
+    padding: 12px 16px !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+  .markdown-body table th,
+  .markdown-body table.ui-table th {
+    background: var(--surface2) !important;
+    color: var(--accent) !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    letter-spacing: 0.6px !important;
+    font-family: var(--mono) !important;
+    white-space: nowrap !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .markdown-body table td,
+  .markdown-body table.ui-table td {
+    color: var(--text-muted) !important;
+    background: var(--surface) !important;
+    border-bottom: 1px solid var(--border) !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    hyphens: auto !important;
+  }
+  .markdown-body table th + th,
+  .markdown-body table td + td,
+  .markdown-body table.ui-table th + th,
+  .markdown-body table.ui-table td + td {
+    border-left: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  .markdown-body table tbody tr:nth-child(even) td,
+  .markdown-body table.ui-table tbody tr:nth-child(even) td {
+    background: rgba(255,255,255,0.02) !important;
+  }
+  .markdown-body table tr:last-child td,
+  .markdown-body table.ui-table tr:last-child td {
+    border-bottom: none !important;
+  }
+  .markdown-body table tbody tr:hover td,
+  .markdown-body table.ui-table tbody tr:hover td {
+    background: var(--surface2) !important;
+  }
   .markdown-body strong { color: var(--text); font-weight: 600; }
   .markdown-body em { color: var(--text-muted); }
 
@@ -681,6 +758,9 @@ export function generateCompletionReportHTML(opts: {
     <button class="btn btn-ghost" onclick="saveReport()" title="Save report to desktop">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save
     </button>
+    <button class="btn btn-ghost" onclick="downloadStandalone()" title="Download standalone read-only report HTML">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Standalone
+    </button>
     <div class="spacer"></div>
     <button class="btn btn-warning" onclick="rollbackAll()" id="rollbackAllBtn" title="Rollback all changes">Rollback All</button>
     <button class="btn btn-success" onclick="done()">Done</button>
@@ -720,7 +800,7 @@ export function generateCompletionReportHTML(opts: {
     // Summary section
     if (report.summary && report.summary.trim()) {
       document.getElementById('summarySection').style.display = 'block';
-      document.getElementById('summaryContent').innerHTML = marked.parse(report.summary);
+      document.getElementById('summaryContent').innerHTML = renderMarkdownWithTables(report.summary);
     }
 
     // Task section
@@ -750,9 +830,21 @@ export function generateCompletionReportHTML(opts: {
     return md.replace(/^(\\s*- \\[[ xX]\\] )(\\d+)\\./gm, '$1$2\\\\.');
   }
 
+  function renderMarkdownWithTables(md) {
+    let html = '';
+    try {
+      html = marked.parse(md);
+    } catch (e) {
+      html = md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>');
+    }
+    return html
+      .split('<table>').join('<div class="table-wrap"><table class="ui-table">')
+      .split('</table>').join('</table></div>');
+  }
+
   function renderTasks(taskMd) {
     // Pre-process to fix checkbox items with numbered prefixes
-    let html = marked.parse(preprocessCheckboxMarkdown(taskMd));
+    let html = renderMarkdownWithTables(preprocessCheckboxMarkdown(taskMd));
     // Enhance checkbox rendering
     // Handles both tight lists (<li><input>text</li>) and loose lists (<li><p><input>text</p></li>)
     html = html.replace(
@@ -1073,6 +1165,20 @@ export function generateCompletionReportHTML(opts: {
     })
     .catch(function() {
       showToast('Save failed', 'error');
+    });
+  };
+
+  window.downloadStandalone = function() {
+    fetch('http://localhost:' + PORT + '/export-standalone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      showToast(data.message || 'Standalone export saved', 'success');
+    })
+    .catch(function() {
+      showToast('Standalone export failed', 'error');
     });
   };
 

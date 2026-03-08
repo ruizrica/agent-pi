@@ -12,6 +12,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
+import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -150,6 +151,25 @@ function discoverSpecDocuments(folderPath: string): SpecDocument[] {
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
+function buildStandaloneSpecDocuments(folderPath: string, documents: SpecDocument[], markdownChanges?: Record<string, string>): SpecExportDocument[] {
+	return documents.map((doc) => {
+		if (doc.isVisuals) {
+			return {
+				label: doc.label,
+				filePath: doc.filePath,
+				isVisuals: true,
+				visuals: (doc.visualFiles || []).map((file) => loadVisualAsExportAsset(folderPath, file)),
+			};
+		}
+
+		return {
+			label: doc.label,
+			filePath: doc.filePath,
+			markdown: markdownChanges?.[doc.filePath] ?? doc.markdown,
+		};
+	});
+}
+
 function startSpecViewerServer(
 	folderPath: string,
 	documents: SpecDocument[],
@@ -268,6 +288,25 @@ function startSpecViewerServer(
 						writeFileSync(commentsPath, JSON.stringify({ comments: data.comments || [] }, null, 2), "utf-8");
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
+					} catch (err: any) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err.message }));
+					}
+				});
+				return;
+			}
+
+			if (req.method === "POST" && url.pathname === "/export-standalone") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body || "{}");
+						const exportDocs = buildStandaloneSpecDocuments(folderPath, documents, data.markdownChanges || {});
+						const html = createSpecStandaloneExport({ title, documents: exportDocs });
+						const saved = saveStandaloneExport({ filePrefix: "spec-readonly", html });
+						res.writeHead(200, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
 					} catch (err: any) {
 						res.writeHead(500, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: err.message }));

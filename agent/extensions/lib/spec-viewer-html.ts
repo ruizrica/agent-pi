@@ -785,6 +785,11 @@ export function generateSpecViewerHTML(opts: {
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
       </svg>Copy
     </button>
+    <button class="btn btn-ghost" onclick="downloadStandalone()" title="Download standalone read-only spec HTML">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
+        <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>
+      </svg>Standalone
+    </button>
     <button class="btn btn-ghost" onclick="toggleComments()" title="Toggle comment sidebar" id="btnToggleComments">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -1193,6 +1198,28 @@ export function generateSpecViewerHTML(opts: {
       showToast('Copied to clipboard');
     }).catch(function() {
       showToast('Copy failed');
+    });
+  };
+
+  window.downloadStandalone = function() {
+    syncCurrentDoc();
+    var markdownChanges = {};
+    documents.forEach(function(doc) {
+      if (!doc.isVisuals && docMarkdown[doc.key] !== originalMarkdown[doc.key]) {
+        markdownChanges[doc.filePath] = docMarkdown[doc.key];
+      }
+    });
+
+    fetch('http://127.0.0.1:' + PORT + '/export-standalone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdownChanges: markdownChanges })
+    }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      showToast(data.message || 'Standalone export saved');
+    }).catch(function() {
+      showToast('Standalone export failed');
     });
   };
 

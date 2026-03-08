@@ -13,6 +13,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCompletionReportHTML, type ReportData, type ChangedFile } from "./lib/completion-report-html.ts";
+import { createCompletionReportStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -369,6 +370,19 @@ function startReportServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
+				return;
+			}
+
+			if (req.method === "POST" && url.pathname === "/export-standalone") {
+				try {
+					const html = createCompletionReportStandaloneExport(report);
+					const saved = saveStandaloneExport({ filePrefix: "report-readonly", html });
+					res.writeHead(200, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
+				} catch (err: any) {
+					res.writeHead(500, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: err.message }));
+				}
 				return;
 			}
 

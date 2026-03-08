@@ -13,6 +13,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
+import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -115,6 +116,28 @@ function startViewerServer(
 						writeFileSync(filePath, data.markdown, "utf-8");
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true, message: `Saved to ~/Desktop/${fileName}` }));
+					} catch (err: any) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err.message }));
+					}
+				});
+				return;
+			}
+
+			if (req.method === "POST" && url.pathname === "/export-standalone") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body);
+						const html = createPlanStandaloneExport({
+							title,
+							markdown: data.markdown || markdown,
+							mode: purpose,
+						});
+						const saved = saveStandaloneExport({ filePrefix: "plan-readonly", html });
+						res.writeHead(200, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
 					} catch (err: any) {
 						res.writeHead(500, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: err.message }));

@@ -622,6 +622,7 @@ export function generatePlanViewerHTML(opts: {
   <div class="footer">
     <button class="btn btn-ghost" onclick="copyToClipboard()" title="Copy markdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
     <button class="btn btn-ghost" onclick="saveToDesktop()" title="Save to desktop"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button>
+    <button class="btn btn-ghost" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Standalone</button>
     <div class="spacer"></div>
     <button class="btn" onclick="decline()" id="btnDecline">Close</button>
     <button class="btn btn-primary" onclick="approve()" id="btnApprove">
@@ -1056,6 +1057,21 @@ export function generatePlanViewerHTML(opts: {
       showToast(data.message || 'Saved');
     }).catch(() => {
       showToast('Save failed');
+    });
+  };
+
+  window.downloadStandalone = function() {
+    if (currentView === 'raw') {
+      markdown = document.getElementById('rawEditor').value;
+    }
+    fetch('http://localhost:' + PORT + '/export-standalone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: markdown }),
+    }).then(r => r.json()).then(data => {
+      showToast(data.message || 'Standalone export saved');
+    }).catch(() => {
+      showToast('Standalone export failed');
     });
   };
 
