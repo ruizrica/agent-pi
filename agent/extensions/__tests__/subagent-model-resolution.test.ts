@@ -23,7 +23,7 @@ function makeModelsConfig(): AgentModelsConfig {
 			scout: { provider: "x-ai", model: "grok-4.1-fast" },
 			builder: { provider: "mercury", model: "mercury-2" },
 			reviewer: { provider: "anthropic", model: "claude-opus-4-6" },
-			planner: { provider: "google", model: "gemini-3.1-pro-preview" },
+			planner: { provider: "github-copilot", model: "gemini-3.1-pro-preview" },
 			tester: { provider: "anthropic", model: "claude-haiku-4-5" },
 			"red-team": { provider: "anthropic", model: "claude-haiku-4-5" },
 		},
@@ -74,8 +74,8 @@ describe("resolveAgentModelString", () => {
 		expect(resolveAgentModelString("reviewer", config)).toBe("anthropic/claude-opus-4-6");
 	});
 
-	it("resolves planner to google/gemini-3.1-pro-preview", () => {
-		expect(resolveAgentModelString("planner", config)).toBe("google/gemini-3.1-pro-preview");
+	it("resolves planner to github-copilot/gemini-3.1-pro-preview", () => {
+		expect(resolveAgentModelString("planner", config)).toBe("github-copilot/gemini-3.1-pro-preview");
 	});
 
 	it("is case-insensitive", () => {
@@ -130,8 +130,8 @@ describe("subagent model resolution (end-to-end)", () => {
 	});
 
 	describe("PLANNER agent", () => {
-		it("uses google/gemini-3.1-pro-preview from models.json", () => {
-			expect(resolveModel(undefined, "PLANNER")).toBe("google/gemini-3.1-pro-preview");
+		it("uses github-copilot/gemini-3.1-pro-preview from models.json", () => {
+			expect(resolveModel(undefined, "PLANNER")).toBe("github-copilot/gemini-3.1-pro-preview");
 		});
 	});
 

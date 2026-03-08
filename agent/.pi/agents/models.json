@@ -17,7 +17,7 @@
       "model": "claude-opus-4-6"
     },
     "planner": {
-      "provider": "google",
+      "provider": "github-copilot",
       "model": "gemini-3.1-pro-preview"
     },
     "tester": {
@@ -25,6 +25,42 @@
       "model": "claude-haiku-4-5"
     },
     "red-team": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    },
+    "gemini-agent": {
+      "provider": "openrouter",
+      "model": "google/gemini-2.5-flash"
+    },
+    "cursor-agent": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "codex-agent": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "qwen-agent": {
+      "provider": "openrouter",
+      "model": "qwen/qwen3-coder-plus"
+    },
+    "opencode-agent": {
+      "provider": "openrouter",
+      "model": "google/gemini-2.5-flash"
+    },
+    "groq-agent": {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-maverick"
+    },
+    "crush-agent": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    },
+    "droid-agent": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "rlm-subcall": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5"
     }

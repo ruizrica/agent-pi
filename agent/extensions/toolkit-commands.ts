@@ -83,7 +83,12 @@ const TOOL_MAP: Record<string, string> = {
 
 export function mapTools(toolList: string[]): string[] {
 	const result: string[] = [];
-	for (const t of toolList) {
+	for (let t of toolList) {
+		// Handle Claude Code tool filter patterns like "Bash(python3:*)"
+		// Strip the filter suffix — Pi doesn't use it, just map the base tool name
+		const filterMatch = t.match(/^([A-Za-z_-]+)\(.*\)$/);
+		if (filterMatch) t = filterMatch[1];
+
 		const mapped = TOOL_MAP[t] ?? t.toLowerCase().replace(/-/g, "_");
 		for (const m of mapped.split(",")) {
 			const trimmed = m.trim();
