@@ -20,7 +20,7 @@ bash ~/.pi/agent/scripts/sync-toolkit.sh
 |-----------|------|
 | Agents | `~/.pi/agent/.pi/agents/toolkit/` |
 | Commands | `~/.pi/agent/.pi/prompts/toolkit/` |
-| Skills | `~/.pi/agent/skills/agent-memory/`, `~/.pi/agent/skills/just-bash/` |
+| Skills | `~/.pi/agent/skills/just-bash/` |
 | Model config | `~/.pi/agent/.pi/agents/models.json` |
 | Team config | `~/.pi/agent/.pi/agents/teams.yaml` |
 | Sync script | `~/.pi/agent/scripts/sync-toolkit.sh` |
@@ -75,9 +75,8 @@ Commands are registered by the `toolkit-commands.ts` extension with a `toolkit-`
 | `/toolkit-setup` | Initialize project context and agent-memory indexing |
 | `/toolkit-rlm` | Recursive Language Model for large documents |
 | `/toolkit-just-bash` | Sandboxed bash execution (read-only, no network) |
-| `/agent-memory` | Search and manage agent memories (registered without prefix) |
 
-> **Note:** Compact and restore are handled natively by Pi's `memory-cycle.ts` extension (`/cycle`, `/compact`). The toolkit versions have been omitted to avoid duplication.
+> **Note:** Compact, restore, and agent-memory are handled natively by Pi's `memory-cycle.ts` extension. The toolkit versions have been omitted.
 
 ---
 
@@ -85,8 +84,9 @@ Commands are registered by the `toolkit-commands.ts` extension with a `toolkit-`
 
 | Skill | CLI Tool | Description |
 |-------|----------|-------------|
-| `agent-memory` | `agent-memory` (Python) | Local hybrid search (vector + BM25) for memory files |
 | `just-bash` | `just-bash` (Node) | Sandboxed bash execution (read-only FS, no network) |
+
+> **Note:** agent-memory is omitted — Pi has its own memory system via `memory-cycle.ts`.
 
 ---
 

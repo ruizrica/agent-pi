@@ -98,8 +98,8 @@ fi
 info "Syncing commands..."
 mkdir -p "$COMMANDS_DST"
 
-# Commands to skip (handled natively by Pi's memory-cycle extension)
-SKIP_COMMANDS="compact.md compact-min.md restore.md"
+# Commands to skip (handled natively by Pi extensions)
+SKIP_COMMANDS="compact.md compact-min.md restore.md agent-memory.md"
 
 CMDS_CHANGED=0
 for f in "$COMMANDS_SRC"/*.md; do
@@ -153,22 +153,8 @@ fi
 
 info "Syncing skills..."
 
-# agent-memory skill
-MEMORY_SKILL_DST="$SKILLS_DST/agent-memory"
-if [[ -f "$SKILLS_SRC/agent-memory.md" ]]; then
-    mkdir -p "$MEMORY_SKILL_DST"
-    if [[ -f "$MEMORY_SKILL_DST/SKILL.md" ]]; then
-        if ! diff -q "$SKILLS_SRC/agent-memory.md" "$MEMORY_SKILL_DST/SKILL.md" >/dev/null 2>&1; then
-            cp "$SKILLS_SRC/agent-memory.md" "$MEMORY_SKILL_DST/SKILL.md"
-            success "Skill: agent-memory updated"
-        else
-            success "Skill: agent-memory (no changes)"
-        fi
-    else
-        cp "$SKILLS_SRC/agent-memory.md" "$MEMORY_SKILL_DST/SKILL.md"
-        success "Skill: agent-memory installed"
-    fi
-fi
+# agent-memory skill — skipped (Pi has its own memory system via memory-cycle.ts)
+success "Skill: agent-memory (skipped — Pi native)"
 
 # just-bash skill
 BASH_SKILL_DST="$SKILLS_DST/just-bash"
