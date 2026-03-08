@@ -237,9 +237,12 @@ async function executeBuiltinTool(
 			if (!command) return { content: [{ type: "text", text: "Error: 'command' parameter required" }] };
 			const timeout = (args.timeout as number) || undefined;
 			try {
-				const result = await pi.exec(command, [], {
+				// pi.exec takes (binary, args[], options) like child_process.spawn
+				// For shell commands, we need to invoke bash -c "command"
+				const result = await pi.exec("bash", ["-c", command], {
 					signal,
 					timeout: timeout ? timeout * 1000 : undefined,
+					cwd,
 				});
 				const output = result.stdout + (result.stderr ? `\nSTDERR: ${result.stderr}` : "");
 				return {
