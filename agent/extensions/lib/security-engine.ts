@@ -644,6 +644,33 @@ export function stripInjections(
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Output Size Limits (OWASP #10 — Unbounded Consumption)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Truncate tool result text to prevent context exhaustion.
+ * Returns the (possibly truncated) text, whether truncation occurred, and original length.
+ * Set maxChars to 0 to disable truncation.
+ */
+export function truncateToolResult(
+	text: string,
+	maxChars: number,
+): { text: string; truncated: boolean; originalLength: number } {
+	const originalLength = text.length;
+
+	if (maxChars <= 0 || originalLength <= maxChars) {
+		return { text, truncated: false, originalLength };
+	}
+
+	const notice = `\n\n[TRUNCATED: Output was ${originalLength} chars, limit is ${maxChars}. Use offset/pagination to see more.]`;
+	return {
+		text: text.slice(0, maxChars) + notice,
+		truncated: true,
+		originalLength,
+	};
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Utility: Format threat for display
 // ═══════════════════════════════════════════════════════════════════
 

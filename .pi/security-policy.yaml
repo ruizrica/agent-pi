@@ -471,3 +471,6 @@ settings:
   
   # Whether to show verbose threat details in block messages
   verbose_blocks: true
+
+  # Max chars allowed in a single tool result before truncation (0 = unlimited)
+  max_tool_result_chars: 100000

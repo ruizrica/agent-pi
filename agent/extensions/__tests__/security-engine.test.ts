@@ -13,6 +13,7 @@ import {
 	getDefaultPolicy,
 	formatThreat,
 	formatThreatsForBlock,
+	truncateToolResult,
 	type SecurityPolicy,
 	type ThreatResult,
 } from "../lib/security-engine.ts";
@@ -726,6 +727,50 @@ describe("command chaining bypass prevention", () => {
 	it("should detect subshell notation as chain operator", () => {
 		const threats = scanCommand("echo $(rm -rf /)", policy);
 		expect(threats.length).toBeGreaterThan(0);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// truncateToolResult Tests (OWASP #10 — Unbounded Consumption)
+// ═══════════════════════════════════════════════════════════════════
+
+describe("truncateToolResult", () => {
+	it("should pass through text under the limit", () => {
+		const result = truncateToolResult("short text", 100);
+		expect(result.text).toBe("short text");
+		expect(result.truncated).toBe(false);
+		expect(result.originalLength).toBe(10);
+	});
+
+	it("should truncate text over the limit with notice", () => {
+		const longText = "a".repeat(200);
+		const result = truncateToolResult(longText, 100);
+		expect(result.text.length).toBeLessThanOrEqual(200); // truncated + notice
+		expect(result.truncated).toBe(true);
+		expect(result.originalLength).toBe(200);
+		expect(result.text).toContain("[TRUNCATED");
+		expect(result.text.startsWith("a".repeat(100))).toBe(true);
+	});
+
+	it("should disable truncation when maxChars is 0", () => {
+		const longText = "a".repeat(200000);
+		const result = truncateToolResult(longText, 0);
+		expect(result.text).toBe(longText);
+		expect(result.truncated).toBe(false);
+	});
+
+	it("should handle exact limit boundary", () => {
+		const text = "a".repeat(100);
+		const result = truncateToolResult(text, 100);
+		expect(result.text).toBe(text);
+		expect(result.truncated).toBe(false);
+	});
+
+	it("should handle empty string", () => {
+		const result = truncateToolResult("", 100);
+		expect(result.text).toBe("");
+		expect(result.truncated).toBe(false);
+		expect(result.originalLength).toBe(0);
 	});
 });
 

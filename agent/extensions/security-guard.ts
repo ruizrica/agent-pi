@@ -38,6 +38,7 @@ import {
 	stripInjections,
 	formatThreat,
 	formatThreatsForBlock,
+	truncateToolResult,
 	type SecurityPolicy,
 	type ThreatResult,
 	type Severity,
@@ -375,10 +376,11 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	pi.on("context", async (event, ctx) => {
 		if (!policy.settings.enabled) return;
-		if (!policy.settings.strip_injections) return;
 
 		const messages = event.messages;
 		if (!messages || messages.length === 0) return;
+
+		const maxResultChars = (policy.settings as any).max_tool_result_chars ?? 100000;
 
 		let anyModified = false;
 		const repairedMessages = messages.map((msg: any) => {
@@ -389,8 +391,40 @@ export default function securityGuard(pi: ExtensionAPI) {
 			const content = msg.content;
 			if (!Array.isArray(content)) return msg;
 
+			// ── Output size truncation (OWASP #10) ──────────────────
+			if (maxResultChars > 0) {
+				let truncated = false;
+				const truncatedContent = content.map((block: any) => {
+					if (block.type !== "text" || !block.text) return block;
+					const result = truncateToolResult(block.text, maxResultChars);
+					if (result.truncated) {
+						truncated = true;
+						anyModified = true;
+						return { ...block, text: result.text };
+					}
+					return block;
+				});
+				if (truncated) {
+					msg = { ...msg, content: truncatedContent };
+					emitGuardCard("output truncated", `limit ${maxResultChars} chars`);
+					audit.log({
+						timestamp: now(),
+						severity: "warn",
+						category: "unknown",
+						tool: msg.toolName || "unknown",
+						description: "Tool result truncated (output size limit)",
+						matched: `>${maxResultChars} chars`,
+						action: "warned",
+					});
+					stats.warned++;
+				}
+			}
+
+			if (!policy.settings.strip_injections) return msg;
+
 			let msgModified = false;
-			const newContent = content.map((block: any) => {
+			const currentContent = msg.content;
+			const newContent = currentContent.map((block: any) => {
 				if (block.type !== "text" || !block.text) return block;
 
 				const threats = scanContent(block.text, policy);
