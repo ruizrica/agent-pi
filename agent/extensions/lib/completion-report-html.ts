@@ -507,6 +507,13 @@ export function generateCompletionReportHTML(opts: {
     padding: 6px 12px;
   }
   .diff-context .diff-line-content { color: var(--text-dim); }
+  .diff-note {
+    background: rgba(41, 128, 185, 0.08);
+  }
+  .diff-note .diff-line-content {
+    color: var(--accent);
+    font-style: italic;
+  }
 
   /* ── Done Banner ──────────────────────── */
   .done-banner {
@@ -985,6 +992,13 @@ export function generateCompletionReportHTML(opts: {
         continue;
       }
 
+      if (line.includes('Diff preview suppressed for generated or bulky artifact')) {
+        var noteText = line.charAt(0) === '+' ? line.substring(1) : line;
+        html += '<tr class="diff-note"><td class="diff-line-num"></td><td class="diff-line-num"></td>' +
+          '<td class="diff-line-content">' + escapeHtml(noteText) + '</td></tr>';
+        continue;
+      }
+
       // Other lines (e.g. \\ No newline at end of file)
       if (line.startsWith('\\\\')) {
         html += '<tr class="diff-context"><td class="diff-line-num"></td><td class="diff-line-num"></td>' +
@@ -1109,7 +1123,26 @@ export function generateCompletionReportHTML(opts: {
     }).catch(function() {});
   }
 
-  window.done = function() {
+  function showDoneState() {
+    var banner = document.createElement('div');
+    banner.className = 'done-banner';
+    banner.innerHTML = '<div class="done-icon">\u2713</div>' +
+      '<div><div class="done-text">Report Complete</div>' +
+      '<div class="done-sub">You can close this tab.</div></div>';
+    var header = document.querySelector('.header');
+    header.parentNode.insertBefore(banner, header.nextSibling);
+
+    document.body.classList.add('done-state');
+
+    var badge = document.getElementById('modeBadge');
+    if (badge) {
+      badge.textContent = 'DONE';
+      badge.style.color = 'var(--success)';
+      badge.style.borderColor = 'var(--success)';
+    }
+  }
+
+  function handleDone() {
     fetch('http://localhost:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1118,29 +1151,24 @@ export function generateCompletionReportHTML(opts: {
         rolledBackFiles: Array.from(rolledBackFiles),
       }),
     }).then(function() {
-      // Show done state: banner + full read-only content (like plan/spec viewers)
-      var banner = document.createElement('div');
-      banner.className = 'done-banner';
-      banner.innerHTML = '<div class="done-icon">\u2713</div>' +
-        '<div><div class="done-text">Report Complete</div>' +
-        '<div class="done-sub">You can close this tab.</div></div>';
-      var header = document.querySelector('.header');
-      header.parentNode.insertBefore(banner, header.nextSibling);
-
-      // Switch to done state (disables interactivity via CSS)
-      document.body.classList.add('done-state');
-
-      // Update header badge
-      var badge = document.getElementById('modeBadge');
-      if (badge) {
-        badge.textContent = 'DONE';
-        badge.style.color = 'var(--success)';
-        badge.style.borderColor = 'var(--success)';
-      }
+      showDoneState();
     }).catch(function() {
-      showToast('Failed to close report', 'error');
+      showDoneState();
+      showToast('Report closed locally; server did not acknowledge', 'error');
     });
-  };
+  }
+
+  window.done = handleDone;
+  globalThis.done = handleDone;
+
+  window.addEventListener('pagehide', function() {
+    try {
+      navigator.sendBeacon('http://localhost:' + PORT + '/result', JSON.stringify({
+        action: 'closed',
+        rolledBackFiles: Array.from(rolledBackFiles)
+      }));
+    } catch (e) {}
+  });
 
   // ── Copy / Save ───────────────────────────────
   window.copyReport = function() {
