@@ -644,6 +644,77 @@ export function stripInjections(
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// System Prompt Leakage Detection (OWASP #7)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Extract distinctive fingerprint phrases from a system prompt.
+ * Returns 5-10 phrases (lowercased) that are unlikely to appear in normal conversation.
+ * Prefers sentences with security-related keywords.
+ */
+export function extractPromptFingerprints(systemPrompt: string): string[] {
+	if (systemPrompt.length < 50) return [];
+
+	// Split into sentences/phrases
+	const sentences = systemPrompt
+		.split(/[.!?\n]/)
+		.map((s) => s.trim().toLowerCase())
+		.filter((s) => s.length >= 20 && s.length <= 150);
+
+	// Prioritize sentences with distinctive security vocabulary
+	const securityKeywords = /\b(never|always|block|refuse|redact|strip|monitor|inject|exfiltrat|credential|security guard)\b/i;
+	const scored = sentences.map((s) => ({
+		text: s,
+		score: (s.match(securityKeywords) || []).length,
+	}));
+
+	scored.sort((a, b) => b.score - a.score);
+
+	// Take top 10 most distinctive
+	return scored
+		.filter((s) => s.score > 0)
+		.slice(0, 10)
+		.map((s) => s.text);
+}
+
+/**
+ * Detect if assistant output contains system prompt content.
+ * If 3+ fingerprints are found in a single response, it's likely leakage.
+ * Returns a ThreatResult if leakage detected, null otherwise.
+ */
+export function detectSystemPromptLeakage(
+	text: string,
+	fingerprints: string[],
+	threshold: number = 3,
+): ThreatResult | null {
+	if (fingerprints.length === 0) return null;
+
+	const lowerText = text.toLowerCase();
+	let matchCount = 0;
+	const matched: string[] = [];
+
+	for (const fp of fingerprints) {
+		if (lowerText.includes(fp)) {
+			matchCount++;
+			matched.push(fp);
+		}
+		if (matchCount >= threshold) break;
+	}
+
+	if (matchCount >= threshold) {
+		return {
+			severity: "block",
+			category: "prompt_injection",
+			description: `System prompt leakage detected (${matchCount} fingerprints matched)`,
+			matched: matched.slice(0, 3).join("; "),
+			rulePattern: "detect_prompt_leakage",
+		};
+	}
+
+	return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Secret/PII Scanning (OWASP #2 — Sensitive Information Disclosure)
 // ═══════════════════════════════════════════════════════════════════
 

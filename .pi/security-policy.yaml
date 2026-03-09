@@ -475,6 +475,9 @@ settings:
   # Max chars allowed in a single tool result before truncation (0 = unlimited)
   max_tool_result_chars: 100000
 
+  # Detect system prompt leakage in assistant output (OWASP #7)
+  detect_prompt_leakage: true
+
   # Redact secrets/credentials from assistant output (OWASP #2)
   redact_secrets: true
 

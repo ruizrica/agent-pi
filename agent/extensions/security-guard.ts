@@ -41,6 +41,8 @@ import {
 	truncateToolResult,
 	checkToolBudget,
 	scanForSecrets,
+	extractPromptFingerprints,
+	detectSystemPromptLeakage,
 	type SecurityPolicy,
 	type ThreatResult,
 	type Severity,
@@ -188,6 +190,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	// Tool call budget counters (OWASP #6)
 	let budgetCounters = { turn: 0, session: 0, bashTurn: 0 };
+
+	// System prompt fingerprints for leakage detection (OWASP #7)
+	let promptFingerprints: string[] = [];
 
 	// ── Security event inline card ───────────────────────────────────────────
 	// Dark gray card that flows with conversation (like memory-cycle cards).
@@ -526,6 +531,44 @@ export default function securityGuard(pi: ExtensionAPI) {
 			return msg;
 		});
 
+		// ── System prompt leakage detection (OWASP #7) ──────────────
+		if (promptFingerprints.length > 0 && (policy.settings as any).detect_prompt_leakage !== false) {
+			for (let i = 0; i < repairedMessages.length; i++) {
+				const msg = repairedMessages[i];
+				if (msg.role !== "assistant") continue;
+
+				const text = typeof msg.content === "string"
+					? msg.content
+					: Array.isArray(msg.content)
+						? msg.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n")
+						: "";
+
+				if (!text) continue;
+
+				const leakage = detectSystemPromptLeakage(text, promptFingerprints);
+				if (leakage) {
+					stats.blocked++;
+					stats.threats.push(leakage);
+					audit.log({
+						timestamp: now(),
+						severity: leakage.severity,
+						category: leakage.category,
+						tool: "assistant",
+						description: leakage.description,
+						matched: leakage.matched,
+						action: "blocked",
+					});
+					emitGuardCard("prompt leakage blocked", truncate(leakage.matched, 60));
+					// Replace the assistant message with a warning
+					anyModified = true;
+					repairedMessages[i] = {
+						...msg,
+						content: "[System prompt leakage detected and blocked. The assistant attempted to reveal its system instructions.]",
+					};
+				}
+			}
+		}
+
 		// ── Secret/PII scanning on assistant messages (OWASP #2) ────
 		const redactSecrets = (policy.settings as any).redact_secrets ?? true;
 		if (redactSecrets) {
@@ -599,10 +642,22 @@ export default function securityGuard(pi: ExtensionAPI) {
 		// Check if addendum is already present (idempotent — safe against double-fire).
 		const existingPrompt = event.systemPrompt || "";
 		if (existingPrompt.includes("## Security Policy (Active)")) {
-			return {}; // Already present — another hook or session restore included it
+			// Still extract fingerprints even if addendum already present
+			if ((policy.settings as any).detect_prompt_leakage !== false) {
+				promptFingerprints = extractPromptFingerprints(existingPrompt);
+			}
+			return {};
 		}
+
+		const fullPrompt = existingPrompt + SECURITY_PROMPT_ADDENDUM;
+
+		// Extract fingerprints for leakage detection (OWASP #7)
+		if ((policy.settings as any).detect_prompt_leakage !== false) {
+			promptFingerprints = extractPromptFingerprints(fullPrompt);
+		}
+
 		return {
-			systemPrompt: existingPrompt + SECURITY_PROMPT_ADDENDUM,
+			systemPrompt: fullPrompt,
 		};
 	});
 
