@@ -21,6 +21,7 @@ agent/pi-crash.log
 .pi/agent-sessions/
 .pi/debug-captures/
 .pi/web-test-captures/
+.context/reports/
 agent/extensions/coverage/
 
 # Secrets

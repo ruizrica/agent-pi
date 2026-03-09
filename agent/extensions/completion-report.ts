@@ -14,11 +14,12 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCompletionReportHTML, type ReportData, type ChangedFile } from "./lib/completion-report-html.ts";
 import { createCompletionReportStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
+import { upsertPersistedReport } from "./lib/report-index.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 interface ReportResult {
-	action: "done" | "rollback";
+	action: "done" | "rollback" | "closed";
 	rolledBackFiles: string[];
 }
 
@@ -145,6 +146,21 @@ function getFileStatuses(cwd: string, baseRef: string): Map<string, { status: Ch
 /**
  * Gather all data needed for the completion report.
  */
+function shouldSuppressReportFile(filePath: string): boolean {
+	const normalized = filePath.replace(/\\/g, "/");
+	return normalized.startsWith(".context/test-exports/") ||
+		normalized.startsWith(".context/reports/") ||
+		normalized === "agent/extensions/lib/marked.min.js";
+}
+
+function summarizeSuppressedFile(filePath: string): string {
+	return [
+		"@@ -0,0 +1,1 @@",
+		`+Diff preview suppressed for generated or bulky artifact: ${filePath}`,
+		"+Use copy/save/export or open the file directly if you need to inspect the full contents.",
+	].join("\n");
+}
+
 function gatherReportData(cwd: string, title: string, summary: string, baseRef: string): ReportData {
 	const resolvedRef = resolveBaseRef(cwd, baseRef);
 
@@ -184,7 +200,7 @@ function gatherReportData(cwd: string, title: string, summary: string, baseRef: 
 			status: statusInfo.status,
 			additions: stat.additions,
 			deletions: stat.deletions,
-			diff,
+			diff: shouldSuppressReportFile(stat.path) ? summarizeSuppressedFile(stat.path) : diff,
 			oldPath: statusInfo.oldPath,
 		});
 	}
@@ -194,6 +210,17 @@ function gatherReportData(cwd: string, title: string, summary: string, baseRef: 
 		const untracked = execGit("git ls-files --others --exclude-standard", cwd);
 		for (const filePath of untracked.split("\n").filter(Boolean)) {
 			if (!files.some((f) => f.path === filePath)) {
+				if (shouldSuppressReportFile(filePath)) {
+					files.push({
+						path: filePath,
+						status: "added",
+						additions: 1,
+						deletions: 0,
+						diff: summarizeSuppressedFile(filePath),
+					});
+					continue;
+				}
+
 				// Read file content to show as "all added"
 				let content = "";
 				try {
@@ -249,6 +276,12 @@ function startReportServer(
 ): Promise<{ port: number; server: Server; waitForResult: () => Promise<ReportResult> }> {
 	return new Promise((resolveSetup) => {
 		let resolveResult: (result: ReportResult) => void;
+		let settled = false;
+		const settle = (result: ReportResult) => {
+			if (settled) return;
+			settled = true;
+			resolveResult!(result);
+		};
 		const resultPromise = new Promise<ReportResult>((res) => {
 			resolveResult = res;
 		});
@@ -338,7 +371,7 @@ function startReportServer(
 						const data = JSON.parse(body);
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
+						settle({
 							action: data.action || "done",
 							rolledBackFiles: data.rolledBackFiles || [],
 						});
@@ -389,6 +422,10 @@ function startReportServer(
 			// 404
 			res.writeHead(404);
 			res.end("Not found");
+		});
+
+		server.on("close", () => {
+			settle({ action: "closed", rolledBackFiles: [] });
 		});
 
 		server.listen(0, "127.0.0.1", () => {
@@ -492,6 +529,26 @@ export default function (pi: ExtensionAPI) {
 			// Wait for user to close the report
 			try {
 				const result = await waitForResult();
+
+				try {
+					upsertPersistedReport({
+						category: "completion",
+						title,
+						summary,
+						sourcePath: join(cwd, ".context", "todo.md"),
+						viewerPath: join(cwd, ".context", "todo.md"),
+						viewerLabel: title,
+						tags: ["completion", "git", "diff"],
+						metadata: {
+							baseRef: report.baseRef,
+							fileCount: report.files.length,
+							totalAdditions: report.totalAdditions,
+							totalDeletions: report.totalDeletions,
+							action: result.action,
+							rolledBackFiles: result.rolledBackFiles,
+						},
+					});
+				} catch {}
 
 				const rolledBack = result.rolledBackFiles.length;
 				const summary = rolledBack > 0

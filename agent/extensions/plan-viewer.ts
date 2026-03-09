@@ -14,6 +14,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
+import { upsertPersistedReport } from "./lib/report-index.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -241,6 +242,24 @@ export default function (pi: ExtensionAPI) {
 				} catch {
 					// Silently fail
 				}
+			}
+
+			try {
+				upsertPersistedReport({
+					category: purpose,
+					title,
+					summary: result.answers || result.markdown,
+					sourcePath: filePath,
+					viewerPath: filePath,
+					viewerLabel: title,
+					tags: [purpose, "markdown"],
+					metadata: {
+						action: result.action,
+						modified: result.modified,
+					},
+				});
+			} catch {
+				// Persistence is best-effort; viewer result should still return.
 			}
 
 			return result;

@@ -13,6 +13,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
+import { upsertPersistedReport } from "./lib/report-index.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -444,6 +445,26 @@ export default function (pi: ExtensionAPI) {
 					writeFileSync(commentsPath, JSON.stringify({ comments: result.comments }, null, 2), "utf-8");
 				} catch {}
 			}
+
+			try {
+				const editedDocCount = result.markdownChanges ? Object.keys(result.markdownChanges).length : 0;
+				upsertPersistedReport({
+					category: "spec",
+					title,
+					summary: `${documents.length} document(s) reviewed${result.comments.length ? `, ${result.comments.length} comment(s)` : ""}`,
+					sourcePath: folderPath,
+					viewerPath: folderPath,
+					viewerLabel: title,
+					tags: ["spec", "review"],
+					metadata: {
+						action: result.action,
+						modified: result.modified,
+						commentCount: result.comments.length,
+						editedDocCount,
+						documentCount: documents.length,
+					},
+				});
+			} catch {}
 
 			return result;
 		} finally {
