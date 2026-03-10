@@ -632,19 +632,19 @@ export function generateFileViewerHTML(opts: {
       modified = currentContent !== savedContent;
     }
 
-    /* Signal the CLI server */
-    fetch('http://127.0.0.1:' + PORT + '/result', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'done', modified: modified, content: currentContent })
-    });
-
-    /* Switch to done/read-only state */
+    /* Switch to done/read-only state immediately */
     isDone = true;
     mode = 'view';
     doneBanner.classList.add('visible');
     setNotice('', '');
     refreshUI();
+
+    /* Signal the CLI server — fire and forget, server may close before response */
+    fetch('http://127.0.0.1:' + PORT + '/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'done', modified: modified, content: currentContent })
+    }).catch(function() { /* expected — server closes after receiving result */ });
   });
 
   /* ── Keyboard shortcuts ── */
