@@ -462,25 +462,27 @@ export function generateFileViewerHTML(opts: {
     notice.className = 'notice' + (text ? ' visible ' + kind : '');
   }
 
+  var NL = String.fromCharCode(10);
+
   function generateLineNums(content, container) {
-    var lines = content.split('\\n');
+    var lines = content.split(NL);
     var count = lines.length;
     if (lines.length > 1 && lines[lines.length - 1] === '') count--;
     var html = '';
     for (var i = 1; i <= count; i++) {
-      html += '<span>' + i + '<\\/span>';
+      html += '<span>' + i + '</span>';
     }
     container.innerHTML = html;
   }
 
   /* ── Highlight code ── */
   function updateGutter(content) {
-    var lines = content.split('\\n');
+    var lines = content.split(NL);
     var count = lines.length;
     if (count > 1 && lines[count - 1] === '') count--;
     var html = '';
     for (var i = 1; i <= count; i++) {
-      html += '<span>' + i + '<\\/span>';
+      html += '<span>' + i + '</span>';
     }
     gutter.innerHTML = html;
   }
@@ -520,8 +522,8 @@ export function generateFileViewerHTML(opts: {
   /* ── Refresh meta bar ── */
   function refreshMeta() {
     metaPath.textContent = 'Path: ' + FILE_PATH;
-    var lineCount = currentContent.split('\\n').length;
-    if (currentContent.endsWith('\\n') && lineCount > 1) lineCount--;
+    var lineCount = currentContent.split(NL).length;
+    if (currentContent.endsWith(NL) && lineCount > 1) lineCount--;
     metaLines.textContent = 'Lines: ' + lineCount + (LINE_RANGE ? ' (range ' + LINE_RANGE + ')' : '');
     metaMode.textContent = isDone ? 'Mode: Read-only (done)' : ('Mode: ' + (mode === 'view' ? 'Read' : 'Edit') + (EDITABLE ? '' : ' (read-only)'));
     metaSize.textContent = 'Size: ' + formatBytes(new Blob([currentContent]).size);
