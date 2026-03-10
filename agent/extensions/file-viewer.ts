@@ -47,14 +47,25 @@ function parseRange(content: string, lineRange?: string): string {
 }
 
 function launchEditor(editor: string, filePath: string): { ok: boolean; error?: string } {
+	const macAppMap: Record<string, string> = {
+		cursor: "Cursor",
+		windsurf: "Windsurf",
+		vscode: "Visual Studio Code",
+	};
 	const commandMap: Record<string, string[]> = {
 		cursor: ["cursor", filePath],
 		windsurf: ["windsurf", filePath],
 		vscode: ["code", filePath],
 	};
-	const cmd = commandMap[editor];
-	if (!cmd) return { ok: false, error: `Unsupported editor: ${editor}` };
+	if (!commandMap[editor]) return { ok: false, error: `Unsupported editor: ${editor}` };
 	try {
+		if (process.platform === "darwin") {
+			const appName = macAppMap[editor];
+			const child = spawn("open", ["-a", appName, filePath], { detached: true, stdio: "ignore" });
+			child.unref();
+			return { ok: true };
+		}
+		const cmd = commandMap[editor];
 		const child = spawn(cmd[0], cmd.slice(1), { detached: true, stdio: "ignore" });
 		child.unref();
 		return { ok: true };
