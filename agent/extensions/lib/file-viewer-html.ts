@@ -323,6 +323,9 @@ export function generateFileViewerHTML(opts: {
       <div class="subtitle" id="subtitleText"></div>
     </div>
     <div class="toolbar">
+      <button id="cursorBtn" title="Open in Cursor">Cursor</button>
+      <button id="windsurfBtn" title="Open in Windsurf">Windsurf</button>
+      <button id="vscodeBtn" title="Open in VS Code">VS Code</button>
       <button id="copyBtn" title="Copy file contents">Copy</button>
       <button id="toggleBtn"></button>
       <button id="saveBtn" class="primary" title="Save file">Save</button>
@@ -407,6 +410,9 @@ export function generateFileViewerHTML(opts: {
   var editorWrap = document.getElementById('editorWrap');
   var editorLines = document.getElementById('editorLines');
   var editor = document.getElementById('editor');
+  var cursorBtn = document.getElementById('cursorBtn');
+  var windsurfBtn = document.getElementById('windsurfBtn');
+  var vscodeBtn = document.getElementById('vscodeBtn');
   var copyBtn = document.getElementById('copyBtn');
   var toggleBtn = document.getElementById('toggleBtn');
   var saveBtn = document.getElementById('saveBtn');
@@ -580,6 +586,25 @@ export function generateFileViewerHTML(opts: {
     saveHint.textContent = (EDITABLE && !isDone) ? (navigator.platform.indexOf('Mac') > -1 ? '\\u2318S' : 'Ctrl+S') : '';
     refreshMeta();
   }
+
+  function openInEditor(editorName) {
+    fetch('http://127.0.0.1:' + PORT + '/open-editor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ editor: editorName })
+    }).then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (!data.ok) throw new Error(data.error || ('Failed to open in ' + editorName));
+      setNotice('Opened in ' + editorName, 'success');
+      setTimeout(function() { setNotice('', ''); }, 2000);
+    }).catch(function(err) {
+      setNotice(err && err.message ? err.message : ('Failed to open in ' + editorName), 'error');
+    });
+  }
+
+  cursorBtn.addEventListener('click', function() { openInEditor('cursor'); });
+  windsurfBtn.addEventListener('click', function() { openInEditor('windsurf'); });
+  vscodeBtn.addEventListener('click', function() { openInEditor('vscode'); });
 
   /* ── Copy ── */
   copyBtn.addEventListener('click', function() {

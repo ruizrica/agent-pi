@@ -5,7 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -44,6 +44,23 @@ function parseRange(content: string, lineRange?: string): string {
 	out.push(...lines.slice(start, end));
 	if (end < lines.length) out.push("...");
 	return out.join("\n");
+}
+
+function launchEditor(editor: string, filePath: string): { ok: boolean; error?: string } {
+	const commandMap: Record<string, string[]> = {
+		cursor: ["cursor", filePath],
+		windsurf: ["windsurf", filePath],
+		vscode: ["code", filePath],
+	};
+	const cmd = commandMap[editor];
+	if (!cmd) return { ok: false, error: `Unsupported editor: ${editor}` };
+	try {
+		const child = spawn(cmd[0], cmd.slice(1), { detached: true, stdio: "ignore" });
+		child.unref();
+		return { ok: true };
+	} catch (err: any) {
+		return { ok: false, error: err?.message || `Failed to launch ${editor}` };
+	}
 }
 
 function detectLanguage(filePath: string): string {
@@ -132,6 +149,23 @@ function startFileViewerServer(opts: {
 				});
 				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 				res.end(html);
+				return;
+			}
+
+			if (req.method === "POST" && url.pathname === "/open-editor") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body || "{}");
+						const result = launchEditor(String(data.editor || ""), opts.filePath);
+						res.writeHead(result.ok ? 200 : 400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify(result));
+					} catch (err: any) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: false, error: err?.message || "Editor launch failed" }));
+					}
+				});
 				return;
 			}
 
