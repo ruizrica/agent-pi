@@ -4,7 +4,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
@@ -46,11 +46,38 @@ function parseRange(content: string, lineRange?: string): string {
 	return out.join("\n");
 }
 
+function detectLanguage(filePath: string): string {
+	const name = basename(filePath).toLowerCase();
+	if (name === "dockerfile") return "dockerfile";
+	if (name === "makefile" || name === "gnumakefile") return "makefile";
+	const ext = extname(filePath).replace(/^\./, "").toLowerCase();
+	const map: Record<string, string> = {
+		js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
+		ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
+		py: "python", rb: "ruby", rs: "rust", go: "go",
+		java: "java", kt: "kotlin", swift: "swift",
+		c: "c", h: "c", cpp: "cpp", cc: "cpp", cs: "csharp",
+		html: "html", htm: "html", css: "css", scss: "scss",
+		json: "json", jsonc: "json",
+		md: "markdown", mdx: "markdown",
+		yaml: "yaml", yml: "yaml",
+		xml: "xml", svg: "xml",
+		sql: "sql",
+		sh: "bash", bash: "bash", zsh: "bash",
+		toml: "toml", ini: "ini",
+		php: "php", lua: "lua", r: "r",
+		graphql: "graphql", gql: "graphql",
+		tf: "hcl", hcl: "hcl",
+	};
+	return map[ext] || "";
+}
+
 function startFileViewerServer(opts: {
 	filePath: string;
 	title: string;
 	editable: boolean;
 	lineRange?: string;
+	language?: string;
 }): Promise<{ port: number; server: Server; waitForResult: () => Promise<FileViewerResult> }> {
 	return new Promise((resolveSetup, rejectSetup) => {
 		let initialContent = "";
@@ -88,6 +115,7 @@ function startFileViewerServer(opts: {
 					port,
 					lineRange: opts.lineRange,
 					editable: opts.editable,
+					language: opts.language,
 				});
 				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 				res.end(html);
@@ -175,11 +203,13 @@ export default function (pi: ExtensionAPI) {
 		const editable = params.editable === true;
 		const title = params.title || basename(filePath);
 
+		const language = detectLanguage(filePath);
 		const { port, server, waitForResult } = await startFileViewerServer({
 			filePath,
 			title,
 			editable,
 			lineRange: params.line_range,
+			language,
 		});
 		activeServer = server;
 		const url = `http://127.0.0.1:${port}`;
@@ -269,18 +299,8 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	applyExtensionDefaults(pi, import.meta.url, {
-		name: "file-viewer",
-		rank: 95,
-		description: "Lightweight local web-based file viewer/editor",
-		themeVariables: {
-			accent: 0x2980B9,
-			accentEmphasis: 0x3A9AD5,
-			secondary: 0x8892A0,
-			success: 0x48D889,
-			warning: 0xF0B429,
-			error: 0xE85858,
-		},
+	pi.on("session_start", async (_event, ctx) => {
+		applyExtensionDefaults(import.meta.url, ctx);
 	});
 
 	pi.registerCommand("show-file-help", {
