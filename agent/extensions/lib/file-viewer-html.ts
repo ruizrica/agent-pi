@@ -128,6 +128,28 @@ export function generateFileViewerHTML(opts: {
     white-space: nowrap;
   }
   button:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .icon-btn .fill {
+    fill: currentColor;
+    stroke: none;
+  }
   button.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
   button.primary:hover { background: rgba(41, 128, 185, 0.22); }
   button.success { background: rgba(72, 216, 137, 0.1); border-color: var(--success); color: var(--success); }
@@ -323,9 +345,23 @@ export function generateFileViewerHTML(opts: {
       <div class="subtitle" id="subtitleText"></div>
     </div>
     <div class="toolbar">
-      <button id="cursorBtn" title="Open in Cursor">Cursor</button>
-      <button id="windsurfBtn" title="Open in Windsurf">Windsurf</button>
-      <button id="vscodeBtn" title="Open in VS Code">VS Code</button>
+      <button id="cursorBtn" class="icon-btn" title="Open in Cursor" aria-label="Open in Cursor">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="fill" d="M6 4l10 8-4.2 1.1 2.7 5-2.3 1.2-2.7-5L7 18 6 4z"/>
+        </svg>
+      </button>
+      <button id="windsurfBtn" class="icon-btn" title="Open in Windsurf" aria-label="Open in Windsurf">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 15c2.2-2.6 4.4-3.9 6.6-3.9 2.1 0 3.7 1.2 5.1 2.3 1.3 1 2.4 1.8 3.8 1.8 1 0 1.9-.3 2.8-.9"/>
+          <path d="M3 19c2.1-1.8 4.1-2.7 6-2.7 1.8 0 3.2.8 4.6 1.6 1.4.8 2.8 1.6 4.7 1.6 1.1 0 2.1-.2 3.2-.8"/>
+          <path d="M4 10c1.3-2.9 3.3-4.5 5.8-4.5 3.2 0 4.6 2.8 6.9 2.8 1.1 0 2.1-.4 3.3-1.5"/>
+        </svg>
+      </button>
+      <button id="vscodeBtn" class="icon-btn" title="Open in VS Code" aria-label="Open in VS Code">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="fill" d="M16.8 3.8l-7.2 6.9-3.2-2.4-2.2 1.9 3.1 2.8-3.1 2.8 2.2 1.9 3.2-2.4 7.2 6.9 3.2-1.5V5.3l-3.2-1.5zM17 8.2v7.6l-4.6-3.8L17 8.2z"/>
+        </svg>
+      </button>
       <button id="copyBtn" title="Copy file contents">Copy</button>
       <button id="toggleBtn"></button>
       <button id="saveBtn" class="primary" title="Save file">Save</button>
