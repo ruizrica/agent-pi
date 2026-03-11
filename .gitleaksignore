@@ -1,0 +1,10 @@
+# Test fixtures — intentionally fake API keys used in security engine tests
+2f342da6782d56fbfbd57259590cef84a38bc4bb:agent/extensions/__tests__/security-engine.test.ts:generic-api-key:889
+2f342da6782d56fbfbd57259590cef84a38bc4bb:agent/extensions/__tests__/security-engine.test.ts:generic-api-key:903
+5bbea40a14a5c366f1b66aec1a74e1258ecd5527:agent/extensions/__tests__/secure-engine.test.ts:generic-api-key:223
+
+# Firebase Storage public media tokens (not secrets — read-only CDN URLs)
+66e12c103573a98236738251766388c9ec1e57a6:.context/test-exports/plan-standalone.html:generic-api-key:69
+66e12c103573a98236738251766388c9ec1e57a6:.context/test-exports/spec-standalone.html:generic-api-key:69
+66e12c103573a98236738251766388c9ec1e57a6:.context/test-exports/report-standalone.html:generic-api-key:69
+40a9eb173fcd0da6b01cf802dea4ec82b0fa571a:agent/extensions/lib/viewer-standalone-export.ts:generic-api-key:5
