@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent — Documentation</title>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --surface: #1e2228;
+    --surface2: #252a32;
+    --surface3: #2a2f38;
+    --border: #2e343e;
+    --border-light: #3a4150;
+    --text: #e2e8f0;
+    --text-muted: #8892a0;
+    --text-dim: #555d6e;
+    --accent: #2980b9;
+    --accent-hover: #3a9ad5;
+    --accent-dim: rgba(41, 128, 185, 0.12);
+    --accent-glow: rgba(41, 128, 185, 0.06);
+    --success: #48d889;
+    --success-dim: rgba(72, 216, 137, 0.08);
+    --warning: #f0b429;
+    --warning-dim: rgba(240, 180, 41, 0.08);
+    --error: #e85858;
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.08);
+    --teal: #4ecdc4;
+    --teal-dim: rgba(78, 205, 196, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    --mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
+    --sidebar-w: 280px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font);
+    font-size: 15px; line-height: 1.65; height: 100%; overflow: hidden;
+  }
+  ::selection { background: var(--accent); color: #fff; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+  .layout { display: flex; height: 100%; width: 100%; }
+
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--surface);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; z-index: 50;
+  }
+  .sidebar-header { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .sidebar-logo {
+    margin-bottom: 8px; opacity: 0.7;
+  }
+  .sidebar-logo img { display: block; }
+  .sidebar-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .sidebar-subtitle { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .sidebar-search input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 7px 10px; color: var(--text); font-size: 12px; font-family: var(--font); outline: none; transition: border-color 0.2s;
+  }
+  .sidebar-search input:focus { border-color: var(--accent); }
+  .sidebar-search input::placeholder { color: var(--text-dim); }
+  .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .nav-section { padding: 0 12px; margin-bottom: 4px; }
+  .nav-section-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-dim); padding: 12px 8px 6px; font-family: var(--mono);
+  }
+  .nav-link {
+    display: block; padding: 5px 8px 5px 12px; font-size: 13px; color: var(--text-muted);
+    text-decoration: none; border-radius: 4px; transition: all 0.15s; cursor: pointer; border-left: 2px solid transparent;
+  }
+  .nav-link:hover { background: var(--accent-dim); color: var(--text); }
+  .nav-link.active { background: var(--accent-dim); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+  .nav-link .ext-tag { font-size: 10px; font-family: var(--mono); color: var(--text-dim); margin-left: 6px; opacity: 0.6; }
+  .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .sidebar-footer a { font-size: 11px; color: var(--text-dim); text-decoration: none; font-family: var(--mono); transition: color 0.2s; }
+  .sidebar-footer a:hover { color: var(--accent); }
+
+  /* Main */
+  .main { flex: 1; overflow-y: auto; padding: 0; }
+  .content-area { max-width: 900px; margin: 0 auto; padding: 40px 48px 120px; }
+
+  /* Sections */
+  .section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  .section > h1 { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 8px; letter-spacing: -0.5px; }
+  .section > h2 {
+    font-size: 18px; font-weight: 700; color: var(--accent); text-transform: uppercase;
+    letter-spacing: 1px; font-family: var(--mono); margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section > h3 { font-size: 16px; font-weight: 600; color: var(--text); margin: 32px 0 12px; }
+  .section > h4 { font-size: 14px; font-weight: 600; color: var(--text-muted); margin: 24px 0 8px; }
+  .section p { color: var(--text-muted); font-size: 14px; margin: 8px 0; line-height: 1.7; }
+  .section p strong { color: var(--text); font-weight: 600; }
+  .section ul, .section ol { margin: 8px 0; padding-left: 24px; }
+  .section li { color: var(--text-muted); font-size: 14px; margin: 4px 0; line-height: 1.6; }
+  .section li strong { color: var(--text); }
+  .section a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+  .section a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* Hero */
+  .hero { text-align: center; padding: 48px 0 40px; margin-bottom: 48px; border-bottom: 1px solid var(--border); }
+  .hero-art { margin-bottom: 16px; opacity: 0.8; }
+  .hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
+  .hero .subtitle { font-size: 15px; color: var(--text-muted); max-width: 560px; margin: 0 auto 20px; line-height: 1.6; }
+  .hero-badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; font-family: var(--mono);
+    padding: 4px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .badge.blue { color: var(--accent); border: 1px solid var(--accent); background: var(--accent-dim); }
+  .badge.green { color: var(--success); border: 1px solid var(--success); background: var(--success-dim); }
+  .badge.purple { color: var(--purple); border: 1px solid var(--purple); background: var(--purple-dim); }
+  .badge.teal { color: var(--teal); border: 1px solid var(--teal); background: var(--teal-dim); }
+  .badge.yellow { color: var(--warning); border: 1px solid var(--warning); background: var(--warning-dim); }
+
+  /* Code */
+  code { background: var(--surface2); color: var(--accent); padding: 2px 6px; border-radius: 3px; font-family: var(--mono); font-size: 12px; }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+
+  /* Tables */
+  table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: var(--surface); font-weight: 600; color: var(--accent); text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; font-family: var(--mono); }
+  td { color: var(--text-muted); }
+  td code { font-size: 11px; }
+
+  /* Callout */
+  blockquote, .callout { border-left: 3px solid var(--accent); background: var(--accent-dim); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; color: var(--text-muted); font-size: 13px; }
+  .callout.success { border-left-color: var(--success); background: var(--success-dim); }
+  .callout.warning { border-left-color: var(--warning); background: var(--warning-dim); }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px; transition: border-color 0.2s; }
+  .card:hover { border-color: var(--border-light); }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .card-title .badge { font-size: 9px; padding: 2px 6px; }
+  .card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* Extension Entry */
+  .ext-entry { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin: 16px 0; }
+  .ext-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .ext-name { font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+  .ext-file { font-size: 11px; font-family: var(--mono); color: var(--text-dim); }
+  .ext-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6; }
+  .ext-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ext-tag { font-size: 10px; font-family: var(--mono); padding: 2px 8px; border-radius: 3px; background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .ext-tag.tool { color: var(--accent); border-color: rgba(41,128,185,0.3); }
+  .ext-tag.cmd { color: var(--success); border-color: rgba(72,216,137,0.3); }
+  .ext-tag.shortcut { color: var(--purple); border-color: rgba(167,139,250,0.3); }
+  .ext-tag.hook { color: var(--warning); border-color: rgba(240,180,41,0.3); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  kbd { background: var(--surface2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 3px; padding: 2px 6px; font-family: var(--mono); font-size: 11px; color: var(--text); }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; gap: 0; margin: 16px 0; flex-wrap: wrap; }
+  .flow-step { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 6px 14px; font-size: 12px; font-family: var(--mono); color: var(--text-muted); font-weight: 600; }
+  .flow-step.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .flow-arrow { color: var(--text-dim); font-size: 14px; padding: 0 6px; font-family: var(--mono); }
+
+  /* Mobile */
+  .sidebar-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; color: var(--text); font-size: 16px; cursor: pointer; }
+  @media (max-width: 860px) {
+    .sidebar { position: fixed; left: -300px; top: 0; bottom: 0; transition: left 0.25s; z-index: 100; }
+    .sidebar.open { left: 0; box-shadow: 8px 0 24px rgba(0,0,0,0.4); }
+    .sidebar-toggle { display: block; }
+    .content-area { padding: 40px 24px 120px; }
+  }
+  [id] { scroll-margin-top: 24px; }
+</style>
+</head>
+<body>
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+<div class="layout">
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAiAAAADACAYAAAA9Uti3AAAFQ0lEQVR4nOzd0YrVWx3A8fZhP8GROHTkNFg+gs7MwxQRRNCVZAaChUISYmI3XnUTUg8zM84jSFJDCom+wr9nyF98F5v5fO73f/32rP+C76yb/dX3AABiAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3H71AABwiG68vtwmn9+GVwCff3pnN3vCWm5AAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMjtb98/2yYP2HazAbZpAi1e/92z0+EEax09Pl+6/9MEnu7f1e9ODnr/bj6/mO3fgZ+/D78+Xrp/37x6M/r7j9//1edvuP7HX9496PPHjBsQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHK72/fPtskDtt1sgG2aQKvXH37+3R9PR9/g6Pfno/2bzj/d//H6i9+fq0cnoyfcfHaxdv+u+fn7cO949A2+efXmep+/xet//MXd0QQ3/nrp/E18NRvADQgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAuf3bl6ezH/Q/cLcenm2rZzhk/3pysvT9+e7puf0beP/geOn+/eDPF/Zv4D+/urt0/77/lzf2jy/mBgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3P72/bNt8oBtNxtgmybQdP3h8nDIvn1xMTsCzh8H7NPP74ze4BuvL5e+wp9/Mpt/NTcgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOT2qwf4x59OdyvXv/XwbFu5Pqz0/sHx0vMHXF9uQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADI7VcP8KPfnm2jB+xm688W54dPzmd/wmEC27+Zb19crD1/03+Bhp//cO94+A1gna//fjk6v/PzNzs+bkAAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyO3fvjwd/aD/j39ztv3/xuF/9c8/nIz27+jxuf1b6N8Pj0f7d/P5hf2DRT797M7o/H79t8trfX7dgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQ260eACa+e3q+jR4wPAFXj06cIYAv4AYEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgNx+9QCsdfT4fJt8ftsNBxgm8Gh4AJZxAwIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAbr96AFjp6tHJbvUMANeRGxAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcv8NAAD//8TXik161ttyAAAAAElFTkSuQmCC" alt="agent" style="height: 28px; width: auto; image-rendering: pixelated;" /></div>
+    <div class="sidebar-title">documentation</div>
+    <div class="sidebar-subtitle">v1.0.0</div>
+  </div>
+  <div class="sidebar-search"><input type="text" id="nav-search" placeholder="Search docs... ( / )" /></div>
+  <div class="sidebar-nav" id="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-section-title">Getting Started</div>
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#quickstart">Quickstart</a>
+      <a class="nav-link" href="#architecture">Architecture</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Core Concepts</div>
+      <a class="nav-link" href="#modes">Operational Modes</a>
+      <a class="nav-link" href="#orchestration">Multi-Agent Orchestration</a>
+      <a class="nav-link" href="#security">Security System</a>
+      <a class="nav-link" href="#viewers">Viewers &amp; Reports</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Extensions</div>
+      <a class="nav-link" href="#ext-core-ui">Core UI <span class="ext-tag">5</span></a>
+      <a class="nav-link" href="#ext-tasks">Task Management <span class="ext-tag">3</span></a>
+      <a class="nav-link" href="#ext-modes">Modes <span class="ext-tag">1</span></a>
+      <a class="nav-link" href="#ext-orchestration">Orchestration <span class="ext-tag">5</span></a>
+      <a class="nav-link" href="#ext-security">Security <span class="ext-tag">3</span></a>
+      <a class="nav-link" href="#ext-viewers">Viewers <span class="ext-tag">5</span></a>
+      <a class="nav-link" href="#ext-devtools">Dev Tools <span class="ext-tag">6</span></a>
+      <a class="nav-link" href="#ext-session">Session &amp; Context <span class="ext-tag">5</span></a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Configuration</div>
+      <a class="nav-link" href="#config-settings">Settings</a>
+      <a class="nav-link" href="#config-models">Model Providers</a>
+      <a class="nav-link" href="#config-agents">Agent Definitions</a>
+      <a class="nav-link" href="#config-themes">Themes</a>
+      <a class="nav-link" href="#config-skills">Skills</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Extending Pi</div>
+      <a class="nav-link" href="#extend-api">Extension API</a>
+      <a class="nav-link" href="#extend-tools">Writing Tools</a>
+      <a class="nav-link" href="#extend-commands">Writing Commands</a>
+      <a class="nav-link" href="#extend-hooks">Using Hooks</a>
+      <a class="nav-link" href="#extend-widgets">Widgets</a>
+      <a class="nav-link" href="#extend-agents">Agent Definitions</a>
+      <a class="nav-link" href="#extend-chains">Chains &amp; Pipelines</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Ecosystem</div>
+      <a class="nav-link" href="#ecosystem">agent + commander</a>
+    </div>
+  </div>
+  <div class="sidebar-footer"><a href="https://github.com/badlogic/pi-mono" target="_blank">Pi Coding Agent &#8599;</a></div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="main" id="main-content">
+<div class="content-area">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-art"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAiAAAADACAYAAAA9Uti3AAAFQ0lEQVR4nOzd0YrVWx3A8fZhP8GROHTkNFg+gs7MwxQRRNCVZAaChUISYmI3XnUTUg8zM84jSFJDCom+wr9nyF98F5v5fO73f/32rP+C76yb/dX3AABiAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3H71AABwiG68vtwmn9+GVwCff3pnN3vCWm5AAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMjtb98/2yYP2HazAbZpAi1e/92z0+EEax09Pl+6/9MEnu7f1e9ODnr/bj6/mO3fgZ+/D78+Xrp/37x6M/r7j9//1edvuP7HX9496PPHjBsQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHK72/fPtskDtt1sgG2aQKvXH37+3R9PR9/g6Pfno/2bzj/d//H6i9+fq0cnoyfcfHaxdv+u+fn7cO949A2+efXmep+/xet//MXd0QQ3/nrp/E18NRvADQgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAuf3bl6ezH/Q/cLcenm2rZzhk/3pysvT9+e7puf0beP/geOn+/eDPF/Zv4D+/urt0/77/lzf2jy/mBgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3P72/bNt8oBtNxtgmybQdP3h8nDIvn1xMTsCzh8H7NPP74ze4BuvL5e+wp9/Mpt/NTcgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOT2qwf4x59OdyvXv/XwbFu5Pqz0/sHx0vMHXF9uQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADI7VcP8KPfnm2jB+xm688W54dPzmd/wmEC27+Zb19crD1/03+Bhp//cO94+A1gna//fjk6v/PzNzs+bkAAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyO3fvjwd/aD/j39ztv3/xuF/9c8/nIz27+jxuf1b6N8Pj0f7d/P5hf2DRT797M7o/H79t8trfX7dgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQ260eACa+e3q+jR4wPAFXj06cIYAv4AYEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgNx+9QCsdfT4fJt8ftsNBxgm8Gh4AJZxAwIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAbr96AFjp6tHJbvUMANeRGxAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcv8NAAD//8TXik161ttyAAAAAElFTkSuQmCC" alt="agent" style="height: 72px; width: auto; image-rendering: pixelated;" /></div>
+  <p class="subtitle">An extension suite that transforms <a href="https://github.com/badlogic/pi-mono">Pi Coding Agent</a> into a multi-agent orchestration platform with security hardening, browser-based viewers, and 30+ model providers.</p>
+  <div class="hero-badges">
+    <span class="badge blue">28 Extensions</span>
+    <span class="badge green">6 Modes</span>
+    <span class="badge purple">Multi-Agent</span>
+    <span class="badge teal">11 Themes</span>
+    <span class="badge yellow">Security Hardened</span>
+  </div>
+</div>
+<!-- GETTING STARTED -->
+<div class="section" id="overview">
+  <h1>Overview</h1>
+  <p><a href="https://github.com/badlogic/pi-mono">Pi</a> is a terminal-based AI coding agent by <a href="https://github.com/badlogic">Mario Zechner</a>. Out of the box it provides tool use, conversation memory, a TUI, and an extension API.</p>
+  <p><strong>agent</strong> is a set of 28 extensions, 6 agent definitions, 11 themes, and configuration files that transform Pi into a multi-agent orchestration platform with:</p>
+  <ul>
+    <li><strong>6 operational modes</strong> &mdash; NORMAL, PLAN, SPEC, PIPELINE, TEAM, CHAIN</li>
+    <li><strong>Multi-agent orchestration</strong> &mdash; dispatch teams, run sequential chains, or execute parallel pipelines</li>
+    <li><strong>Security hardened</strong> &mdash; pre-tool-hook guard blocks destructive commands, detects prompt injection, prevents data exfiltration</li>
+    <li><strong>Browser-based viewers</strong> &mdash; plan approval, completion reports with rollback, spec review with inline comments</li>
+    <li><strong>30+ model providers</strong> &mdash; Anthropic, OpenAI, Google, Mercury, Synthetic, OpenRouter</li>
+    <li><strong>Task discipline</strong> &mdash; the agent must define tasks before tools unlock; three-state lifecycle with Commander sync</li>
+  </ul>
+  <p>Everything is configuration &mdash; no forks, no patches. Just extensions, agent definitions, and YAML.</p>
+</div>
+
+<div class="section" id="quickstart">
+  <h2>Quickstart</h2>
+  <h3>Prerequisites</h3>
+  <ul>
+    <li><a href="https://bun.sh">Bun</a> (v1.0+)</li>
+    <li><a href="https://github.com/badlogic/pi-mono">Pi Coding Agent</a> installed globally</li>
+  </ul>
+  <h3>Install</h3>
+  <pre><code># Clone the repo
+git clone https://github.com/ruizrica/pi-dev.git
+cd pi-dev
+
+# Install dependencies
+npm install
+
+# Run Pi with all extensions
+cd agent &amp;&amp; pi</code></pre>
+  <p>Pi reads <code>agent/settings.json</code> on startup, which loads all 28 extensions automatically.</p>
+  <h3>First Steps</h3>
+  <ol>
+    <li><strong>Type a task</strong> &mdash; Pi operates in plan-first mode. It asks you to define tasks before using tools.</li>
+    <li><kbd>Shift</kbd>+<kbd>Tab</kbd> &mdash; Cycle operational modes</li>
+    <li><kbd>Ctrl</kbd>+<kbd>T</kbd> &mdash; Cycle themes</li>
+    <li><code>/agents-team</code> &mdash; Switch agent teams</li>
+    <li><code>/chain</code> &mdash; Switch chain workflows</li>
+    <li><code>/security status</code> &mdash; Check security posture</li>
+  </ol>
+</div>
+
+<div class="section" id="architecture">
+  <h2>Architecture</h2>
+  <pre><code>agent/
+&#9500;&#9472;&#9472; extensions/              28 TypeScript extensions
+&#9474;   &#9500;&#9472;&#9472; lib/                 42 shared library modules
+&#9474;   &#9500;&#9472;&#9472; __tests__/           Test suite
+&#9474;   &#9492;&#9472;&#9472; web-test-worker/     Cloudflare Worker for browser testing
+&#9500;&#9472;&#9472; .pi/
+&#9474;   &#9500;&#9472;&#9472; agents/              Agent definitions + team/chain/pipeline YAML
+&#9474;   &#9500;&#9472;&#9472; commands/            Toolkit slash commands
+&#9474;   &#9492;&#9472;&#9472; prompts/             Prompt templates
+&#9500;&#9472;&#9472; themes/                  11 custom terminal themes
+&#9500;&#9472;&#9472; skills/                  Skill packs (browser, image gen, iOS, bash)
+&#9500;&#9472;&#9472; settings.json            Extension loading + Pi configuration
+&#9500;&#9472;&#9472; models.json              30+ models across 4+ providers
+&#9492;&#9472;&#9472; keybindings.json         Custom shortcuts</code></pre>
+  <h3>Extension Loading</h3>
+  <p>Extensions are listed in the <code>packages</code> array in <code>settings.json</code>. Each is a relative path to a TypeScript file that exports a default function. Pi loads them in order at startup.</p>
+  <h3>How Extensions Work</h3>
+  <p>Each extension receives the Pi <code>ExtensionAPI</code> and can register:</p>
+  <ul>
+    <li><strong>Tools</strong> &mdash; LLM-callable functions with typed parameters and execute handlers</li>
+    <li><strong>Commands</strong> &mdash; Slash commands (<code>/foo</code>) with autocomplete and handler functions</li>
+    <li><strong>Shortcuts</strong> &mdash; Keyboard bindings (<code>ctrl+k</code>, <code>shift+tab</code>)</li>
+    <li><strong>Widgets</strong> &mdash; TUI components rendered above or below the editor</li>
+    <li><strong>Hooks</strong> &mdash; Lifecycle callbacks (<code>tool_call</code>, <code>context</code>, <code>before_agent_start</code>, etc.)</li>
+  </ul>
+</div>
+
+<!-- OPERATIONAL MODES -->
+<div class="section" id="modes">
+  <h1>Operational Modes</h1>
+  <p>agent extends Pi with 6 operational modes. Each mode injects a tailored system prompt that changes how the agent approaches tasks. Cycle modes with <kbd>Shift</kbd>+<kbd>Tab</kbd> or use <code>/mode &lt;name&gt;</code>.</p>
+  <table>
+    <thead><tr><th>Mode</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>NORMAL</code></td><td>Standard coding assistant &mdash; no additional constraints</td></tr>
+      <tr><td><code>PLAN</code></td><td>Plan-first workflow: analyze &rarr; plan &rarr; <code>show_plan</code> &rarr; approve &rarr; implement &rarr; <code>show_report</code></td></tr>
+      <tr><td><code>SPEC</code></td><td>Spec-driven development: shape feature idea &rarr; generate requirements &rarr; create tasks</td></tr>
+      <tr><td><code>TEAM</code></td><td>Dispatcher mode &mdash; primary agent delegates to specialists via <code>dispatch_agent</code></td></tr>
+      <tr><td><code>CHAIN</code></td><td>Sequential pipeline &mdash; each step's output feeds the next via <code>run_chain</code></td></tr>
+      <tr><td><code>PIPELINE</code></td><td>5-phase hybrid with parallel dispatch via <code>advance_phase</code> and <code>dispatch_agents</code></td></tr>
+    </tbody>
+  </table>
+  <h3>PLAN Mode Workflow</h3>
+  <div class="flow">
+    <div class="flow-step active">Analyze</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Plan</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Approve</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Implement</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Report</div>
+  </div>
+  <p>In PLAN mode, the agent must: explore the codebase, write a plan to <code>.context/todo.md</code>, present it via <code>show_plan</code> for user approval, implement step by step, and present a <code>show_report</code> completion report.</p>
+</div>
+<!-- MULTI-AGENT ORCHESTRATION -->
+<div class="section" id="orchestration">
+  <h1>Multi-Agent Orchestration</h1>
+  <p>agent provides three complementary orchestration patterns. Each uses a different extension and configuration format.</p>
+
+  <h2>Teams</h2>
+  <p>Teams are defined in <code>agent/.pi/agents/teams.yaml</code>. Each team is a named list of agent roles. In TEAM mode, the primary agent has <strong>no codebase tools</strong> &mdash; it can only delegate work to team members via the <code>dispatch_agent</code> tool.</p>
+  <pre><code># teams.yaml
+plan-build:
+  - planner
+  - builder
+  - reviewer
+
+quality:
+  - reviewer
+  - tester
+  - red-team</code></pre>
+  <p>Agent definitions live in <code>agent/.pi/agents/*.md</code> with YAML frontmatter specifying name, description, and allowed tools. Each dispatched agent gets its own Pi session for persistent memory.</p>
+
+  <h3>Pre-configured Teams</h3>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">all <span class="badge blue">14 agents</span></div><div class="card-desc">Every available agent including toolkit agents</div></div>
+    <div class="card"><div class="card-title">full <span class="badge blue">5 agents</span></div><div class="card-desc">scout, planner, builder, reviewer, tester</div></div>
+    <div class="card"><div class="card-title">plan-build <span class="badge blue">3 agents</span></div><div class="card-desc">planner, builder, reviewer</div></div>
+    <div class="card"><div class="card-title">quality <span class="badge blue">3 agents</span></div><div class="card-desc">reviewer, tester, red-team</div></div>
+    <div class="card"><div class="card-title">investigate <span class="badge blue">2 agents</span></div><div class="card-desc">scout, reviewer</div></div>
+    <div class="card"><div class="card-title">toolkit <span class="badge blue">8 agents</span></div><div class="card-desc">External CLI agents (Cursor, Codex, Gemini, Qwen, etc.)</div></div>
+  </div>
+
+  <h2>Chains</h2>
+  <p>Chains are sequential pipelines defined in <code>agent/.pi/agents/agent-chain.yaml</code>. Each chain is a sequence of steps where each step specifies an agent and a prompt template. Output from step N becomes <code>$INPUT</code> for step N+1. <code>$ORIGINAL</code> always refers to the user's original prompt.</p>
+  <pre><code># agent-chain.yaml
+plan-build-review:
+  description: "Plan, implement, and review"
+  steps:
+    - agent: planner
+      prompt: "Plan the implementation for: $INPUT"
+    - agent: builder
+      prompt: "Implement the following plan:\n\n$INPUT"
+    - agent: reviewer
+      prompt: "Review this implementation:\n\n$INPUT"</code></pre>
+
+  <h3>Pre-built Chains</h3>
+  <table>
+    <thead><tr><th>Chain</th><th>Steps</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>plan-build-review</code></td><td>3</td><td>Plan, implement, and review</td></tr>
+      <tr><td><code>plan-build</code></td><td>2</td><td>Fast two-step without review</td></tr>
+      <tr><td><code>full-pipeline</code></td><td>5</td><td>Scout, plan, build, review, test</td></tr>
+      <tr><td><code>investigate-fix</code></td><td>4</td><td>Bug fix flow</td></tr>
+      <tr><td><code>audit</code></td><td>5</td><td>Comprehensive code audit (multi-agent)</td></tr>
+      <tr><td><code>secure</code></td><td>4</td><td>AI security sweep</td></tr>
+      <tr><td><code>performance</code></td><td>5</td><td>Performance optimization analysis</td></tr>
+      <tr><td><code>sentry-setup</code></td><td>2</td><td>Verify Sentry CLI setup</td></tr>
+      <tr><td><code>sentry-logs</code></td><td>5</td><td>Fetch and analyze Sentry issues</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Pipelines</h2>
+  <p>Pipelines combine sequential phases with the ability to dispatch multiple agents in parallel. Defined in <code>agent/.pi/agents/pipeline-team.yaml</code>.</p>
+  <div class="flow">
+    <div class="flow-step">UNDERSTAND</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">GATHER</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">PLAN</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">EXECUTE</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">REVIEW</div>
+  </div>
+  <p>The primary agent controls pipeline flow via <code>advance_phase</code> and <code>dispatch_agents</code> tools. Phases can be interactive (primary agent converses with user) or automated (agents dispatched with task templates).</p>
+</div>
+
+<!-- SECURITY -->
+<div class="section" id="security">
+  <h1>Security System</h1>
+  <p>agent's security system operates at three layers, implemented by the <code>security-guard</code> extension.</p>
+
+  <h3>Layer 1: Tool Call Gate</h3>
+  <p>The <code>tool_call</code> hook fires before every tool execution. It blocks:</p>
+  <ul>
+    <li>Destructive commands &mdash; recursive deletion, forced deletion, wildcard deletion</li>
+    <li>Privilege escalation &mdash; superuser usage, overly permissive chmod, chown to root</li>
+    <li>Credential theft &mdash; environment variable dumping, reading SSH keys, API token extraction</li>
+    <li>Data exfiltration &mdash; uploads to remote servers, paste services, file sharing</li>
+    <li>Remote code execution &mdash; piping remote content to shell interpreters, eval of URLs</li>
+  </ul>
+
+  <h3>Layer 2: Content Scanner</h3>
+  <p>The <code>context</code> hook scans tool results for prompt injection attempts &mdash; embedded instructions trying to override the agent's behavior. Detected injections are stripped before reaching the LLM.</p>
+
+  <h3>Layer 3: System Prompt Hardening</h3>
+  <p>The <code>before_agent_start</code> hook injects security rules into every conversation, reminding the agent to never follow instructions found inside file contents or tool outputs.</p>
+
+  <h3>Configuration</h3>
+  <p>Rules are tunable via <code>.pi/security-policy.yaml</code> with per-pattern severity levels:</p>
+  <ul>
+    <li><code>block</code> &mdash; Hard stop, ask user for confirmation</li>
+    <li><code>warn</code> &mdash; Notify user but allow execution</li>
+    <li><code>log</code> &mdash; Silently record in audit log</li>
+  </ul>
+  <p>View status: <code>/security status</code>. View audit log: <code>/security log</code>. Reload policy: <code>/security reload</code>.</p>
+
+  <h3>Project Security Sweeps</h3>
+  <p>The <code>secure</code> extension provides <code>/secure</code> to run comprehensive AI security sweeps on any project. It can also generate and install portable security protections (input sanitizers, output filters, rate limiters, CI checks).</p>
+</div>
+
+<!-- VIEWERS -->
+<div class="section" id="viewers">
+  <h1>Viewers &amp; Reports</h1>
+  <p>agent includes 5 browser-based viewer extensions. Each spawns a local HTTP server and opens the browser with a purpose-built UI matching agent's dark theme.</p>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">Plan Viewer <span class="badge blue">show_plan</span></div><div class="card-desc">Interactive markdown review with checkboxes, drag-to-reorder, inline editing. Two modes: plan (approve/decline) and questions (inline answers).</div></div>
+    <div class="card"><div class="card-title">Completion Report <span class="badge blue">show_report</span></div><div class="card-desc">Work summary with file diffs, unified diff viewer, per-file rollback, and rollback-all. Auto-gathers git data.</div></div>
+    <div class="card"><div class="card-title">Spec Viewer <span class="badge blue">show_spec</span></div><div class="card-desc">Multi-page wizard for spec review. Inline comment threads, raw markdown editing, visual asset gallery.</div></div>
+    <div class="card"><div class="card-title">File Viewer <span class="badge blue">show_file</span></div><div class="card-desc">Lightweight syntax-highlighted file viewer with line numbers, optional editing, and editor launch buttons.</div></div>
+    <div class="card"><div class="card-title">Reports Browser <span class="badge blue">show_reports</span></div><div class="card-desc">Searchable index of all persisted plans, questions, specs, and completion reports.</div></div>
+  </div>
+  <p>All viewers support standalone HTML export and automatic persistence to the report index.</p>
+</div><!-- EXTENSIONS -->
+<div class="section" id="ext-core-ui">
+  <h1>Extensions</h1>
+  <h2>Core UI</h2>
+
+  <div class="ext-entry" id="ext-agent-banner">
+    <div class="ext-header"><span class="ext-name">agent-banner</span><span class="ext-file">90 lines</span></div>
+    <div class="ext-desc">ASCII art banner displayed above the editor on session start. Reads from <code>~/Desktop/agent.txt</code> or uses an embedded default. Auto-hides on first user input. Re-displays on <code>/new</code>.</div>
+    <div class="ext-meta"><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-footer">
+    <div class="ext-header"><span class="ext-name">footer</span><span class="ext-file">88 lines</span></div>
+    <div class="ext-desc">Status bar showing abbreviated model name, context usage percentage, and working directory. Shows warnings at high context usage. Model names are abbreviated (e.g., "Claude 4 Opus" &rarr; "opus 4").</div>
+    <div class="ext-meta"><span class="ext-tag">widget: footer</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-agent-nav">
+    <div class="ext-header"><span class="ext-name">agent-nav</span><span class="ext-file">28 lines</span></div>
+    <div class="ext-desc">Shared F-key navigation dispatched to the first active NavProvider on <code>globalThis</code>. Used by agent-team, agent-chain, and pipeline-team for keyboard navigation of their grid/list widgets.</div>
+    <div class="ext-meta"><span class="ext-tag shortcut">F1</span><span class="ext-tag shortcut">F2</span><span class="ext-tag shortcut">F3</span><span class="ext-tag shortcut">F4</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-theme-cycler">
+    <div class="ext-header"><span class="ext-name">theme-cycler</span><span class="ext-file">187 lines</span></div>
+    <div class="ext-desc">Cycles through installed themes. Scans <code>agent/themes/</code> for JSON files. Selection persists to <code>settings.json</code>.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /theme</span><span class="ext-tag shortcut">Ctrl+T</span><span class="ext-tag shortcut">Ctrl+Shift+T</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-escape-cancel">
+    <div class="ext-header"><span class="ext-name">escape-cancel</span><span class="ext-file">146 lines</span></div>
+    <div class="ext-desc">Double-tap ESC (within 400ms) cancels all running operations: main agent stream, subagents, chains, pipelines, and team agents.</div>
+    <div class="ext-meta"><span class="ext-tag shortcut">ESC ESC</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-tasks">
+  <h2>Task Management</h2>
+
+  <div class="ext-entry" id="ext-tasks-ext">
+    <div class="ext-header"><span class="ext-name">tasks</span><span class="ext-file">872 lines</span></div>
+    <div class="ext-desc">Task discipline system that gates agent tools until tasks are defined. Three-state lifecycle: idle &rarr; inprogress &rarr; done. Prominent widget showing current task. Syncs with Commander when available.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: tasks</span><span class="ext-tag cmd">cmd: /tasks</span><span class="ext-tag hook">hook: tool_call</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-commander-mcp">
+    <div class="ext-header"><span class="ext-name">commander-mcp</span><span class="ext-file">377 lines</span></div>
+    <div class="ext-desc">Bridge exposing Commander MCP tools as native Pi tools. Spawns commander-mcp as a subprocess and proxies JSON-RPC over stdio. Provides 8 tool families: task, session, workflow, spec, jira, mailbox, orchestration, dependency.</div>
+    <div class="ext-meta"><span class="ext-tag tool">8 tools</span><span class="ext-tag hook">hook: context</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-commander-tracker">
+    <div class="ext-header"><span class="ext-name">commander-tracker</span><span class="ext-file">138 lines</span></div>
+    <div class="ext-desc">Reconciles local task state with Commander. Runs reconciliation every 15s and heartbeat every 30s. Retries failed sync operations from the tasks extension.</div>
+    <div class="ext-meta"><span class="ext-tag">interval: 15s reconcile</span><span class="ext-tag">interval: 30s heartbeat</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-modes">
+  <h2>Modes</h2>
+
+  <div class="ext-entry" id="ext-mode-cycler">
+    <div class="ext-header"><span class="ext-name">mode-cycler</span><span class="ext-file">225 lines</span></div>
+    <div class="ext-desc">Cycles through NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN modes. Each mode injects a tailored system prompt via the <code>before_agent_start</code> hook. The <code>set_mode</code> tool allows the LLM to switch modes programmatically.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: set_mode</span><span class="ext-tag cmd">cmd: /mode</span><span class="ext-tag shortcut">Shift+Tab</span><span class="ext-tag hook">hook: before_agent_start</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-orchestration">
+  <h2>Orchestration</h2>
+
+  <div class="ext-entry" id="ext-agent-team">
+    <div class="ext-header"><span class="ext-name">agent-team</span><span class="ext-file">1,411 lines</span></div>
+    <div class="ext-desc">Dispatcher-only orchestrator with specialist agents and grid dashboard. Primary agent delegates via <code>dispatch_agent</code>. Each specialist maintains its own Pi session. Teams configured in YAML. Live TUI grid shows agent status cards.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: dispatch_agent</span><span class="ext-tag cmd">cmd: /agents-team</span><span class="ext-tag cmd">cmd: /agents-list</span><span class="ext-tag cmd">cmd: /agents-grid</span><span class="ext-tag shortcut">Alt+G</span><span class="ext-tag hook">hook: before_agent_start</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-agent-chain">
+    <div class="ext-header"><span class="ext-name">agent-chain</span><span class="ext-file">1,202 lines</span></div>
+    <div class="ext-desc">Sequential pipeline orchestrator. Chains defined in YAML. Each step output becomes <code>$INPUT</code> for the next. <code>$ORIGINAL</code> is always the user prompt. Agents maintain session context across runs.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: run_chain</span><span class="ext-tag cmd">cmd: /chain</span><span class="ext-tag cmd">cmd: /chain-list</span><span class="ext-tag cmd">cmd: /chain-clear</span><span class="ext-tag hook">hook: before_agent_start</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-pipeline-team">
+    <div class="ext-header"><span class="ext-name">pipeline-team</span><span class="ext-file">1,212 lines</span></div>
+    <div class="ext-desc">5-phase hybrid: UNDERSTAND &rarr; GATHER &rarr; PLAN &rarr; EXECUTE &rarr; REVIEW. Combines sequential phases with parallel agent dispatch. Review phase supports approve/re-dispatch loops.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: advance_phase</span><span class="ext-tag tool">tool: dispatch_agents</span><span class="ext-tag tool">tool: pipeline_status</span><span class="ext-tag cmd">cmd: /pipeline</span><span class="ext-tag shortcut">Alt+P</span><span class="ext-tag shortcut">Alt+S</span><span class="ext-tag hook">hook: before_agent_start</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-subagent-widget">
+    <div class="ext-header"><span class="ext-name">subagent-widget</span><span class="ext-file">886 lines</span></div>
+    <div class="ext-desc">Background subagent process management with live status widgets. Named agents auto-apply model, tools, and system prompt from definitions. Supports create, batch create, continue, remove, and list operations.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: subagent_create</span><span class="ext-tag tool">tool: subagent_create_batch</span><span class="ext-tag tool">tool: subagent_continue</span><span class="ext-tag tool">tool: subagent_remove</span><span class="ext-tag tool">tool: subagent_list</span><span class="ext-tag cmd">cmd: /sub</span><span class="ext-tag cmd">cmd: /subcont</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-toolkit-commands">
+    <div class="ext-header"><span class="ext-name">toolkit-commands</span><span class="ext-file">266 lines</span></div>
+    <div class="ext-desc">Registers <code>.md</code> files from <code>.pi/commands/</code> as dynamic slash commands. Supports inline (inject as user message) and fork (spawn subprocess) execution modes. Frontmatter defines description, argument hints, and allowed tools.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">dynamic commands</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-security">
+  <h2>Security</h2>
+
+  <div class="ext-entry" id="ext-security-guard">
+    <div class="ext-header"><span class="ext-name">security-guard</span><span class="ext-file">819 lines</span></div>
+    <div class="ext-desc">Multi-layer defense: tool_call gate (blocks destructive commands), context scanner (strips prompt injection), system prompt hardening. Configurable via <code>.pi/security-policy.yaml</code> with block/warn/log severity. Audit logging with rotation.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /security</span><span class="ext-tag hook">hook: tool_call</span><span class="ext-tag hook">hook: context</span><span class="ext-tag hook">hook: before_agent_start</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-secure">
+    <div class="ext-header"><span class="ext-name">secure</span><span class="ext-file">383 lines</span></div>
+    <div class="ext-desc">AI security sweep and protection installer. Scans projects for prompt injection vulnerabilities, credential exposure, and missing protections. Can generate portable security guards, policy YAML, middleware, and CI checks.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /secure</span><span class="ext-tag cmd">/secure sweep</span><span class="ext-tag cmd">/secure install</span><span class="ext-tag cmd">/secure status</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-message-integrity">
+    <div class="ext-header"><span class="ext-name">message-integrity-guard</span><span class="ext-file">428 lines</span></div>
+    <div class="ext-desc">Prevents the "session-bricking" bug where orphaned <code>tool_result</code> messages cause unrecoverable 400 errors from the API. Validates and repairs message ordering on every LLM call, compaction, and session restore.</div>
+    <div class="ext-meta"><span class="ext-tag hook">hook: context</span><span class="ext-tag hook">hook: session_before_compact</span><span class="ext-tag hook">hook: session_switch</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-viewers">
+  <h2>Viewers &amp; Reports</h2>
+
+  <div class="ext-entry" id="ext-plan-viewer">
+    <div class="ext-header"><span class="ext-name">plan-viewer</span><span class="ext-file">518 + 1,183 lines</span></div>
+    <div class="ext-desc">Interactive browser GUI for markdown plan review. Plan mode: checkboxes, drag-to-reorder, inline editing, approve/decline. Questions mode: auto-detects questions, inline answer fields, submit. Spawns local HTTP server.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: show_plan</span><span class="ext-tag cmd">cmd: /plan</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-completion-report">
+    <div class="ext-header"><span class="ext-name">completion-report</span><span class="ext-file">693 + 1,270 lines</span></div>
+    <div class="ext-desc">Browser GUI showing work summary, changed files with unified diffs, and per-file rollback controls. Auto-gathers git diff data. Includes task completion data from <code>.context/todo.md</code>.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: show_report</span><span class="ext-tag cmd">cmd: /report</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-spec-viewer">
+    <div class="ext-header"><span class="ext-name">spec-viewer</span><span class="ext-file">708 + 1,351 lines</span></div>
+    <div class="ext-desc">Multi-page browser GUI for spec review. Wizard-style navigation. Inline comment threads. Raw markdown editing. Visual asset gallery. Approve, request changes, or decline actions.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: show_spec</span><span class="ext-tag cmd">cmd: /spec</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-file-viewer">
+    <div class="ext-header"><span class="ext-name">file-viewer</span><span class="ext-file">370 + 790 lines</span></div>
+    <div class="ext-desc">Lightweight browser file viewer with syntax highlighting, line numbers, optional editing, and editor launch buttons for VS Code, Cursor, and Zed.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: show_file</span><span class="ext-tag tool">tool: close_viewer</span><span class="ext-tag cmd">cmd: /view</span><span class="ext-tag cmd">cmd: /edit</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-reports-viewer">
+    <div class="ext-header"><span class="ext-name">reports-viewer</span><span class="ext-file">201 + 575 lines</span></div>
+    <div class="ext-desc">Searchable browser view for all persisted reports. Organized by category: plans, questions, specs, completion reports. Each entry links to its standalone HTML export.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: show_reports</span><span class="ext-tag cmd">cmd: /reports</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-devtools">
+  <h2>Developer Tools</h2>
+
+  <div class="ext-entry" id="ext-debug-capture">
+    <div class="ext-header"><span class="ext-name">debug-capture</span><span class="ext-file">619 lines</span></div>
+    <div class="ext-desc">VHS-based terminal screenshot tool. Generates <code>.tape</code> files, runs them to produce PNG screenshots. Scenarios: tasks, modes, footer, theme, custom commands, Pi prompts. Prerequisites: <code>vhs</code>, <code>ttyd</code>, <code>ffmpeg</code>.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: debug_capture</span><span class="ext-tag cmd">cmd: /debug-capture</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-web-test">
+    <div class="ext-header"><span class="ext-name">web-test</span><span class="ext-file">696 lines</span></div>
+    <div class="ext-desc">Cloudflare Browser Rendering for headless browser testing. Actions: screenshot, content extraction (with CSS selector), accessibility audit (axe-core), responsive screenshots. Backed by a deployed Cloudflare Worker.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: web_test</span><span class="ext-tag cmd">cmd: /web-test</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-tool-registry">
+    <div class="ext-header"><span class="ext-name">tool-registry</span><span class="ext-file">254 lines</span></div>
+    <div class="ext-desc">In-memory index of all registered tools. Auto-categorizes into: filesystem, shell, commander, testing, ui, agents, workflow, meta, security. Foundation for tool-search and tool-caller.</div>
+    <div class="ext-meta"><span class="ext-tag hook">hook: context</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-tool-search">
+    <div class="ext-header"><span class="ext-name">tool-search</span><span class="ext-file">246 lines</span></div>
+    <div class="ext-desc">Meta-tool for discovering and inspecting tools at runtime. Operations: search (by query), list (by category), inspect (full details + parameters).</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: tool_search</span><span class="ext-tag cmd">cmd: /tools</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-tool-caller">
+    <div class="ext-header"><span class="ext-name">tool-caller</span><span class="ext-file">309 lines</span></div>
+    <div class="ext-desc">Meta-tool for invoking any registered tool programmatically by name. Enables dynamic tool composition and conditional tool usage. Cannot call itself or tool_search recursively. Security guard restrictions apply.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: call_tool</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-lean-tools">
+    <div class="ext-header"><span class="ext-name">lean-tools</span><span class="ext-file">91 lines</span></div>
+    <div class="ext-desc">Toggle lean mode: reduces system prompt size by deactivating non-essential tools. Only <code>tool_search</code>, <code>call_tool</code>, <code>read</code>, <code>bash</code>, <code>write</code>, <code>edit</code>, and <code>tasks</code> remain active.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /lean-tools</span><span class="ext-tag hook">hook: before_agent_start</span></div>
+  </div>
+</div>
+
+<div class="section" id="ext-session">
+  <h2>Session &amp; Context</h2>
+
+  <div class="ext-entry" id="ext-memory-cycle">
+    <div class="ext-header"><span class="ext-name">memory-cycle</span><span class="ext-file">541 lines</span></div>
+    <div class="ext-desc">Memory-aware compaction. Before compact: extracts session insights (daily log, session state, stable facts). After compact: injects restored memory so the agent continues seamlessly. Also provides manual <code>/cycle</code> command.</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: cycle_memory</span><span class="ext-tag cmd">cmd: /cycle</span><span class="ext-tag hook">hook: before_agent_start</span><span class="ext-tag hook">hook: session_before_compact</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-session-replay">
+    <div class="ext-header"><span class="ext-name">session-replay</span><span class="ext-file">148 lines</span></div>
+    <div class="ext-desc">Scrollable full-screen overlay showing conversation timeline. Messages formatted by type (user/assistant/tool) with timestamps. Navigate with arrow keys, expand/collapse with Enter.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /replay</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-system-select">
+    <div class="ext-header"><span class="ext-name">system-select</span><span class="ext-file">153 lines</span></div>
+    <div class="ext-desc">Switch system prompts by selecting agent definitions. Scans <code>.pi/agents/</code>, <code>.claude/agents/</code>, <code>.gemini/agents/</code>, <code>.codex/agents/</code> for <code>.md</code> files with frontmatter. Selected agent body prepended to Pi default instructions.</div>
+    <div class="ext-meta"><span class="ext-tag cmd">cmd: /system</span><span class="ext-tag hook">hook: before_agent_start</span></div>
+  </div>
+
+  <div class="ext-entry" id="ext-user-question">
+    <div class="ext-header"><span class="ext-name">user-question</span><span class="ext-file">153 lines</span></div>
+    <div class="ext-desc">Interactive inline UI for agent-to-user communication. Three modes: select (picker with options + markdown previews), input (free text with placeholder), confirm (yes/no with detail).</div>
+    <div class="ext-meta"><span class="ext-tag tool">tool: ask_user</span></div>
+  </div>
+</div><!-- CONFIGURATION -->
+<div class="section" id="config-settings">
+  <h1>Configuration</h1>
+  <h2>Settings</h2>
+  <p>The main configuration file is <code>agent/settings.json</code>. Key fields:</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>packages</code></td><td>Array of extension paths to load (relative to agent dir)</td></tr>
+      <tr><td><code>defaultProvider</code></td><td>Default LLM provider (e.g., <code>"anthropic"</code>)</td></tr>
+      <tr><td><code>defaultModel</code></td><td>Default model ID (e.g., <code>"claude-opus-4-6"</code>)</td></tr>
+      <tr><td><code>theme</code></td><td>Active theme name (e.g., <code>"midnight-ocean"</code>)</td></tr>
+      <tr><td><code>transport</code></td><td>API transport: <code>"sse"</code> or <code>"messages"</code></td></tr>
+      <tr><td><code>quietStartup</code></td><td>Suppress startup messages</td></tr>
+      <tr><td><code>editorPaddingX</code></td><td>Horizontal editor padding</td></tr>
+      <tr><td><code>showHardwareCursor</code></td><td>Use terminal hardware cursor</td></tr>
+      <tr><td><code>followUpMode</code></td><td><code>"one-at-a-time"</code> or <code>"batch"</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" id="config-models">
+  <h2>Model Providers</h2>
+  <p>Model providers are configured in <code>agent/models.json</code>. Supports any OpenAI-compatible API.</p>
+  <pre><code>{
+  "providers": {
+    "my-api": {
+      "baseUrl": "https://api.example.com/v1",
+      "api": "openai-completions",
+      "apiKey": "YOUR_KEY",
+      "models": [
+        {
+          "id": "my-model",
+          "name": "My Model",
+          "reasoning": true,
+          "input": ["text", "image"],
+          "contextWindow": 128000,
+          "maxTokens": 4096
+        }
+      ]
+    }
+  }
+}</code></pre>
+  <h3>Configured Providers</h3>
+  <table>
+    <thead><tr><th>Provider</th><th>Models</th><th>API</th></tr></thead>
+    <tbody>
+      <tr><td>Mercury</td><td>4 (Mercury 2, Coder, Edit, etc.)</td><td>OpenAI-compatible</td></tr>
+      <tr><td>Synthetic</td><td>16 (GLM, Qwen, Kimi, MiniMax, etc.)</td><td>OpenAI-compatible</td></tr>
+      <tr><td>OpenRouter</td><td>9</td><td>OpenAI-compatible</td></tr>
+      <tr><td>MiniMax Coding</td><td>1</td><td>OpenAI-compatible</td></tr>
+    </tbody>
+  </table>
+  <p>Anthropic, OpenAI, Google, and GitHub Copilot providers are built into Pi core and configured via environment variables or <code>auth.json</code>.</p>
+</div>
+
+<div class="section" id="config-agents">
+  <h2>Agent Definitions</h2>
+  <p>Agent definitions are Markdown files with YAML frontmatter in <code>agent/.pi/agents/</code>.</p>
+  <pre><code>---
+name: scout
+description: Fast recon and codebase exploration
+tools: read,grep,find,ls
+---
+
+You are a scout agent. Your job is to investigate
+the codebase quickly and report findings concisely.
+
+## Role
+- Map the project structure and key entry points
+- Identify existing patterns and dependencies
+
+## Constraints
+- Do NOT modify any files. You are read-only.
+- Be thorough but concise</code></pre>
+  <h3>Built-in Agents</h3>
+  <table>
+    <thead><tr><th>Agent</th><th>Tools</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>scout</code></td><td>read, grep, find, ls</td><td>Read-only codebase exploration and recon</td></tr>
+      <tr><td><code>planner</code></td><td>read, grep, find, ls</td><td>Implementation planning and architecture</td></tr>
+      <tr><td><code>builder</code></td><td>read, write, edit, bash, grep, find, ls</td><td>Code implementation following existing patterns</td></tr>
+      <tr><td><code>reviewer</code></td><td>read, grep, find, ls, bash</td><td>Code review for bugs, style, and correctness</td></tr>
+      <tr><td><code>tester</code></td><td>read, write, edit, bash, grep, find, ls</td><td>Test writing and execution</td></tr>
+      <tr><td><code>red-team</code></td><td>read, grep, find, ls, bash</td><td>Security vulnerability analysis</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" id="config-themes">
+  <h2>Themes</h2>
+  <p>Theme JSON files live in <code>agent/themes/</code>. Cycle with <kbd>Ctrl</kbd>+<kbd>T</kbd> or set in <code>settings.json</code>.</p>
+  <p><strong>Included themes:</strong> Catppuccin Mocha, Cyberpunk, Dracula, Everforest, Gruvbox, Midnight Ocean, Nord, Ocean Breeze, Rose Pine, Synthwave, Tokyo Night.</p>
+  <p>Each theme defines colors for: primary, secondary, accent, background, surface, border, text, text-muted, error, warning, success, and more.</p>
+</div>
+
+<div class="section" id="config-skills">
+  <h2>Skills</h2>
+  <p>Skills are reusable agent workflow packs in <code>agent/skills/</code>. Each contains a <code>SKILL.md</code> defining the skill's purpose and instructions.</p>
+  <table>
+    <thead><tr><th>Skill</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>agent-browser</code></td><td>Browser testing workflows with reference templates</td></tr>
+      <tr><td><code>nano-banana</code></td><td>Image generation with test runners and inspectors</td></tr>
+      <tr><td><code>just-bash</code></td><td>Shell-only operations</td></tr>
+      <tr><td><code>way-ios</code></td><td>iOS development workflows</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- EXTENDING PI -->
+<div class="section" id="extend-api">
+  <h1>Extending Pi</h1>
+  <p>This section covers how to write your own extensions for Pi. Every extension is a TypeScript file that exports a default function receiving the <code>ExtensionAPI</code>.</p>
+  <h3>Extension Skeleton</h3>
+  <pre><code>// ABOUTME: One-line purpose description.
+// ABOUTME: Second line with key details.
+
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+
+export default function (pi: ExtensionAPI) {
+  // Register tools, commands, shortcuts, widgets, hooks
+}</code></pre>
+  <h3>Loading Your Extension</h3>
+  <p>Add the relative path to <code>settings.json</code>:</p>
+  <pre><code>{
+  "packages": [
+    "extensions/my-extension.ts"
+  ]
+}</code></pre>
+  <h3>ExtensionAPI Surface</h3>
+  <table>
+    <thead><tr><th>Method</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>pi.registerTool()</code></td><td>Register an LLM-callable tool with typed parameters</td></tr>
+      <tr><td><code>pi.registerCommand()</code></td><td>Register a <code>/slash</code> command with handler and autocomplete</td></tr>
+      <tr><td><code>pi.registerShortcut()</code></td><td>Register a keyboard shortcut (e.g., <code>"ctrl+k"</code>)</td></tr>
+      <tr><td><code>pi.registerHook()</code></td><td>Register a lifecycle hook callback</td></tr>
+      <tr><td><code>pi.setActiveTools()</code></td><td>Filter which tools are active for the LLM</td></tr>
+      <tr><td><code>pi.getAllTools()</code></td><td>Get all registered tools (name + description)</td></tr>
+    </tbody>
+  </table>
+  <h3>ExtensionContext</h3>
+  <p>Tool execute functions and hook callbacks receive an <code>ExtensionContext</code> with:</p>
+  <table>
+    <thead><tr><th>Property</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>ctx.ui.setWidget()</code></td><td>Set a TUI widget (above or below editor)</td></tr>
+      <tr><td><code>ctx.ui.notify()</code></td><td>Show a notification (info, warning, error)</td></tr>
+      <tr><td><code>ctx.ui.select()</code></td><td>Show a select dialog and await user choice</td></tr>
+      <tr><td><code>ctx.abort()</code></td><td>Abort the current agent stream</td></tr>
+      <tr><td><code>ctx.isIdle()</code></td><td>Check if the agent is idle</td></tr>
+      <tr><td><code>ctx.compact()</code></td><td>Trigger context compaction</td></tr>
+      <tr><td><code>ctx.hasUI</code></td><td>Whether the TUI is available</td></tr>
+      <tr><td><code>ctx.messages</code></td><td>Current conversation messages</td></tr>
+      <tr><td><code>ctx.model</code></td><td>Current model information</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" id="extend-tools">
+  <h2>Writing Tools</h2>
+  <p>Tools are LLM-callable functions. The LLM sees the tool name, description, and parameter schema, and can decide to call it.</p>
+  <pre><code>import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+
+export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "my_tool",
+    label: "My Tool",
+    description: "Does something useful.",
+    parameters: Type.Object({
+      input: Type.String({ description: "The input to process" }),
+      verbose: Type.Optional(Type.Boolean({ description: "Show details" })),
+    }),
+
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const { input, verbose } = params;
+      const result = `Processed: ${input}`;
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    },
+  });
+}</code></pre>
+  <h3>Key Points</h3>
+  <ul>
+    <li><code>parameters</code> uses <a href="https://github.com/sinclairzx81/typebox">TypeBox</a> for JSON Schema generation</li>
+    <li><code>execute</code> receives: toolCallId, parsed params, AbortSignal, streaming update callback, and ExtensionContext</li>
+    <li>Return <code>{ content: [{ type: "text", text: "..." }] }</code> to send results back to the LLM</li>
+    <li>Use <code>signal</code> to check for cancellation in long-running operations</li>
+  </ul>
+</div>
+
+<div class="section" id="extend-commands">
+  <h2>Writing Commands</h2>
+  <p>Slash commands are user-invoked via <code>/name [args]</code> in the input. They don't go through the LLM.</p>
+  <pre><code>pi.registerCommand("greet", {
+  description: "Say hello",
+  handler: async (args, ctx) => {
+    const name = args.trim() || "world";
+    ctx.ui.notify(`Hello, ${name}!`, "info");
+  },
+  autocomplete: (partial) => {
+    return [
+      { label: "world", description: "Greet the world" },
+      { label: "agent", description: "Greet the agent" },
+    ].filter(item => item.label.startsWith(partial));
+  },
+});</code></pre>
+</div>
+
+<div class="section" id="extend-hooks">
+  <h2>Using Hooks</h2>
+  <p>Hooks let you intercept and modify agent behavior at key lifecycle points.</p>
+  <table>
+    <thead><tr><th>Hook</th><th>When</th><th>Use Case</th></tr></thead>
+    <tbody>
+      <tr><td><code>tool_call</code></td><td>Before every tool execution</td><td>Block dangerous commands, validate inputs, add logging</td></tr>
+      <tr><td><code>context</code></td><td>Before messages sent to LLM</td><td>Modify messages, inject context, strip content</td></tr>
+      <tr><td><code>before_agent_start</code></td><td>Before agent's first response</td><td>Inject system prompts, configure tools</td></tr>
+      <tr><td><code>session_switch</code></td><td>When switching sessions</td><td>Reset state, clean up resources</td></tr>
+      <tr><td><code>session_before_compact</code></td><td>Before context compaction</td><td>Save state, extract insights</td></tr>
+    </tbody>
+  </table>
+  <h3>Example: tool_call Hook</h3>
+  <pre><code>pi.registerHook("tool_call", async (event, ctx) => {
+  const { name, input } = event;
+  if (name === "bash" &amp;&amp; input.command?.includes("dangerous")) {
+    return { blocked: true, message: "Blocked by policy" };
+  }
+  return { blocked: false };
+});</code></pre>
+  <h3>Example: before_agent_start Hook</h3>
+  <pre><code>pi.registerHook("before_agent_start", async (event, ctx) => {
+  return { systemPrompt: "Always respond concisely." };
+});</code></pre>
+</div>
+
+<div class="section" id="extend-widgets">
+  <h2>Widgets</h2>
+  <p>Widgets are TUI components rendered in the terminal UI above or below the editor.</p>
+  <pre><code>import { Text, Container } from "@mariozechner/pi-tui";
+
+ctx.ui.setWidget("my-widget", (tui, theme) => ({
+  invalidate() {},
+  render() {
+    return Container({
+      children: [
+        Text(" MY WIDGET ", { bold: true, color: theme.accent }),
+        Text(" Status: running ", { color: theme.textMuted }),
+      ],
+    });
+  },
+}));</code></pre>
+  <ul>
+    <li>Widgets are identified by a string key</li>
+    <li>Set to <code>undefined</code> to remove a widget</li>
+    <li>Use <code>Text</code>, <code>Container</code>, <code>Box</code>, <code>Spacer</code>, <code>Markdown</code> from <code>@mariozechner/pi-tui</code></li>
+    <li>Call <code>invalidate()</code> when widget state changes to trigger re-render</li>
+  </ul>
+</div>
+
+<div class="section" id="extend-agents">
+  <h2>Agent Definitions</h2>
+  <p>Create a new agent by adding a Markdown file to <code>agent/.pi/agents/</code>:</p>
+  <pre><code>---
+name: my-agent
+description: Short description shown in team selection
+tools: read,write,edit,bash
+---
+
+You are my-agent. Your role is to...
+
+## Instructions
+- Do this
+- Don't do that</code></pre>
+  <h3>Frontmatter Fields</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>name</code></td><td>Yes</td><td>Agent identifier (used in teams.yaml and dispatch)</td></tr>
+      <tr><td><code>description</code></td><td>Yes</td><td>One-line description</td></tr>
+      <tr><td><code>tools</code></td><td>No</td><td>Comma-separated tool names (default: all tools)</td></tr>
+    </tbody>
+  </table>
+  <p>Then add the agent to a team in <code>teams.yaml</code>:</p>
+  <pre><code>my-team:
+  - scout
+  - my-agent
+  - reviewer</code></pre>
+</div>
+
+<div class="section" id="extend-chains">
+  <h2>Chains &amp; Pipelines</h2>
+  <h3>Creating a Chain</h3>
+  <p>Add to <code>agent/.pi/agents/agent-chain.yaml</code>:</p>
+  <pre><code>my-chain:
+  description: "My custom workflow"
+  steps:
+    - agent: scout
+      prompt: "Explore the codebase for: $INPUT"
+    - agent: my-agent
+      prompt: "Based on this analysis:\n\n$INPUT\n\nOriginal: $ORIGINAL"
+    - agent: reviewer
+      prompt: "Review the results:\n\n$INPUT"</code></pre>
+  <h4>Template Variables</h4>
+  <table>
+    <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>$INPUT</code></td><td>Output from the previous step (or user prompt for step 1)</td></tr>
+      <tr><td><code>$ORIGINAL</code></td><td>The user's original prompt (always available)</td></tr>
+      <tr><td><code>$INPUT_N</code></td><td>Output from step N specifically (e.g., <code>$INPUT_2</code>)</td></tr>
+    </tbody>
+  </table>
+  <h3>Creating a Pipeline</h3>
+  <p>Add to <code>agent/.pi/agents/pipeline-team.yaml</code>:</p>
+  <pre><code>my-pipeline:
+  description: "My custom pipeline"
+  review_max_loops: 3
+  phases:
+    - name: understand
+      description: "Clarify the task"
+      mode: interactive
+      agents:
+        - role: scout
+          task_template: "Explore and clarify: $INPUT"
+    - name: build
+      description: "Implement"
+      mode: interactive
+      agents:
+        - role: builder
+          task_template: "Implement: $INPUT"
+    - name: review
+      description: "Review"
+      mode: interactive
+      agents:
+        - role: reviewer
+          task_template: "Review: $INPUT"</code></pre>
+  <h4>Pipeline Phase Modes</h4>
+  <ul>
+    <li><strong>interactive</strong> &mdash; Primary agent converses with user, may dispatch agents</li>
+    <li><strong>parallel</strong> &mdash; Multiple agents dispatched concurrently</li>
+    <li><strong>sequential</strong> &mdash; Single agent executes, output feeds forward</li>
+  </ul>
+</div>
+
+<!-- ECOSYSTEM -->
+<div class="section" id="ecosystem">
+  <h1>Ecosystem</h1>
+  <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAiAAAADACAYAAAA9Uti3AAAFQ0lEQVR4nOzd0YrVWx3A8fZhP8GROHTkNFg+gs7MwxQRRNCVZAaChUISYmI3XnUTUg8zM84jSFJDCom+wr9nyF98F5v5fO73f/32rP+C76yb/dX3AABiAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3H71AABwiG68vtwmn9+GVwCff3pnN3vCWm5AAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMjtb98/2yYP2HazAbZpAi1e/92z0+EEax09Pl+6/9MEnu7f1e9ODnr/bj6/mO3fgZ+/D78+Xrp/37x6M/r7j9//1edvuP7HX9496PPHjBsQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHK72/fPtskDtt1sgG2aQKvXH37+3R9PR9/g6Pfno/2bzj/d//H6i9+fq0cnoyfcfHaxdv+u+fn7cO949A2+efXmep+/xet//MXd0QQ3/nrp/E18NRvADQgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAuf3bl6ezH/Q/cLcenm2rZzhk/3pysvT9+e7puf0beP/geOn+/eDPF/Zv4D+/urt0/77/lzf2jy/mBgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3P72/bNt8oBtNxtgmybQdP3h8nDIvn1xMTsCzh8H7NPP74ze4BuvL5e+wp9/Mpt/NTcgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOT2qwf4x59OdyvXv/XwbFu5Pqz0/sHx0vMHXF9uQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADI7VcP8KPfnm2jB+xm688W54dPzmd/wmEC27+Zb19crD1/03+Bhp//cO94+A1gna//fjk6v/PzNzs+bkAAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyO3fvjwd/aD/j39ztv3/xuF/9c8/nIz27+jxuf1b6N8Pj0f7d/P5hf2DRT797M7o/H79t8trfX7dgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQ260eACa+e3q+jR4wPAFXj06cIYAv4AYEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgNx+9QCsdfT4fJt8ftsNBxgm8Gh4AJZxAwIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAbr96AFjp6tHJbvUMANeRGxAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcv8NAAD//8TXik161ttyAAAAAElFTkSuQmCC" alt="agent" style="height: 28px; width: auto; image-rendering: pixelated; vertical-align: middle; margin-right: 8px;" /><strong>agent</strong> and <img src="data:image/png;base64,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" alt="commander" style="height: 20px; width: auto; image-rendering: pixelated; vertical-align: middle; margin-right: 8px;" /><strong>commander</strong> form a two-part system. Each works independently, but together they create a complete AI development workflow.</p>
+
+  <div class="card-grid">
+    <div class="card" style="border-left: 3px solid var(--success);">
+      <div class="card-title"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAiAAAADACAYAAAA9Uti3AAAFQ0lEQVR4nOzd0YrVWx3A8fZhP8GROHTkNFg+gs7MwxQRRNCVZAaChUISYmI3XnUTUg8zM84jSFJDCom+wr9nyF98F5v5fO73f/32rP+C76yb/dX3AABiAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3H71AABwiG68vtwmn9+GVwCff3pnN3vCWm5AAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMjtb98/2yYP2HazAbZpAi1e/92z0+EEax09Pl+6/9MEnu7f1e9ODnr/bj6/mO3fgZ+/D78+Xrp/37x6M/r7j9//1edvuP7HX9496PPHjBsQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHK72/fPtskDtt1sgG2aQKvXH37+3R9PR9/g6Pfno/2bzj/d//H6i9+fq0cnoyfcfHaxdv+u+fn7cO949A2+efXmep+/xet//MXd0QQ3/nrp/E18NRvADQgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAuf3bl6ezH/Q/cLcenm2rZzhk/3pysvT9+e7puf0beP/geOn+/eDPF/Zv4D+/urt0/77/lzf2jy/mBgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACA3P72/bNt8oBtNxtgmybQdP3h8nDIvn1xMTsCzh8H7NPP74ze4BuvL5e+wp9/Mpt/NTcgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOT2qwf4x59OdyvXv/XwbFu5Pqz0/sHx0vMHXF9uQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADI7VcP8KPfnm2jB+xm688W54dPzmd/wmEC27+Zb19crD1/03+Bhp//cO94+A1gna//fjk6v/PzNzs+bkAAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyO3fvjwd/aD/j39ztv3/xuF/9c8/nIz27+jxuf1b6N8Pj0f7d/P5hf2DRT797M7o/H79t8trfX7dgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQ260eACa+e3q+jR4wPAFXj06cIYAv4AYEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgNx+9QCsdfT4fJt8ftsNBxgm8Gh4AJZxAwIA5AQIAJATIABAToAAADkBAgDkBAgAkBMgAEBOgAAAOQECAOQECACQEyAAQE6AAAA5AQIA5AQIAJATIABAbr96AFjp6tHJbvUMANeRGxAAICdAAICcAAEAcgIEAMgJEAAgJ0AAgJwAAQByAgQAyAkQACAnQACAnAABAHICBADICRAAICdAAICcAAEAcv8NAAD//8TXik161ttyAAAAAElFTkSuQmCC" alt="agent" style="height: 14px; image-rendering: pixelated;" /> agent</div>
+      <div class="card-desc"><strong>Execute, build, review.</strong> 28 extensions, 6 modes, multi-agent orchestration, security hardening, browser-based viewers. The hands in the terminal.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--accent);">
+      <div class="card-title"><img src="data:image/png;base64,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" alt="commander" style="height: 14px; image-rendering: pixelated;" /> commander</div>
+      <div class="card-desc"><strong>Plan, track, coordinate.</strong> Desktop dashboard with Kanban board, spec wizard, agent registry, Jira integration, 14 MCP tool families. The brain.</div>
+    </div>
+  </div>
+
+  <h3>How They Connect</h3>
+  <div class="flow">
+    <div class="flow-step active">agent</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">commander-mcp</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">WebSocket :9002</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Rust Backend</div><div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Dashboard</div>
+  </div>
+  <p>agent's <code>commander-mcp</code> extension spawns the MCP server and connects to Commander's WebSocket. Tasks sync bidirectionally &mdash; create a spec in Commander's wizard, execute it with agent's multi-agent orchestration, watch live progress on the Kanban board.</p>
+  <p><strong>Both work fully standalone.</strong> agent's 28 extensions, orchestration modes, and viewers need nothing else. Commander's dashboard, spec wizard, Jira integration, and personal assistant work without agent.</p>
+  <p><a href="https://github.com/ruizrica/commander">Commander Documentation &rarr;</a></p>
+</div>
+
+<!-- Footer -->
+<hr>
+<p style="text-align: center; color: var(--text-dim); font-size: 12px; font-family: var(--mono); padding: 24px 0;">
+  agent &mdash; built on <a href="https://github.com/badlogic/pi-mono" style="color: var(--text-dim);">Pi Coding Agent</a> by Mario Zechner
+</p>
+
+</div><!-- .content-area -->
+</main>
+</div><!-- .layout -->
+
+<script>
+const navLinks = document.querySelectorAll('.nav-link');
+const main = document.getElementById('main-content');
+const searchInput = document.getElementById('nav-search');
+
+function updateActiveLink() {
+  const sections = document.querySelectorAll('[id]');
+  let current = '';
+  const scrollTop = main.scrollTop;
+  sections.forEach(section => {
+    const top = section.offsetTop - main.offsetTop - 60;
+    if (scrollTop >= top) current = section.id;
+  });
+  navLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    link.classList.toggle('active', href === '#' + current);
+  });
+}
+main.addEventListener('scroll', updateActiveLink);
+
+navLinks.forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector('.sidebar').classList.remove('open');
+  });
+});
+
+searchInput.addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  document.querySelectorAll('.nav-section').forEach(section => {
+    const links = section.querySelectorAll('.nav-link');
+    let anyVisible = false;
+    links.forEach(link => {
+      const show = !query || link.textContent.toLowerCase().includes(query);
+      link.style.display = show ? '' : 'none';
+      if (show) anyVisible = true;
+    });
+    section.style.display = (!query || anyVisible) ? '' : 'none';
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== searchInput) { e.preventDefault(); searchInput.focus(); }
+  if (e.key === 'Escape' && document.activeElement === searchInput) { searchInput.blur(); searchInput.value = ''; searchInput.dispatchEvent(new Event('input')); }
+});
+
+updateActiveLink();
+</script>
+</body>
+</html>

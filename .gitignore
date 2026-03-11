@@ -21,9 +21,19 @@ agent/pi-crash.log
 .pi/agent-sessions/
 .pi/debug-captures/
 .pi/web-test-captures/
+.pi/security-audit.log
+.pi/security-audit.log.*.bak
 .context/reports/
+.context/generated-images/
+.context/test-exports/
+.context/session-state.json
+.context/call-tool-test.txt
 agent/extensions/coverage/
 
 # Secrets
+agent/models.json
 agent/extensions/web-test-worker/.env
 agent/extensions/web-test-worker/node_modules/
+
+# Docs build
+docs/.archive/
