@@ -37,6 +37,40 @@ describe("PLAN_PROMPT — Commander-first enforcement", () => {
 	});
 });
 
+describe("PLAN_PROMPT — structured plan format", () => {
+	it("teaches phased plan structure", () => {
+		expect(PLAN_PROMPT).toContain("Phase");
+		expect(PLAN_PROMPT).toContain("Context");
+	});
+
+	it("includes file action indicators", () => {
+		expect(PLAN_PROMPT).toContain("New file");
+		expect(PLAN_PROMPT).toContain("Modify");
+		expect(PLAN_PROMPT).toContain("Test first");
+	});
+
+	it("includes Critical Files section template", () => {
+		expect(PLAN_PROMPT).toContain("Critical Files");
+	});
+
+	it("includes Verification section template", () => {
+		expect(PLAN_PROMPT).toContain("Verification");
+	});
+
+	it("includes Reusable Components section template", () => {
+		expect(PLAN_PROMPT).toContain("Reusable Components");
+	});
+
+	it("teaches Why justification for phases", () => {
+		expect(PLAN_PROMPT).toContain("Why");
+		expect(PLAN_PROMPT).toContain("justification");
+	});
+
+	it("emphasizes phases over flat steps", () => {
+		expect(PLAN_PROMPT).toContain("Phases, not flat steps");
+	});
+});
+
 describe("SPEC_PROMPT — Commander-first enforcement", () => {
 	it("contains 'ALWAYS' for Commander usage", () => {
 		expect(SPEC_PROMPT).toContain("ALWAYS");

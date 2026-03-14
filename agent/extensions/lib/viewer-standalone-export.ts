@@ -105,7 +105,8 @@ function baseDocument(opts: { title: string; label: string; body: string; script
 }
 
 export function createPlanStandaloneExport(opts: { title: string; markdown: string; mode: "plan" | "questions" }): string {
-	const state = JSON.stringify({ markdown: opts.markdown, mode: opts.mode });
+	// Escape </ sequences to prevent </script> from breaking out of the script block
+	const state = JSON.stringify({ markdown: opts.markdown, mode: opts.mode }).replace(/<\//g, '<\\/');
 	const body = `<div class="section"><div class="markdown-body" id="content"></div></div>`;
 	const script = `
 const state = ${state};
@@ -138,7 +139,8 @@ export interface CompletionReportExportData {
 }
 
 export function createCompletionReportStandaloneExport(report: CompletionReportExportData): string {
-	const state = JSON.stringify(report);
+	// Escape </ sequences to prevent </script> from breaking out of the script block
+	const state = JSON.stringify(report).replace(/<\//g, '<\\/');
 	const body = `
 <div class="section">
   <div id="overview"></div>
@@ -267,7 +269,8 @@ export interface SpecExportDocument {
 }
 
 export function createSpecStandaloneExport(opts: { title: string; documents: SpecExportDocument[] }): string {
-	const docs = JSON.stringify(opts.documents);
+	// Escape </ sequences to prevent </script> from breaking out of the script block
+	const docs = JSON.stringify(opts.documents).replace(/<\//g, '<\\/');
 	const body = `<div id="specContent"></div>`;
 	const script = `
 function escapeHtml(value) { return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }

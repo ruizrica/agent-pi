@@ -123,3 +123,15 @@ secure:
       prompt: "# Phase 2: AI Security Findings Report\n\nConsolidate findings into a structured report.\n\n**Discovery:**\n$INPUT_1\n\n**Vulnerabilities:**\n$INPUT_2\n\nFormat as:\n- Security Score X/100\n- Executive Summary\n- Findings table (severity, count)\n- Each finding: ID, severity, category (Prompt Injection / Credential Exposure / Data Leakage / Missing Protection), file:line, description, proof of concept, impact, recommendation\n- Positive findings (security measures already in place)"
     - agent: planner
       prompt: "# Phase 3: AI Security Hardening Plan\n\nCreate prioritized remediation with installable protections.\n\n**Security Report:**\n$INPUT\n\n## Plan:\n1. **Priority 1: Critical Fixes** — immediate code changes with file:line and code examples\n2. **Priority 2: Install Protections** — recommend running /secure install to generate AI Security Guard (input sanitization + output filtering), Security Policy YAML, rate limiting middleware, and CI security checks\n3. **Priority 3: Configuration** — rate limits, token limits, logging, monitoring\n4. **Priority 4: Process** — security review checklist, incident response, alerting\n\nRecommended architecture: User Input -> Rate Limiter -> Input Sanitizer -> AI API -> Output Filter -> Response, with Audit Logger and Content Filter as side-channels."
+
+network-security-local:
+  description: "Curated security intelligence, passive local inspection, safe local port analysis, and defensive reporting"
+  steps:
+    - agent: security-news-analyst
+      prompt: "Gather current trusted security intelligence relevant to this local network security task. Prefer official or high-trust sources only. Include OWASP, CISA, NVD, CVE, and protocol-relevant items when applicable.\n\nTask:\n$INPUT"
+    - agent: network-scout
+      prompt: "Perform passive local network inspection for this task. Inventory interfaces and local listeners first, then summarize any bounded passive inspection findings that are safe and authorized.\n\nTask context:\n$ORIGINAL\n\nThreat intelligence context:\n$INPUT"
+    - agent: port-scan-analyst
+      prompt: "Perform a safe, scope-restricted local port analysis only if the task includes an explicit loopback or private IP target. Use conservative defaults and explain any refusal clearly.\n\nTask context:\n$ORIGINAL\n\nPassive inspection context:\n$INPUT"
+    - agent: reviewer
+      prompt: "Produce a defensive local network security report. Consolidate trusted intelligence, passive inspection findings, and safe port-analysis results. Clearly separate: completed checks, refused or skipped actions, findings, and recommended mitigations.\n\nSecurity intelligence:\n$INPUT_1\n\nPassive inspection:\n$INPUT_2\n\nPort analysis:\n$INPUT_3"

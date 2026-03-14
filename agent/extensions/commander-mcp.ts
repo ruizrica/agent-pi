@@ -245,11 +245,139 @@ EXAMPLE - Find ready work:
 	},
 ];
 
-// ── Shared schema ───────────────────────────────────────────────────
+// ── Per-tool schemas ────────────────────────────────────────────────
+// Each tool gets a schema that explicitly defines its parameters so that
+// the model knows what to send. additionalProperties remains true for
+// forward-compatibility with new fields.
 
-const ToolParams = Type.Object({
+const TaskParams = Type.Object({
 	operation: Type.String({ description: "Operation to perform" }),
+	// CRUD
+	description: Type.Optional(Type.String({ description: "Task description (for create)" })),
+	working_directory: Type.Optional(Type.String({ description: "Working directory path (for create, list)" })),
+	task_id: Type.Optional(Type.Number({ description: "Task ID (for get, update, claim, complete, fail)" })),
+	status: Type.Optional(Type.String({ description: "Task status: pending, working, completed, failed, cancelled (for update, list)" })),
+	agent_id: Type.Optional(Type.Number({ description: "Agent ID (for list filter)" })),
+	// Lifecycle
+	agent_name: Type.Optional(Type.String({ description: "Agent name (for claim)" })),
+	result: Type.Optional(Type.String({ description: "Result summary (for complete)" })),
+	error_message: Type.Optional(Type.String({ description: "Error message (for fail)" })),
+	// Groups
+	group_name: Type.Optional(Type.String({ description: "Group name (for group:create)" })),
+	group_id: Type.Optional(Type.Number({ description: "Group ID (for group:get, group:list, group:update)" })),
+	initiative_summary: Type.Optional(Type.String({ description: "Initiative summary (for group:create)" })),
+	total_waves: Type.Optional(Type.Number({ description: "Total waves (for group:create)" })),
+	tasks: Type.Optional(Type.Array(Type.Object({
+		description: Type.String(),
+		task_prompt: Type.Optional(Type.String()),
+		dependency_order: Type.Optional(Type.Number()),
+		context: Type.Optional(Type.String()),
+	}), { description: "Array of task definitions (for group:create)" })),
+	overall_status: Type.Optional(Type.String({ description: "Overall group status (for group:update)" })),
+	// Comments & Logs
+	body: Type.Optional(Type.String({ description: "Comment body (for comment:add)" })),
+	message: Type.Optional(Type.String({ description: "Log message (for log)" })),
+	// Policy
+	policy: Type.Optional(Type.Object({}, { additionalProperties: true, description: "Policy object (for policy:update)" })),
 }, { additionalProperties: true });
+
+const SessionParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	name: Type.Optional(Type.String({ description: "Session name (for create)" })),
+	session_id: Type.Optional(Type.Number({ description: "Session ID (for get, cleanup:terminate)" })),
+	working_directory: Type.Optional(Type.String({ description: "Working directory filter (for list)" })),
+	status: Type.Optional(Type.String({ description: "Status filter (for list)" })),
+	// Terminal
+	terminal_session_id: Type.Optional(Type.Number({ description: "Terminal session ID (for pipe)" })),
+	cli_type: Type.Optional(Type.String({ description: "CLI type filter (for terminals:list)" })),
+	data: Type.Optional(Type.String({ description: "Text to send to terminal (for pipe)" })),
+	// File viewer
+	file_path: Type.Optional(Type.String({ description: "File path to open (for file:open)" })),
+	line_range: Type.Optional(Type.String({ description: "Line range like '45-60' (for file:open)" })),
+	viewer_id: Type.Optional(Type.Number({ description: "Viewer ID (for file:close)" })),
+	// Cleanup
+	min_age_hours: Type.Optional(Type.Number({ description: "Minimum age in hours for stale cleanup (for cleanup:stale)" })),
+}, { additionalProperties: true });
+
+const WorkflowParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	workflow: Type.Optional(Type.String({ description: "Workflow name: kiro, contextos (for doc:get, doc:list, template:get, template:list)" })),
+	doc_type: Type.Optional(Type.String({ description: "Document type (for doc:get)" })),
+	query: Type.Optional(Type.String({ description: "Search query (for doc:search)" })),
+	template_type: Type.Optional(Type.String({ description: "Template type (for template:get)" })),
+	steering_type: Type.Optional(Type.String({ description: "Steering document type (for steering:get)" })),
+}, { additionalProperties: true });
+
+const SpecParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	spec_id: Type.Optional(Type.Number({ description: "Spec ID (for get, update, shape, write, create_tasks)" })),
+	name: Type.Optional(Type.String({ description: "Spec name (for create)" })),
+	description: Type.Optional(Type.String({ description: "Spec description (for create)" })),
+	project_id: Type.Optional(Type.Number({ description: "Project ID (for create)" })),
+	feature_idea: Type.Optional(Type.String({ description: "Feature idea text (for shape)" })),
+	shaped_content: Type.Optional(Type.String({ description: "Shaped content (for write)" })),
+	selected_tasks: Type.Optional(Type.Array(Type.Unknown(), { description: "Selected tasks to create (for create_tasks)" })),
+}, { additionalProperties: true });
+
+const JiraParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	issue_key: Type.Optional(Type.String({ description: "Jira issue key like PROJ-123 (for most operations)" })),
+	jql: Type.Optional(Type.String({ description: "JQL query string (for issue:search)" })),
+	body: Type.Optional(Type.String({ description: "Comment body (for comment:add)" })),
+	pr_url: Type.Optional(Type.String({ description: "PR URL to link (for link:pr)" })),
+	transition_id: Type.Optional(Type.Number({ description: "Transition ID (for transition:execute)" })),
+	transition_name: Type.Optional(Type.String({ description: "Transition name (for transition:execute)" })),
+}, { additionalProperties: true });
+
+const MailboxParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	from_agent: Type.Optional(Type.String({ description: "Sender agent name (for send)" })),
+	to_agent: Type.Optional(Type.String({ description: "Recipient agent name or broadcast group (for send)" })),
+	agent_name: Type.Optional(Type.String({ description: "Agent name (for inbox, outbox, read_all, unread_count)" })),
+	body: Type.Optional(Type.String({ description: "Message body (for send)" })),
+	message_type: Type.Optional(Type.String({ description: "Message type: status, question, result, error, dispatch, escalation (for send)" })),
+	message_id: Type.Optional(Type.Number({ description: "Message ID (for read, delete)" })),
+	thread_id: Type.Optional(Type.Number({ description: "Thread ID (for thread)" })),
+	task_id: Type.Optional(Type.Number({ description: "Related task ID (for send)" })),
+	priority: Type.Optional(Type.String({ description: "Priority: low, normal, high, urgent (for send)" })),
+}, { additionalProperties: true });
+
+const OrchestrationParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	name: Type.Optional(Type.String({ description: "Agent name (for agent:register, agent:get_by_name)" })),
+	agent_type: Type.Optional(Type.String({ description: "Agent type (for agent:register)" })),
+	role: Type.Optional(Type.String({ description: "Agent role: coordinator, lead, worker (for agent:register)" })),
+	agent_id: Type.Optional(Type.Number({ description: "Agent ID (for agent:deregister, agent:heartbeat, agent:state, dispatch)" })),
+	agent_name: Type.Optional(Type.String({ description: "Agent name for heartbeat (for agent:heartbeat)" })),
+	task_id: Type.Optional(Type.Number({ description: "Task ID (for dispatch)" })),
+	state: Type.Optional(Type.String({ description: "Agent state: idle, running, working, stuck, done, stopped (for agent:state)" })),
+	capability: Type.Optional(Type.String({ description: "Capability to search for (for agent:find_capable)" })),
+	parent_agent_id: Type.Optional(Type.Number({ description: "Parent agent ID (for agent:hierarchy)" })),
+	active_only: Type.Optional(Type.Boolean({ description: "Filter to active agents only (for agent:list)" })),
+	threshold_secs: Type.Optional(Type.Number({ description: "Staleness threshold in seconds (for health:check)" })),
+}, { additionalProperties: true });
+
+const DependencyParams = Type.Object({
+	operation: Type.String({ description: "Operation to perform" }),
+	task_id: Type.Optional(Type.Number({ description: "Task ID (for get, blockers, dependents, cached_blockers)" })),
+	from_task_id: Type.Optional(Type.Number({ description: "Source task ID (for add, remove_by_edge)" })),
+	to_task_id: Type.Optional(Type.Number({ description: "Target task ID (for add, remove_by_edge)" })),
+	dependency_id: Type.Optional(Type.Number({ description: "Dependency ID (for remove)" })),
+	dependency_type: Type.Optional(Type.String({ description: "Dependency type: blocks, parent_child, waits_for, related (for add)" })),
+	group_id: Type.Optional(Type.Number({ description: "Group ID (for graph)" })),
+}, { additionalProperties: true });
+
+// Map tool names to their specific parameter schemas
+const TOOL_PARAMS: Record<string, ReturnType<typeof Type.Object>> = {
+	commander_task: TaskParams,
+	commander_session: SessionParams,
+	commander_workflow: WorkflowParams,
+	commander_spec: SpecParams,
+	commander_jira: JiraParams,
+	commander_mailbox: MailboxParams,
+	commander_orchestration: OrchestrationParams,
+	commander_dependency: DependencyParams,
+};
 
 // ── Extension entry point ───────────────────────────────────────────
 
@@ -292,7 +420,7 @@ export default function (pi: ExtensionAPI) {
 			name: tool.name,
 			label: tool.label,
 			description: tool.description,
-			parameters: ToolParams,
+			parameters: TOOL_PARAMS[tool.name] || TaskParams,
 
 			async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 				try {

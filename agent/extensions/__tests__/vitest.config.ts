@@ -20,6 +20,12 @@ export default defineConfig({
 			branches: 75,
 			statements: 80,
 		},
+		alias: {
+			"@mariozechner/pi-tui": "../mocks/pi-tui.ts",
+			"@mariozechner/pi-coding-agent": "../mocks/pi-coding-agent.ts",
+			"@mariozechner/pi-ai": "../mocks/pi-ai.ts",
+			"@sinclair/typebox": "../mocks/typebox.ts",
+		},
 	},
 	resolve: {
 		alias: {

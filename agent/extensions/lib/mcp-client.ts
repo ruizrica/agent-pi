@@ -69,6 +69,11 @@ export class McpClient {
 		this.proc.stderr!.on("data", () => {}); // Drain stderr
 		this.proc.on("close", () => this.onClose());
 
+		// Handle stdin errors (EPIPE when server dies) to prevent uncaught crash
+		this.proc.stdin!.on("error", (err) => {
+			this.onClose();
+		});
+
 		// Send initialize handshake
 		const initId = this.nextId++;
 		const initMsg = formatJsonRpcRequest(initId, "initialize", {
@@ -76,7 +81,12 @@ export class McpClient {
 			capabilities: {},
 			clientInfo: { name: "pi-mcp-client", version: "1.0.0" },
 		});
-		this.proc.stdin!.write(initMsg + "\n");
+
+		try {
+			this.proc.stdin!.write(initMsg + "\n");
+		} catch (err) {
+			throw new Error(`MCP initialize write failed: ${(err as Error).message}`);
+		}
 
 		// Wait for initialize response
 		await new Promise<void>((resolve, reject) => {
@@ -89,7 +99,11 @@ export class McpClient {
 					clearTimeout(timer);
 					// Send initialized notification
 					const notif = formatJsonRpcRequest(undefined, "notifications/initialized", {});
-					this.proc!.stdin!.write(notif + "\n");
+					try {
+						this.proc!.stdin!.write(notif + "\n");
+					} catch {
+						// Non-fatal — handshake already succeeded
+					}
 					this.connected = true;
 					resolve();
 				},
@@ -109,7 +123,6 @@ export class McpClient {
 
 		const id = this.nextId++;
 		const msg = formatJsonRpcRequest(id, "tools/call", { name, arguments: args });
-		this.proc.stdin!.write(msg + "\n");
 
 		const effectiveTimeout = timeoutMs ?? this.timeoutMs;
 		return new Promise<any>((resolve, reject) => {
@@ -119,6 +132,17 @@ export class McpClient {
 			}, effectiveTimeout);
 
 			this.pending.set(id, { resolve, reject, timer });
+
+			// Write after registering the pending handler so EPIPE triggers onClose
+			// which rejects all pending calls cleanly instead of crashing
+			try {
+				this.proc!.stdin!.write(msg + "\n");
+			} catch (err) {
+				// Synchronous write error (stream already destroyed)
+				this.pending.delete(id);
+				clearTimeout(timer);
+				reject(new Error(`MCP write failed: ${(err as Error).message}`));
+			}
 		});
 	}
 

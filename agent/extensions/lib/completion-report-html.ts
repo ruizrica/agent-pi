@@ -34,7 +34,12 @@ export function generateCompletionReportHTML(opts: {
 	port: number;
 }): string {
 	const { report, port } = opts;
-	const escapedReport = JSON.stringify(report);
+	// JSON.stringify doesn't escape </script> or </style> sequences inside strings.
+	// If diff content contains these (e.g. an HTML template with </script>), the browser's
+	// HTML parser terminates the <script> block prematurely, causing raw JS/JSON to render
+	// as visible text and any embedded HTML to render as real DOM elements.
+	const escapedReport = JSON.stringify(report)
+		.replace(/<\//g, '<\\/');
 
 	return `<!DOCTYPE html>
 <html lang="en">

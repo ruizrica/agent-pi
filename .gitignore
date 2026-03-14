@@ -35,5 +35,8 @@ agent/models.json
 agent/extensions/web-test-worker/.env
 agent/extensions/web-test-worker/node_modules/
 
+# Autoresearch
+autoresearch-results.tsv
+
 # Docs build
 docs/.archive/

@@ -10,12 +10,14 @@ export function generateFileViewerHTML(opts: {
 	editable: boolean;
 	language?: string;
 }): string {
-	const escapedTitle = JSON.stringify(opts.title);
-	const escapedFilePath = JSON.stringify(opts.filePath);
-	const escapedContent = JSON.stringify(opts.content);
-	const escapedLineRange = JSON.stringify(opts.lineRange || "");
-	const escapedEditable = JSON.stringify(opts.editable);
-	const escapedLanguage = JSON.stringify(opts.language || "");
+	// Escape </ sequences to prevent </script> in file content from breaking the script block
+	const esc = (v: unknown) => JSON.stringify(v).replace(/<\//g, '<\\/');
+	const escapedTitle = esc(opts.title);
+	const escapedFilePath = esc(opts.filePath);
+	const escapedContent = esc(opts.content);
+	const escapedLineRange = esc(opts.lineRange || "");
+	const escapedEditable = esc(opts.editable);
+	const escapedLanguage = esc(opts.language || "");
 	const lineCount = Math.max(1, opts.content.endsWith("\n") ? opts.content.split("\n").length - 1 : opts.content.split("\n").length);
 	const initialGutterHtml = Array.from({ length: lineCount }, (_, i) => `<span>${i + 1}</span>`).join("");
 

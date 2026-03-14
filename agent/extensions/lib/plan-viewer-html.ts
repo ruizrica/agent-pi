@@ -12,8 +12,9 @@ export function generatePlanViewerHTML(opts: {
 	port: number;
 }): string {
 	const { markdown, title, mode, port } = opts;
-	const escapedMarkdown = JSON.stringify(markdown);
-	const escapedTitle = JSON.stringify(title);
+	// Escape </ sequences to prevent </script> in content from breaking the script block
+	const escapedMarkdown = JSON.stringify(markdown).replace(/<\//g, '<\\/');
+	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -221,6 +222,194 @@ export function generatePlanViewerHTML(opts: {
   .markdown-body a:hover { text-decoration: underline; }
   .markdown-body strong { color: var(--text); font-weight: 600; }
   .markdown-body em { color: var(--text-muted); }
+
+  /* ── Structured Plan: Phase Blocks ───── */
+  .phase-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 20px 24px 16px;
+    margin: 20px 0;
+    position: relative;
+  }
+  .phase-block .phase-number {
+    position: absolute;
+    top: -12px;
+    left: 16px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    padding: 3px 12px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .phase-block h2 {
+    margin-top: 4px !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* ── Structured Plan: Why callout ────── */
+  .why-callout {
+    background: rgba(41, 128, 185, 0.06);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 10px 16px;
+    margin: 12px 0;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .why-callout strong { color: var(--accent); }
+
+  /* ── Structured Plan: File indicators ── */
+  .file-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 6px;
+    padding: 6px 0;
+  }
+  .file-indicator .file-action {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .file-indicator .file-action.new {
+    background: rgba(72, 216, 137, 0.12);
+    color: var(--success);
+    border: 1px solid rgba(72, 216, 137, 0.3);
+  }
+  .file-indicator .file-action.modify {
+    background: rgba(240, 180, 41, 0.12);
+    color: var(--warning);
+    border: 1px solid rgba(240, 180, 41, 0.3);
+  }
+  .file-indicator .file-action.test {
+    background: rgba(41, 128, 185, 0.12);
+    color: var(--accent);
+    border: 1px solid rgba(41, 128, 185, 0.3);
+  }
+  .file-indicator .file-action.reference {
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .file-indicator .file-action.readonly {
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .file-indicator .file-path {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  /* ── Structured Plan: Critical Files ─── */
+  .critical-files-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 20px 0;
+  }
+  .critical-files-section h2 {
+    margin-top: 0 !important;
+    font-size: 13px !important;
+  }
+  .critical-files-section table {
+    margin-top: 12px;
+  }
+  .critical-files-section td:first-child {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .critical-files-section td:last-child {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Structured Plan: Reusable section ─ */
+  .reusable-section {
+    background: rgba(72, 216, 137, 0.04);
+    border: 1px solid rgba(72, 216, 137, 0.15);
+    border-left: 3px solid var(--success);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin: 20px 0;
+  }
+  .reusable-section h2 {
+    color: var(--success) !important;
+    margin-top: 0 !important;
+    font-size: 13px !important;
+  }
+
+  /* ── Structured Plan: Verification ───── */
+  .verification-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin: 20px 0;
+  }
+  .verification-section h2 {
+    margin-top: 0 !important;
+    font-size: 13px !important;
+  }
+  .verification-section ol {
+    counter-reset: verify-counter;
+    list-style: none;
+    padding-left: 0;
+  }
+  .verification-section ol li {
+    counter-increment: verify-counter;
+    position: relative;
+    padding-left: 32px;
+    margin: 8px 0;
+  }
+  .verification-section ol li::before {
+    content: counter(verify-counter);
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 22px;
+    height: 22px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    border-radius: 4px;
+    border: 1px solid rgba(41, 128, 185, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 22px;
+  }
+
+  /* ── Structured Plan: Phase separator ── */
+  .phase-separator {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 28px 0;
+    position: relative;
+  }
 
   /* ── Checkbox Items ──────────────────── */
   .plan-item {
@@ -639,7 +828,7 @@ export function generatePlanViewerHTML(opts: {
 (function() {
   // ── State ─────────────────────────────────────
   const PORT = ${port};
-  const MODE = ${JSON.stringify(mode)};
+  const MODE = ${JSON.stringify(mode).replace(/<\//g, '<\\/')};
   let markdown = ${escapedMarkdown};
   let originalMarkdown = markdown;
   let modified = false;
@@ -715,7 +904,174 @@ export function generatePlanViewerHTML(opts: {
     );
 
     container.innerHTML = html;
+    enhanceStructuredPlan(container);
     setupDragAndDrop();
+  }
+
+  // ── Post-process rendered HTML for structured plan format ──
+  function enhanceStructuredPlan(container) {
+    // 1. Detect phase headings (## Phase N: ...) and wrap them in phase blocks
+    var headings = container.querySelectorAll('h2');
+    headings.forEach(function(h2) {
+      var text = h2.textContent || '';
+
+      // Phase headings: "Phase N: Title" or "Phase N: Title (TDD)"
+      var phaseMatch = text.match(/^Phase\\s+(\\d+)\\s*[:.]\\s*(.+)/i);
+      if (phaseMatch) {
+        var phaseNum = phaseMatch[1];
+        // Wrap the h2 and all siblings until the next h2 or hr in a phase-block div
+        var block = document.createElement('div');
+        block.className = 'phase-block';
+        var badge = document.createElement('span');
+        badge.className = 'phase-number';
+        badge.textContent = 'PHASE ' + phaseNum;
+        block.appendChild(badge);
+
+        h2.parentNode.insertBefore(block, h2);
+        block.appendChild(h2);
+
+        // Collect siblings until next h2, hr, or end
+        var next = block.nextSibling;
+        while (next) {
+          var nextEl = next;
+          next = next.nextSibling;
+          if (nextEl.nodeType === 1) {
+            var tag = nextEl.tagName;
+            if (tag === 'H2' || tag === 'H1') break;
+            if (tag === 'HR') {
+              // Convert HR between phases to phase-separator
+              nextEl.className = 'phase-separator';
+              break;
+            }
+          }
+          block.appendChild(nextEl);
+        }
+
+        // Enhance "Why:" paragraphs inside phase blocks
+        var paras = block.querySelectorAll('p');
+        paras.forEach(function(p) {
+          var pStrong = p.querySelector('strong');
+          if (pStrong && /^Why:/i.test(pStrong.textContent)) {
+            p.className = 'why-callout';
+          }
+        });
+
+        // Enhance file indicator paragraphs: "Test first →", "New file →", "Modify →"
+        paras.forEach(function(p) {
+          var pStrong = p.querySelector('strong');
+          if (!pStrong) return;
+          var strongText = pStrong.textContent || '';
+          var actionType = null;
+          var actionLabel = null;
+
+          if (/^Test first/i.test(strongText)) {
+            actionType = 'test';
+            actionLabel = 'TEST';
+          } else if (/^New file/i.test(strongText)) {
+            actionType = 'new';
+            actionLabel = 'NEW';
+          } else if (/^Modify/i.test(strongText)) {
+            actionType = 'modify';
+            actionLabel = 'MODIFY';
+          }
+
+          if (actionType) {
+            // Extract the file path from the code element if present
+            var codeEl = p.querySelector('code');
+            var filePath = codeEl ? codeEl.textContent : '';
+
+            var indicator = document.createElement('div');
+            indicator.className = 'file-indicator';
+            indicator.innerHTML =
+              '<span class="file-action ' + actionType + '">' + actionLabel + '</span>' +
+              (filePath ? '<span class="file-path">' + escapeHtml(filePath) + '</span>' : '');
+
+            p.parentNode.insertBefore(indicator, p);
+            p.style.display = 'none';
+          }
+        });
+
+        return;
+      }
+
+      // Critical Files section
+      if (/^Critical Files/i.test(text)) {
+        var section = document.createElement('div');
+        section.className = 'critical-files-section';
+        h2.parentNode.insertBefore(section, h2);
+        section.appendChild(h2);
+
+        var nextSib = section.nextSibling;
+        while (nextSib) {
+          var nextNode = nextSib;
+          nextSib = nextSib.nextSibling;
+          if (nextNode.nodeType === 1) {
+            var nt = nextNode.tagName;
+            if (nt === 'H2' || nt === 'H1' || nt === 'HR') break;
+          }
+          section.appendChild(nextNode);
+        }
+
+        // Color-code the Action column based on content
+        var cells = section.querySelectorAll('td:last-child');
+        cells.forEach(function(td) {
+          var val = (td.textContent || '').toLowerCase();
+          if (val.indexOf('new') === 0) {
+            td.style.color = 'var(--success)';
+          } else if (val.indexOf('modify') === 0) {
+            td.style.color = 'var(--warning)';
+          } else if (val.indexOf('reference') === 0 || val.indexOf('read-only') === 0) {
+            td.style.color = 'var(--text-dim)';
+          }
+        });
+        return;
+      }
+
+      // Reusable Components section
+      if (/^Reusable Components/i.test(text)) {
+        var reuseSec = document.createElement('div');
+        reuseSec.className = 'reusable-section';
+        h2.parentNode.insertBefore(reuseSec, h2);
+        reuseSec.appendChild(h2);
+
+        var rn = reuseSec.nextSibling;
+        while (rn) {
+          var rNext = rn;
+          rn = rn.nextSibling;
+          if (rNext.nodeType === 1) {
+            var rt = rNext.tagName;
+            if (rt === 'H2' || rt === 'H1' || rt === 'HR') break;
+          }
+          reuseSec.appendChild(rNext);
+        }
+        return;
+      }
+
+      // Verification section
+      if (/^Verification/i.test(text)) {
+        var verifySec = document.createElement('div');
+        verifySec.className = 'verification-section';
+        h2.parentNode.insertBefore(verifySec, h2);
+        verifySec.appendChild(h2);
+
+        var vn = verifySec.nextSibling;
+        while (vn) {
+          var vNext = vn;
+          vn = vn.nextSibling;
+          if (vNext.nodeType === 1) {
+            var vt = vNext.tagName;
+            if (vt === 'H2' || vt === 'H1' || vt === 'HR') break;
+          }
+          verifySec.appendChild(vNext);
+        }
+        return;
+      }
+    });
+
+    // 2. Convert remaining HRs between sections to phase separators
+    container.querySelectorAll('hr').forEach(function(hr) {
+      if (!hr.className) hr.className = 'phase-separator';
+    });
   }
 
   function renderQuestions() {
@@ -842,6 +1198,18 @@ export function generatePlanViewerHTML(opts: {
     const el = document.getElementById('progressText');
     if (questionCount > 0) {
       el.textContent = answered + '/' + questionCount + ' answered';
+    } else if (MODE === 'plan') {
+      // Show phase count for structured plans, or checkbox count for flat plans
+      var phases = document.querySelectorAll('.phase-block');
+      if (phases.length > 0) {
+        el.textContent = phases.length + ' phases';
+      } else {
+        var checks = document.querySelectorAll('.plan-item');
+        var done = document.querySelectorAll('.plan-item.checked');
+        if (checks.length > 0) {
+          el.textContent = done.length + '/' + checks.length + ' done';
+        }
+      }
     }
   }
 

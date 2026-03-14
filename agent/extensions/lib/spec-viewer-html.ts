@@ -27,9 +27,10 @@ export function generateSpecViewerHTML(opts: {
 	existingComments?: string; // JSON string of existing comments
 }): string {
 	const { documents, title, port, existingComments } = opts;
-	const escapedDocs = JSON.stringify(documents);
-	const escapedTitle = JSON.stringify(title);
-	const escapedComments = existingComments ? existingComments : "[]";
+	// Escape </ sequences to prevent </script> in content from breaking the script block
+	const escapedDocs = JSON.stringify(documents).replace(/<\//g, '<\\/');
+	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
+	const escapedComments = existingComments ? existingComments.replace(/<\//g, '<\\/') : "[]";
 
 	return `<!DOCTYPE html>
 <html lang="en">

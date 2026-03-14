@@ -104,12 +104,94 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 - Read the task carefully
 - Explore the codebase to understand existing patterns, dependencies, and architecture
 - Identify files that will need changes
+- Map relevant existing code, patterns, and reusable components
 
-### Phase 2: Plan
-- Use EnterPlanMode for non-trivial tasks (3+ steps or architectural decisions)
-- Write a clear, step-by-step plan to .context/todo.md
-- Include verification steps in the plan
-- Keep the plan minimal — only what's needed
+### Phase 2: Write a Structured Plan
+Write the plan to \`.context/todo.md\` following the **structured plan format** below.
+
+#### Plan Document Format
+
+Every plan MUST follow this structure. Use markdown. Be specific — reference actual paths, functions, and patterns from the codebase.
+
+\`\`\`markdown
+# Plan: <Action Verb> <Target> — <Specifics>
+
+## Context
+
+<Narrative paragraph(s) describing the current state, what needs to change, and why.
+Be specific about file locations, line counts, existing patterns, and pain points.
+Reference actual code — no hand-waving.>
+
+<Optional: Include data tables for mappings, configurations, or comparisons>
+
+| Source | Target |
+|--------|--------|
+| ...    | ...    |
+
+---
+
+## Phase 1: <Phase Title> (TDD if applicable)
+
+**Why:** <1-2 sentence justification for this phase>
+
+**Test first** → \`path/to/test/file.test.ts\`
+- Test case 1
+- Test case 2
+- Test case 3
+
+**New file** → \`path/to/new/file.ts\`
+- What this file does
+- Key implementation details
+- Exports and interfaces
+
+**Modify** → \`path/to/existing/file.ts\`
+- What changes are needed
+- What to remove, add, or refactor
+
+---
+
+## Phase 2: <Phase Title>
+
+<Same structure as Phase 1 — repeat for each phase>
+
+---
+
+## Phase N: Integration Test + Polish
+
+<Final phase for integration testing and cleanup>
+
+---
+
+## Critical Files
+
+| File | Action |
+|------|--------|
+| \`path/to/file.ts\` | New |
+| \`path/to/other.ts\` | Modify (description) |
+| \`path/to/ref.ts\` | Reference |
+| \`path/to/reuse.ts\` | Read-only (reuse as-is) |
+
+## Reusable Components (no changes needed)
+
+- **ComponentName** — what it does and why it's reusable
+- **OtherComponent** — what it does and why it's reusable
+
+## Verification
+
+1. Specific test command and expected outcome
+2. Visual/manual check with specific steps
+3. Edge case verification
+4. Integration check
+\`\`\`
+
+#### Key Principles for Plans
+- **Phases, not flat steps** — group related work into phases with clear boundaries
+- **Why before What** — every phase starts with a justification
+- **TDD when applicable** — test-first sections before implementation sections
+- **File-level specificity** — every phase lists exact files (New, Modify, Reference)
+- **Context is narrative** — write prose, not bullets, for the Context section
+- **Tables for structured data** — use tables for mappings, file lists, and comparisons
+- **Critical Files summary** — a single table at the end showing all touched files
 
 ### Phase 2b: Follow-up Questions (when needed)
 - If clarification is needed before planning, write questions to a markdown file
@@ -130,13 +212,13 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 - Do NOT proceed until the plan is approved
 
 ### Phase 4: Implement
-- Follow the approved plan step by step
+- Follow the approved plan phase by phase
 - Commit frequently, even for incomplete work
 - Mark items complete in .context/todo.md as you go
 - If you discover the plan needs adjustment, stop and re-plan
 
-### Phase 5: Completion Report (when plan has 4+ steps)
-- After all implementation tasks are done, call \`show_report\` to open the completion report viewer
+### Phase 5: Completion Report (when plan has 3+ phases)
+- After all implementation phases are done, call \`show_report\` to open the completion report viewer
 - Pass a \`summary\` describing the work done and a \`title\` for the report
 - The user can review diffs, rollback individual files, or rollback all changes
 - Example: \`show_report { title: "Feature Complete", summary: "Implemented X, Y, Z..." }\`
@@ -145,7 +227,8 @@ export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow f
 - Never start coding without a plan
 - Never skip approval — ALWAYS use show_plan to present the plan
 - Keep changes minimal and focused
-- For plans with 4+ steps, ALWAYS present a completion report at the end
+- ALWAYS use the structured plan format (phases, not flat numbered steps)
+- For plans with 3+ phases, ALWAYS present a completion report at the end
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS track tasks: \`commander_task\` for cross-session tracking
