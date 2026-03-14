@@ -533,6 +533,21 @@ export function generateCompletionReportHTML(opts: {
     gap: 12px;
     flex-shrink: 0;
   }
+  .done-banner .done-content {
+    min-width: 0;
+    flex: 1;
+  }
+  .done-banner .done-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .done-banner .done-actions .btn {
+    white-space: nowrap;
+  }
   .done-banner .done-icon {
     width: 32px;
     height: 32px;
@@ -1132,8 +1147,13 @@ export function generateCompletionReportHTML(opts: {
     var banner = document.createElement('div');
     banner.className = 'done-banner';
     banner.innerHTML = '<div class="done-icon">\u2713</div>' +
-      '<div><div class="done-text">Report Complete</div>' +
-      '<div class="done-sub">You can close this tab.</div></div>';
+      '<div class="done-content"><div class="done-text">Report Complete</div>' +
+      '<div class="done-sub">You can close this tab.</div></div>' +
+      '<div class="done-actions">' +
+      '<button class="btn btn-ghost" onclick="copyReport()">Copy</button>' +
+      '<button class="btn btn-ghost" onclick="saveReport()">Save</button>' +
+      '<button class="btn btn-ghost" onclick="downloadStandalone()">Standalone</button>' +
+      '</div>';
     var header = document.querySelector('.header');
     header.parentNode.insertBefore(banner, header.nextSibling);
 

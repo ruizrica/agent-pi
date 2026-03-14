@@ -724,6 +724,21 @@ export function generatePlanViewerHTML(opts: {
     gap: 12px;
     flex-shrink: 0;
   }
+  .approved-banner .approved-content {
+    min-width: 0;
+    flex: 1;
+  }
+  .approved-banner .approved-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .approved-banner .approved-actions .btn {
+    white-space: nowrap;
+  }
   .approved-banner .approved-icon {
     width: 32px;
     height: 32px;
@@ -1486,8 +1501,13 @@ export function generatePlanViewerHTML(opts: {
         var banner = document.createElement('div');
         banner.className = 'approved-banner';
         banner.innerHTML = '<div class="approved-icon">✓</div>' +
-          '<div><div class="approved-text">' + label + '</div>' +
-          '<div class="approved-sub">' + sub + '</div></div>';
+          '<div class="approved-content"><div class="approved-text">' + label + '</div>' +
+          '<div class="approved-sub">' + sub + '</div></div>' +
+          '<div class="approved-actions">' +
+          '<button class="btn btn-ghost" onclick="copyToClipboard()">Copy</button>' +
+          '<button class="btn btn-ghost" onclick="saveToDesktop()">Save</button>' +
+          '<button class="btn btn-ghost" onclick="downloadStandalone()">Standalone</button>' +
+          '</div>';
         var header = document.querySelector('.header');
         header.parentNode.insertBefore(banner, header.nextSibling);
 
