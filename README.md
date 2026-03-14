@@ -6,7 +6,7 @@
 
 **An extension suite that turns [Pi](https://github.com/badlogic/pi-mono) into a multi-agent orchestration platform**
 
-[Extensions](#extensions) · [Modes](#operational-modes) · [Orchestration](#multi-agent-orchestration) · [Full Docs](docs/index.html)
+[Extensions](#extensions) · [Modes](#operational-modes) · [Viewers](#browser-based-viewers) · [Orchestration](#multi-agent-orchestration) · [Full Docs](docs/index.html)
 
 </div>
 
@@ -163,6 +163,36 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **TEAM** | Shift+Tab | Dispatcher mode — primary delegates, specialists execute |
 | **CHAIN** | Shift+Tab | Sequential pipeline — step outputs chain into next step |
 | **PIPELINE** | Shift+Tab | 5-phase hybrid with parallel dispatch |
+
+## Browser-Based Viewers
+
+agent includes browser-based GUI viewers that open directly from the terminal for rich interactive workflows — plan approval, completion reports, spec review, and more.
+
+### Plan Viewer
+
+The plan viewer renders structured implementation plans with phased layouts, context narratives, data tables, "Why" callouts, file action badges, and interactive checkboxes. Plans can be edited, reordered, and approved or declined — all from the browser.
+
+<div align="center">
+<img src="docs/screenshots/plan-viewer.png" alt="Plan Viewer — structured plan approval with phases, context, and file action badges" width="720" />
+<br/><em>Plan Viewer — structured plan with approval controls, phase blocks, and inline code references</em>
+</div>
+
+<br/>
+
+### Completion Report
+
+After implementation, the completion report viewer shows a summary of all work done — files changed, additions, deletions, and a rich markdown summary. Each file includes a unified diff with per-file rollback controls.
+
+<div align="center">
+<img src="docs/screenshots/completion-report.png" alt="Completion Report — file change stats, summary, and unified diffs with rollback" width="720" />
+<br/><em>Completion Report — file change stats, work summary, and per-file rollback</em>
+</div>
+
+<br/>
+
+Additional viewers include the **Spec Viewer** (multi-page spec review with inline comments and visual gallery), **File Viewer** (syntax-highlighted viewing/editing), and **Reports Browser** (searchable archive of all persisted plans, specs, and reports).
+
+---
 
 ## Multi-Agent Orchestration
 
