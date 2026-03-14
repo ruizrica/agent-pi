@@ -40,7 +40,8 @@
     "extensions/tool-search.ts",
     "extensions/tool-caller.ts",
     "extensions/lean-tools.ts",
-    "extensions/escape-cancel.ts"
+    "extensions/escape-cancel.ts",
+    "extensions/sounds.ts"
   ],
   "editorPaddingX": 2,
   "showHardwareCursor": true,

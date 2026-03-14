@@ -19,8 +19,9 @@ Before each iteration, build situational awareness:
 1. Read current state of in-scope files (full context)
 2. Read last 10-20 entries from results log
 3. Read git log --oneline -20 to see recent changes
-4. Identify: what worked, what failed, what's untried
-5. If bounded: check current_iteration vs max_iterations
+4. Re-read `.context/autoresearch-plan.md` Strategy section for planned approaches
+5. Identify: what worked, what failed, what's untried from the plan
+6. If bounded: check current_iteration vs max_iterations
 ```
 
 **Why read every time?** After rollbacks, state may differ from what you expect. Never assume — always verify.
@@ -161,9 +162,9 @@ Keeps: X | Discards: Y | Crashes: Z
 Best iteration: #{n} — {description}
 ```
 
-### Commander: Final Broadcast + Completion Report
+### Commander: Final Broadcast + Completion Report (MANDATORY)
 
-When the loop ends (bounded or goal achieved):
+When the loop ends (bounded or goal achieved), ALL three steps are required:
 
 1. Send a final mailbox result broadcast:
 ```
@@ -176,23 +177,26 @@ commander_mailbox {
 }
 ```
 
-2. Call `show_report` to open the visual completion report with git diffs of all kept changes:
+2. Call `show_report` to open the visual completion report with a rich summary that ties back to the research plan:
 ```
 show_report {
   title: "Autoresearch Complete: <goal>",
-  summary: "## Results\n\nBaseline: <X> → Final: <Y> (delta: <Z>)\n\n**Iterations:** N total (A keeps, B discards, C crashes)\n\n**Best:** #M — <description>\n\n## Kept Changes\n\n<list of kept iterations>"
+  summary: "## Results\n\nBaseline: <X> → Final: <Y> (delta: <Z>)\n\n**Iterations:** N total (A keeps, B discards, C crashes)\n\n**Best:** #M — <description>\n\n## Plan vs. Reality\n\nReference `.context/autoresearch-plan.md` — which planned strategies were tried? Which worked? What was surprising?\n\n## Kept Changes\n\n<list of kept iterations with descriptions>\n\n## What Didn't Work\n\n<Discarded approaches and why>"
 }
 ```
+
+3. Preserve `.context/autoresearch-plan.md` as a record of the research session. Do not delete it.
 
 ### When Stuck (>5 consecutive discards)
 
 Applies to both modes:
 1. Re-read ALL in-scope files from scratch
-2. Re-read the original goal/direction
+2. Re-read the original goal AND `.context/autoresearch-plan.md` for planned strategy
 3. Review entire results log for patterns
-4. Try combining 2-3 previously successful changes
-5. Try the OPPOSITE of what hasn't been working
-6. Try a radical architectural change
+4. Try the next untried approach from the plan's Strategy section
+5. Try combining 2-3 previously successful changes
+6. Try the OPPOSITE of what hasn't been working
+7. Try a radical architectural change
 
 ## Crash Recovery
 

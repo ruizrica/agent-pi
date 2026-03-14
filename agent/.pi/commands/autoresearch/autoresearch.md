@@ -2,7 +2,7 @@
 name: autoresearch
 description: "Autonomous Goal-directed Iteration — Apply Karpathy's autoresearch principles to ANY task. Loops autonomously: modify, verify, keep/discard, repeat."
 argument-hint: "<goal description> [--iterations N]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "commander_task", "commander_mailbox", "show_report"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "ask_user", "show_plan", "commander_task", "commander_mailbox", "show_report"]
 ---
 
 # Autoresearch — Autonomous Goal-directed Iteration
@@ -15,33 +15,114 @@ Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch).
 
 The user has given you a goal: **$ARGUMENTS**
 
-## Step 1: Setup (Do This First)
+## Step 1: Understand (Do This First — Before ANY Work)
 
-1. **Read all in-scope files** for full context before any modification
-2. **Extract the goal metric** from the user's description:
-   - Code quality: tests pass, build succeeds, coverage %, lint errors
-   - Performance: benchmark time (ms), bundle size (KB), response time
-   - Content: word count, readability score, SEO score
-   - If no metric is obvious, ask the user for ONE mechanical metric
-3. **Define scope** — Which files can you modify? Which are read-only?
-4. **Create results log** — Create `autoresearch-results.tsv` in the working directory:
+Before you touch a single file, you must deeply understand the goal. Do NOT rush into iteration.
+
+1. **Read relevant files** — Scan the codebase to build context around the user's goal. Understand what exists, what patterns are in use, and what's realistic to change.
+
+2. **Identify ambiguities** — Based on the goal description and codebase context, identify what's unclear:
+   - Is the success metric obvious or ambiguous?
+   - Is the scope (which files to modify) clear?
+   - Are there constraints the user hasn't mentioned?
+   - Are there multiple valid interpretations of the goal?
+
+3. **Ask clarifying questions** — If ANY ambiguity exists, use `ask_user` to ask targeted questions. Write thoughtful questions — not generic boilerplate:
+   ```
+   ask_user {
+     question: "I have a few questions before I build the research plan:",
+     mode: "questions",
+     options: [
+       { label: "1. What metric should define success? (e.g. test coverage %, build time ms, bundle size KB)" },
+       { label: "2. Which files/directories are in scope for modification?" },
+       { label: "3. Are there any approaches to avoid or constraints I should know about?" },
+       { label: "4. What does 'done' look like — a specific target, or iterate until interrupted?" }
+     ]
+   }
+   ```
+   **Tailor the questions to the specific goal.** Don't ask about metrics if the user already specified one. Don't ask about scope if it's obvious. Ask about what's genuinely unclear.
+
+4. **Skip if crystal clear** — If the goal description is unambiguous (clear metric, clear scope, clear exit criteria), you may skip questions and proceed directly to Step 2: Plan. State briefly why no questions are needed.
+
+5. **Synthesize understanding** — After answers (or if skipped), form a concrete goal statement:
+   - **Goal:** One sentence
+   - **Metric:** What to measure, direction (higher/lower is better), verification command
+   - **Scope:** Files in/out of scope
+   - **Constraints:** Iteration budget, approaches to avoid, time limits
+   - **Exit criteria:** When to stop
+
+## Step 2: Plan (Present Before Executing)
+
+Now that you understand the goal, write and present a research plan for user approval. Do NOT start iterating without approval.
+
+1. **Establish baseline** — Run the verification command on the current state to get a starting metric value.
+
+2. **Write the research plan** — Create `.context/autoresearch-plan.md` with this structure:
+
+   ```markdown
+   # Autoresearch Plan: <goal summary>
+
+   ## Goal
+   <Concrete goal statement from Step 1>
+
+   ## Metric
+   - **Measuring:** <what>
+   - **Direction:** <higher/lower is better>
+   - **Verify command:** `<command>`
+   - **Baseline:** <current value>
+   - **Target:** <target value, if any, or "continuous improvement">
+
+   ## Scope
+   - **In scope:** <files/directories that can be modified>
+   - **Read only:** <files for context but not modification>
+   - **Out of scope:** <explicitly excluded areas>
+
+   ## Strategy
+   Ordered list of approaches to try, from most to least promising:
+
+   1. <First approach — why it's promising>
+   2. <Second approach — what it explores>
+   3. <Third approach — alternative angle>
+   4. <Fourth approach — radical idea>
+   5. <Fifth approach — simplification play>
+
+   ## Iteration Plan
+   - **Mode:** <bounded (N iterations) / unbounded>
+   - **Estimated time per iteration:** <seconds/minutes>
+   - **When stuck protocol:** Re-read plan, combine near-misses, try opposites
+
+   ## Exit Criteria
+   - <When to stop: metric target, iteration count, or manual interrupt>
+   ```
+
+3. **Present for approval** — Show the plan to the user:
+   ```
+   show_plan { file_path: ".context/autoresearch-plan.md", title: "Autoresearch Plan: <goal>" }
+   ```
+   - If **approved** → proceed to Step 3
+   - If **declined** → revise based on feedback and re-present
+
+## Step 3: Setup & Begin
+
+With understanding confirmed and plan approved, set up the tracking infrastructure and start.
+
+1. **Create results log** — Create `autoresearch-results.tsv` in the working directory:
    ```
    # metric_direction: higher_is_better
    iteration	commit	metric	delta	status	description
    ```
-5. **Establish baseline** — Run the verification command on current state. Record as iteration #0
-6. **Commander tracking** — If Commander is available, create a task group and send initial status:
+2. **Record baseline** — Log the baseline metric from Step 2 as iteration #0
+3. **Commander tracking** — If Commander is available, create a task group and send initial status:
    ```
    commander_task { operation: "group:create", group_name: "Autoresearch: <goal>", initiative_summary: "<goal with metric and scope>", total_waves: 1, working_directory: "<cwd>", tasks: [] }
    ```
    Store the returned `group_id`. Then broadcast:
    ```
-   commander_mailbox { operation: "send", from_agent: "autoresearch", to_agent: "commander", body: "Autoresearch started: <goal>. Baseline: <value>. Scope: <files>", message_type: "status" }
+   commander_mailbox { operation: "send", from_agent: "autoresearch", to_agent: "commander", body: "Autoresearch started: <goal>. Baseline: <value>. Scope: <files>. Plan approved.", message_type: "status" }
    ```
-7. **Show the user your setup** — Display: goal, metric, scope, verify command, baseline value
-8. **Begin the loop** — After confirmation, start iterating
+4. **Begin the loop** — Start iterating immediately. No further confirmation needed.
 
-## Step 2: The Loop
+## Step 4: The Loop
 
 Parse the arguments for `--iterations N`. If provided, loop exactly N times. Otherwise, loop until interrupted.
 
@@ -85,8 +166,9 @@ LOOP:
 7. **Git is memory** — Every kept change is committed. Read your own git history to learn patterns
 8. **When stuck (>5 consecutive discards):**
    - Re-read ALL in-scope files from scratch
-   - Re-read the original goal
+   - Re-read the original goal AND `.context/autoresearch-plan.md` for planned strategy
    - Review entire results log for patterns
+   - Try the next untried approach from your plan's Strategy section
    - Try combining 2-3 previously successful changes
    - Try the OPPOSITE of what hasn't been working
    - Try a radical architectural change
@@ -108,9 +190,12 @@ LOOP:
   ```
   commander_mailbox { operation: "send", from_agent: "autoresearch", to_agent: "commander", body: "Autoresearch complete (N iterations). Baseline: X → Final: Y (delta: Z). Keeps: A | Discards: B | Crashes: C", message_type: "result" }
   ```
-- DO call `show_report` at the end to present a visual completion report:
+- DO **always** call `show_report` at the end — this is MANDATORY, not optional:
   ```
-  show_report { title: "Autoresearch Complete: <goal>", summary: "## Results\n\nBaseline: X → Final: Y (delta: Z)\n\n**Iterations:** N total (A keeps, B discards, C crashes)\n\n**Best:** #M — <description>\n\n## Kept Changes\n\n<list>" }
+  show_report {
+    title: "Autoresearch Complete: <goal>",
+    summary: "## Results\n\nBaseline: X → Final: Y (delta: Z)\n\n**Iterations:** N total (A keeps, B discards, C crashes)\n\n**Best:** #M — <description>\n\n## Plan vs. Reality\n\n<Which planned strategies were tried? Which worked? Any surprises?>\n\n## Kept Changes\n\n<list of kept iterations with descriptions>\n\n## What Didn't Work\n\n<Discarded approaches and why — useful for future runs>"
+  }
   ```
 
 ## Domain Adaptation
@@ -139,8 +224,10 @@ All Commander integration is **optional** — if Commander is unavailable, skip 
 
 | When | What | Tool Call |
 |------|------|-----------|
-| Setup (after baseline) | Create task group | `commander_task { operation: "group:create", ... }` |
-| Setup (after baseline) | Announce start | `commander_mailbox { operation: "send", message_type: "status", ... }` |
+| Understand (Step 1) | Ask clarifying questions | `ask_user { mode: "questions", ... }` |
+| Plan (Step 2) | Present research plan | `show_plan { file_path: ".context/autoresearch-plan.md", ... }` |
+| Setup (Step 3, after baseline) | Create task group | `commander_task { operation: "group:create", ... }` |
+| Setup (Step 3, after baseline) | Announce start | `commander_mailbox { operation: "send", message_type: "status", ... }` |
 | Each iteration (before modify) | Create + claim task | `commander_task { operation: "create", ... }` then `{ operation: "claim", ... }` |
 | Each iteration (after log) | Complete task | `commander_task { operation: "complete", ... }` |
 | Each iteration (after log) | Add detail comment | `commander_task { operation: "comment:add", ... }` |
@@ -155,4 +242,4 @@ All Commander integration is **optional** — if Commander is unavailable, skip 
 - **crash** → `complete` with result noting the crash and recovery
 - **Only use `fail`** if the entire autoresearch loop must abort due to an unrecoverable error
 
-**BEGIN NOW. Read the codebase, establish baseline, and start the autonomous loop.**
+**BEGIN NOW. Start with Step 1: Understand the goal, ask clarifying questions if needed, then present a plan for approval. Only after the plan is approved, set up tracking and start the autonomous loop.**

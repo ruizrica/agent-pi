@@ -3585,3 +3585,4 @@
 [2026-03-14T03:46:30.484Z] WARN warned | prompt_injection | read | Content injection: XML-style prompt boundary injection | matched: "<prompt>"
 [2026-03-14T03:46:34.870Z] WARN warned | prompt_injection | read | Content injection: XML-style prompt boundary injection | matched: "<prompt>"
 [2026-03-14T03:48:27.543Z] WARN warned | prompt_injection | read | Content injection: XML-style prompt boundary injection | matched: "<prompt>"
+[2026-03-14T15:46:00.016Z] BLOCK blocked | remote_exec | bash | Piping curl output to shell (remote code execution) | matched: "curl -s https://api.github.com/repos/ruizrica/soundcn/contents/ 2>/dev/null | python"

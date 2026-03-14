@@ -45,6 +45,7 @@ export const THEME_MAP: Record<string, string> = {
 	"user-question":      "midnight-ocean",
 	"plan-viewer":        "midnight-ocean",
 	"completion-report":  "midnight-ocean",
+	"sounds":             "midnight-ocean",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
