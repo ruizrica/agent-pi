@@ -1,124 +1,220 @@
-# Plan: Enhance Autoresearch — Add Clarifying Questions, Plan Presentation & Completion Report
+# Plan: Extend Autoresearch — Implementation Chain, Session Persistence & Research Browser
 
 ## Context
 
-The autoresearch feature currently works well as an autonomous iteration loop: it receives a goal, sets up baseline metrics, and immediately begins the modify → verify → keep/discard cycle. Commander task board visibility and status broadcasts are already in place and working great.
+Autoresearch currently ends at the completion report. The user sees results, diffs, and a summary — then the session is over. This is only half the story. Research findings need to become implemented code, and the whole research lifecycle (goal → research → implementation → final report) needs to be saved and resumable.
 
-However, the current flow has a gap between receiving the user's instruction and starting work. Right now, the agent jumps straight into reading files and establishing baselines without first making sure it truly understands the goal. This leads to wasted iterations when the agent misinterprets scope, picks the wrong metric, or heads in a direction the user didn't intend.
+Three big additions are needed:
 
-The enhancement adds three structured phases **before** the autonomous loop begins:
+**1. Research → Implementation Chain:** The completion report currently says "here's what we found." Instead, it should present prioritized next steps as *actionable implementation tasks* — then offer to spawn a TEAM of specialist agents to execute those tasks. The report isn't the end; it's the handoff to implementation.
 
-1. **Understand Phase** — The agent reads relevant context, then asks clarifying questions using the `ask_user` tool (interactive inline Q&A) to concretely understand the goal, scope, success criteria, and constraints. This ensures alignment before any work starts.
+**2. Session Persistence:** Each autoresearch session (goal, plan, results log, findings, implementation work) should be saved as a JSON session file under `.context/research-sessions/`. Sessions can be resumed later — pick up where you left off, re-run with different approaches, or extend with more iterations.
 
-2. **Plan Phase** — After understanding is confirmed, the agent writes a structured research plan to `.context/autoresearch-plan.md` and presents it via `show_plan` for interactive review/approval. This plan covers: the goal and metric, scope of files, iteration strategy, verification command, and expected approaches. The user can edit, reorder, and approve or decline—just like PLAN mode.
+**3. Research Browser:** A new web viewer (following the exact pattern of `reports-viewer.ts` + `reports-viewer-html.ts`) that lets users browse all saved research sessions. Search, filter by status (researching/implementing/complete), open any session to see the full lifecycle. Accessible via `/research` command and `show_research` tool.
 
-3. **Completion Report** — Upon completion, `show_report` is already called (this is working), but we'll strengthen the instructions to ensure it's always invoked with a rich summary and that the plan file is referenced in the final output.
+The existing infrastructure is solid. The report-index system uses SQLite with JSON fallback. The reports-viewer is a self-contained HTML SPA served via local HTTP. The agent-team system dispatches specialist agents via `dispatch_agent`. We follow all these patterns.
 
-The changes touch two files that are mirrors of each other:
-- `agent/.pi/commands/autoresearch/autoresearch.md` — The Pi command definition (with frontmatter `allowed-tools`)
-- `agent/skills/autoresearch/SKILL.md` — The skill definition (referenced by the skill system)
+### Key Files
 
-Both need the same structural changes. The `allowed-tools` in both must be updated to include `ask_user` and `show_plan`. The reference files (`references/autonomous-loop-protocol.md`, `references/core-principles.md`, `references/results-logging.md`) need minimal or no changes since they describe the loop itself which isn't changing.
-
----
-
-## Phase 1: Update Allowed Tools
-
-**Why:** The `ask_user` and `show_plan` tools are required for the new clarifying questions and plan presentation features, but they're not currently in the allowed-tools list for either file.
-
-**Modify** → `agent/.pi/commands/autoresearch/autoresearch.md`
-- Add `ask_user` and `show_plan` to the frontmatter `allowed-tools` array
-
-**Modify** → `agent/skills/autoresearch/SKILL.md`
-- Add `ask_user` and `show_plan` to the frontmatter `allowed-tools` line
+| Existing Pattern | What We Reuse |
+|-----------------|---------------|
+| `agent/extensions/reports-viewer.ts` | HTTP server pattern, browser open, heartbeat |
+| `agent/extensions/lib/report-index.ts` | SQLite + JSON storage pattern (but separate DB) |
+| `agent/extensions/lib/reports-viewer-html.ts` | Full HTML SPA template pattern |
+| `agent/extensions/completion-report.ts` | `show_report` tool registration pattern |
+| `agent/extensions/agent-team.ts` | `dispatch_agent` tool, team spawning |
+| `agent/.pi/commands/autoresearch/autoresearch.md` | Command definition (modify) |
+| `agent/skills/autoresearch/SKILL.md` | Skill definition (modify) |
 
 ---
 
-## Phase 2: Add "Understand" Phase — Clarifying Questions
+## Phase 1: Research Session Data Model & Persistence
 
-**Why:** The agent currently jumps straight to file reading and baseline setup. It needs to first deeply understand the user's intent by asking targeted clarifying questions, ensuring it picks the right metric, scope, and strategy.
+**Why:** We need a structured way to save and load research sessions before we can build the chain or browser. This is the foundation everything else depends on.
 
-**Modify** → `agent/.pi/commands/autoresearch/autoresearch.md`
-- Restructure the existing "Step 1: Setup" into a new "Step 1: Understand"
-- Step 1 should:
-  1. Read all in-scope files for initial context (keep this from current setup)
-  2. Analyze the user's goal description to identify ambiguities
-  3. Use `ask_user` (mode: `questions`) to ask 3-6 targeted clarifying questions covering:
-     - What specific outcome/metric defines success?
-     - What files/directories are in scope vs. read-only?
-     - Are there constraints (time budget, iteration count, approaches to avoid)?
-     - What does "done" look like?
-     - Any known approaches to try or avoid?
-  4. Use `ask_user` only when there are genuine ambiguities—if the goal is crystal clear, skip to plan
-  5. Synthesize answers into a concrete goal statement with metric, scope, and constraints
+**New file** → `agent/extensions/lib/research-session.ts`
+- Define `ResearchSession` interface:
+  ```typescript
+  interface ResearchSession {
+    id: string;                    // timestamp-slug
+    status: "understanding" | "planning" | "researching" | "implementing" | "complete" | "paused";
+    goal: string;                  // original goal
+    metric: { name: string; direction: "higher" | "lower"; verifyCommand: string; baseline?: number; final?: number; target?: number };
+    scope: { inScope: string[]; readOnly: string[]; outOfScope: string[] };
+    plan: string;                  // markdown content of the research plan
+    clarifyingQA: Array<{ question: string; answer: string }>;  // Q&A from understand phase
+    iterations: Array<{ iteration: number; commit: string; metric: number; delta: number; status: string; description: string }>;
+    findings: string;              // markdown: research findings/summary
+    nextSteps: Array<{ priority: number; description: string; status: "pending" | "implementing" | "done" | "skipped" }>;
+    implementation: { startedAt?: string; completedAt?: string; teamUsed?: string; tasksCreated?: number; summary?: string };
+    createdAt: string;
+    updatedAt: string;
+    workingDirectory: string;
+    tags: string[];
+  }
+  ```
+- `saveResearchSession(session)` — write to `.context/research-sessions/{id}.json`
+- `loadResearchSession(id)` — read from JSON file
+- `listResearchSessions()` — scan directory, return sorted list
+- `updateResearchSession(id, partial)` — merge update and save
+- SQLite index (same pattern as `report-index.ts`) for searchable metadata
+- `upsertResearchSessionIndex(session)` — persist to SQLite for browser search
 
-**Modify** → `agent/skills/autoresearch/SKILL.md`
-- Mirror the same changes: add an "Understand" phase before the current Setup Phase
-- Reference the same `ask_user` workflow
+**New directory** → `.context/research-sessions/`
+- JSON files, one per session
+- Automatically created on first save
 
 ---
 
-## Phase 3: Add "Plan" Phase — Structured Research Plan
+## Phase 2: Update Autoresearch to Save Sessions
 
-**Why:** After understanding the goal, the agent should present a structured plan showing what it intends to do, how it will measure progress, and what approaches it plans to try—giving the user a chance to approve or redirect before any work begins.
+**Why:** The autoresearch command/skill needs to create and update a research session throughout its lifecycle — from understanding through research completion.
 
 **Modify** → `agent/.pi/commands/autoresearch/autoresearch.md`
-- Add "Step 2: Plan" between Understand and the Loop
-- Step 2 should:
-  1. Write a structured research plan to `.context/autoresearch-plan.md` containing:
-     - **Goal**: Concrete goal statement with success metric
-     - **Metric**: What's being measured, direction (higher/lower is better), verification command
-     - **Scope**: Files in scope, files read-only, constraints
-     - **Baseline**: Current metric value (run verification to establish)
-     - **Strategy**: Ordered list of approaches to try (first 5-10 ideas)
-     - **Iteration Budget**: How many iterations (if bounded) or "unbounded"
-     - **Exit Criteria**: When to stop (metric target, iteration count, or manual interrupt)
-  2. Present the plan via `show_plan { file_path: ".context/autoresearch-plan.md", title: "Autoresearch Plan: <goal>" }`
-  3. Wait for user approval before proceeding
-  4. If declined, revise the plan based on feedback and re-present
-- Renumber current "Step 2: The Loop" to "Step 3: The Loop"
-- Add a note that the plan should be referenced during the loop (re-read when stuck)
+- Add `show_research` to allowed-tools (needed for session save)
+- In Step 1 (Understand): After synthesizing understanding, save initial session with status "understanding" and the Q&A
+- In Step 2 (Plan): After plan approval, update session with plan content and status "planning"  
+- In Step 3 (Setup): Update session status to "researching"
+- In Step 4 (Loop): After each iteration, append to session's iterations array (every ~5 iterations or on keep)
+- At loop end (before show_report): Update session with findings, final metric, and prioritized next steps. Change status to "researching" → ready for implementation handoff
 
-**Modify** → `agent/skills/autoresearch/SKILL.md`
-- Mirror the same plan phase between "Setup Phase" and "The Loop"
-- Include the same `.context/autoresearch-plan.md` structure and `show_plan` workflow
+**Modify** → `agent/skills/autoresearch/SKILL.md`  
+- Mirror all session persistence changes from the command file
 
 **Modify** → `agent/skills/autoresearch/references/autonomous-loop-protocol.md`
-- Add a brief note in the "When Stuck" section to re-read the autoresearch plan file
-- Add the plan file to Phase 1: Review as something to re-read each iteration
+- Add session save calls to the loop protocol (after log phase)
 
 ---
 
-## Phase 4: Strengthen Completion Report
+## Phase 3: Implementation Handoff — Chain Research to Team
 
-**Why:** The completion report is already partially implemented via `show_report`, but we need to ensure it always fires, includes a reference back to the original plan, and provides a rich summary tying results back to the planned strategy.
+**Why:** This is the core new feature. The completion report should present findings as actionable next steps, then offer to spawn a team to implement them.
 
 **Modify** → `agent/.pi/commands/autoresearch/autoresearch.md`
-- Enhance the Communication Protocol section's `show_report` call to include:
-  - Reference to the original plan (what was planned vs. what happened)
-  - Summary of which planned approaches were tried and their outcomes
-  - Final metric compared to both baseline AND the plan's target
-- Make the `show_report` call more prominent (not buried in a list)
+- Restructure the completion phase (after loop ends) into two sub-phases:
+  
+  **Step 5: Research Report & Implementation Handoff**
+  1. Compile findings: what worked, what didn't, prioritized next steps
+  2. Write findings to `.context/autoresearch-plan.md` (update the plan with results section)
+  3. Save session with status "researching", findings, and next steps array
+  4. Present completion report via `show_report` — but frame it as a handoff:
+     - "Research Complete — Ready for Implementation"
+     - Include "Prioritized Next Steps" section with numbered action items
+     - Include "Recommended Implementation Approach" section
+  5. After report closes, ask user: "Ready to implement these findings? I'll spawn a team."
+     ```
+     ask_user {
+       question: "Research complete. Ready to implement the findings?",
+       mode: "select",
+       options: [
+         { label: "Implement now — spawn a team to execute the findings", markdown: "..." },
+         { label: "Save & pause — resume implementation later", markdown: "..." },
+         { label: "Done — research only, no implementation needed", markdown: "..." }
+       ]
+     }
+     ```
+  
+  **Step 6: Implementation (if user chooses "implement now")**
+  1. Update session status to "implementing"
+  2. Convert next steps into Commander task group
+  3. Dispatch specialist agents (builders) via `dispatch_agent` or `subagent_create_batch` to implement each finding
+  4. Track implementation progress via Commander
+  5. When implementation completes:
+     - Update session with implementation summary, status "complete"
+     - Present a FINAL completion report that includes:
+       - Original research goal
+       - Research results (baseline → final metric)
+       - Implementation work done (files changed, tasks completed)
+       - Any remaining gaps or follow-up items
+     ```
+     show_report {
+       title: "Research & Implementation Complete: <goal>",
+       summary: "## Original Goal\n<goal>\n\n## Research Results\n<findings>\n\n## Implementation\n<what was built>\n\n## Gaps & Follow-up\n<remaining items>"
+     }
+     ```
 
 **Modify** → `agent/skills/autoresearch/SKILL.md`
-- Mirror the same completion report enhancements
-- Ensure the "Completion — Report & Final Broadcast" section is clear that `show_report` is MANDATORY
-
-**Modify** → `agent/skills/autoresearch/references/autonomous-loop-protocol.md`
-- Enhance the "Commander: Final Broadcast + Completion Report" section with the richer summary format
+- Mirror the same handoff and implementation phases
 
 ---
 
-## Phase 5: Verify & Polish
+## Phase 4: Research Session Browser — Extension & Web Viewer
 
-**Why:** Ensure all changes are consistent across the three files, the flow reads naturally, and nothing is broken.
+**Why:** Users need to browse, search, and resume saved research sessions. Following the exact pattern of the existing reports-viewer.
 
-- Re-read all modified files end-to-end to verify consistency
-- Ensure step numbering is correct and sequential
-- Verify all tool names in `allowed-tools` match exactly
-- Check that the plan template in the instructions matches what `show_plan` expects
-- Ensure the flow is: Understand → Plan (approve) → Setup (baseline) → Loop → Complete (report)
-- Confirm no existing functionality is broken (Commander tracking, results logging, loop protocol)
+**New file** → `agent/extensions/lib/research-viewer-html.ts`
+- Self-contained HTML SPA (same dark theme as reports-viewer-html.ts)
+- Card-based layout showing research sessions:
+  - Status badge (color-coded: researching=blue, implementing=yellow, complete=green, paused=gray)
+  - Goal title
+  - Metric: baseline → current (with delta)
+  - Iteration count (keeps/discards/crashes)
+  - Created date, last updated
+  - Tags
+- Search bar (searches goal, findings, tags)
+- Filter by status dropdown
+- Click a session → detail view showing:
+  - Full goal & clarifying Q&A
+  - Research plan (rendered markdown)
+  - Iteration timeline (table of all iterations)
+  - Findings & next steps
+  - Implementation status
+  - "Resume" button that copies a resume command to clipboard
+- Responsive layout, same CSS variables as reports-viewer
+
+**New file** → `agent/extensions/research-viewer.ts`
+- Register `show_research` tool:
+  ```typescript
+  {
+    name: "show_research",
+    description: "Open the research sessions browser. Browse, search, and resume saved autoresearch sessions.",
+    parameters: { title?: string, session_id?: string }
+  }
+  ```
+  - If `session_id` provided, open directly to that session's detail view
+  - Otherwise, open the browser listing all sessions
+- Register `/research` command (same as tool but command-line invoked)
+- HTTP server pattern (same as reports-viewer.ts):
+  - `GET /` — serve HTML
+  - `GET /logo.png` — serve agent logo
+  - `POST /heartbeat` — keep alive
+  - `GET /api/sessions` — return all sessions as JSON
+  - `GET /api/sessions/:id` — return single session detail
+  - `POST /result` — close viewer
+- Server lifecycle: cleanup on session_shutdown, single active server
+
+---
+
+## Phase 5: Update Allowed Tools & Integration
+
+**Why:** The new tools need to be wired into the autoresearch command, and the extension needs to be loadable.
+
+**Modify** → `agent/.pi/commands/autoresearch/autoresearch.md`
+- Add `show_research` to allowed-tools
+- Add session persistence calls throughout (as designed in Phase 2)
+- Update the Commander lifecycle table with new phases
+
+**Modify** → `agent/skills/autoresearch/SKILL.md`
+- Mirror allowed-tools update
+- Add session persistence section
+
+**Modify** → `agent/skills/autoresearch/references/autonomous-loop-protocol.md`
+- Add "Session Save" note to Phase 7 (Log Results)
+- Add implementation handoff section after the completion section
+
+---
+
+## Phase 6: Verify & Polish
+
+**Why:** Ensure the full lifecycle works end-to-end and all components integrate correctly.
+
+- Read all modified files for consistency
+- Verify the session JSON schema is complete and covers all phases
+- Confirm the research browser HTML renders correctly with sample data
+- Test that the autoresearch flow: Understand → Plan → Loop → Handoff → Implement → Final Report is coherent in the instructions
+- Verify session persistence survives across separate autoresearch invocations
+- Ensure backward compatibility: existing autoresearch sessions (without save) still work
+- Check that the `/research` command and `show_research` tool are properly registered
 
 ---
 
@@ -126,23 +222,32 @@ Both need the same structural changes. The `allowed-tools` in both must be updat
 
 | File | Action |
 |------|--------|
-| `agent/.pi/commands/autoresearch/autoresearch.md` | Modify (add understand + plan phases, update allowed-tools, enhance completion) |
-| `agent/skills/autoresearch/SKILL.md` | Modify (mirror all changes from command file) |
-| `agent/skills/autoresearch/references/autonomous-loop-protocol.md` | Modify (add plan reference to review/stuck phases, enhance completion) |
-| `agent/skills/autoresearch/references/core-principles.md` | Reference only (no changes needed) |
-| `agent/skills/autoresearch/references/results-logging.md` | Reference only (no changes needed) |
+| `agent/extensions/lib/research-session.ts` | New — session data model & persistence |
+| `agent/extensions/lib/research-viewer-html.ts` | New — HTML SPA for research browser |
+| `agent/extensions/research-viewer.ts` | New — extension with show_research tool & /research command |
+| `agent/.pi/commands/autoresearch/autoresearch.md` | Modify — add implementation chain, session saves, new tools |
+| `agent/skills/autoresearch/SKILL.md` | Modify — mirror command changes |
+| `agent/skills/autoresearch/references/autonomous-loop-protocol.md` | Modify — add session save + implementation phases |
+| `agent/extensions/reports-viewer.ts` | Reference — reuse server pattern |
+| `agent/extensions/lib/report-index.ts` | Reference — reuse SQLite pattern |
+| `agent/extensions/lib/reports-viewer-html.ts` | Reference — reuse HTML SPA pattern |
+| `agent/extensions/agent-team.ts` | Reference — dispatch_agent integration |
 
 ## Reusable Components (no changes needed)
 
-- **`ask_user` tool** — Already exists in the system, supports `questions` mode with inline answers, `select` mode for choices, and `confirm` mode for yes/no. Perfect for clarifying questions.
-- **`show_plan` tool** — Already exists, renders markdown plans with interactive approve/decline. Exactly what we need for the research plan presentation.
-- **`show_report` tool** — Already exists and is already referenced in autoresearch. Just needs richer summary content.
-- **Commander task/mailbox tools** — Already integrated and working. No changes needed to these integrations.
+- **report-index.ts** — SQLite + JSON persistence pattern. We create a separate `research-session.ts` following the same architecture but with its own DB table and schema.
+- **reports-viewer.ts** — HTTP server lifecycle, browser open, heartbeat pattern. Cloned directly for research-viewer.ts.
+- **reports-viewer-html.ts** — Full HTML SPA template with dark theme, search, cards. Used as the design template for research-viewer-html.ts.
+- **completion-report.ts** — show_report tool pattern. The research viewer follows the same registration approach.
+- **agent-team.ts** — dispatch_agent tool for spawning specialist agents during implementation.
 
 ## Verification
 
-1. Read all three modified files end-to-end and confirm the flow: Understand → Plan → Setup → Loop → Complete
-2. Verify `allowed-tools` includes `ask_user` and `show_plan` in both files
-3. Confirm the plan template structure is complete and actionable
-4. Ensure backward compatibility — bounded/unbounded modes still work, Commander integration unchanged
-5. Check that the clarifying questions are genuinely useful (not just busywork) and include a skip path for obvious goals
+1. `node -e "require('./agent/extensions/lib/research-session.ts')"` — module loads without errors
+2. Create a test session, save it, list sessions, load it back — data round-trips correctly
+3. Open `/research` browser — sessions display with correct status badges, search works
+4. Click a session — detail view shows all sections (Q&A, plan, iterations, findings)
+5. Run a full autoresearch cycle — session is created and updated at each phase
+6. At completion, "implement now" option spawns agents and tracks implementation
+7. Final report includes both research results AND implementation summary
+8. Paused session can be browsed and resumed from the research viewer
