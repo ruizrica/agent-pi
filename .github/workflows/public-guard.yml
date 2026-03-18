@@ -1,0 +1,56 @@
+name: Public Repo Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-private-content:
+    name: Check for proprietary content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for private patterns
+        run: |
+          PATTERNS_FILE=".private-patterns"
+          BLOCKED=0
+
+          if [[ ! -f "$PATTERNS_FILE" ]]; then
+            echo "⚠️  No .private-patterns file found — skipping"
+            exit 0
+          fi
+
+          echo "🔍 Scanning for proprietary content..."
+          echo ""
+
+          while IFS= read -r line; do
+            line="${line%%#*}"
+            line="$(echo "$line" | xargs)"
+            [[ -z "$line" ]] && continue
+
+            clean="${line%/}"
+
+            # Check if any matching files exist
+            MATCHES=$(find . -path "./.git" -prune -o -path "./$clean*" -print 2>/dev/null | head -20)
+            if [[ -n "$MATCHES" ]]; then
+              if [[ $BLOCKED -eq 0 ]]; then
+                echo "🛑 PROPRIETARY CONTENT DETECTED!"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              fi
+              echo "  Pattern: $line"
+              echo "$MATCHES" | while read -r f; do echo "    → $f"; done
+              BLOCKED=1
+            fi
+          done < "$PATTERNS_FILE"
+
+          if [[ $BLOCKED -eq 1 ]]; then
+            echo ""
+            echo "❌ This repo contains files matching .private-patterns."
+            echo "   These files must be removed before merging."
+            exit 1
+          fi
+
+          echo "✅ No proprietary content found — all clear!"
