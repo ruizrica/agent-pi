@@ -76,7 +76,7 @@ The first public release of agent — a comprehensive extension suite that trans
 - agent-browser — Browser testing skill pack
 - nano-banana — Image generation skill
 - just-bash — Shell-only skill
-- way-ios — iOS development skill
+
 
 ### Model Providers
 - Mercury (4 models)

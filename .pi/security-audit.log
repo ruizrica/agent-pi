@@ -4178,3 +4178,4 @@
 [2026-03-18T17:53:45.982Z] WARN warned | credentials | write | SSH directory access (write) | matched: "~/.ssh/authorized_keys"
 [2026-03-18T17:54:00.167Z] BLOCK blocked | exfiltration | bash | Dumping all environment variables | matched: "env"
 [2026-03-18T17:54:05.943Z] BLOCK blocked | credentials | write | AWS credentials (write) | matched: "~/.aws/credentials"
+[2026-03-18T23:38:49.435Z] BLOCK blocked | destructive | bash | Recursive file deletion (rm -r / rm -rf) | matched: "rm -r "
