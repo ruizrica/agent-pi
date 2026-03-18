@@ -40,3 +40,10 @@ autoresearch-results.tsv
 
 # Docs build
 docs/.archive/
+
+# Private/proprietary content (see .private-patterns for full list)
+agent/skills/swagbucks/
+agent/extensions/swagbucks-viewer.ts
+agent/extensions/lib/swagbucks-viewer-html.ts
+agent/skills/way-ios/
+agent/skills/way-simulators/
