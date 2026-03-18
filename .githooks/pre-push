@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# ABOUTME: Pre-push hook that blocks pushes to the 'public' remote if proprietary content is detected.
+# Reads patterns from .private-patterns and scans the branch being pushed.
+
+set -euo pipefail
+
+# ── Only guard pushes to the "public" remote ────────────────────────
+REMOTE="$1"
+URL="$2"
+
+# Extract remote name — only block pushes to 'public'
+if [[ "$REMOTE" != "public" ]]; then
+    exit 0
+fi
+
+PATTERNS_FILE="$(git rev-parse --show-toplevel)/.private-patterns"
+
+if [[ ! -f "$PATTERNS_FILE" ]]; then
+    echo "⚠️  Warning: .private-patterns file not found — skipping private content check"
+    exit 0
+fi
+
+# ── Read patterns (skip comments and blank lines) ───────────────────
+PATTERNS=()
+while IFS= read -r line; do
+    line="${line%%#*}"       # strip inline comments
+    line="${line// /}"       # strip whitespace
+    [[ -z "$line" ]] && continue
+    PATTERNS+=("$line")
+done < "$PATTERNS_FILE"
+
+if [[ ${#PATTERNS[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+# ── Check each ref being pushed ─────────────────────────────────────
+BLOCKED=0
+while read -r LOCAL_REF LOCAL_OID REMOTE_REF REMOTE_OID; do
+    # Skip delete pushes
+    if [[ "$LOCAL_OID" == "0000000000000000000000000000000000000000" ]]; then
+        continue
+    fi
+
+    # Get list of files in the commit(s) being pushed
+    FILES=$(git diff --name-only "$REMOTE_OID".."$LOCAL_OID" 2>/dev/null || git ls-tree --name-only -r "$LOCAL_OID")
+
+    for pattern in "${PATTERNS[@]}"; do
+        # Remove trailing slash for matching
+        clean_pattern="${pattern%/}"
+        
+        MATCHES=$(echo "$FILES" | grep -i "$clean_pattern" 2>/dev/null || true)
+        if [[ -n "$MATCHES" ]]; then
+            if [[ $BLOCKED -eq 0 ]]; then
+                echo ""
+                echo "🛑 BLOCKED — Proprietary content detected in push to PUBLIC remote!"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            fi
+            echo "  Pattern: $pattern"
+            echo "$MATCHES" | while read -r f; do echo "    → $f"; done
+            BLOCKED=1
+        fi
+    done
+done
+
+if [[ $BLOCKED -eq 1 ]]; then
+    echo ""
+    echo "These files match patterns in .private-patterns and must not be"
+    echo "pushed to the public repo. Remove them from the branch first."
+    echo ""
+    echo "  Tip: Use the 'public' branch which has these files removed."
+    echo "  Run: git push public public:main"
+    echo ""
+    exit 1
+fi
+
+exit 0

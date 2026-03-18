@@ -1,0 +1,15 @@
+# Private content patterns — files that must NEVER appear in the public repo.
+# Used by .githooks/pre-push and CI to block proprietary content from leaking.
+# Format: one glob pattern per line (gitignore-style). Lines starting with # are comments.
+
+# Swagbucks (work-specific sentiment analysis)
+agent/skills/swagbucks/
+agent/extensions/swagbucks-viewer.ts
+agent/extensions/lib/swagbucks-viewer-html.ts
+
+# Way (work-specific iOS/simulator skills)
+agent/skills/way-ios/
+agent/skills/way-simulators/
+
+# Session state (may contain proprietary context)
+.context/session-state.json
