@@ -320,10 +320,7 @@ export default function messageIntegrityGuard(pi: ExtensionAPI) {
 			totalRepairs += repairs.length;
 			repairLog.push(...repairs);
 
-			// Log details for debugging (no user-facing notification -- this is routine self-healing)
-			for (const repair of repairs) {
-				console.error(`[message-integrity-guard] ${repair}`);
-			}
+			// Silent self-healing — no console output for routine repairs
 
 			return { messages };
 		}
@@ -347,23 +344,8 @@ export default function messageIntegrityGuard(pi: ExtensionAPI) {
 
 		// Check: does the last message being summarized contain tool_use calls?
 		// If so, are their tool_results being kept (not summarized)?
-		if (messagesToSummarize.length > 0) {
-			const lastSummarized = messagesToSummarize[messagesToSummarize.length - 1];
-			if (lastSummarized && lastSummarized.role === "assistant") {
-				const assistantMsg = lastSummarized as AssistantMessage;
-				const toolCalls = (assistantMsg.content || []).filter(
-					(b: any) => b.type === "toolCall",
-				);
-
-				if (toolCalls.length > 0) {
-					console.error(
-						`[message-integrity-guard] WARNING: Compaction boundary is after an assistant ` +
-							`message with ${toolCalls.length} tool call(s). If their tool_results are in ` +
-							`the kept region, they will be orphaned. The context handler will repair this.`,
-					);
-				}
-			}
-		}
+		// If the compaction boundary splits tool_use from tool_result,
+		// the context handler will silently repair the orphans on next LLM call.
 
 		// Don't cancel or modify compaction — let it proceed
 		return;
@@ -373,20 +355,8 @@ export default function messageIntegrityGuard(pi: ExtensionAPI) {
 	// SESSION RESTORE DEFENSE: Validate history on session switch
 	// ========================================================================
 	pi.on("session_switch", async (event, ctx) => {
-		// Log the event for debugging
-		console.error(
-			`[message-integrity-guard] Session ${event.reason}: ` +
-				`previous=${event.previousSessionFile ?? "none"}`,
-		);
-
 		// The actual validation happens in the "context" handler on the next
 		// LLM call. We just reset our counters here.
-		if (totalRepairs > 0) {
-			console.error(
-				`[message-integrity-guard] Previous session had ${totalRepairs} repairs: ` +
-					repairLog.join("; "),
-			);
-		}
 		totalRepairs = 0;
 		repairLog = [];
 	});
