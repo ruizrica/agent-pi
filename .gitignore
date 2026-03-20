@@ -29,6 +29,7 @@ agent/pi-crash.log
 .context/test-exports/
 .context/session-state.json
 .context/call-tool-test.txt
+.context/questions.md
 agent/extensions/coverage/
 
 # Secrets
