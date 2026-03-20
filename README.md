@@ -41,14 +41,50 @@ Everything is configuration — no forks, no patches. Just extensions, agent def
 git clone https://github.com/ruizrica/pi-dev.git
 cd pi-dev
 
-# Install dependencies
-npm install
+# Run the installer
+./install.sh
+```
 
-# Run Pi with all extensions loaded
+The installer will:
+- ✅ Check prerequisites (Node.js, npm, git)
+- ✅ Install the Pi CLI globally if not present
+- ✅ Install root and extension dependencies
+- ✅ Validate all agent configs (chains, pipelines, teams)
+- ✅ Check for broken symlinks and fix them
+- ✅ Seed `agent/models.json` from template if missing
+- ✅ Verify all 28+ extensions are present
+
+Then start Pi:
+
+```bash
 cd agent && pi
 ```
 
 Pi reads `agent/settings.json` on startup, which loads all 28 extensions automatically.
+
+<details>
+<summary><strong>Manual install</strong> (if you prefer not to use the installer)</summary>
+
+```bash
+git clone https://github.com/ruizrica/pi-dev.git
+cd pi-dev
+npm install
+cd agent/extensions && npm install && cd ../..
+cp agent/models.json.template agent/models.json  # then add your API keys
+cd agent && pi
+```
+
+</details>
+
+### Verify Installation
+
+Run the health checker anytime to validate your setup:
+
+```bash
+./pi-doctor.sh
+```
+
+It checks 9 categories — runtime, dependencies, agent configs, definitions, symlinks, models, settings, themes, and skills — with color-coded results and fix suggestions.
 
 ### First Steps
 
@@ -269,6 +305,19 @@ Configure model providers. Supports any OpenAI-compatible API. See [docs/QUICK_R
 ### `agent/.pi/agents/`
 
 Agent definitions (`.md`), team configs (`teams.yaml`), chain workflows (`agent-chain.yaml`), and pipeline configs (`pipeline-team.yaml`).
+
+## Troubleshooting
+
+Run `./pi-doctor.sh` first — it identifies most issues and suggests fixes.
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `Warning: No chains found in .pi/agents/agent-chain.yaml` | Agent config files missing or unreadable | Run `./install.sh` or `git checkout -- agent/.pi/agents/` |
+| `Warning: No pipelines found in .pi/agents/pipeline-team.yaml` | Same as above | Same fix — installer validates both files |
+| `pi: command not found` | Pi CLI not installed globally | `npm install -g @mariozechner/pi-coding-agent` |
+| Broken toolkit symlink warning | The `agent/.pi/agents/toolkit` symlink points to a local path | Remove it: the installer handles this automatically |
+| No model providers available | `agent/models.json` missing (it's gitignored) | `cp agent/models.json.template agent/models.json` then add API keys |
+| Extensions not loading | Missing `node_modules` in extensions dir | `cd agent/extensions && npm install` |
 
 ## Documentation
 

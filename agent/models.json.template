@@ -1,0 +1,46 @@
+{
+  "providers": {
+    "anthropic": {
+      "_comment": "Default provider — set ANTHROPIC_API_KEY env var or paste key below",
+      "apiKey": "",
+      "models": []
+    },
+    "openrouter": {
+      "_comment": "OpenRouter — access 200+ models with one API key",
+      "baseUrl": "https://openrouter.ai/api/v1/",
+      "api": "openai-completions",
+      "apiKey": "",
+      "models": [
+        {
+          "id": "anthropic/claude-sonnet-4",
+          "name": "Claude Sonnet 4 (OpenRouter)",
+          "input": ["text", "image"],
+          "contextWindow": 200000,
+          "maxTokens": 16384
+        }
+      ]
+    },
+    "synthetic": {
+      "_comment": "Synthetic — free tier available at synthetic.new",
+      "baseUrl": "https://api.synthetic.new/v1/",
+      "api": "openai-completions",
+      "apiKey": "",
+      "models": [
+        {
+          "id": "hf:deepseek-ai/DeepSeek-V3.2",
+          "name": "DeepSeek V3.2",
+          "input": ["text"],
+          "contextWindow": 159000,
+          "maxTokens": 16384
+        },
+        {
+          "id": "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
+          "name": "Qwen3 Coder 480B",
+          "input": ["text"],
+          "contextWindow": 256000,
+          "maxTokens": 16384
+        }
+      ]
+    }
+  }
+}

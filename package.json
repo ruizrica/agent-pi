@@ -1,4 +1,11 @@
 {
+  "name": "agent-pi",
+  "version": "1.1.0",
+  "description": "Extension suite that transforms Pi Coding Agent into a multi-agent orchestration platform",
+  "scripts": {
+    "install-agent": "bash install.sh",
+    "doctor": "bash pi-doctor.sh"
+  },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.55.4"
   }

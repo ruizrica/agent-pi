@@ -2,6 +2,20 @@
 
 All notable changes to agent will be documented in this file.
 
+## [1.1.0] — 2026-03-20
+
+### 🚀 Installer & Validation
+
+- **`install.sh`** — One-command installer that checks prerequisites, installs Pi CLI, installs dependencies (root + extensions), validates agent configs, handles broken symlinks, seeds models.json from template, and verifies all extensions
+- **`pi-doctor.sh`** — Standalone installation health checker with 9 diagnostic categories: Runtime, Dependencies, Agent Configs, Agent Definitions, Symlinks, Models, Settings & Extensions, Themes, and Skills. Color-coded pass/warn/fail output with actionable fix suggestions
+- **`agent/models.json.template`** — Sanitized template for multi-provider model configuration (Anthropic, OpenRouter, Synthetic) with placeholder API keys
+
+### 📦 Packaging
+
+- Added `version` field to `package.json`
+- Added `install-agent` and `doctor` npm scripts
+- Updated README with installer instructions, verification steps, and troubleshooting guide
+
 ## [1.0.0] — 2025-03-11
 
 ### 🎉 Initial Public Release
