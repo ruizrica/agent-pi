@@ -228,8 +228,7 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
 
   .column {
     flex: 1;
-    min-width: 240px;
-    max-width: 360px;
+    min-width: 200px;
     display: flex;
     flex-direction: column;
     gap: 0;
