@@ -59,7 +59,11 @@ function isCloudflaredAvailable(): boolean {
 
 function startTunnel(localPort: number): Promise<{ url: string; proc: ChildProcess }> {
 	return new Promise((resolve, reject) => {
-		const proc = spawn("cloudflared", ["tunnel", "--url", `http://127.0.0.1:${localPort}`], {
+		const proc = spawn("cloudflared", [
+			"tunnel",
+			"--url", `http://127.0.0.1:${localPort}`,
+			"--no-chunked-encoding",
+		], {
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 
@@ -172,8 +176,7 @@ function printRemoteQRBlock(qr: string, url: string, pin: string): void {
 	w(qr);
 	w("\n\n\n\n");
 	w(`  ${url}\n\n`);
-	w(`  \x1b[1mPIN:\x1b[0m\n\n`);
-	w(`\x1b[1m${renderBigPin(pin)}\x1b[0m\n`);
+	w(`  \x1b[1mPIN: ${pin}\x1b[0m\n`);
 	w("\n\n");
 }
 
@@ -181,12 +184,19 @@ function printRemoteQRBlock(qr: string, url: string, pin: string): void {
 
 function sendSSE(client: SSEClient, event: string, data: any): void {
 	try {
-		const ok = client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-		// Force flush — without this, SSE writes get buffered and never reach the client.
-		// This replaces the console.error() calls that were accidentally providing
-		// the same effect via synchronous stderr I/O.
-		if (typeof (client.res as any).flush === "function") {
-			(client.res as any).flush();
+		client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+		// Force-flush: Node's HTTP response buffers writes internally.
+		// Without an explicit flush, SSE events sit in the buffer and never
+		// reach the remote client. We use cork()+uncork() on the underlying
+		// TCP socket — scheduling uncork() on nextTick forces a coalesced
+		// flush of all buffered data to the wire. This replicates the flush
+		// effect that console.error() calls accidentally provided via
+		// synchronous stderr I/O in the original working version.
+		const socket = client.res.socket;
+		if (socket && !socket.destroyed) {
+			socket.setNoDelay(true);
+			socket.cork();
+			process.nextTick(() => socket.uncork());
 		}
 	} catch {}
 }
@@ -519,7 +529,9 @@ function startChatServer(
 				resetShutdownTimer();
 				res.writeHead(200, {
 					"Content-Type": "text/event-stream",
-					"Cache-Control": "no-cache",
+					"Cache-Control": "no-cache, no-store, must-revalidate",
+					"Pragma": "no-cache",
+					"Expires": "0",
 					"Connection": "keep-alive",
 					"X-Accel-Buffering": "no",
 				});
