@@ -193,7 +193,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
     justify-content: center; height: 100%; gap: 16px;
     color: var(--text-muted); text-align: center; padding: 20px;
   }
-  .welcome-logo { height: 56px; opacity: 0.85; margin-bottom: 8px; }
+  .welcome-logo { height: 56px; opacity: 0.2; margin-bottom: 8px; }
   .welcome h2 { color: var(--text); font-size: 20px; font-weight: 600; }
   .welcome p { font-size: 14px; max-width: 320px; line-height: 1.6; }
   .welcome-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
@@ -210,7 +210,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   #input-area {
     padding: 12px 16px; padding-bottom: calc(12px + var(--safe-bottom));
     background: var(--surface); border-top: 1px solid var(--border);
-    flex-shrink: 0; width: 100%;
+    flex-shrink: 0; width: 100%; position: relative;
   }
   #input-wrapper {
     display: flex; align-items: flex-end; gap: 8px;
@@ -372,6 +372,45 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   .dir-badge.pkg { background: rgba(52,211,153,0.12); color: var(--success); }
   .dir-empty { text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 14px; }
   .dir-loading { text-align: center; padding: 32px 16px; color: var(--text-muted); font-size: 14px; }
+
+  /* ── Slash Command Menu ───────────────────────────── */
+  #slash-menu {
+    display: none; position: absolute; bottom: 100%; left: 0; right: 0;
+    max-height: 260px; overflow-y: auto; background: var(--surface);
+    border: 1px solid var(--border); border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    z-index: 50; margin-bottom: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  #slash-menu.visible { display: block; }
+  #slash-menu::-webkit-scrollbar { width: 4px; }
+  #slash-menu::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .slash-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; cursor: pointer; transition: background 0.1s;
+  }
+  .slash-item:hover, .slash-item.selected { background: var(--surface2); }
+  .slash-item-name {
+    font-family: var(--mono); font-size: 14px; font-weight: 600;
+    color: var(--blue-bright); white-space: nowrap;
+  }
+  .slash-item-desc {
+    font-size: 13px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── Mode Bar ─────────────────────────────────────── */
+  #mode-bar {
+    display: none; width: 100%; padding: 4px 16px;
+    background: rgb(30,144,255); color: #fff;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+    text-align: left; flex-shrink: 0;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  #mode-bar.visible { display: block; }
+  .mode-hint {
+    font-weight: 400; opacity: 0.7; font-size: 11px; margin-left: 8px;
+  }
 </style>
 </head>
 <body>
@@ -399,35 +438,35 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       </div>
       <div class="header-right">
         <div class="dir-pill" id="dir-pill" onclick="openDirPicker()" title="Change working directory">
-          <span class="dir-icon">📁</span>
+          <span class="dir-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
           <span class="dir-name" id="dir-pill-name">...</span>
-          <span class="dir-chevron">▼</span>
+          <span class="dir-chevron"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
         </div>
         <div class="status-dot" id="status-dot" title="Connected"></div>
         <button class="header-btn" onclick="resetChat()" title="New conversation">New</button>
       </div>
     </div>
 
+    <div id="mode-bar"></div>
     <div class="connection-banner" id="conn-banner">Connection lost. Reconnecting...</div>
 
     <div id="messages">
       <div class="welcome" id="welcome">
         ${logo ? '<img src="' + logo + '" class="welcome-logo" alt="Pi">' : ''}
-        <h2>Pi Agent</h2>
-        <p>Chat with your Pi agent from anywhere on your network. Full tool access included.</p>
         <div class="welcome-suggestions">
-          <div class="suggestion" onclick="sendSuggestion('What files are in the current directory?')">📁 List files</div>
-          <div class="suggestion" onclick="sendSuggestion('What is the current git status?')">🔀 Git status</div>
-          <div class="suggestion" onclick="sendSuggestion('Give me a summary of this project')">📋 Summary</div>
+          <div class="suggestion" onclick="sendSuggestion('What files are in the current directory?')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>List files</div>
+          <div class="suggestion" onclick="sendSuggestion('What is the current git status?')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Git status</div>
+          <div class="suggestion" onclick="sendSuggestion('Give me a summary of this project')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Summary</div>
         </div>
       </div>
     </div>
 
     <div id="input-area">
+      <div id="slash-menu"></div>
       <div id="input-wrapper">
         <textarea id="message-input" placeholder="Message Pi agent..." rows="1"
           autocomplete="off" autocorrect="on" spellcheck="true"></textarea>
-        <button id="send-btn" onclick="sendMessage()" title="Send">↑</button>
+        <button id="send-btn" onclick="sendMessage()" title="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
       </div>
     </div>
   </div>
@@ -438,7 +477,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
 <div id="dir-panel">
   <div class="dir-panel-header">
     <h3>Working Directory</h3>
-    <button class="dir-panel-close" onclick="closeDirPicker()">✕</button>
+    <button class="dir-panel-close" onclick="closeDirPicker()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div class="dir-search-wrapper">
     <input type="text" class="dir-search" id="dir-search" placeholder="Search projects..." oninput="filterDirs()">
@@ -553,12 +592,139 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   const connBanner = document.getElementById('conn-banner');
   const welcomeEl = document.getElementById('welcome');
 
+  // ── Slash Command Menu ───────────────────────────────
+  const SLASH_COMMANDS = [
+    { name: 'mode', desc: 'Set operational mode' },
+    { name: 'thinking', desc: 'Set thinking level' },
+    { name: 'plan', desc: 'Open plan viewer' },
+    { name: 'report', desc: 'Show completion report' },
+    { name: 'board', desc: 'Open task board' },
+    { name: 'chat', desc: 'Manage web chat' },
+    { name: 'cycle', desc: 'Cycle memory context' },
+    { name: 'tasks', desc: 'Manage task list' },
+    { name: 'research', desc: 'Browse research sessions' },
+    { name: 'cleanup', desc: 'Disk cleanup viewer' },
+    { name: 'sounds', desc: 'Sound configuration' },
+    { name: 'theme', desc: 'Cycle color theme' },
+    { name: 'secure', desc: 'Security status' },
+    { name: 'agents-team', desc: 'Manage agent team' },
+    { name: 'chain', desc: 'Run agent chain' },
+    { name: 'pipeline', desc: 'Pipeline orchestration' },
+    { name: 'spec', desc: 'Open spec viewer' },
+    { name: 'reports', desc: 'Browse saved reports' },
+    { name: 'replay', desc: 'Session replay' },
+    { name: 'sub', desc: 'Spawn subagent' },
+  ];
+  const slashMenu = document.getElementById('slash-menu');
+  let slashSelectedIdx = -1;
+  let slashFiltered = [];
+
+  function showSlashMenu(filter) {
+    const q = filter.toLowerCase();
+    slashFiltered = q ? SLASH_COMMANDS.filter(c => c.name.startsWith(q)) : SLASH_COMMANDS.slice();
+    if (!slashFiltered.length) { hideSlashMenu(); return; }
+    slashSelectedIdx = 0;
+    slashMenu.innerHTML = slashFiltered.map((c, i) =>
+      '<div class="slash-item' + (i === 0 ? ' selected' : '') + '" data-idx="' + i + '">' +
+      '<span class="slash-item-name">/' + c.name + '</span>' +
+      '<span class="slash-item-desc">' + c.desc + '</span></div>'
+    ).join('');
+    slashMenu.classList.add('visible');
+    // Event delegation for clicks
+    slashMenu.querySelectorAll('.slash-item').forEach(el => {
+      el.addEventListener('click', () => { selectSlashItem(parseInt(el.dataset.idx)); });
+    });
+  }
+
+  function hideSlashMenu() {
+    slashMenu.classList.remove('visible');
+    slashMenu.innerHTML = '';
+    slashSelectedIdx = -1;
+    slashFiltered = [];
+  }
+
+  function selectSlashItem(idx) {
+    if (idx < 0 || idx >= slashFiltered.length) return;
+    const cmd = slashFiltered[idx];
+    inputEl.value = '/' + cmd.name + ' ';
+    hideSlashMenu();
+    inputEl.focus();
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+  }
+
+  function moveSlashSelection(dir) {
+    if (!slashFiltered.length) return;
+    const items = slashMenu.querySelectorAll('.slash-item');
+    if (items[slashSelectedIdx]) items[slashSelectedIdx].classList.remove('selected');
+    slashSelectedIdx = (slashSelectedIdx + dir + slashFiltered.length) % slashFiltered.length;
+    if (items[slashSelectedIdx]) {
+      items[slashSelectedIdx].classList.add('selected');
+      items[slashSelectedIdx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // ── Mode Cycling ────────────────────────────────────
+  const MODES = ['NORMAL','PLAN','SPEC','PIPELINE','TEAM','CHAIN'];
+  let currentMode = 'NORMAL';
+  const modeBar = document.getElementById('mode-bar');
+
+  function cycleMode() {
+    const idx = MODES.indexOf(currentMode);
+    currentMode = MODES[(idx + 1) % MODES.length];
+    updateModeUI();
+  }
+
+  function updateModeUI() {
+    if (currentMode === 'NORMAL') {
+      modeBar.classList.remove('visible');
+      modeBar.textContent = '';
+    } else {
+      modeBar.textContent = '';
+      const label = document.createTextNode(currentMode);
+      modeBar.appendChild(label);
+      const hint = document.createElement('span');
+      hint.className = 'mode-hint';
+      hint.textContent = 'Shift+Tab to cycle';
+      modeBar.appendChild(hint);
+      modeBar.classList.add('visible');
+    }
+  }
+
   inputEl.addEventListener('input', () => {
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+    // Slash command detection
+    const val = inputEl.value;
+    if (val.startsWith('/') && !val.includes(' ') && val.length > 0) {
+      showSlashMenu(val.slice(1));
+    } else {
+      hideSlashMenu();
+    }
   });
+
   inputEl.addEventListener('keydown', (e) => {
+    // Shift+Tab: cycle mode
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      cycleMode();
+      return;
+    }
+    // Slash menu navigation
+    if (slashMenu.classList.contains('visible')) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveSlashSelection(1); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); moveSlashSelection(-1); return; }
+      if (e.key === 'Enter') { e.preventDefault(); selectSlashItem(slashSelectedIdx); return; }
+      if (e.key === 'Escape') { e.preventDefault(); hideSlashMenu(); return; }
+      if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); selectSlashItem(slashSelectedIdx); return; }
+    }
+    // Normal enter to send
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  // Close slash menu on outside click
+  document.addEventListener('click', (e) => {
+    if (!slashMenu.contains(e.target) && e.target !== inputEl) hideSlashMenu();
   });
 
   // ── Markdown renderer ───────────────────────────────
@@ -684,12 +850,15 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   window.sendMessage = async function() {
     const text = inputEl.value.trim();
     if (!text || busy) return;
+    hideSlashMenu();
     inputEl.value = ''; inputEl.style.height = 'auto';
     setBusy(true); addUserMessage(text); showThinking();
     try {
+      const payload = { message: text };
+      if (currentMode !== 'NORMAL') payload.mode = currentMode;
       const res = await authedFetch('/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -807,7 +976,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       const badges = (d.hasGit ? '<span class="dir-badge git">git</span>' : '') +
                      (d.hasPackageJson ? '<span class="dir-badge pkg">npm</span>' : '');
       return '<div class="dir-item' + (isActive ? ' active' : '') + '" onclick="selectDir(\\'' + d.path.replace(/'/g, "\\\\'") + '\\')">' +
-        '<div class="dir-item-icon">' + (d.hasGit ? '📂' : '📁') + '</div>' +
+        '<div class="dir-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>' +
         '<div class="dir-item-info"><div class="dir-item-name">' + escapeHtml(d.name) + '</div>' +
         '<div class="dir-item-path">' + escapeHtml(shortPath) + '</div></div>' +
         '<div class="dir-item-badges">' + badges + '</div></div>';
@@ -829,6 +998,14 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
     } catch (err) { addSystemMessage('Error: ' + err.message); }
   };
   function updateDirPill(name) { dirPillName.textContent = name || '...'; dirPillName.title = currentCwd; }
+
+  // ── Global Shift+Tab for mode cycling (works outside textarea) ──
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && e.shiftKey && document.activeElement !== inputEl) {
+      e.preventDefault();
+      cycleMode();
+    }
+  });
 
   // ── Prevent double-tap zoom (iOS) ───────────────────
   let lastTap = 0;

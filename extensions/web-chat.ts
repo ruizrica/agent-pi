@@ -239,7 +239,7 @@ class AgentBridge {
 		broadcastSSE(this.clients, "reset", { ok: true });
 	}
 
-	async sendMessage(message: string): Promise<void> {
+	async sendMessage(message: string, mode?: string): Promise<void> {
 		if (this.busy) {
 			broadcastSSE(this.clients, "error_event", { message: "Agent is busy. Wait for the current response to finish." });
 			return;
@@ -272,6 +272,20 @@ class AgentBridge {
 			extensions.push("-e", commanderExt);
 		}
 
+		// Build the final message, prepending mode context if not NORMAL
+		let finalMessage = message;
+		if (mode && mode !== "NORMAL") {
+			const modeInstructions: Record<string, string> = {
+				PLAN: "[MODE: PLAN] Follow a plan-first workflow. Write a structured plan before any implementation. Get approval before coding.",
+				SPEC: "[MODE: SPEC] Follow spec-driven development. Shape the feature idea, write requirements, then create tasks.",
+				PIPELINE: "[MODE: PIPELINE] Use the pipeline workflow with phases: understand, gather, plan, build, review.",
+				TEAM: "[MODE: TEAM] Coordinate a multi-agent team. Dispatch scouts, builders, and reviewers as needed.",
+				CHAIN: "[MODE: CHAIN] Execute as part of an agent chain pipeline. Process the task and pass results to the next step.",
+			};
+			const instruction = modeInstructions[mode] || `[MODE: ${mode}]`;
+			finalMessage = `${instruction}\n\n${message}`;
+		}
+
 		const args = [
 			"--mode", "json",
 			"-p",
@@ -280,7 +294,7 @@ class AgentBridge {
 			...extensions,
 			"--tools", "read,bash,edit,write,grep,find,ls",
 			"--thinking", "off",
-			message,
+			finalMessage,
 		];
 
 		return new Promise<void>((resolve) => {
@@ -538,7 +552,8 @@ function startChatServer(
 							res.end(JSON.stringify({ ok: false, error: "Empty message" }));
 							return;
 						}
-						bridge.sendMessage(message).catch(() => {});
+						const mode = data.mode ? String(data.mode).toUpperCase() : undefined;
+						bridge.sendMessage(message, mode).catch(() => {});
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
 					} catch (err: any) {
@@ -742,7 +757,7 @@ export default function (pi: ExtensionAPI) {
 				content: [{
 					type: "text" as const,
 					text: [
-						`🌐 Web Chat is live!`,
+						`Web Chat is live!`,
 						``,
 						`Local:  ${localUrl}`,
 						`Phone:  ${lanUrl}`,
