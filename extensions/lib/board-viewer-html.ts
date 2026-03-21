@@ -306,19 +306,6 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
     opacity: 0.7;
   }
 
-  .column-empty::before {
-    display: block;
-    font-size: 20px;
-    margin-bottom: 6px;
-    font-style: normal;
-    opacity: 0.5;
-  }
-
-  .col-pending .column-empty::before   { content: "☁️"; }
-  .col-working .column-empty::before   { content: "⏳"; }
-  .col-completed .column-empty::before { content: "✨"; }
-  .col-failed .column-empty::before    { content: "🛡️"; }
-
   /* ── Task Card ───────────────────────── */
   .task-card {
     background: var(--surface2);
