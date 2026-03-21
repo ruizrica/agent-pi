@@ -221,14 +221,30 @@ class SessionBridge {
 		this.busy = true;
 		this.textBuffer = [];
 		this.toolNames = [];
-		this.pushTerminalLine("⏳ Processing...");
+		this.pushTerminalLine("[start] Processing...");
 		broadcastSSE(this.clients, "status", { busy: true });
 	}
 
 	onAgentEnd(): void {
+		// If there's unbuffered text that message_end didn't catch, deliver it now
+		const remaining = this.textBuffer.join("");
+		if (remaining) {
+			const assistantMsg: ChatMessage = {
+				role: "assistant",
+				content: remaining,
+				timestamp: new Date().toISOString(),
+				toolCalls: this.toolNames.length > 0 ? [...this.toolNames] : undefined,
+			};
+			this.history.push(assistantMsg);
+			broadcastSSE(this.clients, "assistant_message", assistantMsg);
+		}
+
 		this.busy = false;
 		this.pendingFromPhone = false;
-		this.pushTerminalLine("✅ Done");
+		this.textBuffer = [];
+		this.toolNames = [];
+		this.pushTerminalLine("[done] Complete");
+		broadcastSSE(this.clients, "done", {});
 		broadcastSSE(this.clients, "status", { busy: false });
 	}
 
@@ -241,12 +257,12 @@ class SessionBridge {
 			this.textBuffer.push(text);
 			broadcastSSE(this.clients, "text_delta", { text });
 		} else if (delta.type === "thinking_start") {
-			this.pushTerminalLine("💭 Thinking...");
+			this.pushTerminalLine("[think] Reasoning...");
 		}
 	}
 
 	onMessageEnd(message: any): void {
-		// Extract the full text from the completed message
+		// Extract text from the completed message
 		let fullText = "";
 		if (message?.content) {
 			if (Array.isArray(message.content)) {
@@ -260,10 +276,10 @@ class SessionBridge {
 		}
 
 		if (!fullText) {
-			// Maybe text was in the buffer from text_delta events
 			fullText = this.textBuffer.join("");
 		}
 
+		// Only broadcast if there's actual text (skip tool-use-only messages)
 		if (fullText) {
 			const assistantMsg: ChatMessage = {
 				role: "assistant",
@@ -272,38 +288,46 @@ class SessionBridge {
 				toolCalls: this.toolNames.length > 0 ? [...this.toolNames] : undefined,
 			};
 			this.history.push(assistantMsg);
-
-			// ALWAYS send the complete message — this is the reliable delivery
 			broadcastSSE(this.clients, "assistant_message", assistantMsg);
+			// Reset text buffer after delivering
+			this.textBuffer = [];
 		}
-
-		// Signal completion
-		broadcastSSE(this.clients, "done", {});
-		broadcastSSE(this.clients, "status", { busy: false });
-		this.busy = false;
-
-		// Reset buffers
-		this.textBuffer = [];
-		this.toolNames = [];
+		// Do NOT send done/status here — agent_end handles that.
+		// message_end fires multiple times per turn (tool-use + text).
 	}
 
 	onToolStart(event: ToolExecutionStartEvent): void {
 		const name = event.toolName || "tool";
 		this.toolNames.push(name);
 		broadcastSSE(this.clients, "tool_start", { name });
-		this.pushTerminalLine(`▶ ${name}`);
+		this.pushTerminalLine(`[tool] ${name}`);
+
+		// Detect subagent spawning
+		if (name === "subagent_create" || name === "subagent_create_batch") {
+			const args = event.args;
+			if (name === "subagent_create_batch" && args?.agents) {
+				const count = args.agents.length;
+				const names = args.agents.map((a: any) => a.name || a.summary || "agent").join(", ");
+				this.pushTerminalLine(`[agent] Spawning ${count} agents: ${names}`);
+				broadcastSSE(this.clients, "subagent_start", { count, names });
+			} else if (name === "subagent_create") {
+				const agentName = args?.name || args?.summary || "agent";
+				this.pushTerminalLine(`[agent] Spawning: ${agentName}`);
+				broadcastSSE(this.clients, "subagent_start", { count: 1, names: agentName });
+			}
+		}
 	}
 
 	onToolEnd(event: ToolExecutionEndEvent): void {
 		const name = event.toolName || "tool";
-		const err = event.isError ? " ✗" : "";
+		const ok = !event.isError;
 		broadcastSSE(this.clients, "tool_end", {});
-		this.pushTerminalLine(`${err ? "✗" : "✓"} ${name}${err}`);
+		this.pushTerminalLine(`[${ok ? "ok" : "err"}] ${name}`);
 	}
 
 	onInput(text: string, source: string): void {
 		// Log the input source in terminal feed
-		const label = source === "extension" ? "📱" : "⌨️";
+		const label = source === "extension" ? "[phone]" : "[term]";
 		const preview = text.length > 60 ? text.slice(0, 57) + "..." : text;
 		this.pushTerminalLine(`${label} ${preview}`);
 
@@ -702,7 +726,20 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("message_end", async (event) => {
 		if (activeBridge) {
-			activeBridge.onMessageEnd((event as any).message);
+			// Single debug line — remove once confirmed working
+			const msg = (event as any).message;
+			const hasText = Array.isArray(msg?.content)
+				? msg.content.some((p: any) => p.type === "text")
+				: typeof msg?.content === "string";
+			console.error(`[web-chat] message_end hasText=${hasText} role=${msg?.role}`);
+			activeBridge.onMessageEnd(msg);
+		}
+	});
+
+	pi.on("turn_end", async () => {
+		// Backup completion signal — turn_end fires after each LLM turn
+		if (activeBridge && activeBridge.isBusy()) {
+			activeBridge.pushTerminalLine("[turn] Turn complete");
 		}
 	});
 

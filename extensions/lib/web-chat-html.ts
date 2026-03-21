@@ -568,13 +568,14 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
 
   function appendTerminalLine(line) {
     const span = document.createElement('div');
-    if (line.startsWith('▶ ')) span.className = 't-tool';
-    else if (line.startsWith('✓ ')) span.className = 't-done';
-    else if (line.startsWith('✗ ')) span.className = 't-error';
-    else if (line.startsWith('📱') || line.startsWith('⌨️')) span.className = 't-input';
-    else if (line.startsWith('💭')) span.className = 't-think';
-    else if (line.startsWith('✅')) span.className = 't-done';
-    else if (line.startsWith('⏳')) span.className = 't-event';
+    if (line.startsWith('[tool]')) span.className = 't-tool';
+    else if (line.startsWith('[ok]')) span.className = 't-done';
+    else if (line.startsWith('[err]')) span.className = 't-error';
+    else if (line.startsWith('[phone]') || line.startsWith('[term]')) span.className = 't-input';
+    else if (line.startsWith('[think]')) span.className = 't-think';
+    else if (line.startsWith('[done]')) span.className = 't-done';
+    else if (line.startsWith('[start]')) span.className = 't-event';
+    else if (line.startsWith('[agent]')) span.className = 't-tool';
     else span.className = 't-event';
     span.textContent = line;
     terminalOutput.appendChild(span);
@@ -932,6 +933,10 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
     });
     eventSource.addEventListener('tool_end', () => { removeToolIndicator(); });
     eventSource.addEventListener('done', () => { hideThinking(); finalizeStream(); setBusy(false); });
+    eventSource.addEventListener('subagent_start', (e) => {
+      const data = JSON.parse(e.data);
+      addSystemMessage('Agents spawned: ' + data.names + ' (' + data.count + ')');
+    });
     eventSource.addEventListener('error_event', (e) => {
       hideThinking(); addSystemMessage(JSON.parse(e.data).message); setBusy(false);
     });
