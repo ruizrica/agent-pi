@@ -273,6 +273,10 @@ class SessionBridge {
 	}
 
 	onMessageEnd(message: any): void {
+		// Skip user messages — only relay assistant responses to the phone.
+		// Without this, the user's own message gets echoed back as a "PI" message.
+		if (message?.role === "user") return;
+
 		// Extract the full text from the completed message
 		let fullText = "";
 		if (message?.content) {
