@@ -349,7 +349,14 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   }
   #terminal-output .t-tool { color: var(--blue-bright); }
   #terminal-output .t-done { color: var(--success); }
+  #terminal-output .t-error { color: var(--error); }
   #terminal-output .t-event { color: var(--text-dim); }
+  #terminal-output .t-input { color: var(--accent); }
+  #terminal-output .t-think { color: var(--text-muted); font-style: italic; }
+  #terminal-output:empty::before {
+    content: 'Activity feed — shows tool calls, thinking, and session events';
+    color: var(--text-dim); font-style: italic; opacity: 0.6;
+  }
 
   #mode-bar {
     display: none; padding: 4px 16px;
@@ -561,13 +568,14 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
 
   function appendTerminalLine(line) {
     const span = document.createElement('div');
-    if (line.startsWith('▶ ')) {
-      span.className = 't-tool';
-    } else if (line.startsWith('✓ ')) {
-      span.className = 't-done';
-    } else {
-      span.className = 't-event';
-    }
+    if (line.startsWith('▶ ')) span.className = 't-tool';
+    else if (line.startsWith('✓ ')) span.className = 't-done';
+    else if (line.startsWith('✗ ')) span.className = 't-error';
+    else if (line.startsWith('📱') || line.startsWith('⌨️')) span.className = 't-input';
+    else if (line.startsWith('💭')) span.className = 't-think';
+    else if (line.startsWith('✅')) span.className = 't-done';
+    else if (line.startsWith('⏳')) span.className = 't-event';
+    else span.className = 't-event';
     span.textContent = line;
     terminalOutput.appendChild(span);
     if (currentView === 'terminal') {

@@ -221,12 +221,14 @@ class SessionBridge {
 		this.busy = true;
 		this.textBuffer = [];
 		this.toolNames = [];
+		this.pushTerminalLine("⏳ Processing...");
 		broadcastSSE(this.clients, "status", { busy: true });
 	}
 
 	onAgentEnd(): void {
 		this.busy = false;
 		this.pendingFromPhone = false;
+		this.pushTerminalLine("✅ Done");
 		broadcastSSE(this.clients, "status", { busy: false });
 	}
 
@@ -234,11 +236,12 @@ class SessionBridge {
 		const delta = event.assistantMessageEvent;
 		if (!delta) return;
 
-		// Stream text deltas to phone in real-time
 		if (delta.type === "text_delta") {
 			const text = (delta as any).delta || "";
 			this.textBuffer.push(text);
 			broadcastSSE(this.clients, "text_delta", { text });
+		} else if (delta.type === "thinking_start") {
+			this.pushTerminalLine("💭 Thinking...");
 		}
 	}
 
@@ -291,12 +294,19 @@ class SessionBridge {
 		this.pushTerminalLine(`▶ ${name}`);
 	}
 
-	onToolEnd(_event: ToolExecutionEndEvent): void {
+	onToolEnd(event: ToolExecutionEndEvent): void {
+		const name = event.toolName || "tool";
+		const err = event.isError ? " ✗" : "";
 		broadcastSSE(this.clients, "tool_end", {});
-		this.pushTerminalLine(`✓ tool done`);
+		this.pushTerminalLine(`${err ? "✗" : "✓"} ${name}${err}`);
 	}
 
 	onInput(text: string, source: string): void {
+		// Log the input source in terminal feed
+		const label = source === "extension" ? "📱" : "⌨️";
+		const preview = text.length > 60 ? text.slice(0, 57) + "..." : text;
+		this.pushTerminalLine(`${label} ${preview}`);
+
 		// Capture input from the terminal user (not from phone — we already tracked that)
 		if (source !== "extension" && !this.pendingFromPhone) {
 			const userMsg: ChatMessage = {
