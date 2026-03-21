@@ -4,13 +4,14 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { mkdirSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { mkdirSync, readdirSync, readFileSync, statSync, existsSync } from "node:fs";
+import { join, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { homedir } from "node:os";
+import { randomInt } from "node:crypto";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateWebChatHTML } from "./lib/web-chat-html.ts";
@@ -43,6 +44,26 @@ function getLanIP(): string {
 		}
 	}
 	return "0.0.0.0";
+}
+
+// ── PIN Authentication ───────────────────────────────────────────────
+
+function generatePIN(): string {
+	return String(randomInt(1000, 9999));
+}
+
+// ── Logo Loading ─────────────────────────────────────────────────────
+
+function loadLogoBase64(): string {
+	try {
+		const extDir = dirname(fileURLToPath(import.meta.url));
+		const logoPath = join(extDir, "..", "agent-logo.png");
+		if (existsSync(logoPath)) {
+			const buf = readFileSync(logoPath);
+			return `data:image/png;base64,${buf.toString("base64")}`;
+		}
+	} catch {}
+	return "";
 }
 
 // ── Session File Management ──────────────────────────────────────────
@@ -356,12 +377,49 @@ class AgentBridge {
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
-function startChatServer(): Promise<{ port: number; server: Server }> {
+function startChatServer(
+	pin: string,
+	onShutdown: () => void,
+): Promise<{ port: number; server: Server }> {
 	return new Promise((resolve) => {
 		const sseClients = new Map<number, SSEClient>();
 		let clientIdCounter = 0;
 		const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 		const bridge = new AgentBridge(sessionId, sseClients);
+		const logoDataUri = loadLogoBase64();
+		const authedTokens = new Set<string>();
+
+		// Generate a session token for authenticated clients
+		function makeToken(): string {
+			const t = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+			authedTokens.add(t);
+			return t;
+		}
+
+		// Check if request is authenticated (via cookie or query param)
+		function isAuthed(req: IncomingMessage, url: URL): boolean {
+			// Check cookie
+			const cookies = req.headers.cookie || "";
+			const match = cookies.match(/pi_token=([^;]+)/);
+			if (match && authedTokens.has(match[1])) return true;
+			// Check query param
+			const qToken = url.searchParams.get("token");
+			if (qToken && authedTokens.has(qToken)) return true;
+			return false;
+		}
+
+		// Auto-shutdown timer: close server if no clients for 2 minutes
+		let shutdownTimer: ReturnType<typeof setTimeout> | null = null;
+		function resetShutdownTimer() {
+			if (shutdownTimer) clearTimeout(shutdownTimer);
+			shutdownTimer = setTimeout(() => {
+				if (sseClients.size === 0) {
+					try { server.close(); } catch {}
+					bridge.destroy();
+					onShutdown();
+				}
+			}, 120_000); // 2 minutes
+		}
 
 		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 			// CORS
@@ -384,18 +442,49 @@ function startChatServer(): Promise<{ port: number; server: Server }> {
 				return;
 			}
 
-			// ── Chat UI ──────────────────────────────────────────
+			// ── PIN Auth Endpoint ────────────────────────────────
+			if (req.method === "POST" && url.pathname === "/auth") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body || "{}");
+						if (String(data.pin) === pin) {
+							const token = makeToken();
+							res.setHeader("Set-Cookie", `pi_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, token }));
+						} else {
+							res.writeHead(401, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: false, error: "Invalid PIN" }));
+						}
+					} catch {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: false, error: "Bad request" }));
+					}
+				});
+				return;
+			}
+
+			// ── Chat UI (no auth required — PIN gate is client-side) ──
 			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
 				res.setHeader("Cache-Control", "no-store");
-				const html = generateWebChatHTML({ port });
+				const html = generateWebChatHTML({ port: (server.address() as any)?.port || 0, logoDataUri });
 				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
 				res.end(html);
 				return;
 			}
 
+			// ── All API endpoints below require auth ─────────────
+			if (!isAuthed(req, url)) {
+				res.writeHead(401, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ error: "Unauthorized" }));
+				return;
+			}
+
 			// ── SSE Events Stream ────────────────────────────────
 			if (req.method === "GET" && url.pathname === "/events") {
+				resetShutdownTimer();
 				res.writeHead(200, {
 					"Content-Type": "text/event-stream",
 					"Cache-Control": "no-cache",
@@ -429,6 +518,8 @@ function startChatServer(): Promise<{ port: number; server: Server }> {
 				req.on("close", () => {
 					clearInterval(pingInterval);
 					sseClients.delete(clientId);
+					// Start shutdown timer when last client disconnects
+					if (sseClients.size === 0) resetShutdownTimer();
 				});
 
 				return;
@@ -447,8 +538,6 @@ function startChatServer(): Promise<{ port: number; server: Server }> {
 							res.end(JSON.stringify({ ok: false, error: "Empty message" }));
 							return;
 						}
-
-						// Fire and forget — response streams via SSE
 						bridge.sendMessage(message).catch(() => {});
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
@@ -522,6 +611,18 @@ function startChatServer(): Promise<{ port: number; server: Server }> {
 				return;
 			}
 
+			// ── Shutdown (explicit close from client) ────────────
+			if (req.method === "POST" && url.pathname === "/shutdown") {
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ ok: true }));
+				setTimeout(() => {
+					bridge.destroy();
+					try { server.close(); } catch {}
+					onShutdown();
+				}, 200);
+				return;
+			}
+
 			res.writeHead(404);
 			res.end("Not found");
 		});
@@ -584,10 +685,20 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	async function launchChat(ctx: ExtensionContext): Promise<{ localUrl: string; lanUrl: string }> {
+	let currentPIN = "";
+
+	async function launchChat(ctx: ExtensionContext): Promise<{ localUrl: string; lanUrl: string; pin: string }> {
 		cleanupServer();
 
-		const { port, server } = await startChatServer();
+		currentPIN = generatePIN();
+		const { port, server } = await startChatServer(currentPIN, () => {
+			// Called when server auto-shuts down
+			activeServer = null;
+			if (activeSession) {
+				clearActiveViewer(activeSession);
+				activeSession = null;
+			}
+		});
 		activeServer = server;
 
 		const lanIP = getLanIP();
@@ -607,7 +718,7 @@ export default function (pi: ExtensionAPI) {
 		registerActiveViewer(activeSession);
 		notifyViewerOpen(ctx, activeSession);
 
-		return { localUrl, lanUrl };
+		return { localUrl, lanUrl, pin: currentPIN };
 	}
 
 	// ── show_chat tool ───────────────────────────────────────────────
@@ -623,7 +734,7 @@ export default function (pi: ExtensionAPI) {
 		parameters: ShowChatParams,
 
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-			const { localUrl, lanUrl } = await launchChat(ctx);
+			const { localUrl, lanUrl, pin } = await launchChat(ctx);
 
 			openBrowser(localUrl);
 
@@ -635,11 +746,11 @@ export default function (pi: ExtensionAPI) {
 						``,
 						`Local:  ${localUrl}`,
 						`Phone:  ${lanUrl}`,
+						`PIN:    ${pin}`,
 						``,
-						`Open the "Phone" URL on any device connected to the same WiFi network.`,
-						`The chat has its own Pi agent with full tool access.`,
+						`Open the "Phone" URL on any device connected to the same WiFi.`,
+						`Enter the PIN to authenticate. Server auto-closes when all clients disconnect.`,
 						``,
-						`Commands:`,
 						`  /chat       — reopen/restart the chat`,
 						`  /chat stop  — shut down the server`,
 					].join("\n"),
@@ -686,9 +797,9 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			const { localUrl, lanUrl } = await launchChat(ctx);
+			const { localUrl, lanUrl, pin } = await launchChat(ctx);
 			openBrowser(localUrl);
-			ctx.ui.notify(`Web Chat live → Phone: ${lanUrl}`, "success");
+			ctx.ui.notify(`Web Chat live → ${lanUrl} PIN: ${pin}`, "success");
 		},
 	});
 
