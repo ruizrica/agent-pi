@@ -251,10 +251,37 @@ class SessionBridge {
 
 	onMessageUpdate(event: MessageUpdateEvent): void {
 		const delta = event.assistantMessageEvent;
-		if (delta?.type === "text_delta") {
+		if (!delta) return;
+		if (delta.type === "text_delta") {
 			const text = (delta as any).delta || "";
 			this.textBuffer.push(text);
 			broadcastSSE(this.clients, "text_delta", { text });
+		} else if (delta.type === "text_end") {
+			// Full text block finished — use as fallback if streaming missed
+			const fullText = (delta as any).content || "";
+			if (fullText && this.textBuffer.length === 0) {
+				// Streaming missed — send full text at once
+				this.textBuffer.push(fullText);
+				broadcastSSE(this.clients, "text_delta", { text: fullText });
+			}
+		}
+	}
+
+	onMessageEnd(message: any): void {
+		// Fallback: if we never got text_delta but the message has content, send it
+		if (this.textBuffer.length === 0 && message) {
+			const content = message.content;
+			if (Array.isArray(content)) {
+				for (const part of content) {
+					if (part.type === "text" && part.text) {
+						this.textBuffer.push(part.text);
+						broadcastSSE(this.clients, "text_delta", { text: part.text });
+					}
+				}
+			} else if (typeof content === "string" && content) {
+				this.textBuffer.push(content);
+				broadcastSSE(this.clients, "text_delta", { text: content });
+			}
 		}
 	}
 
@@ -679,8 +706,16 @@ export default function (pi: ExtensionAPI) {
 	pi.on("message_update", async (event) => {
 		if (activeBridge) {
 			const delta = event.assistantMessageEvent;
-			console.error("[web-chat] message_update type=" + delta?.type + " clients=" + activeBridge.hasClients());
+			const snippet = delta?.type === "text_delta" ? ` text="${String((delta as any).delta || "").slice(0, 30)}"` : "";
+			console.error(`[web-chat] message_update type=${delta?.type}${snippet} clients=${activeBridge.hasClients()}`);
 			activeBridge.onMessageUpdate(event);
+		}
+	});
+
+	pi.on("message_end", async (event) => {
+		console.error(`[web-chat] message_end fired, content_type=${typeof (event as any).message?.content}`);
+		if (activeBridge) {
+			activeBridge.onMessageEnd((event as any).message);
 		}
 	});
 
