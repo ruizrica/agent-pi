@@ -148,7 +148,13 @@ function printQRBlock(qr: string, url: string, pin: string): void {
 
 function sendSSE(client: SSEClient, event: string, data: any): void {
 	try {
-		client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+		const ok = client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+		// Force flush — without this, SSE writes get buffered and never reach the client.
+		// This replaces the console.error() calls that were accidentally providing
+		// the same effect via synchronous stderr I/O.
+		if (typeof (client.res as any).flush === "function") {
+			(client.res as any).flush();
+		}
 	} catch {}
 }
 
@@ -480,6 +486,12 @@ function startChatServer(
 					"Connection": "keep-alive",
 					"X-Accel-Buffering": "no",
 				});
+				// Disable Nagle's algorithm and flush headers immediately
+				// so SSE events are delivered without buffering delay
+				res.flushHeaders();
+				if (res.socket) {
+					res.socket.setNoDelay(true);
+				}
 
 				const clientId = ++clientIdCounter;
 				const client: SSEClient = { id: clientId, res };
