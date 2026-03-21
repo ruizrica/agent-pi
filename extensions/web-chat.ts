@@ -258,6 +258,8 @@ class SessionBridge {
 			broadcastSSE(this.clients, "text_delta", { text });
 		} else if (delta.type === "thinking_start") {
 			this.pushTerminalLine("[think] Reasoning...");
+		} else if (delta.type === "text_start") {
+			this.pushTerminalLine("[text] Responding...");
 		}
 	}
 
@@ -281,6 +283,9 @@ class SessionBridge {
 
 		// Only broadcast if there's actual text (skip tool-use-only messages)
 		if (fullText) {
+			const preview = fullText.length > 60 ? fullText.slice(0, 57) + "..." : fullText;
+			this.pushTerminalLine(`[msg] ${preview.replace(/\n/g, " ")}`);
+
 			const assistantMsg: ChatMessage = {
 				role: "assistant",
 				content: fullText,
@@ -289,11 +294,14 @@ class SessionBridge {
 			};
 			this.history.push(assistantMsg);
 			broadcastSSE(this.clients, "assistant_message", assistantMsg);
-			// Reset text buffer after delivering
 			this.textBuffer = [];
+
+			// Send done + not-busy when we have text (this is the final response).
+			// agent_end doesn't fire reliably through extension hooks.
+			broadcastSSE(this.clients, "done", {});
+			broadcastSSE(this.clients, "status", { busy: false });
+			this.busy = false;
 		}
-		// Do NOT send done/status here — agent_end handles that.
-		// message_end fires multiple times per turn (tool-use + text).
 	}
 
 	onToolStart(event: ToolExecutionStartEvent): void {
@@ -485,6 +493,10 @@ function startChatServer(
 				}
 
 				// Send existing terminal history
+				if (bridge.getTerminalHistory().length === 0) {
+					// Send a welcome line so terminal isn't blank
+					sendSSE(client, "terminal_output", { line: "[info] Connected — activity will appear here" });
+				}
 				for (const line of bridge.getTerminalHistory()) {
 					sendSSE(client, "terminal_output", { line });
 				}
@@ -726,13 +738,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("message_end", async (event) => {
 		if (activeBridge) {
-			// Single debug line — remove once confirmed working
-			const msg = (event as any).message;
-			const hasText = Array.isArray(msg?.content)
-				? msg.content.some((p: any) => p.type === "text")
-				: typeof msg?.content === "string";
-			console.error(`[web-chat] message_end hasText=${hasText} role=${msg?.role}`);
-			activeBridge.onMessageEnd(msg);
+			activeBridge.onMessageEnd((event as any).message);
 		}
 	});
 
