@@ -132,6 +132,18 @@ function generateQRString(url: string): Promise<string> {
 	});
 }
 
+function printQRBlock(qr: string, url: string, pin: string): void {
+	const w = process.stderr.write.bind(process.stderr);
+	w("\n\n");
+	w(qr);
+	w("\n\n");
+	w(`  URL:  ${url}\n`);
+	w(`  PIN:  ${pin}\n`);
+	w("\n");
+	w(`  Scan QR with phone camera. One device at a time.\n`);
+	w("\n\n");
+}
+
 // ── SSE Helpers ──────────────────────────────────────────────────────
 
 function sendSSE(client: SSEClient, event: string, data: any): void {
@@ -224,12 +236,30 @@ class SessionBridge {
 		this.busy = true;
 		this.textBuffer = [];
 		this.toolNames = [];
+		this.pushTerminalLine("[start] Processing...");
 		broadcastSSE(this.clients, "status", { busy: true });
 	}
 
 	onAgentEnd(): void {
+		// If there's unbuffered text that message_end didn't catch, deliver it now
+		const remaining = this.textBuffer.join("");
+		if (remaining) {
+			const assistantMsg: ChatMessage = {
+				role: "assistant",
+				content: remaining,
+				timestamp: new Date().toISOString(),
+				toolCalls: this.toolNames.length > 0 ? [...this.toolNames] : undefined,
+			};
+			this.history.push(assistantMsg);
+			broadcastSSE(this.clients, "assistant_message", assistantMsg);
+		}
+
 		this.busy = false;
 		this.pendingFromPhone = false;
+		this.textBuffer = [];
+		this.toolNames = [];
+		this.pushTerminalLine("[done] Complete");
+		broadcastSSE(this.clients, "done", {});
 		broadcastSSE(this.clients, "status", { busy: false });
 	}
 
@@ -237,16 +267,34 @@ class SessionBridge {
 		const delta = event.assistantMessageEvent;
 		if (!delta) return;
 
-		// Stream text deltas to phone in real-time
 		if (delta.type === "text_delta") {
 			const text = (delta as any).delta || "";
 			this.textBuffer.push(text);
 			broadcastSSE(this.clients, "text_delta", { text });
+		} else if (delta.type === "thinking_start") {
+			this.pushTerminalLine("[think] Reasoning...");
+		} else if (delta.type === "text_start") {
+			this.pushTerminalLine("[text] Responding...");
 		}
 	}
 
 	onMessageEnd(message: any): void {
-		// Extract the full text from the completed message
+		// Diagnostic — writes to file, not terminal (remove once stable)
+		try {
+			const fs = require("node:fs");
+			const info = {
+				ts: new Date().toISOString(),
+				role: message?.role,
+				isArray: Array.isArray(message?.content),
+				types: Array.isArray(message?.content) ? message.content.map((p: any) => p.type) : [],
+				textParts: Array.isArray(message?.content) ? message.content.filter((p: any) => p.type === "text").map((p: any) => (p.text || "").slice(0, 80)) : [],
+				buffer: this.textBuffer.join("").slice(0, 80),
+				clients: this.clients.size,
+			};
+			fs.appendFileSync("/tmp/web-chat-debug.log", JSON.stringify(info) + "\n");
+		} catch {}
+
+		// Extract text from the completed message
 		let fullText = "";
 		if (message?.content) {
 			if (Array.isArray(message.content)) {
@@ -260,11 +308,13 @@ class SessionBridge {
 		}
 
 		if (!fullText) {
-			// Maybe text was in the buffer from text_delta events
 			fullText = this.textBuffer.join("");
 		}
 
 		if (fullText) {
+			const preview = fullText.length > 60 ? fullText.slice(0, 57) + "..." : fullText;
+			this.pushTerminalLine(`[msg] ${preview.replace(/\n/g, " ")}`);
+
 			const assistantMsg: ChatMessage = {
 				role: "assistant",
 				content: fullText,
@@ -272,17 +322,15 @@ class SessionBridge {
 				toolCalls: this.toolNames.length > 0 ? [...this.toolNames] : undefined,
 			};
 			this.history.push(assistantMsg);
-
-			// ALWAYS send the complete message — this is the reliable delivery
 			broadcastSSE(this.clients, "assistant_message", assistantMsg);
 		}
 
-		// Signal completion
+		// ALWAYS signal completion — matches the working version.
+		// This fires for every message (including tool-use), which resets
+		// the phone's busy state. The phone handles this gracefully.
 		broadcastSSE(this.clients, "done", {});
 		broadcastSSE(this.clients, "status", { busy: false });
 		this.busy = false;
-
-		// Reset buffers
 		this.textBuffer = [];
 		this.toolNames = [];
 	}
@@ -291,15 +339,37 @@ class SessionBridge {
 		const name = event.toolName || "tool";
 		this.toolNames.push(name);
 		broadcastSSE(this.clients, "tool_start", { name });
-		this.pushTerminalLine(`▶ ${name}`);
+		this.pushTerminalLine(`[tool] ${name}`);
+
+		// Detect subagent spawning
+		if (name === "subagent_create" || name === "subagent_create_batch") {
+			const args = event.args;
+			if (name === "subagent_create_batch" && args?.agents) {
+				const count = args.agents.length;
+				const names = args.agents.map((a: any) => a.name || a.summary || "agent").join(", ");
+				this.pushTerminalLine(`[agent] Spawning ${count} agents: ${names}`);
+				broadcastSSE(this.clients, "subagent_start", { count, names });
+			} else if (name === "subagent_create") {
+				const agentName = args?.name || args?.summary || "agent";
+				this.pushTerminalLine(`[agent] Spawning: ${agentName}`);
+				broadcastSSE(this.clients, "subagent_start", { count: 1, names: agentName });
+			}
+		}
 	}
 
-	onToolEnd(_event: ToolExecutionEndEvent): void {
+	onToolEnd(event: ToolExecutionEndEvent): void {
+		const name = event.toolName || "tool";
+		const ok = !event.isError;
 		broadcastSSE(this.clients, "tool_end", {});
-		this.pushTerminalLine(`✓ tool done`);
+		this.pushTerminalLine(`[${ok ? "ok" : "err"}] ${name}`);
 	}
 
 	onInput(text: string, source: string): void {
+		// Log the input source in terminal feed
+		const label = source === "extension" ? "[phone]" : "[term]";
+		const preview = text.length > 60 ? text.slice(0, 57) + "..." : text;
+		this.pushTerminalLine(`${label} ${preview}`);
+
 		// Capture input from the terminal user (not from phone — we already tracked that)
 		if (source !== "extension" && !this.pendingFromPhone) {
 			const userMsg: ChatMessage = {
@@ -455,6 +525,10 @@ function startChatServer(
 				}
 
 				// Send existing terminal history
+				if (bridge.getTerminalHistory().length === 0) {
+					// Send a welcome line so terminal isn't blank
+					sendSSE(client, "terminal_output", { line: "[info] Connected — activity will appear here" });
+				}
 				for (const line of bridge.getTerminalHistory()) {
 					sendSSE(client, "terminal_output", { line });
 				}
@@ -721,6 +795,13 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
+	pi.on("turn_end", async () => {
+		// Backup completion signal — turn_end fires after each LLM turn
+		if (activeBridge && activeBridge.isBusy()) {
+			activeBridge.pushTerminalLine("[turn] Turn complete");
+		}
+	});
+
 	pi.on("tool_execution_start", async (event) => {
 		console.error("[web-chat] tool_start: " + event.toolName);
 		if (activeBridge) {
@@ -759,24 +840,24 @@ export default function (pi: ExtensionAPI) {
 			openBrowser(localUrl);
 
 			const qr = await generateQRString(lanUrl);
-			console.error(`\n  \x1b[1;36m⚡ Web Chat (relay mode)\x1b[0m\n\n${qr}\n\n  \x1b[1mURL:\x1b[0m  ${lanUrl}\n  \x1b[1mPIN:\x1b[0m  \x1b[1;33m${pin}\x1b[0m\n`);
+			printQRBlock(qr, lanUrl, pin);
 
 			return {
 				content: [{
 					type: "text" as const,
 					text: [
-						`Web Chat is live! (relay mode)`,
+						`Web Chat is live (relay mode)`,
 						``,
 						`Local:  ${localUrl}`,
 						`Phone:  ${lanUrl}`,
 						`PIN:    ${pin}`,
 						``,
-						`Scan the QR code above with your phone camera.`,
+						`Scan the QR code in the terminal with your phone camera.`,
 						`Only one device can be authenticated at a time.`,
 						``,
-						`  /chat            — reopen/restart the chat`,
-						`  /chat --remote   — secure tunnel (accessible from anywhere)`,
-						`  /chat stop       — shut down the server`,
+						`  /chat            -- reopen/restart the chat`,
+						`  /chat --remote   -- secure tunnel (accessible from anywhere)`,
+						`  /chat stop       -- shut down the server`,
 					].join("\n"),
 				}],
 			};
@@ -830,22 +911,7 @@ export default function (pi: ExtensionAPI) {
 
 				const phoneUrl = tunnelUrl || lanUrl;
 				const qr = await generateQRString(phoneUrl);
-
-				// Print QR code and connection info to stderr (shows in terminal)
-				const lines = [
-					"",
-					`  \x1b[1;36m⚡ Web Chat (relay mode)\x1b[0m`,
-					"",
-					qr,
-					"",
-					`  \x1b[1mURL:\x1b[0m  ${phoneUrl}`,
-					`  \x1b[1mPIN:\x1b[0m  \x1b[1;33m${pin}\x1b[0m`,
-					"",
-					`  \x1b[2mScan QR with your phone camera to connect.\x1b[0m`,
-					`  \x1b[2mOnly one device can be authenticated at a time.\x1b[0m`,
-					"",
-				];
-				console.error(lines.join("\n"));
+				printQRBlock(qr, phoneUrl, pin);
 
 				if (tunnelUrl) {
 					ctx.ui.notify(`Web Chat → ${tunnelUrl} PIN: ${pin}`, "success");
