@@ -116,21 +116,12 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   .header-btn-shutdown { color: var(--error); border-color: rgba(232,88,88,0.3); padding: 7px 10px; }
   .header-btn-shutdown:hover { background: var(--error-bg); color: var(--error); border-color: var(--error); }
 
-  .dir-pill {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 10px; background: var(--surface2);
-    border: 1px solid var(--border); border-radius: 4px;
-    font-size: 12px; color: var(--text-muted); cursor: pointer;
-    transition: all 0.15s; max-width: 160px; overflow: hidden;
+  .relay-badge {
+    padding: 3px 10px; border-radius: 6px;
+    background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);
+    color: var(--blue-bright); font-size: 11px; font-weight: 600;
+    font-family: var(--mono); letter-spacing: 0.5px;
   }
-  .dir-pill:hover { background: var(--surface3); color: var(--text); border-color: var(--accent); }
-  .dir-pill:active { transform: scale(0.97); }
-  .dir-pill .dir-icon { font-size: 13px; flex-shrink: 0; }
-  .dir-pill .dir-name {
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    font-family: var(--mono); font-weight: 500;
-  }
-  .dir-pill .dir-chevron { font-size: 10px; flex-shrink: 0; opacity: 0.5; }
 
   /* ── Messages ─────────────────────────────────────── */
   #messages {
@@ -300,87 +291,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   }
   .connection-banner.visible { display: block; }
 
-  /* ── Directory Picker Panel ───────────────────────── */
-  #dir-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    z-index: 100; display: none; animation: fadeOverlay 0.2s ease;
-  }
-  #dir-overlay.visible { display: block; }
-  @keyframes fadeOverlay { from { opacity: 0; } to { opacity: 1; } }
-
-  #dir-panel {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    max-height: 75vh; background: var(--surface);
-    border-top: 1px solid var(--border); border-radius: 6px 6px 0 0;
-    z-index: 101; display: none; flex-direction: column;
-    animation: slideUp 0.25s ease; padding-bottom: var(--safe-bottom);
-  }
-  #dir-panel.visible { display: flex; }
-  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-  .dir-panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 16px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-  }
-  .dir-panel-header h3 { font-size: 16px; font-weight: 600; }
-  .dir-panel-close {
-    width: 32px; height: 32px; border-radius: 4px;
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text-muted); font-size: 16px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .dir-panel-close:hover { background: var(--surface3); color: var(--text); }
-
-  .dir-search-wrapper { padding: 12px 16px; flex-shrink: 0; }
-  .dir-search {
-    width: 100%; padding: 10px 12px; background: var(--surface2);
-    border: 1px solid var(--border); border-radius: var(--radius);
-    color: var(--text); font-family: var(--font); font-size: 14px;
-    outline: none; transition: border-color 0.2s;
-  }
-  .dir-search:focus { border-color: var(--accent); }
-  .dir-search::placeholder { color: var(--text-dim); }
-
-  .dir-list {
-    flex: 1; overflow-y: auto; padding: 0 8px 16px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .dir-list::-webkit-scrollbar { width: 4px; }
-  .dir-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .dir-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px; border-radius: var(--radius); cursor: pointer; transition: all 0.12s;
-  }
-  .dir-item:hover { background: var(--surface2); }
-  .dir-item:active { background: var(--surface3); transform: scale(0.99); }
-  .dir-item.active { background: var(--accent-dim); border: 1px solid var(--tool-border); }
-
-  .dir-item-icon {
-    width: 36px; height: 36px; border-radius: var(--radius);
-    background: var(--surface3); display: flex; align-items: center;
-    justify-content: center; font-size: 16px; flex-shrink: 0;
-  }
-  .dir-item.active .dir-item-icon { background: var(--accent-glow); }
-  .dir-item-info { flex: 1; min-width: 0; }
-  .dir-item-name {
-    font-size: 15px; font-weight: 500; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .dir-item-path {
-    font-size: 12px; color: var(--text-dim); font-family: var(--mono);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
-  }
-  .dir-item-badges { display: flex; gap: 4px; flex-shrink: 0; }
-  .dir-badge {
-    font-size: 10px; padding: 2px 6px; border-radius: 3px;
-    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-    font-family: var(--mono);
-  }
-  .dir-badge.git { background: rgba(240,80,50,0.15); color: #f05032; }
-  .dir-badge.pkg { background: rgba(52,211,153,0.12); color: var(--success); }
-  .dir-empty { text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 14px; }
-  .dir-loading { text-align: center; padding: 32px 16px; color: var(--text-muted); font-size: 14px; }
+  /* Directory picker removed — relay mode uses main session's cwd */
 
   /* ── Slash Command Menu ───────────────────────────── */
   #slash-menu {
@@ -479,11 +390,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
         ${logo ? '<img src="' + logo + '" class="header-logo" alt="Pi">' : '<span style="font-size:20px;font-weight:700">π</span>'}
       </div>
       <div class="header-right">
-        <div class="dir-pill" id="dir-pill" onclick="openDirPicker()" title="Change working directory">
-          <span class="dir-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-          <span class="dir-name" id="dir-pill-name">...</span>
-          <span class="dir-chevron"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
-        </div>
+        <span class="relay-badge" title="Connected to main Pi session">⚡ relay</span>
         <div class="status-dot" id="status-dot" title="Connected"></div>
         <button class="header-btn" onclick="resetChat()" title="New conversation">New</button>
         <button class="header-btn header-btn-shutdown" onclick="shutdownChat()" title="Stop server &amp; disconnect">✕</button>
@@ -524,20 +431,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   </div>
 </div>
 
-<!-- Directory Picker -->
-<div id="dir-overlay" onclick="closeDirPicker()"></div>
-<div id="dir-panel">
-  <div class="dir-panel-header">
-    <h3>Working Directory</h3>
-    <button class="dir-panel-close" onclick="closeDirPicker()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-  </div>
-  <div class="dir-search-wrapper">
-    <input type="text" class="dir-search" id="dir-search" placeholder="Search projects..." oninput="filterDirs()">
-  </div>
-  <div class="dir-list" id="dir-list">
-    <div class="dir-loading">Loading projects...</div>
-  </div>
-</div>
+<!-- Directory picker removed — relay mode uses main session's cwd -->
 
 <script>
 (function() {
@@ -994,7 +888,6 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       connBanner.classList.remove('visible'); updateStatusDot();
       const data = JSON.parse(e.data);
       if (data.busy) setBusy(true);
-      if (data.cwdName) { currentCwd = data.cwd || ''; updateDirPill(data.cwdName); }
     });
     eventSource.addEventListener('user_message', () => {});
     eventSource.addEventListener('assistant_message', (e) => {
@@ -1018,9 +911,6 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       hideThinking(); addSystemMessage(JSON.parse(e.data).message); setBusy(false);
     });
     eventSource.addEventListener('status', (e) => { setBusy(JSON.parse(e.data).busy); });
-    eventSource.addEventListener('dir_changed', (e) => {
-      const data = JSON.parse(e.data); currentCwd = data.cwd || ''; updateDirPill(data.name);
-    });
     eventSource.addEventListener('terminal_output', (e) => {
       appendTerminalLine(JSON.parse(e.data).line);
     });
@@ -1038,64 +928,6 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       }, reconnectDelay);
     };
   }
-
-  // ── Directory Picker ────────────────────────────────
-  let allDirs = [];
-  let currentCwd = '';
-  const dirPillName = document.getElementById('dir-pill-name');
-  const dirOverlay = document.getElementById('dir-overlay');
-  const dirPanel = document.getElementById('dir-panel');
-  const dirList = document.getElementById('dir-list');
-  const dirSearchEl = document.getElementById('dir-search');
-
-  window.openDirPicker = async function() {
-    dirOverlay.classList.add('visible'); dirPanel.classList.add('visible');
-    dirSearchEl.value = ''; dirSearchEl.focus();
-    dirList.innerHTML = '<div class="dir-loading">Loading projects...</div>';
-    try {
-      const res = await authedFetch('/directories');
-      const data = await res.json();
-      allDirs = data.directories || []; currentCwd = data.current || '';
-      renderDirList(allDirs);
-    } catch { dirList.innerHTML = '<div class="dir-empty">Failed to load</div>'; }
-  };
-  window.closeDirPicker = function() {
-    dirOverlay.classList.remove('visible'); dirPanel.classList.remove('visible');
-  };
-  window.filterDirs = function() {
-    const q = dirSearchEl.value.toLowerCase().trim();
-    renderDirList(q ? allDirs.filter(d => d.name.toLowerCase().includes(q) || d.path.toLowerCase().includes(q)) : allDirs);
-  };
-  function renderDirList(dirs) {
-    if (!dirs.length) { dirList.innerHTML = '<div class="dir-empty">No projects found</div>'; return; }
-    dirList.innerHTML = dirs.map(d => {
-      const isActive = d.path === currentCwd;
-      const shortPath = d.path.replace(/^\\/Users\\/[^\\/]+/, '~');
-      const badges = (d.hasGit ? '<span class="dir-badge git">git</span>' : '') +
-                     (d.hasPackageJson ? '<span class="dir-badge pkg">npm</span>' : '');
-      return '<div class="dir-item' + (isActive ? ' active' : '') + '" onclick="selectDir(\\'' + d.path.replace(/'/g, "\\\\'") + '\\')">' +
-        '<div class="dir-item-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>' +
-        '<div class="dir-item-info"><div class="dir-item-name">' + escapeHtml(d.name) + '</div>' +
-        '<div class="dir-item-path">' + escapeHtml(shortPath) + '</div></div>' +
-        '<div class="dir-item-badges">' + badges + '</div></div>';
-    }).join('');
-  }
-  window.selectDir = async function(dirPath) {
-    try {
-      const res = await authedFetch('/set-directory', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: dirPath }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        currentCwd = dirPath; updateDirPill(data.name); closeDirPicker();
-        messagesEl.innerHTML = '';
-        if (welcomeEl) { messagesEl.appendChild(welcomeEl); welcomeEl.style.display = ''; }
-        currentStreamBubble = null; currentStreamText = ''; setBusy(false);
-      } else { addSystemMessage('Error: ' + (data.error || 'Switch failed')); }
-    } catch (err) { addSystemMessage('Error: ' + err.message); }
-  };
-  function updateDirPill(name) { dirPillName.textContent = name || '...'; dirPillName.title = currentCwd; }
 
   // ── Global Shift+Tab for mode cycling (works outside textarea) ──
   document.addEventListener('keydown', (e) => {

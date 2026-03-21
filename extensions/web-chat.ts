@@ -1,16 +1,15 @@
-// ABOUTME: Web Chat Extension — opens a LAN-accessible chat interface for interacting with the Pi agent from a phone or other device.
-// ABOUTME: Spawns Pi subprocess per message, bridges JSONL events to SSE, serves a mobile-first chat UI on 0.0.0.0.
+// ABOUTME: Web Chat Extension — opens a LAN-accessible chat interface that relays to the main Pi session.
+// ABOUTME: Phone acts as a thin client — messages are injected into THIS session via pi.sendUserMessage().
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, MessageUpdateEvent, ToolExecutionStartEvent, ToolExecutionEndEvent } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { mkdirSync, readdirSync, readFileSync, statSync, existsSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
-import { homedir } from "node:os";
 import { randomInt } from "node:crypto";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -23,6 +22,7 @@ interface ChatMessage {
 	role: "user" | "assistant" | "system";
 	content: string;
 	timestamp: string;
+	source?: "phone" | "terminal";
 	toolCalls?: string[];
 }
 
@@ -37,7 +37,6 @@ function getLanIP(): string {
 	const nets = networkInterfaces();
 	for (const name of Object.keys(nets)) {
 		for (const net of nets[name] || []) {
-			// Skip loopback and non-IPv4
 			if (net.family === "IPv4" && !net.internal) {
 				return net.address;
 			}
@@ -113,25 +112,13 @@ function generatePIN(): string {
 function loadLogoBase64(): string {
 	try {
 		const extDir = dirname(fileURLToPath(import.meta.url));
-		const logoPath = join(extDir, "..", "agent-logo.png");
+		const logoPath = `${extDir}/../agent-logo.png`;
 		if (existsSync(logoPath)) {
 			const buf = readFileSync(logoPath);
 			return `data:image/png;base64,${buf.toString("base64")}`;
 		}
 	} catch {}
 	return "";
-}
-
-// ── Session File Management ──────────────────────────────────────────
-
-function getSessionDir(): string {
-	const dir = join(homedir(), ".pi", "agent", "sessions", "web-chat");
-	mkdirSync(dir, { recursive: true });
-	return dir;
-}
-
-function getSessionFile(sessionId: string): string {
-	return join(getSessionDir(), `chat-${sessionId}.jsonl`);
 }
 
 // ── SSE Helpers ──────────────────────────────────────────────────────
@@ -148,121 +135,42 @@ function broadcastSSE(clients: Map<number, SSEClient>, event: string, data: any)
 	}
 }
 
-// ── Directory Discovery ──────────────────────────────────────────────
-
-interface ProjectDir {
-	path: string;
-	name: string;
-	hasGit: boolean;
-	hasPackageJson: boolean;
-}
-
-function discoverProjects(): ProjectDir[] {
-	const home = homedir();
-	const results: ProjectDir[] = [];
-	const seen = new Set<string>();
-
-	function addDir(dirPath: string): void {
-		if (seen.has(dirPath)) return;
-		try {
-			const s = statSync(dirPath);
-			if (!s.isDirectory()) return;
-		} catch { return; }
-		seen.add(dirPath);
-
-		const hasGit = existsSync(join(dirPath, ".git"));
-		const hasPackageJson = existsSync(join(dirPath, "package.json"));
-		results.push({
-			path: dirPath,
-			name: basename(dirPath),
-			hasGit,
-			hasPackageJson,
-		});
-	}
-
-	// Scan known dev parent directories for subdirectories
-	const devParents = [
-		join(home, "Workshop", "GitHub"),
-		join(home, "Workshop"),
-		join(home, "Projects"),
-		join(home, "Developer"),
-		join(home, "Code"),
-		join(home, "dev"),
-		join(home, "repos"),
-		join(home, "src"),
-		join(home, "Sites"),
-		join(home, "Desktop"),
-	];
-
-	for (const parent of devParents) {
-		if (!existsSync(parent)) continue;
-		try {
-			const entries = readdirSync(parent, { withFileTypes: true });
-			for (const entry of entries) {
-				if (!entry.isDirectory()) continue;
-				if (entry.name.startsWith(".")) continue;
-				const full = join(parent, entry.name);
-				// Only include directories that look like projects (have .git or package.json)
-				const hasGit = existsSync(join(full, ".git"));
-				const hasPkg = existsSync(join(full, "package.json"));
-				const hasCargo = existsSync(join(full, "Cargo.toml"));
-				const hasGo = existsSync(join(full, "go.mod"));
-				const hasPy = existsSync(join(full, "pyproject.toml")) || existsSync(join(full, "setup.py"));
-				if (hasGit || hasPkg || hasCargo || hasGo || hasPy) {
-					addDir(full);
-				}
-			}
-		} catch {}
-	}
-
-	// Also scan ~/ for top-level git repos (depth 1)
-	try {
-		const homeEntries = readdirSync(home, { withFileTypes: true });
-		for (const entry of homeEntries) {
-			if (!entry.isDirectory()) continue;
-			if (entry.name.startsWith(".")) continue;
-			const full = join(home, entry.name);
-			if (existsSync(join(full, ".git"))) {
-				addDir(full);
-			}
-		}
-	} catch {}
-
-	// Sort: git repos first, then alphabetically
-	results.sort((a, b) => {
-		if (a.hasGit !== b.hasGit) return a.hasGit ? -1 : 1;
-		return a.name.localeCompare(b.name);
-	});
-
-	return results;
-}
-
-// ── Agent Process Manager ────────────────────────────────────────────
+// ── Session Bridge (relay to main Pi session) ────────────────────────
 
 const TERMINAL_BUFFER_MAX = 200;
 
-class AgentBridge {
-	private proc: ChildProcess | null = null;
-	private sessionFile: string;
+class SessionBridge {
+	private piApi: ExtensionAPI;
+	private clients: Map<number, SSEClient>;
 	private busy = false;
 	private history: ChatMessage[] = [];
-	private clients: Map<number, SSEClient>;
 	private textBuffer: string[] = [];
 	private toolNames: string[] = [];
-	private cwd: string;
 	private terminalLines: string[] = [];
+	private pendingFromPhone = false;
 
-	constructor(sessionId: string, clients: Map<number, SSEClient>, cwd?: string) {
-		this.sessionFile = getSessionFile(sessionId);
+	constructor(piApi: ExtensionAPI, clients: Map<number, SSEClient>) {
+		this.piApi = piApi;
 		this.clients = clients;
-		this.cwd = cwd || process.cwd();
+	}
+
+	isBusy(): boolean {
+		return this.busy;
+	}
+
+	getHistory(): ChatMessage[] {
+		return this.history;
 	}
 
 	getTerminalHistory(): string[] {
 		return this.terminalLines;
 	}
 
-	private pushTerminalLine(line: string): void {
+	hasClients(): boolean {
+		return this.clients.size > 0;
+	}
+
+	pushTerminalLine(line: string): void {
 		this.terminalLines.push(line);
 		if (this.terminalLines.length > TERMINAL_BUFFER_MAX) {
 			this.terminalLines.shift();
@@ -270,221 +178,134 @@ class AgentBridge {
 		broadcastSSE(this.clients, "terminal_output", { line });
 	}
 
-	isBusy(): boolean {
-		return this.busy;
-	}
+	// ── Called from HTTP /send endpoint ──
 
-	getCwd(): string {
-		return this.cwd;
-	}
-
-	setCwd(newCwd: string): void {
-		this.cwd = newCwd;
-		// Reset conversation when switching directories
-		if (this.proc) {
-			try { this.proc.kill(); } catch {}
-			this.proc = null;
-		}
-		this.busy = false;
-		this.history = [];
-		const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		this.sessionFile = getSessionFile(newId);
-		broadcastSSE(this.clients, "dir_changed", { cwd: newCwd, name: basename(newCwd) });
-		broadcastSSE(this.clients, "reset", { ok: true });
-	}
-
-	getHistory(): ChatMessage[] {
-		return this.history;
-	}
-
-	reset(): void {
-		if (this.proc) {
-			try { this.proc.kill(); } catch {}
-			this.proc = null;
-		}
-		this.busy = false;
-		this.history = [];
-		// Generate new session file
-		const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		this.sessionFile = getSessionFile(newId);
-		broadcastSSE(this.clients, "reset", { ok: true });
-	}
-
-	async sendMessage(message: string, mode?: string): Promise<void> {
+	sendMessage(text: string): void {
 		if (this.busy) {
-			broadcastSSE(this.clients, "error_event", { message: "Agent is busy. Wait for the current response to finish." });
+			broadcastSSE(this.clients, "error_event", {
+				message: "Agent is busy. Wait for the current response to finish.",
+			});
 			return;
 		}
 
-		this.busy = true;
-		this.textBuffer = [];
-		this.toolNames = [];
+		// Track that this message came from the phone
+		this.pendingFromPhone = true;
 
-		// Add user message to history
 		const userMsg: ChatMessage = {
 			role: "user",
-			content: message,
+			content: text,
 			timestamp: new Date().toISOString(),
+			source: "phone",
 		};
 		this.history.push(userMsg);
 		broadcastSSE(this.clients, "user_message", userMsg);
-		broadcastSSE(this.clients, "status", { busy: true });
 
-		// Build the final message, prepending mode context if not NORMAL
-		let finalMessage = message;
-		if (mode && mode !== "NORMAL") {
-			const modeInstructions: Record<string, string> = {
-				PLAN: "[MODE: PLAN] Follow a plan-first workflow. Write a structured plan before any implementation. Get approval before coding.",
-				SPEC: "[MODE: SPEC] Follow spec-driven development. Shape the feature idea, write requirements, then create tasks.",
-				PIPELINE: "[MODE: PIPELINE] Use the pipeline workflow with phases: understand, gather, plan, build, review.",
-				TEAM: "[MODE: TEAM] Coordinate a multi-agent team. Dispatch scouts, builders, and reviewers as needed.",
-				CHAIN: "[MODE: CHAIN] Execute as part of an agent chain pipeline. Process the task and pass results to the next step.",
-			};
-			const instruction = modeInstructions[mode] || `[MODE: ${mode}]`;
-			finalMessage = `${instruction}\n\n${message}`;
-		}
-
-		// Full orchestration mode — load all extensions and tools, no restrictions.
-		// The subprocess gets the same capabilities as the main Pi session.
-		const args = [
-			"--mode", "json",
-			"-p",
-			"--session", this.sessionFile,
-			"--thinking", "off",
-			finalMessage,
-		];
-
-		return new Promise<void>((resolve) => {
-			const proc = spawn("pi", args, {
-				stdio: ["ignore", "pipe", "pipe"],
-				cwd: this.cwd,
-				env: { ...process.env, PI_SUBAGENT: "1" },
-			});
-
-			this.proc = proc;
-			let buffer = "";
-
-			proc.stdout!.setEncoding("utf-8");
-			proc.stdout!.on("data", (chunk: string) => {
-				buffer += chunk;
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-				for (const line of lines) {
-					this.processLine(line);
-				}
-			});
-
-			proc.stderr!.setEncoding("utf-8");
-			proc.stderr!.on("data", (chunk: string) => {
-				// Stream stderr to terminal view
-				const lines = chunk.split("\n");
-				for (const line of lines) {
-					if (line.trim()) this.pushTerminalLine(line);
-				}
-			});
-
-			proc.on("close", (code) => {
-				if (buffer.trim()) this.processLine(buffer);
-				this.proc = null;
-				this.busy = false;
-
-				// Finalize assistant message
-				const fullText = this.textBuffer.join("");
-				if (fullText) {
-					const assistantMsg: ChatMessage = {
-						role: "assistant",
-						content: fullText,
-						timestamp: new Date().toISOString(),
-						toolCalls: this.toolNames.length > 0 ? this.toolNames : undefined,
-					};
-					this.history.push(assistantMsg);
-				}
-
-				broadcastSSE(this.clients, "done", {
-					code,
-					toolCount: this.toolNames.length,
-				});
-				broadcastSSE(this.clients, "status", { busy: false });
-				resolve();
-			});
-
-			proc.on("error", (err) => {
-				this.proc = null;
-				this.busy = false;
-				broadcastSSE(this.clients, "error_event", { message: err.message });
-				broadcastSSE(this.clients, "status", { busy: false });
-				resolve();
-			});
-		});
+		// Inject into main Pi session — this triggers a turn
+		this.piApi.sendUserMessage(text);
 	}
 
-	private processLine(line: string): void {
-		if (!line.trim()) return;
-		try {
-			const event = JSON.parse(line);
-			const type = event.type;
+	// ── Event handlers (called from pi.on() hooks) ──
 
-			if (type === "message_update") {
-				const delta = event.assistantMessageEvent;
-				if (delta?.type === "text_delta") {
-					const text = delta.delta || "";
-					this.textBuffer.push(text);
-					broadcastSSE(this.clients, "text_delta", { text });
-				}
-			} else if (type === "tool_execution_start") {
-				const toolName = event.toolName || event.tool_name || "tool";
-				this.toolNames.push(toolName);
-				broadcastSSE(this.clients, "tool_start", { name: toolName });
-				this.pushTerminalLine(`▶ ${toolName}`);
-			} else if (type === "tool_execution_end") {
-				broadcastSSE(this.clients, "tool_end", {});
-				this.pushTerminalLine(`✓ tool done`);
-			}
+	onAgentStart(): void {
+		this.busy = true;
+		this.textBuffer = [];
+		this.toolNames = [];
+		broadcastSSE(this.clients, "status", { busy: true });
+	}
 
-			// Forward raw event type to terminal for visibility
-			if (type && type !== "message_update") {
-				this.pushTerminalLine(`[${type}] ${JSON.stringify(event).slice(0, 200)}`);
-			}
-		} catch {}
+	onAgentEnd(): void {
+		this.busy = false;
+
+		// Finalize assistant message from buffered text
+		const fullText = this.textBuffer.join("");
+		if (fullText) {
+			const assistantMsg: ChatMessage = {
+				role: "assistant",
+				content: fullText,
+				timestamp: new Date().toISOString(),
+				toolCalls: this.toolNames.length > 0 ? [...this.toolNames] : undefined,
+			};
+			this.history.push(assistantMsg);
+		}
+		this.textBuffer = [];
+		this.toolNames = [];
+		this.pendingFromPhone = false;
+
+		broadcastSSE(this.clients, "done", { toolCount: this.toolNames.length });
+		broadcastSSE(this.clients, "status", { busy: false });
+	}
+
+	onMessageUpdate(event: MessageUpdateEvent): void {
+		const delta = event.assistantMessageEvent;
+		if (delta?.type === "text_delta") {
+			const text = (delta as any).delta || "";
+			this.textBuffer.push(text);
+			broadcastSSE(this.clients, "text_delta", { text });
+		}
+	}
+
+	onToolStart(event: ToolExecutionStartEvent): void {
+		const name = event.toolName || "tool";
+		this.toolNames.push(name);
+		broadcastSSE(this.clients, "tool_start", { name });
+		this.pushTerminalLine(`▶ ${name}`);
+	}
+
+	onToolEnd(_event: ToolExecutionEndEvent): void {
+		broadcastSSE(this.clients, "tool_end", {});
+		this.pushTerminalLine(`✓ tool done`);
+	}
+
+	onInput(text: string, source: string): void {
+		// Capture input from the terminal user (not from phone — we already tracked that)
+		if (source !== "extension" && !this.pendingFromPhone) {
+			const userMsg: ChatMessage = {
+				role: "user",
+				content: text,
+				timestamp: new Date().toISOString(),
+				source: "terminal",
+			};
+			this.history.push(userMsg);
+			broadcastSSE(this.clients, "user_message", userMsg);
+		}
+		// Reset the pending flag after input is processed
+		if (this.pendingFromPhone) {
+			this.pendingFromPhone = false;
+		}
 	}
 
 	destroy(): void {
-		if (this.proc) {
-			try { this.proc.kill(); } catch {}
-			this.proc = null;
-		}
 		this.busy = false;
+		this.history = [];
+		this.textBuffer = [];
+		this.toolNames = [];
+		this.terminalLines = [];
 	}
 }
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
 function startChatServer(
+	bridge: SessionBridge,
 	pin: string,
 	onShutdown: () => void,
 ): Promise<{ port: number; server: Server }> {
 	return new Promise((resolve) => {
-		const sseClients = new Map<number, SSEClient>();
+		const sseClients = bridge["clients"];
 		let clientIdCounter = 0;
-		const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-		const bridge = new AgentBridge(sessionId, sseClients);
 		const logoDataUri = loadLogoBase64();
 		const authedTokens = new Set<string>();
 
-		// Generate a session token for authenticated clients
 		function makeToken(): string {
 			const t = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 			authedTokens.add(t);
 			return t;
 		}
 
-		// Check if request is authenticated (via cookie or query param)
 		function isAuthed(req: IncomingMessage, url: URL): boolean {
-			// Check cookie
 			const cookies = req.headers.cookie || "";
 			const match = cookies.match(/pi_token=([^;]+)/);
 			if (match && authedTokens.has(match[1])) return true;
-			// Check query param
 			const qToken = url.searchParams.get("token");
 			if (qToken && authedTokens.has(qToken)) return true;
 			return false;
@@ -497,14 +318,12 @@ function startChatServer(
 			shutdownTimer = setTimeout(() => {
 				if (sseClients.size === 0) {
 					try { server.close(); } catch {}
-					bridge.destroy();
 					onShutdown();
 				}
-			}, 120_000); // 2 minutes
+			}, 120_000);
 		}
 
 		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			// CORS
 			res.setHeader("Access-Control-Allow-Origin", "*");
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -517,14 +336,13 @@ function startChatServer(
 
 			const url = new URL(req.url || "/", `http://localhost`);
 
-			// ── Favicon ──────────────────────────────────────────
 			if (url.pathname === "/favicon.ico") {
 				res.writeHead(204);
 				res.end();
 				return;
 			}
 
-			// ── PIN Auth Endpoint ────────────────────────────────
+			// ── PIN Auth ─────────────────────────────────────────
 			if (req.method === "POST" && url.pathname === "/auth") {
 				let body = "";
 				req.on("data", (chunk) => { body += chunk; });
@@ -548,7 +366,7 @@ function startChatServer(
 				return;
 			}
 
-			// ── Chat UI (no auth required — PIN gate is client-side) ──
+			// ── Chat UI (PIN gate is client-side) ────────────────
 			if (req.method === "GET" && url.pathname === "/") {
 				res.setHeader("Cache-Control", "no-store");
 				const html = generateWebChatHTML({ port: (server.address() as any)?.port || 0, logoDataUri });
@@ -557,7 +375,7 @@ function startChatServer(
 				return;
 			}
 
-			// ── All API endpoints below require auth ─────────────
+			// ── All API endpoints require auth ───────────────────
 			if (!isAuthed(req, url)) {
 				res.writeHead(401, { "Content-Type": "application/json" });
 				res.end(JSON.stringify({ error: "Unauthorized" }));
@@ -578,13 +396,10 @@ function startChatServer(
 				const client: SSEClient = { id: clientId, res };
 				sseClients.set(clientId, client);
 
-				// Send initial state
 				sendSSE(client, "connected", {
-					sessionId,
 					busy: bridge.isBusy(),
 					historyCount: bridge.getHistory().length,
-					cwd: bridge.getCwd(),
-					cwdName: basename(bridge.getCwd()),
+					relay: true,
 				});
 
 				// Send existing history
@@ -597,7 +412,6 @@ function startChatServer(
 					sendSSE(client, "terminal_output", { line });
 				}
 
-				// Keep-alive ping every 30s
 				const pingInterval = setInterval(() => {
 					try { res.write(":ping\n\n"); } catch {}
 				}, 30000);
@@ -605,14 +419,13 @@ function startChatServer(
 				req.on("close", () => {
 					clearInterval(pingInterval);
 					sseClients.delete(clientId);
-					// Start shutdown timer when last client disconnects
 					if (sseClients.size === 0) resetShutdownTimer();
 				});
 
 				return;
 			}
 
-			// ── Send Message ─────────────────────────────────────
+			// ── Send Message (relay to main session) ─────────────
 			if (req.method === "POST" && url.pathname === "/send") {
 				let body = "";
 				req.on("data", (chunk) => { body += chunk; });
@@ -625,8 +438,7 @@ function startChatServer(
 							res.end(JSON.stringify({ ok: false, error: "Empty message" }));
 							return;
 						}
-						const mode = data.mode ? String(data.mode).toUpperCase() : undefined;
-						bridge.sendMessage(message, mode).catch(() => {});
+						bridge.sendMessage(message);
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
 					} catch (err: any) {
@@ -644,6 +456,7 @@ function startChatServer(
 					busy: bridge.isBusy(),
 					historyCount: bridge.getHistory().length,
 					clients: sseClients.size,
+					relay: true,
 				}));
 				return;
 			}
@@ -662,56 +475,11 @@ function startChatServer(
 				return;
 			}
 
-			// ── Reset ────────────────────────────────────────────
-			if (req.method === "POST" && url.pathname === "/reset") {
-				bridge.reset();
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-				return;
-			}
-
-			// ── List Directories ─────────────────────────────────
-			if (req.method === "GET" && url.pathname === "/directories") {
-				const projects = discoverProjects();
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({
-					current: bridge.getCwd(),
-					currentName: basename(bridge.getCwd()),
-					directories: projects,
-				}));
-				return;
-			}
-
-			// ── Set Directory ────────────────────────────────────
-			if (req.method === "POST" && url.pathname === "/set-directory") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body || "{}");
-						const dirPath = String(data.path || "").trim();
-						if (!dirPath || !existsSync(dirPath)) {
-							res.writeHead(400, { "Content-Type": "application/json" });
-							res.end(JSON.stringify({ ok: false, error: "Directory not found" }));
-							return;
-						}
-						bridge.setCwd(dirPath);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true, cwd: dirPath, name: basename(dirPath) }));
-					} catch (err: any) {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: false, error: err?.message || "Invalid request" }));
-					}
-				});
-				return;
-			}
-
 			// ── Shutdown (explicit close from client) ────────────
 			if (req.method === "POST" && url.pathname === "/shutdown") {
 				res.writeHead(200, { "Content-Type": "application/json" });
 				res.end(JSON.stringify({ ok: true }));
 				setTimeout(() => {
-					bridge.destroy();
 					try { server.close(); } catch {}
 					onShutdown();
 				}, 200);
@@ -721,9 +489,6 @@ function startChatServer(
 			res.writeHead(404);
 			res.end("Not found");
 		});
-
-		// Store bridge reference on server for cleanup
-		(server as any).__bridge = bridge;
 
 		server.listen(0, "0.0.0.0", () => {
 			const addr = server.address() as any;
@@ -760,6 +525,7 @@ export default function (pi: ExtensionAPI) {
 	let activeServer: Server | null = null;
 	let activeTunnel: ChildProcess | null = null;
 	let activeTunnelUrl: string | null = null;
+	let activeBridge: SessionBridge | null = null;
 	let activeSession: {
 		kind: "chat";
 		title: string;
@@ -769,7 +535,7 @@ export default function (pi: ExtensionAPI) {
 	} | null = null;
 
 	function cleanupServer() {
-		// Kill tunnel first
+		// Kill tunnel
 		if (activeTunnel) {
 			try { activeTunnel.kill(); } catch {}
 			activeTunnel = null;
@@ -778,9 +544,11 @@ export default function (pi: ExtensionAPI) {
 		const server = activeServer;
 		activeServer = null;
 		if (server) {
-			const bridge = (server as any).__bridge as AgentBridge | undefined;
-			if (bridge) bridge.destroy();
 			try { server.close(); } catch {}
+		}
+		if (activeBridge) {
+			activeBridge.destroy();
+			activeBridge = null;
 		}
 		if (activeSession) {
 			clearActiveViewer(activeSession);
@@ -800,15 +568,21 @@ export default function (pi: ExtensionAPI) {
 	async function launchChat(ctx: ExtensionContext, remote = false): Promise<LaunchResult> {
 		cleanupServer();
 
+		// Create the session bridge with shared SSE client map
+		const sseClients = new Map<number, SSEClient>();
+		const bridge = new SessionBridge(pi, sseClients);
+		activeBridge = bridge;
+
 		currentPIN = generatePIN();
-		const { port, server } = await startChatServer(currentPIN, () => {
-			// Called when server auto-shuts down — kill tunnel too
+		const { port, server } = await startChatServer(bridge, currentPIN, () => {
+			// Called on auto-shutdown or explicit /shutdown
 			if (activeTunnel) {
 				try { activeTunnel.kill(); } catch {}
 				activeTunnel = null;
 				activeTunnelUrl = null;
 			}
 			activeServer = null;
+			activeBridge = null;
 			if (activeSession) {
 				clearActiveViewer(activeSession);
 				activeSession = null;
@@ -822,19 +596,15 @@ export default function (pi: ExtensionAPI) {
 
 		let tunnelUrl: string | undefined;
 
-		// Start cloudflared tunnel if --remote
 		if (remote) {
 			if (!isCloudflaredAvailable()) {
-				throw new Error(
-					"cloudflared is not installed. Install it with: brew install cloudflared"
-				);
+				throw new Error("cloudflared is not installed. Install it with: brew install cloudflared");
 			}
 			const tunnel = await startTunnel(port);
 			activeTunnel = tunnel.proc;
 			activeTunnelUrl = tunnel.url;
 			tunnelUrl = tunnel.url;
 
-			// Clean up tunnel if it dies unexpectedly
 			tunnel.proc.on("close", () => {
 				activeTunnel = null;
 				activeTunnelUrl = null;
@@ -857,6 +627,44 @@ export default function (pi: ExtensionAPI) {
 		return { localUrl, lanUrl, pin: currentPIN, tunnelUrl };
 	}
 
+	// ── Event hooks — relay main session events to phone ─────────────
+
+	pi.on("agent_start", async () => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onAgentStart();
+		}
+	});
+
+	pi.on("agent_end", async () => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onAgentEnd();
+		}
+	});
+
+	pi.on("message_update", async (event) => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onMessageUpdate(event);
+		}
+	});
+
+	pi.on("tool_execution_start", async (event) => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onToolStart(event);
+		}
+	});
+
+	pi.on("tool_execution_end", async (event) => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onToolEnd(event);
+		}
+	});
+
+	pi.on("input", async (event) => {
+		if (activeBridge?.hasClients()) {
+			activeBridge.onInput(event.text, event.source);
+		}
+	});
+
 	// ── show_chat tool ───────────────────────────────────────────────
 
 	pi.registerTool({
@@ -865,30 +673,29 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Open a web-based chat interface accessible from your phone or any device on the local network. " +
 			"Starts an HTTP server on 0.0.0.0 (LAN-accessible) with a mobile-friendly chat UI. " +
-			"The chat spawns a Pi agent subprocess with full orchestration capabilities. " +
+			"Messages from the phone are relayed directly into THIS Pi session — same conversation, same tools, same subagents. " +
 			"The server stays running in the background — close it with /chat stop.",
 		parameters: ShowChatParams,
 
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const { localUrl, lanUrl, pin } = await launchChat(ctx);
-
 			openBrowser(localUrl);
 
 			return {
 				content: [{
 					type: "text" as const,
 					text: [
-						`Web Chat is live!`,
+						`Web Chat is live! (relay mode)`,
 						``,
 						`Local:  ${localUrl}`,
 						`Phone:  ${lanUrl}`,
 						`PIN:    ${pin}`,
 						``,
-						`Open the "Phone" URL on any device connected to the same WiFi.`,
-						`Enter the PIN to authenticate. Server auto-closes when all clients disconnect.`,
+						`Phone messages go directly into THIS session.`,
+						`You'll see them here, and the phone sees your output.`,
 						``,
 						`  /chat            — reopen/restart the chat`,
-						`  /chat --remote   — open with secure tunnel (accessible from anywhere)`,
+						`  /chat --remote   — secure tunnel (accessible from anywhere)`,
 						`  /chat stop       — shut down the server`,
 					].join("\n"),
 				}],
@@ -898,24 +705,21 @@ export default function (pi: ExtensionAPI) {
 		renderCall(_args, theme) {
 			const text =
 				theme.fg("toolTitle", theme.bold("show_chat ")) +
-				theme.fg("accent", "Web Chat Interface");
+				theme.fg("accent", "Web Chat (relay)");
 			return new Text(outputLine(theme, "accent", text), 0, 0);
 		},
 
 		renderResult(result, _options, theme) {
 			const text = result.content[0];
 			const firstLine = text?.type === "text" ? text.text.split("\n")[0] : "";
-			return new Text(
-				outputLine(theme, "success", firstLine),
-				0, 0,
-			);
+			return new Text(outputLine(theme, "success", firstLine), 0, 0);
 		},
 	});
 
 	// ── /chat command ────────────────────────────────────────────────
 
 	pi.registerCommand("chat", {
-		description: "Open web chat interface (use '/chat stop' to shut down, '/chat --remote' for tunnel)",
+		description: "Open web chat (relay mode). '/chat --remote' for tunnel, '/chat stop' to shut down",
 		handler: async (args, ctx) => {
 			const trimmed = args.trim().toLowerCase();
 
@@ -924,9 +728,7 @@ export default function (pi: ExtensionAPI) {
 					const hadTunnel = !!activeTunnel;
 					cleanupServer();
 					ctx.ui.notify(
-						hadTunnel
-							? "Web chat server and tunnel stopped."
-							: "Web chat server stopped.",
+						hadTunnel ? "Web chat server and tunnel stopped." : "Web chat server stopped.",
 						"info",
 					);
 				} else {
@@ -947,15 +749,9 @@ export default function (pi: ExtensionAPI) {
 				openBrowser(localUrl);
 
 				if (tunnelUrl) {
-					ctx.ui.notify(
-						`Web Chat live → ${tunnelUrl} PIN: ${pin}`,
-						"success",
-					);
+					ctx.ui.notify(`Web Chat (relay) → ${tunnelUrl} PIN: ${pin}`, "success");
 				} else {
-					ctx.ui.notify(
-						`Web Chat live → ${lanUrl} PIN: ${pin}`,
-						"success",
-					);
+					ctx.ui.notify(`Web Chat (relay) → ${lanUrl} PIN: ${pin}`, "success");
 				}
 			} catch (err: any) {
 				ctx.ui.notify(err?.message || "Failed to start chat", "error");
