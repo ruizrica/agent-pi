@@ -68,6 +68,16 @@ done
 # Pi agent config directory (where Pi stores settings.json, models.json, etc.)
 PI_AGENT_DIR="$HOME/.pi/agent"
 
+# On MSYS/Git Bash (Windows), Node.js needs Windows-style paths.
+# Bash commands work fine with /c/Users/... but Node.js sees C:\c\Users\...
+if command -v cygpath &>/dev/null; then
+    # Use -m for mixed mode (C:/Users/...) — forward slashes work in Node.js
+    # and avoid backslash escape issues inside JS string literals.
+    to_win_path() { cygpath -m "$1"; }
+else
+    to_win_path() { echo "$1"; }
+fi
+
 echo ""
 echo -e "${CYAN}${INSTALL_ART}${NC}"
 echo ""
@@ -194,6 +204,9 @@ else
 fi
 
 SETTINGS_FILE="$PI_AGENT_DIR/settings.json"
+# Windows-safe paths for Node.js (MSYS /c/... → C:\...)
+SETTINGS_FILE_WIN="$(to_win_path "$SETTINGS_FILE")"
+SCRIPT_DIR_WIN="$(to_win_path "$SCRIPT_DIR")"
 
 if [ ! -f "$SETTINGS_FILE" ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
@@ -208,9 +221,9 @@ fi
 if [ -f "$SETTINGS_FILE" ]; then
     ALREADY_REGISTERED=$(node -e "
     const fs = require('fs');
-    const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+    const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE_WIN', 'utf-8'));
     const pkgs = s.packages || [];
-    console.log(pkgs.includes('$SCRIPT_DIR') ? 'yes' : 'no');
+    console.log(pkgs.includes('$SCRIPT_DIR_WIN') ? 'yes' : 'no');
 " 2>/dev/null || echo "no")
 else
     ALREADY_REGISTERED="no"
@@ -224,10 +237,10 @@ else
     else
         node -e "
         const fs = require('fs');
-        const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+        const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE_WIN', 'utf-8'));
         s.packages = s.packages || [];
-        s.packages.push('$SCRIPT_DIR');
-        fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(s, null, 2) + '\n');
+        s.packages.push('$SCRIPT_DIR_WIN');
+        fs.writeFileSync('$SETTINGS_FILE_WIN', JSON.stringify(s, null, 2) + '\n');
     "
         success "Registered ${DIM}$SCRIPT_DIR${NC} in Pi settings"
     fi
@@ -248,7 +261,7 @@ fi
 # Enable quiet startup (suppress verbose keybindings/skills/extensions listing)
 QUIET_ENABLED=$(node -e "
     const fs = require('fs');
-    const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+    const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE_WIN', 'utf-8'));
     console.log(s.quietStartup === true ? 'yes' : 'no');
 " 2>/dev/null || echo "no")
 
@@ -260,10 +273,10 @@ else
     else
         node -e "
         const fs = require('fs');
-        const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+        const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE_WIN', 'utf-8'));
         s.quietStartup = true;
         s.defaultThinkingLevel = s.defaultThinkingLevel || 'off';
-        fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(s, null, 2) + '\n');
+        fs.writeFileSync('$SETTINGS_FILE_WIN', JSON.stringify(s, null, 2) + '\n');
     "
         success "Enabled quiet startup ${DIM}(thinking defaults to off)${NC}"
     fi
@@ -271,11 +284,12 @@ fi
 
 # Free Shift+Tab for mode-cycler by unbinding cycleThinkingLevel
 KEYBINDINGS_FILE="$PI_AGENT_DIR/keybindings.json"
+KEYBINDINGS_FILE_WIN="$(to_win_path "$KEYBINDINGS_FILE")"
 
 SHIFT_TAB_FREE=$(node -e "
     const fs = require('fs');
-    if (!fs.existsSync('$KEYBINDINGS_FILE')) { console.log('no'); process.exit(); }
-    const k = JSON.parse(fs.readFileSync('$KEYBINDINGS_FILE', 'utf-8'));
+    if (!fs.existsSync('$KEYBINDINGS_FILE_WIN')) { console.log('no'); process.exit(); }
+    const k = JSON.parse(fs.readFileSync('$KEYBINDINGS_FILE_WIN', 'utf-8'));
     console.log(Array.isArray(k.cycleThinkingLevel) && k.cycleThinkingLevel.length === 0 ? 'yes' : 'no');
 " 2>/dev/null || echo "no")
 
@@ -287,7 +301,7 @@ else
     else
         node -e "
         const fs = require('fs');
-        const file = '$KEYBINDINGS_FILE';
+        const file = '$KEYBINDINGS_FILE_WIN';
         const k = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
         k.cycleThinkingLevel = [];
         fs.writeFileSync(file, JSON.stringify(k, null, 2) + '\n');
