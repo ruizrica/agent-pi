@@ -1,5 +1,5 @@
 ---
-name: chrome-devtools-mcp
+name: chrome-devtools-mcp-base
 description: >
   Browser automation via your REAL running Chrome instance using Chrome DevTools MCP.
   Use for ALL tasks requiring authenticated browser access — Bitbucket PR reviews, Jira,
@@ -256,6 +256,23 @@ take_snapshot {}
 # Close a tab (can't close the last one)
 close_page { pageId: 3 }
 ```
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| `list_pages` fails or tool not found | MCP server not connected | Ensure Chrome is running, remote debugging is enabled (`chrome://flags/#allow-remote-debugging` → Enabled), then restart the CLI session |
+| Tools time out | Chrome is unresponsive or not running | Restart Chrome, then restart the CLI session |
+| "Repository not found" after navigation | User not authenticated on the target site | Ask the user to log in in their Chrome browser, then re-navigate |
+| agent-browser works but Chrome DevTools MCP doesn't | Different browsers — agent-browser uses isolated Chromium | They are separate tools. Agent-browser has no access to Chrome sessions. Use Chrome DevTools MCP for auth. |
+| MCP config seems correct but tools still fail | CLI session needs restart after config change | Restart the CLI session (`exit` + re-launch) |
+
+### CRITICAL: Never mix agent-browser and Chrome DevTools MCP for auth
+
+- **agent-browser** = isolated Chromium, no cookies, no sessions → for localhost and sandboxed testing only
+- **Chrome DevTools MCP** = the user's real Chrome, with all their logins → for authenticated pages
+
+If a private repo URL fails in agent-browser, do NOT try to "log in" via agent-browser. Instead, use Chrome DevTools MCP where the user is already authenticated. If Chrome DevTools MCP is not available, guide the user through setup — don't fall back.
 
 ## Deep-Dive Documentation
 

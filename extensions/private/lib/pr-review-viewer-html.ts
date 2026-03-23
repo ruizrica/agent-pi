@@ -3,7 +3,7 @@
 
 export interface UrlStatusEntry {
 	url: string;
-	status: "pending" | "checking" | "accessible" | "login_required" | "failed";
+	status: "pending" | "checking" | "accessible" | "login_required" | "needs_browser_verification" | "failed";
 	title?: string;
 	reason?: string;
 }
@@ -147,6 +147,7 @@ export function generatePrReviewViewerHTML(opts: {
   .url-row .status-dot.checking { background: var(--warning); animation: pulse 1s infinite; }
   .url-row .status-dot.accessible { background: var(--success); }
   .url-row .status-dot.login_required { background: var(--warning); }
+  .url-row .status-dot.needs_browser_verification { background: var(--accent, #6c63ff); }
   .url-row .status-dot.failed { background: var(--error); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .url-row .url-text { flex: 1; word-break: break-all; color: var(--text-muted); }
@@ -163,6 +164,7 @@ export function generatePrReviewViewerHTML(opts: {
   .url-row .status-label.checking { color: var(--warning); border: 1px solid var(--warning); }
   .url-row .status-label.accessible { color: var(--success); border: 1px solid var(--success); }
   .url-row .status-label.login_required { color: var(--warning); border: 1px solid var(--warning); }
+  .url-row .status-label.needs_browser_verification { color: var(--accent, #6c63ff); border: 1px solid var(--accent, #6c63ff); }
   .url-row .status-label.failed { color: var(--error); border: 1px solid var(--error); }
   .url-row .page-title { color: var(--text-dim); font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -278,7 +280,7 @@ function renderUrlList() {
   const list = document.getElementById('urlList');
   list.innerHTML = urls.map(u => {
     const s = statuses[u] || { status: 'pending' };
-    const labels = { pending: 'Pending', checking: 'Checking…', accessible: 'Accessible', login_required: 'Login Required', failed: 'Failed' };
+    const labels = { pending: 'Pending', checking: 'Checking…', accessible: 'Accessible', login_required: 'Login Required', needs_browser_verification: 'Verify in Browser', failed: 'Failed' };
     return '<div class="url-row">' +
       '<div class="status-dot ' + s.status + '"></div>' +
       '<span class="url-text">' + escapeHtml(u) + '</span>' +
@@ -288,10 +290,11 @@ function renderUrlList() {
   }).join('');
 
   // Stats
-  const counts = { accessible: 0, login_required: 0, failed: 0, pending: 0, checking: 0 };
+  const counts = { accessible: 0, login_required: 0, needs_browser_verification: 0, failed: 0, pending: 0, checking: 0 };
   urls.forEach(u => { const s = (statuses[u] || {}).status || 'pending'; counts[s] = (counts[s] || 0) + 1; });
   document.getElementById('statsRow').innerHTML =
     '<span class="ok">' + counts.accessible + ' accessible</span>' +
+    (counts.needs_browser_verification > 0 ? '<span style="color:var(--accent,#6c63ff)">' + counts.needs_browser_verification + ' verify in browser</span>' : '') +
     '<span class="warn">' + counts.login_required + ' login required</span>' +
     '<span class="err">' + counts.failed + ' failed</span>' +
     '<span>' + counts.pending + ' pending</span>';
@@ -301,8 +304,9 @@ function renderUrlList() {
   document.getElementById('loginBanner').classList.toggle('visible', needsLogin);
   document.getElementById('recheckBtn').style.display = needsLogin ? 'inline-block' : 'none';
 
-  // Enable start if at least one accessible
-  document.getElementById('startReviewBtn').disabled = counts.accessible === 0;
+  // Enable start if at least one accessible or needs_browser_verification
+  // (needs_browser_verification URLs will be verified via Chrome DevTools MCP during review)
+  document.getElementById('startReviewBtn').disabled = (counts.accessible + counts.needs_browser_verification) === 0;
 }
 
 function showStatusCard() {
@@ -369,12 +373,17 @@ document.getElementById('backBtn').addEventListener('click', () => {
 
 // ── Start Review button ──────────────────
 document.getElementById('startReviewBtn').addEventListener('click', async () => {
-  const accessibleUrls = urls.filter(u => (statuses[u] || {}).status === 'accessible');
+  // Include both accessible and needs_browser_verification URLs
+  // (needs_browser_verification will be verified via Chrome DevTools MCP during actual review)
+  const reviewableUrls = urls.filter(u => {
+    const s = (statuses[u] || {}).status;
+    return s === 'accessible' || s === 'needs_browser_verification';
+  });
   const allStatuses = urls.map(u => statuses[u] || { url: u, status: 'pending' });
   await fetch('http://127.0.0.1:' + PORT + '/result', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'start_review', urls: accessibleUrls, allStatuses }),
+    body: JSON.stringify({ action: 'start_review', urls: reviewableUrls, allStatuses }),
   });
 });
 
