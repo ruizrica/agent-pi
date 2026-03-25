@@ -73,6 +73,25 @@ function killGracefully(proc: any, timeoutMs = 3000): Promise<void> {
 	});
 }
 
+/** Default timeout per agent role (ms). Prevents zombie subagents. */
+const ROLE_TIMEOUT_MS: Record<string, number> = {
+	SCOUT:    10 * 60 * 1000,   // 10 minutes
+	BUILDER:  30 * 60 * 1000,   // 30 minutes
+	REVIEWER: 15 * 60 * 1000,   // 15 minutes
+	TESTER:   20 * 60 * 1000,   // 20 minutes
+	PLANNER:  15 * 60 * 1000,   // 15 minutes
+};
+const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+
+/** Grace period after SIGTERM before escalating to SIGKILL. */
+const TIMEOUT_KILL_GRACE_MS = 30_000;
+
+/** Resolve the timeout for a subagent based on role name or explicit override. */
+function resolveTimeout(name: string, explicitTimeout?: number): number {
+	if (explicitTimeout !== undefined && explicitTimeout > 0) return explicitTimeout;
+	return ROLE_TIMEOUT_MS[name.toUpperCase()] || DEFAULT_TIMEOUT_MS;
+}
+
 interface SubState {
 	id: number;
 	status: "running" | "done" | "error";
@@ -89,6 +108,8 @@ interface SubState {
 	autoRemove?: boolean;      // auto-remove widget ~30s after done (default: true)
 	model?: string;            // resolved model string for display
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
+	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
+	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
 }
 
 export default function (pi: ExtensionAPI) {
@@ -259,8 +280,27 @@ export default function (pi: ExtensionAPI) {
 				if (isScout) publishScoutStatus(state);
 			}, 1000);
 
+			// ── Watchdog: kill agent if it exceeds maxDurationMs ──────────
+			// Standby (warmup) spawns are exempt — they're short-lived by design.
+			if (!state.standby && state.maxDurationMs > 0) {
+				state.watchdogTimer = setTimeout(() => {
+					if (state.status !== "running") return; // already finished
+					const mins = Math.round(state.maxDurationMs / 60_000);
+					state.textChunks.push(`\n[TIMEOUT] Agent timed out after ${mins} minutes.`);
+					ctx.ui.notify(`SA${state.id} (${state.name}) timed out after ${mins}m`, "warning");
+					if (state.proc) {
+						killGracefully(state.proc, TIMEOUT_KILL_GRACE_MS).catch(() => {});
+					}
+				}, state.maxDurationMs);
+			}
+
 			const finish = (code: number | null) => {
 				clearInterval(timer);
+				// Clear watchdog — agent exited normally before timeout
+				if (state.watchdogTimer) {
+					clearTimeout(state.watchdogTimer);
+					state.watchdogTimer = undefined;
+				}
 				state.elapsed = Date.now() - startTime;
 				state.status = code === 0 ? "done" : "error";
 				state.proc = undefined;
@@ -407,14 +447,16 @@ export default function (pi: ExtensionAPI) {
 			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
+			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;
 			const id = nextId++;
+			const agentName = (args.name || "AGENT").toUpperCase();
 			const state: SubState = {
 				id,
 				status: "running",
-				name: (args.name || "AGENT").toUpperCase(),
+				name: agentName,
 				task: args.task,
 				textChunks: [],
 				toolCount: 0,
@@ -425,6 +467,7 @@ export default function (pi: ExtensionAPI) {
 				commanderTaskId: args.commanderTaskId,
 				autoRemove: args.autoRemove,
 				model: args.model, // caller-specified model override
+				maxDurationMs: resolveTimeout(agentName, args.timeout),
 			};
 			agents.set(id, state);
 			registerWidget(state);
@@ -450,6 +493,8 @@ export default function (pi: ExtensionAPI) {
 			}), { description: "Array of agent definitions to spawn" }),
 			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~30s after done (default: true)" })),
+			timeout: Type.Optional(Type.Number({ description: "Max runtime in ms for all agents in this batch. Defaults by role." })),
+			force: Type.Optional(Type.Boolean({ description: "Force spawn even if agents are already running (default: false)" })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;
@@ -458,13 +503,34 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: "Error: No agents specified." }] };
 			}
 
+			// ── Guard: prevent duplicate batch spawns while agents are running ──
+			if (!args.force) {
+				const running = Array.from(agents.values()).filter(a => a.status === "running");
+				if (running.length > 0) {
+					const names = running.map(a => `SA${a.id} (${a.name})`).join(", ");
+					return {
+						content: [{ type: "text", text: `Warning: ${running.length} agent(s) still running: ${names}. Wait for them to finish, use subagent_cleanup to clear stale agents, or pass force: true to override.` }],
+					};
+				}
+			}
+
+			// ── Auto-cleanup: remove done/error agents before spawning new batch ──
+			for (const [id, a] of Array.from(agents.entries())) {
+				if (a.status === "done" || a.status === "error") {
+					if (widgetCtx) widgetCtx.ui.setWidget(`sub-${id}`, undefined);
+					widgetBoxes.delete(id);
+					agents.delete(id);
+				}
+			}
+
 			// Build states for all agents
 			const states: SubState[] = defs.map((def: any) => {
 				const id = nextId++;
+				const agentName = (def.name || "AGENT").toUpperCase();
 				return {
 					id,
 					status: "running" as const,
-					name: (def.name || "AGENT").toUpperCase(),
+					name: agentName,
 					task: def.task,
 					textChunks: [],
 					toolCount: 0,
@@ -474,6 +540,7 @@ export default function (pi: ExtensionAPI) {
 					summary: def.summary,
 					autoRemove: args.autoRemove,
 					model: def.model, // per-agent model override
+					maxDurationMs: resolveTimeout(agentName, args.timeout),
 				};
 			});
 
@@ -605,6 +672,50 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerTool({
+		name: "subagent_cleanup",
+		description: "Clean up finished and stale subagents. Removes done/error agents and kills agents running longer than max_age_seconds. Use before spawning new batches or when the screen is cluttered.",
+		parameters: Type.Object({
+			max_age_seconds: Type.Optional(Type.Number({ description: "Kill agents running longer than this (default: 600s = 10 min). Set 0 to only remove done/error agents." })),
+		}),
+		execute: async (callId, args, _signal, _onUpdate, ctx) => {
+			widgetCtx = ctx;
+			const maxAge = (args.max_age_seconds ?? 600) * 1000;
+			let removedDone = 0;
+			let killedStale = 0;
+			const killPromises: Promise<void>[] = [];
+
+			for (const [id, state] of Array.from(agents.entries())) {
+				// Skip the pre-spawned scout — it's managed separately
+				if ((globalThis as any).__piScoutId === id) continue;
+
+				if (state.status === "done" || state.status === "error") {
+					ctx.ui.setWidget(`sub-${id}`, undefined);
+					widgetBoxes.delete(id);
+					agents.delete(id);
+					removedDone++;
+				} else if (state.status === "running" && maxAge > 0 && state.elapsed > maxAge) {
+					if (state.proc) {
+						killPromises.push(killGracefully(state.proc));
+					}
+					state.status = "error";
+					state.textChunks.push(`\n[CLEANUP] Killed after ${Math.round(state.elapsed / 1000)}s (stale).`);
+					ctx.ui.setWidget(`sub-${id}`, undefined);
+					widgetBoxes.delete(id);
+					agents.delete(id);
+					killedStale++;
+				}
+			}
+
+			await Promise.all(killPromises);
+			const remaining = Array.from(agents.values()).filter(a => a.status === "running").length;
+			const summary = `Cleanup: removed ${removedDone} done/error, killed ${killedStale} stale. ${remaining} active remain.`;
+
+			return {
+				content: [{ type: "text", text: summary }],
+			};
+		},
+	});
 
 
 	// ── /sub <task> ───────────────────────────────────────────────────────────
@@ -637,6 +748,7 @@ export default function (pi: ExtensionAPI) {
 				elapsed: 0,
 				sessionFile: makeSessionFile(id),
 				turnCount: 1,
+				maxDurationMs: resolveTimeout(parsed.name),
 			};
 			agents.set(id, state);
 			registerWidget(state);
@@ -794,6 +906,7 @@ export default function (pi: ExtensionAPI) {
 			summary: "Standing by...",
 			autoRemove: false,     // keep widget alive — scout persists across tasks
 			standby: true,         // suppress follow-up message on warmup completion
+			maxDurationMs: 0,      // no timeout for pre-spawned scout (warmup is exempt)
 		};
 		agents.set(id, state);
 		// No registerWidget — scout shows as a footer pill, not a stacking widget

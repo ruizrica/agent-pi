@@ -11,6 +11,7 @@ export interface SubRenderState {
 	turnCount: number;
 	summary?: string;
 	model?: string;
+	maxDurationMs?: number; // watchdog timeout for progress warning
 }
 
 export interface SubRenderTheme {
@@ -59,13 +60,25 @@ export function renderSubagentWidget(
 
 	const modelSuffix = state.model ? ` | ${state.model}` : "";
 
+	// Timeout warning label when approaching watchdog limit
+	let timeoutLabel = "";
+	if (state.status === "running" && state.maxDurationMs && state.maxDurationMs > 0) {
+		const pct = state.elapsed / state.maxDurationMs;
+		if (pct >= 0.95) {
+			timeoutLabel = " | TIMING OUT";
+		} else if (pct >= 0.80) {
+			timeoutLabel = " | " + Math.round((state.maxDurationMs - state.elapsed) / 1000) + "s left";
+		}
+	}
+
 	// Line 1: spinner + title + stats + model (summary shown on line 2)
 	lines.push(
 		theme.bold(spinner + title) +
 		turnLabel +
 		` | (${Math.round(state.elapsed / 1000)}s)` +
 		` | Tools: ${state.toolCount}` +
-		modelSuffix
+		modelSuffix +
+		timeoutLabel
 	);
 
 	// Line 2: summary (current activity) or task preview as fallback

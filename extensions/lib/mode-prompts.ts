@@ -135,6 +135,15 @@ subagent_create_batch {
 
 After scouts report back, synthesize their findings — identify files that need changes, existing patterns to follow, reusable components, and any gaps or concerns.
 
+#### Scout lifecycle management:
+- Scouts have a **10-minute timeout** — if a scout hangs, it will be automatically killed
+- Scouts **auto-dismiss** their widgets 30 seconds after completing work
+- When you spawn a new batch, any leftover done/error scouts are **auto-cleaned** first
+- You **cannot spawn a new batch** while scouts from a previous batch are still running
+- If scouts are stuck, use \`subagent_cleanup {}\` to kill stale agents and clear widgets
+- ALWAYS wait for all scouts to report back before moving to Phase 2 (planning)
+- Do NOT spawn a second batch of scouts to "add more context" — synthesize what you have
+
 ### Phase 2: Write a Structured Plan
 Write the plan to \`.context/todo.md\` following the **structured plan format** below.
 
@@ -258,6 +267,9 @@ Reference actual code — no hand-waving.>
 - Keep changes minimal and focused
 - ALWAYS use the structured plan format (phases, not flat numbered steps)
 - For plans with 3+ phases, ALWAYS present a completion report at the end
+- ALWAYS wait for all scouts to finish before spawning new ones
+- Check \`subagent_list\` if unsure about active agent status before spawning
+- Use \`subagent_cleanup {}\` to clear stale/zombie agents if needed
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS track tasks: \`commander_task\` for cross-session tracking
