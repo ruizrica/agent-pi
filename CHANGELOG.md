@@ -1,6 +1,58 @@
 # Changelog
 
-All notable changes to agent will be documented in this file.
+All notable changes to agent-pi will be documented in this file.
+
+## [2.1.0] — 2026-03-25
+
+### Web Chat — Remote Access from Any Device
+
+New extension that lets you interact with your Pi session from your phone, tablet, or any device. Messages are relayed directly into the running session — same conversation, same tools, same subagents.
+
+- **`/chat`** — Opens a LAN-accessible chat UI with 6-digit PIN authentication
+- **`/chat --remote`** — Secure Cloudflare Quick Tunnel for access from anywhere (no account needed)
+- **`/chat stop`** — Shuts down the server and tunnel
+- **WebSocket streaming** — Real-time token delivery, tool call notifications, subagent visibility
+- **Mobile-first UI** — Dark blue theme, markdown rendering, slash command menu, terminal activity tab
+- **Security** — PIN auth, single-user lock, token-based sessions, auto-shutdown after 2 min idle
+- **QR code display** — Scan from terminal to connect instantly from your phone
+- See [docs/web-chat.md](docs/web-chat.md) for full documentation
+
+### Subagent Lifecycle Management
+
+Fixed a critical issue where subagents (especially scouts in PLAN mode) could run indefinitely, stacking zombie widgets that never cleaned up.
+
+- **Watchdog timeouts** — Role-based kill timers: scout=10min, builder=30min, reviewer=15min, default=20min
+- **`subagent_cleanup` tool** — Explicitly remove done/error/stale agents with configurable max age
+- **Auto-cleanup before batch spawns** — `subagent_create_batch` removes leftover agents before spawning new ones
+- **Duplicate batch guard** — Blocks spawning a new batch while agents are still running (override with `force: true`)
+- **Timeout warnings in widget** — Shows "Xs left" at 80% of max duration, "TIMING OUT" at 95%
+- **PLAN prompt lifecycle guidance** — Teaches agents about scout timeouts, auto-dismiss, and cleanup rules
+
+### QA Automation Skill
+
+New skill package for generic QA testing with agent-device and agent-browser integration.
+
+- **qa-test-flows** — CDP-based test flow execution with helpers
+- **qa-web** — Web testing with browser automation helpers
+- **qa-scroll** — Scroll testing with gesture simulation
+- **qa-state-persistence** — State management testing across app sessions
+- **qa-device-management** — Device coordinate mapping and management
+- **qa-setup** — Environment setup and configuration
+
+### Task Board Improvements
+
+- Local-first board viewer — always shows local tasks even when Commander is offline
+- Full-height columns, removed max-width cap
+- Polished task cards with colored borders, shadows, and status tints
+- Removed emoji icons from empty states
+
+### Bug Fixes
+
+- **web-chat:** Fixed message echo (user messages being relayed back as assistant messages)
+- **web-chat:** Fixed SSE flush through cloudflared tunnels (migrated to WebSocket)
+- **web-chat:** Fixed stuck thinking indicator — restored done signal in message_end
+- **web-chat:** Fixed terminal tab layout (was display:block in a flex parent)
+- **web-chat:** Cleaned QR code display — no distortion, proper padding
 
 ## [2.0.0] — 2026-03-20
 
