@@ -179,7 +179,7 @@ export function generatePlanViewerHTML(opts: {
   .markdown-body pre code {
     background: none;
     padding: 0;
-    color: var(--text-muted);
+    color: var(--text);
     font-size: 12px;
     line-height: 1.6;
   }

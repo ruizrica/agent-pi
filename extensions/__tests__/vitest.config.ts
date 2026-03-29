@@ -18,7 +18,7 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			reporter: ["text", "json", "html"],
-			include: ["../user-question.ts"],
+			include: ["../user-question.ts", "../file-viewer.ts", "../lib/file-viewer-html.ts"],
 			exclude: ["**/*.test.ts", "**/*.spec.ts"],
 			lines: 80,
 			functions: 80,

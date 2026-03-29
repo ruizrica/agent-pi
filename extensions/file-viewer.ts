@@ -4,8 +4,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { basename, extname, resolve } from "node:path";
+import { basename, extname, resolve, dirname, join } from "node:path";
 import { execSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -141,6 +142,19 @@ function startFileViewerServer(opts: {
 			if (url.pathname === "/favicon.ico") {
 				res.writeHead(204);
 				res.end();
+				return;
+			}
+
+			if (req.method === "GET" && url.pathname === "/logo.png") {
+				try {
+					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
+					const logoData = readFileSync(logoPath);
+					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
+					res.end(logoData);
+				} catch {
+					res.writeHead(404);
+					res.end();
+				}
 				return;
 			}
 

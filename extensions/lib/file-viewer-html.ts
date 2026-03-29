@@ -1,5 +1,5 @@
 // ABOUTME: Self-contained HTML template for a lightweight local file viewer/editor.
-// ABOUTME: Features syntax highlighting (highlight.js), line numbers, edit/save flow, and keyboard shortcuts.
+// ABOUTME: Features syntax highlighting, markdown rendering, hamburger editor menu, line numbers, and edit/save flow.
 
 export function generateFileViewerHTML(opts: {
 	title: string;
@@ -18,6 +18,8 @@ export function generateFileViewerHTML(opts: {
 	const escapedLineRange = esc(opts.lineRange || "");
 	const escapedEditable = esc(opts.editable);
 	const escapedLanguage = esc(opts.language || "");
+	const isMarkdown = (opts.language || "").toLowerCase() === "markdown" || /\.(md|mdx|markdown)$/i.test(opts.filePath);
+	const escapedIsMarkdown = esc(isMarkdown);
 	const lineCount = Math.max(1, opts.content.endsWith("\n") ? opts.content.split("\n").length - 1 : opts.content.split("\n").length);
 	const initialGutterHtml = Array.from({ length: lineCount }, (_, i) => `<span>${i + 1}</span>`).join("");
 
@@ -46,6 +48,8 @@ export function generateFileViewerHTML(opts: {
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
     --mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
     --line-num-width: 54px;
+    --control-height: 30px;
+    --control-radius: 5px;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -59,17 +63,24 @@ export function generateFileViewerHTML(opts: {
     overflow: hidden;
   }
 
-  /* ── Header ── */
   .header {
     background: var(--surface);
     border: 1px solid var(--border);
     border-left: 3px solid var(--accent);
     border-radius: 6px;
     margin: 12px 16px 0;
-    padding: 14px 18px;
+    padding: 10px 16px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .header-logo {
+    height: 20px;
+    width: auto;
+    image-rendering: pixelated;
+    opacity: 0.6;
     flex-shrink: 0;
   }
   .badge {
@@ -93,54 +104,76 @@ export function generateFileViewerHTML(opts: {
     letter-spacing: 0.5px;
     text-transform: uppercase;
     font-family: var(--mono);
+    opacity: 0.9;
   }
-  .title-wrap { flex: 1; min-width: 0; }
+  .title-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-right: 6px;
+  }
   .title {
     font-size: 15px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
   }
   .subtitle {
-    margin-top: 4px;
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    opacity: 0.9;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .toolbar {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    flex-wrap: wrap;
+    position: relative;
+    justify-content: flex-end;
+    flex: 0 0 auto;
   }
   button {
-    background: var(--surface2);
-    color: var(--text);
+    background: transparent;
+    color: var(--text-muted);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 8px 14px;
-    font-size: 12px;
+    border-radius: var(--control-radius);
+    min-height: var(--control-height);
+    height: var(--control-height);
+    padding: 0 10px;
+    font-size: 11px;
     font-family: var(--mono);
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    background: rgba(37, 42, 50, 0.35);
   }
   button:hover { border-color: var(--accent); color: var(--accent); }
   .icon-btn {
-    width: 38px;
-    height: 38px;
+    width: var(--control-height);
+    min-width: var(--control-height);
+    height: var(--control-height);
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
   .icon-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     display: block;
     fill: none;
     stroke: currentColor;
@@ -152,34 +185,164 @@ export function generateFileViewerHTML(opts: {
     fill: currentColor;
     stroke: none;
   }
-  button.primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-  button.primary:hover { background: rgba(41, 128, 185, 0.22); }
-  button.success { background: rgba(72, 216, 137, 0.1); border-color: var(--success); color: var(--success); }
-  button.success:hover { background: rgba(72, 216, 137, 0.2); }
+  button.primary { background: rgba(41, 128, 185, 0.08); border-color: rgba(41, 128, 185, 0.45); color: var(--accent); }
+  button.primary:hover { background: rgba(41, 128, 185, 0.14); }
+  button.success { background: rgba(72, 216, 137, 0.08); border-color: rgba(72, 216, 137, 0.5); color: var(--success); }
+  button.success:hover { background: rgba(72, 216, 137, 0.14); }
+  button.active { background: rgba(41, 128, 185, 0.08); border-color: rgba(41, 128, 185, 0.45); color: var(--accent); }
+  button.secondary-muted {
+    color: var(--text-muted);
+    border-color: rgba(46, 52, 62, 0.9);
+  }
   button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+  #copyBtn {
+    min-width: var(--control-height);
+    width: var(--control-height);
+    padding: 0;
+  }
+  #doneBtn {
+    min-width: 72px;
+    padding: 0 12px;
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: rgba(37, 42, 50, 0.35);
+  }
+  #doneBtn:not(:disabled):hover,
+  #doneBtn:not(:disabled).active {
+    color: var(--success);
+    border-color: rgba(72, 216, 137, 0.5);
+    background: rgba(72, 216, 137, 0.08);
+  }
+  #doneBtn .done-label {
+    font-size: 11px;
+    line-height: 1;
+  }
   .save-hint {
-    font-size: 10px;
-    color: var(--text-dim);
-    font-family: var(--mono);
+    display: none;
   }
 
-  /* ── Meta bar ── */
-  .meta {
-    margin: 8px 16px 0;
-    padding: 10px 14px;
+  .menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 220px;
     background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+    padding: 8px;
+    display: none;
+    z-index: 20;
+  }
+  .dropdown-menu.open { display: block; }
+  .menu-label {
+    font-size: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    padding: 6px 8px;
+  }
+  .menu-item {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 10px 12px;
+  }
+  .menu-item:hover {
+    background: var(--surface2);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .menu-item svg {
+    display: none;
+  }
+
+  .file-meta-bar {
+    margin: 8px 16px 0;
+    padding: 8px 12px;
+    background: rgba(30, 34, 40, 0.7);
     border: 1px solid var(--border);
     border-radius: 6px;
     display: flex;
-    gap: 18px;
-    flex-wrap: wrap;
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: var(--mono);
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     flex-shrink: 0;
   }
+  .meta-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .meta-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .copy-done-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .meta-item {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #metaPath {
+    flex: 1;
+    min-width: 0;
+  }
+  .meta {
+    display: none;
+  }
 
-  /* ── Content area ── */
+  .markdown-toggle {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    display: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .markdown-toggle.visible { display: flex; }
+  .markdown-toggle .toggle-label {
+    display: none;
+  }
+  .view-toggle {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .view-toggle button {
+    min-width: 0;
+    padding: 0 10px;
+  }
+
   .content {
     flex: 1;
     margin: 8px 16px 16px;
@@ -192,7 +355,6 @@ export function generateFileViewerHTML(opts: {
     min-height: 0;
   }
 
-  /* ── Notice bar ── */
   .notice {
     display: none;
     padding: 10px 14px;
@@ -205,7 +367,6 @@ export function generateFileViewerHTML(opts: {
   .notice.warning { color: var(--warning); background: rgba(240, 180, 41, 0.08); }
   .notice.error   { color: var(--error);   background: rgba(232, 88, 88, 0.08); }
 
-  /* ── Code viewer (highlight.js) ── */
   .viewer-wrap {
     flex: 1;
     min-height: 0;
@@ -222,7 +383,6 @@ export function generateFileViewerHTML(opts: {
     display: table-row;
   }
 
-  /* Line number gutter — table cell, always aligned with code */
   .gutter {
     display: table-cell;
     vertical-align: top;
@@ -260,10 +420,112 @@ export function generateFileViewerHTML(opts: {
     font-size: 13px;
     background: transparent !important;
   }
-  /* Override hljs background to match our theme */
   .hljs { background: transparent !important; }
 
-  /* ── Editor (enhanced textarea) ── */
+  .markdown-rendered-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: none;
+    padding: 20px 24px 40px;
+    background: var(--bg);
+  }
+  .markdown-rendered-wrap.visible { display: block; }
+
+  .markdown-body h1, .markdown-body h2, .markdown-body h3,
+  .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+    color: var(--text);
+    margin: 28px 0 12px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .markdown-body h1 {
+    font-size: 22px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    letter-spacing: -0.3px;
+  }
+  .markdown-body h2 {
+    font-size: 16px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-family: var(--mono);
+    font-weight: 700;
+  }
+  .markdown-body h3 { font-size: 15px; color: var(--text); }
+  .markdown-body p { margin: 8px 0; color: var(--text-muted); font-size: 14px; }
+  .markdown-body ul, .markdown-body ol { margin: 8px 0; padding-left: 24px; }
+  .markdown-body li { margin: 4px 0; color: var(--text-muted); font-size: 14px; }
+  .markdown-body code {
+    background: var(--surface2);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .markdown-body pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  .markdown-body pre code {
+    background: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .markdown-body blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 12px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .markdown-body table {
+    border-collapse: collapse;
+    margin: 12px 0;
+    width: 100%;
+    font-size: 13px;
+  }
+  .markdown-body th, .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .markdown-body th {
+    background: var(--surface);
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    font-family: var(--mono);
+  }
+  .markdown-body td { color: var(--text-muted); }
+  .markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+  .markdown-body a { color: var(--accent); text-decoration: none; }
+  .markdown-body a:hover { text-decoration: underline; }
+  .markdown-body strong { color: var(--text); font-weight: 600; }
+  .markdown-body em { color: var(--text-muted); }
+  .markdown-body input[type="checkbox"] {
+    accent-color: var(--accent);
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
   .editor-wrap {
     flex: 1;
     min-height: 0;
@@ -310,7 +572,6 @@ export function generateFileViewerHTML(opts: {
     overflow: auto;
   }
 
-  /* ── Unsaved dot indicator ── */
   .unsaved-dot {
     display: none;
     width: 8px;
@@ -322,7 +583,6 @@ export function generateFileViewerHTML(opts: {
   }
   .unsaved-dot.visible { display: inline-block; }
 
-  /* ── Done state overlay ── */
   .done-banner {
     display: none;
     padding: 12px 18px;
@@ -346,37 +606,95 @@ export function generateFileViewerHTML(opts: {
       <div class="title"><span id="titleText"></span><span id="unsavedDot" class="unsaved-dot"></span></div>
       <div class="subtitle" id="subtitleText"></div>
     </div>
+    <img src="/logo.png" alt="agent" class="header-logo">
     <div class="toolbar">
-      <button id="cursorBtn" class="icon-btn" title="Open in Cursor" aria-label="Open in Cursor">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path class="fill" d="M6 4l10 8-4.2 1.1 2.7 5-2.3 1.2-2.7-5L7 18 6 4z"/>
-        </svg>
-      </button>
-      <button id="windsurfBtn" class="icon-btn" title="Open in Windsurf" aria-label="Open in Windsurf">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 15c2.2-2.6 4.4-3.9 6.6-3.9 2.1 0 3.7 1.2 5.1 2.3 1.3 1 2.4 1.8 3.8 1.8 1 0 1.9-.3 2.8-.9"/>
-          <path d="M3 19c2.1-1.8 4.1-2.7 6-2.7 1.8 0 3.2.8 4.6 1.6 1.4.8 2.8 1.6 4.7 1.6 1.1 0 2.1-.2 3.2-.8"/>
-          <path d="M4 10c1.3-2.9 3.3-4.5 5.8-4.5 3.2 0 4.6 2.8 6.9 2.8 1.1 0 2.1-.4 3.3-1.5"/>
-        </svg>
-      </button>
-      <button id="vscodeBtn" class="icon-btn" title="Open in VS Code" aria-label="Open in VS Code">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path class="fill" d="M16.8 3.8l-7.2 6.9-3.2-2.4-2.2 1.9 3.1 2.8-3.1 2.8 2.2 1.9 3.2-2.4 7.2 6.9 3.2-1.5V5.3l-3.2-1.5zM17 8.2v7.6l-4.6-3.8L17 8.2z"/>
-        </svg>
-      </button>
-      <button id="copyBtn" title="Copy file contents">Copy</button>
-      <button id="toggleBtn"></button>
-      <button id="saveBtn" class="primary" title="Save file">Save</button>
+      <div class="menu-wrap">
+        <button id="menuBtn" class="icon-btn" title="Open menu" aria-label="Open menu" aria-haspopup="menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 17h16"></path>
+          </svg>
+        </button>
+        <div id="editorMenu" class="dropdown-menu" role="menu" aria-label="Open in editor menu">
+          <div class="menu-label">Open in editor</div>
+          <button class="menu-item" data-editor="cursor" role="menuitem" title="Open in Cursor">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="fill" d="M6 4l10 8-4.2 1.1 2.7 5-2.3 1.2-2.7-5L7 18 6 4z"/>
+            </svg>
+            <span>Cursor</span>
+          </button>
+          <button class="menu-item" data-editor="windsurf" role="menuitem" title="Open in Windsurf">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 15c2.2-2.6 4.4-3.9 6.6-3.9 2.1 0 3.7 1.2 5.1 2.3 1.3 1 2.4 1.8 3.8 1.8 1 0 1.9-.3 2.8-.9"></path>
+              <path d="M3 19c2.1-1.8 4.1-2.7 6-2.7 1.8 0 3.2.8 4.6 1.6 1.4.8 2.8 1.6 4.7 1.6 1.1 0 2.1-.2 3.2-.8"></path>
+              <path d="M4 10c1.3-2.9 3.3-4.5 5.8-4.5 3.2 0 4.6 2.8 6.9 2.8 1.1 0 2.1-.4 3.3-1.5"></path>
+            </svg>
+            <span>Windsurf</span>
+          </button>
+          <button class="menu-item" data-editor="vscode" role="menuitem" title="Open in Visual Studio Code">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="fill" d="M16.8 3.8l-7.2 6.9-3.2-2.4-2.2 1.9 3.1 2.8-3.1 2.8 2.2 1.9 3.2-2.4 7.2 6.9 3.2-1.5V5.3l-3.2-1.5zM17 8.2v7.6l-4.6-3.8L17 8.2z"/>
+            </svg>
+            <span>Visual Studio Code</span>
+          </button>
+          <div class="menu-label">Viewer actions</div>
+          <button id="menuToggleBtn" class="menu-item" role="menuitem" title="Toggle edit or preview">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
+              <path d="M13 7l4 4"></path>
+            </svg>
+            <span id="menuToggleLabel">Edit</span>
+          </button>
+          <button id="menuSaveBtn" class="menu-item" role="menuitem" title="Save file">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4h11l3 3v13H5z"></path>
+              <path d="M8 4v6h8V4"></path>
+              <path d="M9 20v-5h6v5"></path>
+            </svg>
+            <span>Save</span>
+          </button>
+          <button id="menuDoneBtn" class="menu-item" role="menuitem" title="Done">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12l5 5L20 7"></path>
+            </svg>
+            <span>Done</span>
+          </button>
+        </div>
+      </div>
+      <button id="toggleBtn" class="secondary-muted" style="display:none"></button>
+      <button id="saveBtn" class="primary" title="Save file" style="display:none">Save</button>
       <span id="saveHint" class="save-hint"></span>
-      <button id="doneBtn" class="success">Done</button>
     </div>
   </div>
 
-  <div class="meta">
-    <span id="metaPath"></span>
-    <span id="metaLines"></span>
-    <span id="metaMode"></span>
-    <span id="metaSize"></span>
+  <div class="file-meta-bar">
+    <div class="meta-left">
+      <span id="metaPath" class="meta-item"></span>
+      <span id="metaLines" class="meta-item"></span>
+      <span id="metaMode" class="meta-item"></span>
+      <span id="metaSize" class="meta-item"></span>
+    </div>
+    <div class="meta-right">
+      <div id="markdownToggle" class="markdown-toggle">
+        <span class="toggle-label">Markdown view</span>
+        <div class="view-toggle">
+          <button id="btnRendered" class="active" type="button">Rendered</button>
+          <button id="btnRaw" type="button">Markdown</button>
+        </div>
+      </div>
+      <div class="copy-done-group">
+        <button id="copyBtn" class="icon-btn secondary-muted" title="Copy file contents" aria-label="Copy file contents">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+            <rect x="5" y="5" width="10" height="10" rx="2"></rect>
+          </svg>
+        </button>
+        <button id="doneBtn" class="secondary-muted" title="Done" aria-label="Done">
+          <span class="done-label">Done</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="content">
@@ -394,6 +712,10 @@ export function generateFileViewerHTML(opts: {
           </div>
         </div>
       </div>
+    </div>
+
+    <div id="markdownRenderedWrap" class="markdown-rendered-wrap">
+      <div id="markdownRendered" class="markdown-body"></div>
     </div>
 
     <div id="editorWrap" class="editor-wrap">
@@ -415,6 +737,7 @@ export function generateFileViewerHTML(opts: {
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/toml.min.js"><\/script>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/makefile.min.js"><\/script>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/xml.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
 <script>
   var PORT = ${opts.port};
   var TITLE = ${escapedTitle};
@@ -423,14 +746,15 @@ export function generateFileViewerHTML(opts: {
   var LINE_RANGE = ${escapedLineRange};
   var EDITABLE = ${escapedEditable};
   var LANGUAGE = ${escapedLanguage};
+  var IS_MARKDOWN = ${escapedIsMarkdown};
 
   var currentContent = ORIGINAL;
   var savedContent = ORIGINAL;
   var modified = false;
   var mode = 'view';
+  var markdownView = IS_MARKDOWN ? 'rendered' : 'raw';
   var isDone = false;
 
-  /* ── DOM refs ── */
   var titleText = document.getElementById('titleText');
   var subtitleText = document.getElementById('subtitleText');
   var unsavedDot = document.getElementById('unsavedDot');
@@ -442,22 +766,29 @@ export function generateFileViewerHTML(opts: {
   var notice = document.getElementById('notice');
   var doneBanner = document.getElementById('doneBanner');
   var viewerWrap = document.getElementById('viewerWrap');
+  var markdownToggle = document.getElementById('markdownToggle');
+  var markdownRenderedWrap = document.getElementById('markdownRenderedWrap');
+  var markdownRendered = document.getElementById('markdownRendered');
+  var btnRendered = document.getElementById('btnRendered');
+  var btnRaw = document.getElementById('btnRaw');
 
   var gutter = document.getElementById('gutter');
   var codeBlock = document.getElementById('codeBlock');
   var editorWrap = document.getElementById('editorWrap');
   var editorLines = document.getElementById('editorLines');
   var editor = document.getElementById('editor');
-  var cursorBtn = document.getElementById('cursorBtn');
-  var windsurfBtn = document.getElementById('windsurfBtn');
-  var vscodeBtn = document.getElementById('vscodeBtn');
+  var menuBtn = document.getElementById('menuBtn');
+  var editorMenu = document.getElementById('editorMenu');
   var copyBtn = document.getElementById('copyBtn');
   var toggleBtn = document.getElementById('toggleBtn');
   var saveBtn = document.getElementById('saveBtn');
   var saveHint = document.getElementById('saveHint');
   var doneBtn = document.getElementById('doneBtn');
+  var menuToggleBtn = document.getElementById('menuToggleBtn');
+  var menuToggleLabel = document.getElementById('menuToggleLabel');
+  var menuSaveBtn = document.getElementById('menuSaveBtn');
+  var menuDoneBtn = document.getElementById('menuDoneBtn');
 
-  /* ── Language detection ── */
   var EXT_MAP = {
     js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
     ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
@@ -469,7 +800,7 @@ export function generateFileViewerHTML(opts: {
     html: 'html', htm: 'html', vue: 'html', svelte: 'html',
     css: 'css', scss: 'scss', less: 'less', sass: 'scss',
     json: 'json', jsonc: 'json',
-    md: 'markdown', mdx: 'markdown',
+    md: 'markdown', mdx: 'markdown', markdown: 'markdown',
     yaml: 'yaml', yml: 'yaml',
     xml: 'xml', svg: 'xml', plist: 'xml',
     sql: 'sql',
@@ -503,7 +834,6 @@ export function generateFileViewerHTML(opts: {
 
   var detectedLang = detectLanguage();
 
-  /* ── Helpers ── */
   function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
@@ -526,9 +856,7 @@ export function generateFileViewerHTML(opts: {
 
   function renderLineNumberHtml(count) {
     var html = '';
-    for (var i = 1; i <= count; i++) {
-      html += '<span>' + i + '</span>';
-    }
+    for (var i = 1; i <= count; i++) html += '<span>' + i + '</span>';
     return html;
   }
 
@@ -537,7 +865,6 @@ export function generateFileViewerHTML(opts: {
     if (container.innerHTML !== html) container.innerHTML = html;
   }
 
-  /* ── Highlight code ── */
   function updateGutter(content) {
     var html = renderLineNumberHtml(getLineCount(content));
     if (gutter.innerHTML !== html) gutter.innerHTML = html;
@@ -546,11 +873,7 @@ export function generateFileViewerHTML(opts: {
   var lastHighlightedContent = null;
 
   function highlightCode() {
-    /* Skip re-highlight if content unchanged */
-    if (currentContent === lastHighlightedContent) {
-      return;
-    }
-    /* Highlight with hljs — use .highlight() for synchronous result */
+    if (currentContent === lastHighlightedContent) return;
     if (typeof hljs !== 'undefined') {
       var lang = (detectedLang && hljs.getLanguage(detectedLang)) ? detectedLang : null;
       var result;
@@ -567,24 +890,54 @@ export function generateFileViewerHTML(opts: {
     lastHighlightedContent = currentContent;
   }
 
-  /* ── Sync editor line numbers on scroll ── */
+  function preprocessMarkdown(content) {
+    return String(content || '');
+  }
+
+  function renderMarkdown() {
+    if (!IS_MARKDOWN) return;
+    if (typeof marked !== 'undefined' && marked && typeof marked.parse === 'function') {
+      marked.setOptions({ gfm: true, breaks: true });
+      markdownRendered.innerHTML = marked.parse(preprocessMarkdown(currentContent));
+    } else {
+      markdownRendered.textContent = currentContent;
+    }
+  }
+
   function syncEditorScroll() {
     editorLines.style.transform = 'translateY(-' + editor.scrollTop + 'px)';
   }
 
-  /* ── Refresh meta bar ── */
-  function refreshMeta() {
-    metaPath.textContent = 'Path: ' + FILE_PATH;
-    var lineCount = getLineCount(currentContent);
-    metaLines.textContent = 'Lines: ' + lineCount + (LINE_RANGE ? ' (range ' + LINE_RANGE + ')' : '');
-    metaMode.textContent = isDone ? 'Mode: Read-only (done)' : ('Mode: ' + (mode === 'view' ? 'Read' : 'Edit') + (EDITABLE ? '' : ' (read-only)'));
-    metaSize.textContent = 'Size: ' + formatBytes(new Blob([currentContent]).size);
+  function truncateMiddle(text, maxLength) {
+    if (!text || text.length <= maxLength) return text;
+    var half = Math.max(4, Math.floor((maxLength - 1) / 2));
+    return text.slice(0, half) + '…' + text.slice(text.length - half);
   }
 
-  /* ── Main UI refresh ── */
+  function refreshMeta() {
+    var lineCount = getLineCount(currentContent);
+    metaPath.textContent = truncateMiddle(FILE_PATH, 48);
+    metaLines.textContent = lineCount + ' lines' + (LINE_RANGE ? ' (range ' + LINE_RANGE + ')' : '');
+    var modeLabel;
+    if (isDone) {
+      modeLabel = 'done';
+    } else if (mode === 'edit') {
+      modeLabel = EDITABLE ? 'edit' : 'read-only';
+    } else if (IS_MARKDOWN && markdownView === 'rendered') {
+      modeLabel = '';
+    } else {
+      modeLabel = EDITABLE ? 'read' : 'read-only';
+    }
+    metaMode.textContent = 'Mode: ' + modeLabel;
+    metaSize.textContent = 'Size: ' + formatBytes(new Blob([currentContent]).size);
+    metaMode.style.display = 'none';
+    metaSize.style.display = 'none';
+
+    subtitleText.textContent = modeLabel;
+  }
+
   function refreshUI() {
     titleText.textContent = TITLE;
-    subtitleText.textContent = FILE_PATH;
     unsavedDot.classList.toggle('visible', modified);
 
     if (detectedLang) {
@@ -595,37 +948,64 @@ export function generateFileViewerHTML(opts: {
     }
 
     var isEdit = mode === 'edit' && EDITABLE && !isDone;
+    var showRendered = IS_MARKDOWN && !isEdit && markdownView === 'rendered';
+    var showCode = !isEdit && (!IS_MARKDOWN || markdownView === 'raw');
 
-    /* Toggle viewer/editor visibility */
-    viewerWrap.classList.toggle('hidden', isEdit);
+    markdownToggle.classList.toggle('visible', IS_MARKDOWN);
+    viewerWrap.classList.toggle('hidden', !showCode);
+    markdownRenderedWrap.classList.toggle('visible', showRendered);
     editorWrap.classList.toggle('visible', isEdit);
 
-    if (!isEdit) {
-      highlightCode();
-    } else {
+    if (showRendered) renderMarkdown();
+    if (showCode) highlightCode();
+
+    if (isEdit) {
       if (editor.value !== currentContent) editor.value = currentContent;
       generateLineNums(currentContent, editorLines);
+      syncEditorScroll();
     }
 
-    /* Button states */
+    btnRendered.classList.toggle('active', markdownView === 'rendered');
+    btnRaw.classList.toggle('active', markdownView === 'raw');
+
     if (isDone) {
       toggleBtn.textContent = 'Read Only';
       toggleBtn.disabled = true;
       saveBtn.disabled = true;
       doneBtn.disabled = true;
       doneBtn.textContent = 'Done';
+      menuToggleBtn.disabled = true;
+      menuSaveBtn.disabled = true;
+      menuDoneBtn.disabled = true;
+      menuToggleLabel.textContent = 'Read Only';
     } else {
-      toggleBtn.textContent = isEdit ? 'Preview' : (EDITABLE ? 'Edit' : 'Read Only');
+      var toggleLabel = isEdit ? 'Preview' : (EDITABLE ? 'Edit' : 'Read Only');
+      toggleBtn.textContent = toggleLabel;
       toggleBtn.disabled = !EDITABLE;
       saveBtn.disabled = !EDITABLE || !modified;
       doneBtn.disabled = false;
+      menuToggleBtn.disabled = !EDITABLE;
+      menuSaveBtn.disabled = !EDITABLE || !modified;
+      menuDoneBtn.disabled = false;
+      menuToggleLabel.textContent = toggleLabel;
     }
 
-    saveHint.textContent = (EDITABLE && !isDone) ? (navigator.platform.indexOf('Mac') > -1 ? '\\u2318S' : 'Ctrl+S') : '';
+    saveHint.textContent = '';
     refreshMeta();
   }
 
+  function closeMenu() {
+    editorMenu.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function openMenu() {
+    editorMenu.classList.add('open');
+    menuBtn.setAttribute('aria-expanded', 'true');
+  }
+
   function openInEditor(editorName) {
+    closeMenu();
     fetch('http://127.0.0.1:' + PORT + '/open-editor', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -640,11 +1020,41 @@ export function generateFileViewerHTML(opts: {
     });
   }
 
-  cursorBtn.addEventListener('click', function() { openInEditor('cursor'); });
-  windsurfBtn.addEventListener('click', function() { openInEditor('windsurf'); });
-  vscodeBtn.addEventListener('click', function() { openInEditor('vscode'); });
+  menuBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (editorMenu.classList.contains('open')) closeMenu();
+    else openMenu();
+  });
 
-  /* ── Copy ── */
+  menuToggleBtn.addEventListener('click', function() {
+    closeMenu();
+    toggleBtn.click();
+  });
+
+  menuSaveBtn.addEventListener('click', function() {
+    closeMenu();
+    doSave();
+  });
+
+  menuDoneBtn.addEventListener('click', function() {
+    closeMenu();
+    doneBtn.click();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-editor]'), function(btn) {
+    btn.addEventListener('click', function() {
+      openInEditor(btn.getAttribute('data-editor'));
+    });
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!editorMenu.contains(e.target) && e.target !== menuBtn) closeMenu();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeMenu();
+  });
+
   copyBtn.addEventListener('click', function() {
     navigator.clipboard.writeText(mode === 'edit' ? editor.value : currentContent).then(function() {
       setNotice('Copied to clipboard', 'success');
@@ -654,11 +1064,29 @@ export function generateFileViewerHTML(opts: {
     });
   });
 
-  /* ── Toggle view/edit ── */
+  btnRendered.addEventListener('click', function() {
+    if (!IS_MARKDOWN || isDone) return;
+    if (mode === 'edit') {
+      currentContent = editor.value;
+      modified = currentContent !== savedContent;
+      mode = 'view';
+      updateGutter(currentContent);
+    }
+    markdownView = 'rendered';
+    refreshUI();
+  });
+
+  btnRaw.addEventListener('click', function() {
+    if (!IS_MARKDOWN || isDone) return;
+    markdownView = 'raw';
+    refreshUI();
+  });
+
   toggleBtn.addEventListener('click', function() {
     if (!EDITABLE || isDone) return;
     if (mode === 'view') {
       mode = 'edit';
+      markdownView = 'raw';
       setNotice('Edit mode — changes are local until you Save', 'warning');
       refreshUI();
       setTimeout(function() { editor.focus(); }, 0);
@@ -672,7 +1100,6 @@ export function generateFileViewerHTML(opts: {
     }
   });
 
-  /* ── Editor input tracking ── */
   editor.addEventListener('input', function() {
     currentContent = editor.value;
     modified = currentContent !== savedContent;
@@ -684,7 +1111,6 @@ export function generateFileViewerHTML(opts: {
 
   editor.addEventListener('scroll', syncEditorScroll);
 
-  /* ── Tab key support in editor ── */
   editor.addEventListener('keydown', function(e) {
     if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
@@ -716,7 +1142,6 @@ export function generateFileViewerHTML(opts: {
     }
   });
 
-  /* ── Save ── */
   function doSave() {
     if (!EDITABLE || !modified || isDone) return;
     currentContent = editor.value;
@@ -730,6 +1155,7 @@ export function generateFileViewerHTML(opts: {
       savedContent = currentContent;
       modified = false;
       updateGutter(currentContent);
+      renderMarkdown();
       setNotice('Saved', 'success');
       setTimeout(function() { if (!modified) setNotice('', ''); }, 2000);
       refreshUI();
@@ -740,49 +1166,39 @@ export function generateFileViewerHTML(opts: {
 
   saveBtn.addEventListener('click', doSave);
 
-  /* ── Done — signal CLI but keep page open as read-only ── */
+  document.addEventListener('keydown', function(e) {
+    var lower = String(e.key || '').toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && lower === 's') {
+      e.preventDefault();
+      doSave();
+    }
+  });
+
   doneBtn.addEventListener('click', function() {
-    if (isDone) return;
-    if (mode === 'edit') {
-      currentContent = editor.value;
-      modified = currentContent !== savedContent;
-    }
-    if (modified) {
-      var proceed = window.confirm('You have unsaved changes. Close the viewer and return to CLI anyway?');
-      if (!proceed) return;
-    }
-
-    /* Switch to done/read-only state immediately */
-    isDone = true;
-    mode = 'view';
-    doneBanner.classList.add('visible');
-    setNotice('', '');
-    refreshUI();
-
-    /* Signal the CLI server — fire and forget, server may close before response */
+    closeMenu();
     fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'done', modified: modified, content: currentContent })
-    }).catch(function() { /* expected — server closes after receiving result */ });
+      body: JSON.stringify({ modified: modified, content: mode === 'edit' ? editor.value : currentContent })
+    }).then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (!data.ok) throw new Error(data.error || 'Failed to finish');
+      isDone = true;
+      modified = false;
+      doneBtn.classList.add('active');
+      doneBanner.classList.add('visible');
+      setNotice('', '');
+      refreshUI();
+    }).catch(function(err) {
+      setNotice(err && err.message ? err.message : 'Failed to finish', 'error');
+    });
   });
 
-  /* ── Keyboard shortcuts ── */
-  document.addEventListener('keydown', function(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-      e.preventDefault();
-      if (mode === 'edit' && !isDone) doSave();
-    }
-  });
-
-  /* ── Init ── */
+  editor.value = ORIGINAL;
+  generateLineNums(currentContent, editorLines);
+  updateGutter(currentContent);
   refreshUI();
-  /* Retry after CDN scripts load in case hljs wasn't ready on first call */
-  window.addEventListener('load', function() {
-    lastHighlightedContent = null;
-    refreshUI();
-  });
-<\/script>
+</script>
 </body>
 </html>`;
 }
