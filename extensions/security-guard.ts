@@ -36,6 +36,8 @@ import {
 	scanContent,
 	scanUrl,
 	stripInjections,
+	classifyContentThreats,
+	annotateUnsafeShell,
 	formatThreat,
 	formatThreatsForBlock,
 	truncateToolResult,
@@ -45,6 +47,7 @@ import {
 	detectSystemPromptLeakage,
 	type SecurityPolicy,
 	type ThreatResult,
+	type ClassifiedThreat,
 	type Severity,
 	type ToolBudget,
 } from "./lib/security-engine.ts";
@@ -474,52 +477,82 @@ export default function securityGuard(pi: ExtensionAPI) {
 			const newContent = currentContent.map((block: any) => {
 				if (block.type !== "text" || !block.text) return block;
 
-				const threats = scanContent(block.text, policy);
-				if (threats.length === 0) return block;
+				const classified = classifyContentThreats(block.text, policy);
+				if (classified.length === 0) return block;
 
-				// Found injection — strip it
-				const blockLevelThreats = threats.filter((t) => t.severity === "block");
-				if (blockLevelThreats.length === 0) {
-					// Only warn-level — log but don't strip
-					for (const t of threats) {
+				const toolLabel = msg.toolName || "unknown";
+				const injections = classified.filter((t) => t.category === "prompt_injection");
+				const unsafeShell = classified.filter((t) => t.category === "unsafe_shell_execution");
+
+				let resultText = block.text;
+
+				// Handle prompt injections — strip block-level, log warn-level
+				const blockLevelInjections = injections.filter((t) => t.severity === "block");
+				const warnLevelInjections = injections.filter((t) => t.severity !== "block");
+
+				for (const t of warnLevelInjections) {
+					stats.warned++;
+					stats.threats.push(t);
+					audit.log({
+						timestamp: now(),
+						severity: t.severity,
+						category: t.category,
+						tool: toolLabel,
+						description: `Content injection: ${t.description}`,
+						matched: t.matched,
+						action: "warned",
+					});
+				}
+
+				if (blockLevelInjections.length > 0) {
+					const { cleaned, redactions } = stripInjections(resultText, policy);
+
+					for (const r of redactions) {
+						stats.redacted++;
+						stats.threats.push(r);
+						audit.log({
+							timestamp: now(),
+							severity: r.severity,
+							category: r.category,
+							tool: toolLabel,
+							description: `REDACTED injection: ${r.description}`,
+							matched: r.matched,
+							action: "redacted",
+						});
+					}
+
+					if (cleaned !== resultText) {
+						resultText = cleaned;
+						emitGuardCard(`stripped ${redactions.length} injection(s)`, toolLabel);
+					}
+				}
+
+				// Handle unsafe shell — annotate (preserve content with warning)
+				if (unsafeShell.length > 0) {
+					const injectionLines = new Set(blockLevelInjections.map(t => t.lineIndex));
+					resultText = annotateUnsafeShell(resultText, unsafeShell, injectionLines);
+
+					for (const t of unsafeShell) {
 						stats.warned++;
 						stats.threats.push(t);
 						audit.log({
 							timestamp: now(),
 							severity: t.severity,
 							category: t.category,
-							tool: msg.toolName || "unknown",
-							description: `Content injection: ${t.description}`,
+							tool: toolLabel,
+							description: `Unsafe shell: ${t.description}`,
 							matched: t.matched,
 							action: "warned",
 						});
 					}
-					return block;
+
+					emitGuardCard(`annotated ${unsafeShell.length} unsafe shell ref(s)`, toolLabel);
 				}
 
-				// Block-level injection found — strip it
-				const { cleaned, redactions } = stripInjections(block.text, policy);
-
-				for (const r of redactions) {
-					stats.redacted++;
-					stats.threats.push(r);
-					audit.log({
-						timestamp: now(),
-						severity: r.severity,
-						category: r.category,
-						tool: msg.toolName || "unknown",
-						description: `REDACTED injection: ${r.description}`,
-						matched: r.matched,
-						action: "redacted",
-					});
-				}
-
-				if (cleaned !== block.text) {
+				if (resultText !== block.text) {
 					msgModified = true;
 					anyModified = true;
-					const toolLabel = msg.toolName || "unknown";
-					emitGuardCard(`stripped ${redactions.length} injection(s)`, toolLabel);
-					return { ...block, text: cleaned };
+					return { ...block, text: resultText };
 				}
 
 				return block;

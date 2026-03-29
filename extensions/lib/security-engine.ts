@@ -18,6 +18,7 @@ export type ThreatCategory =
 	| "exfiltration"
 	| "credentials"
 	| "prompt_injection"
+	| "unsafe_shell_execution"
 	| "tampering"
 	| "unknown";
 
@@ -641,6 +642,139 @@ export function stripInjections(
 	}
 
 	return { cleaned, redactions };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Content Classification (three-category model)
+// ═══════════════════════════════════════════════════════════════════
+
+export interface ClassifiedThreat extends ThreatResult {
+	lineIndex: number;
+}
+
+/** Patterns for dangerous shell commands found in content (not actual tool calls). */
+const UNSAFE_SHELL_CONTENT_PATTERNS: PolicyRule[] = [
+	{ pattern: "curl\\s+.*\\|\\s*(?:bash|sh|zsh)", description: "Pipe to shell", severity: "warn", category: "unsafe_shell_execution" },
+	{ pattern: "wget\\s+.*\\|\\s*(?:bash|sh)", description: "Wget pipe to shell", severity: "warn", category: "unsafe_shell_execution" },
+	{ pattern: "rm\\s+-rf\\b", description: "Recursive force delete", severity: "warn", category: "unsafe_shell_execution" },
+	{ pattern: "sudo\\s+", description: "Sudo usage", severity: "warn", category: "unsafe_shell_execution" },
+	{ pattern: "(?:run|execute|type)\\s+(?:this|the following)", description: "Imperative shell phrasing", severity: "warn", category: "unsafe_shell_execution" },
+];
+
+/**
+ * Build a boolean mask indicating which lines are inside a fenced code block.
+ * Tracks opening/closing of ``` and ~~~ fences.
+ */
+function buildFencedCodeMask(lines: string[]): boolean[] {
+	const mask: boolean[] = new Array(lines.length).fill(false);
+	let inFence = false;
+
+	for (let i = 0; i < lines.length; i++) {
+		const trimmed = lines[i].trimStart();
+		if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+			if (inFence) {
+				// Closing fence — this line is still inside
+				mask[i] = true;
+				inFence = false;
+			} else {
+				// Opening fence — this line is the fence marker
+				mask[i] = true;
+				inFence = true;
+			}
+		} else {
+			mask[i] = inFence;
+		}
+	}
+
+	return mask;
+}
+
+/** Check if a line is a code comment (starts with #, //, or is an HTML comment). */
+function isCommentLine(line: string): boolean {
+	const trimmed = line.trimStart();
+	return trimmed.startsWith("#") || trimmed.startsWith("//") || trimmed.startsWith("<!--");
+}
+
+/**
+ * Classify content into prompt_injection and unsafe_shell_execution threats.
+ * - prompt_injection: always flagged (even in code blocks — injections affect the LLM regardless)
+ * - unsafe_shell_execution: suppressed when inside fenced code blocks or comment lines
+ * - safe_reference: no threat emitted (implicit — anything not flagged)
+ */
+export function classifyContentThreats(text: string, policy: SecurityPolicy): ClassifiedThreat[] {
+	if (!policy.settings.enabled) return [];
+	if (!text || text.length === 0) return [];
+
+	const lines = text.split("\n");
+	const fenceMask = buildFencedCodeMask(lines);
+	const threats: ClassifiedThreat[] = [];
+
+	// Pass 1: Prompt injection patterns — always flagged regardless of context
+	for (let i = 0; i < lines.length; i++) {
+		for (const rule of policy.prompt_injection_patterns) {
+			const re = getRegex(rule.pattern, "i");
+			const match = safeExec(re, lines[i]);
+			if (match) {
+				threats.push({
+					severity: rule.severity,
+					category: rule.category as ThreatCategory,
+					description: rule.description,
+					matched: match[0],
+					rulePattern: rule.pattern,
+					lineIndex: i,
+				});
+			}
+		}
+	}
+
+	// Pass 2: Unsafe shell patterns — suppressed in fenced blocks and comment lines
+	for (let i = 0; i < lines.length; i++) {
+		if (fenceMask[i] || isCommentLine(lines[i])) continue;
+
+		for (const rule of UNSAFE_SHELL_CONTENT_PATTERNS) {
+			const re = getRegex(rule.pattern, "i");
+			const match = safeExec(re, lines[i]);
+			if (match) {
+				threats.push({
+					severity: rule.severity,
+					category: rule.category as ThreatCategory,
+					description: rule.description,
+					matched: match[0],
+					rulePattern: rule.pattern,
+					lineIndex: i,
+				});
+			}
+		}
+	}
+
+	return threats;
+}
+
+/**
+ * Annotate lines containing unsafe shell commands with a visible warning.
+ * Unlike stripInjections, this preserves the original content inside the annotation.
+ * Skips lines in the injectionLineIndices set (those are handled by stripInjections).
+ */
+export function annotateUnsafeShell(
+	text: string,
+	threats: ClassifiedThreat[],
+	injectionLineIndices?: Set<number>,
+): string {
+	const shellThreats = threats.filter(t => t.category === "unsafe_shell_execution");
+	if (shellThreats.length === 0) return text;
+
+	const shellLines = new Set(shellThreats.map(t => t.lineIndex));
+	const skipLines = injectionLineIndices || new Set<number>();
+
+	const lines = text.split("\n");
+	const annotated = lines.map((line, i) => {
+		if (shellLines.has(i) && !skipLines.has(i)) {
+			return `[⚠️ UNSAFE SHELL: ${line}]`;
+		}
+		return line;
+	});
+
+	return annotated.join("\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════
