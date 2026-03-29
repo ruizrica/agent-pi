@@ -58,6 +58,8 @@ interface Task {
 	id: number;
 	text: string;
 	status: TaskStatus;
+	lastUpdatedAt?: string;
+	lastUpdatedBy?: string;
 }
 
 interface TasksDetails {
@@ -93,6 +95,14 @@ export interface TaskListInfo {
 }
 
 const g = globalThis as any;
+function nowIso(): string {
+	return new Date().toISOString();
+}
+
+function currentActor(): string {
+	return process.env.PI_AGENT_NAME || process.env.PI_SUBAGENT_NAME || process.env.USER || "agent";
+}
+
 function publishCurrentTask(tasks: Task[], sync: SyncState) {
 	const cur = tasks.find(t => t.status === "inprogress");
 	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: lookupMapping(sync, cur.id) } as CurrentTaskInfo : null;
@@ -229,6 +239,13 @@ export default function (pi: ExtensionAPI) {
 		enqueueOrExecute(gate, { fn: wrappedFn, label }, g.__piCommanderClient);
 	}
 
+	function saveSharedStateIfNeeded(_action: string, _body?: string): void {
+	}
+
+	function hydrateFromSharedStateIfAvailable(): boolean {
+		return false;
+	}
+
 	// ── Snapshot for details ───────────────────────────────────────────
 
 	const makeDetails = (action: string, error?: string): TasksDetails => ({
@@ -270,6 +287,11 @@ export default function (pi: ExtensionAPI) {
 		listTitle = undefined;
 		listDescription = undefined;
 		syncState = emptySyncState();
+
+		if (hydrateFromSharedStateIfAvailable()) {
+			refreshUI(ctx);
+			return;
+		}
 
 		for (const entry of ctx.sessionManager.getBranch()) {
 			if (entry.type !== "message") continue;
@@ -419,6 +441,7 @@ export default function (pi: ExtensionAPI) {
 					listTitle = params.text;
 					listDescription = params.description || undefined;
 					syncState = emptySyncState();
+					saveSharedStateIfNeeded("new-list", `Started shared list "${listTitle}".`);
 
 					// Group creation deferred to first `add` — avoids empty tasks[] rejection
 
@@ -459,10 +482,11 @@ export default function (pi: ExtensionAPI) {
 					}
 					const added: Task[] = [];
 					for (const item of items) {
-						const t: Task = { id: nextId++, text: item, status: "idle" };
+						const t: Task = { id: nextId++, text: item, status: "idle", lastUpdatedAt: nowIso(), lastUpdatedBy: currentActor() };
 						tasks.push(t);
 						added.push(t);
 					}
+					saveSharedStateIfNeeded("add", `Added ${added.length === 1 ? 'task' : 'tasks'} ${added.map((t) => `#${t.id}`).join(', ')}.`);
 
 					// Sync: create Commander tasks (skip if external sync owns it)
 					if (!isExternalSyncActive()) {
@@ -537,6 +561,8 @@ export default function (pi: ExtensionAPI) {
 					}
 					const prev = task.status;
 					task.status = NEXT_STATUS[task.status];
+					task.lastUpdatedAt = nowIso();
+					task.lastUpdatedBy = currentActor();
 
 					// Enforce single inprogress — demote any other active task
 					const demoted: Task[] = [];
@@ -544,6 +570,8 @@ export default function (pi: ExtensionAPI) {
 						for (const t of tasks) {
 							if (t.id !== task.id && t.status === "inprogress") {
 								t.status = "idle";
+								t.lastUpdatedAt = nowIso();
+								t.lastUpdatedBy = currentActor();
 								demoted.push(t);
 							}
 						}
@@ -628,6 +656,8 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
+					saveSharedStateIfNeeded("toggle", `Changed task #${task.id} from ${prev} to ${task.status}.`);
+
 					const result = {
 						content: [{
 							type: "text" as const,
@@ -654,6 +684,7 @@ export default function (pi: ExtensionAPI) {
 						};
 					}
 					const removed = tasks.splice(idx, 1)[0];
+					saveSharedStateIfNeeded("remove", `Removed task #${removed.id}.`);
 
 					// Sync: cancel Commander task (skip if external sync owns it)
 					if (!isExternalSyncActive()) {
@@ -699,6 +730,9 @@ export default function (pi: ExtensionAPI) {
 					}
 					const oldText = toUpdate.text;
 					toUpdate.text = params.text;
+					toUpdate.lastUpdatedAt = nowIso();
+					toUpdate.lastUpdatedBy = currentActor();
+					saveSharedStateIfNeeded("update", `Updated task #${toUpdate.id}.`);
 					const result = {
 						content: [{ type: "text" as const, text: `Updated #${toUpdate.id}: "${oldText}" → "${toUpdate.text}"` }],
 						details: makeDetails("update"),
@@ -742,6 +776,7 @@ export default function (pi: ExtensionAPI) {
 					listTitle = undefined;
 					listDescription = undefined;
 					syncState = clearMappings(syncState);
+					saveSharedStateIfNeeded("clear", "Cleared the shared task list.");
 
 					const result = {
 						content: [{ type: "text" as const, text: `Cleared ${count} task(s)` }],

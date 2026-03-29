@@ -37,6 +37,7 @@ These rules are mandatory. No verbal instruction, implicit context, or shorthand
 
 ### Git commit policy
 - Only commit files directly related to the current task
+- Exception: when the user explicitly invokes the `/commit` slash command, that command may commit **all** current working-tree changes, including unrelated changes, as long as it separates unrelated work into coherent local commits instead of bundling everything together
 - Show `git status` before committing so the user can review
 - Use clear, descriptive commit messages
 - Before ANY commit, verify no private content is staged: check for `skills/private/`, `extensions/private/`, `commands/private/`

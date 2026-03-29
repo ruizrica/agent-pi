@@ -66,6 +66,9 @@ export function isBannerVisible(): boolean {
 }
 
 export default function (pi: ExtensionAPI) {
+
+
+	// @implement add comments for each line of code
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 		bannerCtx = ctx;
