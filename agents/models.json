@@ -51,6 +51,10 @@
     "rlm-subcall": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5"
+    },
+    "builder-kimi-k2-5-turbo": {
+      "provider": "fireworks",
+      "model": "accounts/fireworks/routers/kimi-k2p5-turbo"
     }
   }
 }
