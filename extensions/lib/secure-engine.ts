@@ -144,6 +144,13 @@ const AI_SERVICE_PATTERNS: AIServicePattern[] = [
 		envPattern: /REPLICATE_API_TOKEN/i,
 		callPattern: /(?:replicate\.run|replicate\.predictions)/i,
 	},
+	{
+		name: "Fireworks AI",
+		sdk: "fireworks-js",
+		importPattern: /(?:require\s*\(\s*['"]fireworks-js['"]\)|from\s+['"]fireworks|import\s+.*fireworks|api\.fireworks\.ai)/i,
+		envPattern: /FIREWORKS_API_KEY/i,
+		callPattern: /(?:fireworks\.(?:chat|completions|inference)|accounts\/fireworks\/)/i,
+	},
 	// Python-specific
 	{
 		name: "OpenAI (Python)",

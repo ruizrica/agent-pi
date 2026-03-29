@@ -22,6 +22,7 @@ const AI_ENV_VARS: Record<string, string[]> = {
 	"Vercel AI SDK": ["OPENAI_API_KEY"],
 	"Azure OpenAI": ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"],
 	"Replicate": ["REPLICATE_API_TOKEN"],
+	"Fireworks AI": ["FIREWORKS_API_KEY"],
 };
 
 // ═══════════════════════════════════════════════════════════════════
