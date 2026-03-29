@@ -91,7 +91,6 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const rightWidth = visibleWidth(rightContent);
 				const gap = Math.max(1, width - leftWidth - rightWidth);
 				const line = leftContent + " ".repeat(gap) + rightContent;
-
 				return [truncateToWidth(line, width, "")];
 			},
 		};
@@ -106,6 +105,12 @@ export default function (pi: ExtensionAPI) {
 		setupFooter(pi, ctx, (unsub) => {
 			branchUnsub = unsub;
 		});
+		(globalThis as any).__piRefreshFooter = () => {
+			ctx.ui.setFooter(undefined);
+			setupFooter(pi, ctx, (unsub) => {
+				branchUnsub = unsub;
+			});
+		};
 	});
 
 	// No tool_call blocking — core auto-compaction handles compaction properly
@@ -120,5 +125,6 @@ export default function (pi: ExtensionAPI) {
 			branchUnsub();
 			branchUnsub = null;
 		}
+		(globalThis as any).__piRefreshFooter = undefined;
 	});
 }
