@@ -66,6 +66,32 @@ describe("buildCommanderPrompt", () => {
 		expect(result).toContain("heartbeat");
 	});
 
+	it("supports local collaboration mailbox instructions", () => {
+		const result = buildCommanderPrompt({
+			agentName: "BUILDER",
+			enableMailboxChat: true,
+			collaborationMode: "local",
+			localMailboxPath: ".pi/local-mailbox/thread-1.jsonl",
+		});
+		expect(result).toContain("local mailbox");
+		expect(result).toContain("DECLARE INTENT");
+		expect(result).toContain("ACKNOWLEDGE direct assignments or questions");
+		expect(result).toContain("CHECK the local mailbox before starting work");
+		expect(result).toContain("AVOID DUPLICATE WORK");
+		expect(result).toContain(".pi/local-mailbox/thread-1.jsonl");
+	});
+
+	it("does not mention join-specific collaboration workflow when mailbox chat is disabled", () => {
+		const result = buildCommanderPrompt({
+			agentName: "SOLO",
+			enableMailboxChat: false,
+			collaborationMode: "local",
+		});
+		expect(result).not.toContain("CHECK the local mailbox before starting work");
+		expect(result).not.toContain("ACKNOWLEDGE direct assignments or questions");
+		expect(result).not.toContain("canonical peer identities");
+	});
+
 	it("includes mailbox notify on success when task is assigned", () => {
 		const result = buildCommanderPrompt({ agentName: "BUILDER", taskId: 7 });
 		expect(result).toContain("Task complete:");

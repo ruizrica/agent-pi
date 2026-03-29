@@ -6,10 +6,12 @@ export interface CommanderPromptOptions {
 	taskId?: number;
 	enableMailboxChat?: boolean;
 	peerNames?: string[];
+	collaborationMode?: "commander" | "local";
+	localMailboxPath?: string;
 }
 
 export function buildCommanderPrompt(opts: CommanderPromptOptions): string {
-	const { agentName, taskId, enableMailboxChat, peerNames } = opts;
+	const { agentName, taskId, enableMailboxChat, peerNames, collaborationMode = "commander", localMailboxPath } = opts;
 	const hasTask = taskId !== undefined;
 	const idStr = hasTask ? String(taskId) : "<id>";
 
@@ -31,13 +33,26 @@ On FAILURE:
 - Fail: commander_task { operation: "fail", task_id: ${idStr}, error_message: "<what went wrong>" }` : "No Commander task assigned. Commander tools are available if needed."}`;
 
 	if (enableMailboxChat) {
+		const mailboxSystem = collaborationMode === "local" ? "local mailbox log" : "mailbox (commander_mailbox)";
 		prompt += `\n\n## Inter-Agent Mailbox Communication (REQUIRED)
-You MUST use the mailbox (commander_mailbox) for all inter-agent communication.
+You MUST use the ${mailboxSystem} for all inter-agent communication.
 The mailbox is your primary channel for coordinating with other agents.`;
 		if (peerNames && peerNames.length > 0) {
 			prompt += `\nYour active peers: ${peerNames.join(", ")}.`;
 		}
-		prompt += `
+		if (collaborationMode === "local") {
+			prompt += `${localMailboxPath ? `\nLocal mailbox path: ${localMailboxPath}.` : ""}
+
+LOCAL MAILBOX PROTOCOL:
+1. CHECK the local mailbox before starting work and again before making overlapping edits.
+2. DECLARE INTENT before editing files; claim file paths and areas you will modify.
+3. SEND STATUS when you start, hit milestones, or finish.
+4. ACKNOWLEDGE direct assignments or questions when the inbox shows pending direct messages.
+5. ASK QUESTIONS through the local mailbox when you need host or peer decisions.
+6. SHARE RESULTS and explicitly mention which files changed or were inspected.
+7. AVOID DUPLICATE WORK: if another agent already claimed a file or area, coordinate before proceeding.`;
+		} else {
+			prompt += `
 
 MAILBOX PROTOCOL:
 1. CHECK INBOX at the start of your work and periodically during long tasks:
@@ -47,7 +62,9 @@ MAILBOX PROTOCOL:
    commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "<peer>", body: "<update>", message_type: "status" }
 4. ASK FOR HELP if you encounter something another agent might know about:
    commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "<peer>", body: "<question>", message_type: "question" }
-5. SHARE RESULTS when you discover useful information other agents should know.
+5. SHARE RESULTS when you discover useful information other agents should know.`;
+		}
+		prompt += `
 
 COMMUNICATION STYLE:
 - Be warm, professional, and collaborative. You are part of a team.

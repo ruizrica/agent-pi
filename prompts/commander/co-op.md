@@ -8,6 +8,7 @@ allowed-tools: ["Task", "TaskOutput", "mcp__commander__commander_task", "mcp__co
 
 Spawn up to **10 cooperative agents** that actively help each other through Commander's cooperation system. Unlike regular teams where agents work in isolation, `/co-op` agents share discoveries, request help when stuck, offer assistance when done early, and can request helper spawns for specialist work.
 
+
 ## Architecture
 
 ```
