@@ -160,6 +160,78 @@ No sessions were actually terminated. Run without dry_run=true to clean.
 
 ---
 
+## Backlog Task Cleanup Protocol
+
+Stale backlog tasks accumulate across work sessions. When task groups complete or sessions end, their associated tasks can become orphaned — sitting in `backlog` status with no active group to process them. Without cleanup, these pile up (15+) and clutter the Commander dashboard.
+
+**Safety rule:** Never cancel a backlog task that belongs to an active task group.
+
+### Step 1: Query All Backlog Tasks
+
+```typescript
+const backlog = await commander_task({
+  operation: "list",
+  status: "pending"
+});
+// Returns all tasks currently sitting in backlog/pending status
+```
+
+### Step 2: Check Active Task Groups
+
+```typescript
+const groups = await commander_task({
+  operation: "group:list"
+});
+// Returns all task groups — check which ones have overall_status != "completed"
+const activeGroups = groups.filter(g => g.overall_status !== "completed" && g.overall_status !== "failed");
+```
+
+### Step 3: Identify Orphaned Tasks
+
+Cross-reference backlog tasks against active groups. A task is orphaned if:
+- It has no `group_id`, OR
+- Its `group_id` does not match any active group
+
+```typescript
+const activeGroupIds = new Set(activeGroups.map(g => g.id));
+const orphans = backlog.filter(task =>
+  !task.group_id || !activeGroupIds.has(task.group_id)
+);
+```
+
+### Step 4: Cancel Orphaned Tasks
+
+```typescript
+for (const task of orphans) {
+  await commander_task({
+    operation: "update",
+    task_id: task.id,
+    status: "cancelled"
+  });
+}
+```
+
+**Always log what was cancelled:**
+```typescript
+await commander_task({
+  operation: "log",
+  message: `Backlog cleanup: cancelled ${orphans.length} orphaned tasks (IDs: ${orphans.map(t => t.id).join(", ")})`
+});
+```
+
+---
+
+## Backlog Cleanup Thresholds
+
+| Backlog Count | Status | Action |
+|---------------|--------|--------|
+| 0-5 | Healthy | None |
+| 6-10 | Warning | Check for orphans on next cleanup |
+| 11-15 | Cleanup candidate | Run backlog cleanup protocol |
+| 15+ | Critical | Run backlog cleanup immediately |
+
+---
+
 ## Best Practices for Agents
 
 ### On Session Startup
@@ -180,7 +252,18 @@ if (status.really_stale_24h > 10) {
 
 ### On Session Completion
 ```typescript
-// Always clean up your own session when done
+// 1. Clean up orphaned backlog tasks
+const backlog = await commander_task({ operation: "list", status: "pending" });
+const groups = await commander_task({ operation: "group:list" });
+const activeGroupIds = new Set(
+  groups.filter(g => g.overall_status !== "completed" && g.overall_status !== "failed").map(g => g.id)
+);
+const orphans = backlog.filter(t => !t.group_id || !activeGroupIds.has(t.group_id));
+for (const task of orphans) {
+  await commander_task({ operation: "update", task_id: task.id, status: "cancelled" });
+}
+
+// 2. Always clean up your own session when done
 await mcp__commander__commander_session_cleanup({
   operation: "terminate_self"
 });
@@ -224,6 +307,12 @@ if (sessions.length > 20) {
 
 # Clean up your own session when done
 /session-cleanup cleanup-self
+
+# Run backlog task cleanup (query -> check groups -> cancel orphans)
+/session-cleanup backlog
+
+# Full cleanup: stale sessions + orphaned backlog tasks
+/session-cleanup full
 ```
 
 ---
@@ -239,6 +328,7 @@ if (sessions.length > 20) {
 **Solution:** Responsible agents clean up after themselves:
 1. Check session health at start
 2. Proactively clean stale sessions
-3. Terminate their own session when done
+3. Run backlog cleanup to cancel orphaned tasks
+4. Terminate their own session when done
 
-**Goal:** Keep active sessions < 20 at any time
+**Goal:** Keep active sessions < 20 and orphaned backlog tasks at 0
