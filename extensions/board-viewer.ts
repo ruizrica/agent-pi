@@ -82,14 +82,44 @@ function getLocalTasks(): { tasks: any[]; title?: string } {
 }
 
 /**
- * Gather board data — always local-first.
- * Local tasks are the primary data source. Commander data is layered in when available.
+ * Gather board data — tries Commander first, falls back to local tasks.
+ * When Commander is available, returns full data (tasks, agents, messages, groups).
+ * When Commander is unavailable, returns local tasks from the Pi tasks extension.
  */
 async function gatherBoardData(): Promise<BoardData> {
 	const g = globalThis as any;
 	const local = getLocalTasks();
 
-	// Always return local tasks — this is the local-first board
+	// Try Commander if MCP client is available
+	const client = g.__piCommanderClient;
+	if (client) {
+		try {
+			const [taskResult, agentResult, messageResult, readyResult, groupResult] = await Promise.all([
+				callCommander("commander_task", { operation: "list" }),
+				callCommander("commander_orchestration", { operation: "agent:list", active_only: true }),
+				callCommander("commander_mailbox", { operation: "inbox", agent_name: "@all" }),
+				callCommander("commander_dependency", { operation: "ready_tasks" }),
+				callCommander("commander_task", { operation: "group:list" }),
+			]);
+
+			// If we got tasks back, Commander is connected
+			if (taskResult?.tasks) {
+				return {
+					tasks: taskResult.tasks || [],
+					agents: agentResult?.agents || [],
+					messages: messageResult?.messages || [],
+					groups: groupResult?.groups || [],
+					readyTasks: readyResult?.tasks || [],
+					connected: true,
+					timestamp: new Date().toISOString(),
+				};
+			}
+		} catch {
+			// Commander call failed — fall through to local mode
+		}
+	}
+
+	// Fallback: local tasks only
 	return {
 		tasks: local.tasks,
 		agents: [],
