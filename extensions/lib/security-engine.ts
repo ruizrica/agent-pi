@@ -361,7 +361,7 @@ export function getDefaultPolicy(): SecurityPolicy {
 	return {
 		blocked_commands: [
 			{ pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*\\s+|--recursive)", description: "Recursive delete", severity: "block", category: "destructive" },
-			{ pattern: "rm\\s+(-[a-zA-Z]*f[a-zA-Z]*\\s+)", description: "Force delete", severity: "block", category: "destructive" },
+			{ pattern: "rm\\s+(-[a-zA-Z]*f[a-zA-Z]*\\s+)(/|~|\\.\\.|\\.\\s|\\*)", description: "Force delete wildcard/root", severity: "block", category: "destructive" },
 			{ pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)", description: "Pipe to shell", severity: "block", category: "remote_exec" },
 			{ pattern: "sudo\\s+", description: "Sudo usage", severity: "block", category: "permissions" },
 			{ pattern: "printenv", description: "Env dump", severity: "block", category: "exfiltration" },
@@ -727,9 +727,10 @@ export function classifyContentThreats(text: string, policy: SecurityPolicy): Cl
 		}
 	}
 
-	// Pass 2: Unsafe shell patterns — suppressed in fenced blocks and comment lines
+	// Pass 2: Unsafe shell patterns — suppressed in fenced blocks, comment lines, and already-annotated lines
 	for (let i = 0; i < lines.length; i++) {
 		if (fenceMask[i] || isCommentLine(lines[i])) continue;
+		if (lines[i].startsWith("[⚠️ UNSAFE SHELL:")) continue;
 
 		for (const rule of UNSAFE_SHELL_CONTENT_PATTERNS) {
 			const re = getRegex(rule.pattern, "i");
@@ -768,13 +769,39 @@ export function annotateUnsafeShell(
 
 	const lines = text.split("\n");
 	const annotated = lines.map((line, i) => {
-		if (shellLines.has(i) && !skipLines.has(i)) {
+		if (shellLines.has(i) && !skipLines.has(i) && !line.startsWith("[⚠️ UNSAFE SHELL:")) {
 			return `[⚠️ UNSAFE SHELL: ${line}]`;
 		}
 		return line;
 	});
 
 	return annotated.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Security Override Helpers
+// ═══════════════════════════════════════════════════════════════════
+
+/** Categories that can NEVER be overridden — prompt injection is always enforced. */
+const NON_OVERRIDABLE_CATEGORIES: Set<ThreatCategory> = new Set(["prompt_injection"]);
+
+/** Check if a threat category can be temporarily overridden by the user. */
+export function isOverridableCategory(category: ThreatCategory): boolean {
+	return !NON_OVERRIDABLE_CATEGORIES.has(category);
+}
+
+/**
+ * Parse a duration string like "5m", "10m", "60m" into milliseconds.
+ * Returns null for invalid input or values outside 1-60 minutes.
+ * Returns 5 minutes (default) when no input is provided.
+ */
+export function parseDuration(input?: string): number | null {
+	if (!input || input === "") return 5 * 60 * 1000;
+	const match = input.match(/^(\d+)m$/);
+	if (!match) return null;
+	const minutes = parseInt(match[1], 10);
+	if (minutes < 1 || minutes > 60) return null;
+	return minutes * 60 * 1000;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -836,6 +863,7 @@ export function detectSystemPromptLeakage(
 	}
 
 	if (matchCount >= threshold) {
+		// @security-scan-suppress SAST-AI-INJ-002 — matchCount is an internal numeric counter, not user input
 		return {
 			severity: "block",
 			category: "prompt_injection",
@@ -852,6 +880,7 @@ export function detectSystemPromptLeakage(
 // Secret/PII Scanning (OWASP #2 — Sensitive Information Disclosure)
 // ═══════════════════════════════════════════════════════════════════
 
+// @security-scan-suppress SAST-AI-LEAK-001 — these are detection patterns, not actual secrets
 /** Default patterns for detecting secrets/credentials in output */
 const SECRET_PATTERNS: { name: string; pattern: RegExp }[] = [
 	{ name: "Anthropic API key", pattern: /sk-ant-[a-zA-Z0-9]{20,}/g },
