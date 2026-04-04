@@ -76,6 +76,7 @@ function startServer(report: SecurityReportData): Promise<{ port: number; server
   return new Promise((resolveSetup) => {
     let resolveResult!: () => void;
     const resultPromise = new Promise<void>((resolve) => { resolveResult = resolve; });
+    let serverPort = 0;
 
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -90,7 +91,7 @@ function startServer(report: SecurityReportData): Promise<{ port: number; server
       const url = new URL(req.url || "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/") {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(generateSecurityReportHTML(report));
+        res.end(generateSecurityReportHTML(report, serverPort));
         return;
       }
 
@@ -112,16 +113,20 @@ function startServer(report: SecurityReportData): Promise<{ port: number; server
         if (!existsSync(desktop)) mkdirSync(desktop, { recursive: true });
         const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
         const filePath = join(desktop, `security-report-${ts}.html`);
-        writeFileSync(filePath, generateSecurityReportHTML(report), "utf-8");
+        writeFileSync(filePath, generateSecurityReportHTML(report, serverPort), "utf-8");
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true, path: filePath }));
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/result") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true }));
-        resolveResult();
+        let body = "";
+        req.on("data", (chunk) => { body += chunk; });
+        req.on("end", () => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+          resolveResult();
+        });
         return;
       }
 
@@ -132,6 +137,7 @@ function startServer(report: SecurityReportData): Promise<{ port: number; server
     server.on("close", () => resolveResult());
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address() as any;
+      serverPort = addr.port;
       resolveSetup({ port: addr.port, server, waitForClose: () => resultPromise });
     });
   });
@@ -229,7 +235,7 @@ export default function (pi: ExtensionAPI) {
         } catch {}
 
         return {
-          content: [{ type: "text" as const, text: "Security analysis report closed." }],
+          content: [{ type: "text" as const, text: "Security analysis report acknowledged." }],
           details: { findings: report.findings.length, mitigations: report.mitigations.length },
         };
       } finally {
@@ -243,7 +249,7 @@ export default function (pi: ExtensionAPI) {
     },
     renderResult(result, _options, theme) {
       const details = result.details as any;
-      return new Text(outputLine(theme, "success", `Security report closed — ${details?.findings ?? 0} findings`), 0, 0);
+      return new Text(outputLine(theme, "success", `Security report acknowledged — ${details?.findings ?? 0} findings`), 0, 0);
     },
   });
 

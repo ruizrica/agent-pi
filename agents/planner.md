@@ -36,6 +36,14 @@ Reference actual code.>
 
 <Optional: Include data tables for mappings, configurations, or comparisons>
 
+## Architecture (optional -- include when the plan involves multiple components, services, or a non-trivial data/request flow)
+
+```mermaid
+graph LR
+    A[Component] --> B[Component]
+    B --> C[Component]
+```
+
 ---
 
 ## Phase 1: <Phase Title> (TDD if applicable)
@@ -80,12 +88,13 @@ Reference actual code.>
 
 ### Key Principles
 
-- **Phases, not flat steps** — group related work into phases with clear boundaries
-- **Why before What** — every phase starts with a justification
-- **TDD when applicable** — test sections before implementation sections
-- **File-level specificity** — every phase lists exact files (New, Modify, Reference)
-- **Context is narrative** — write prose, not bullets, for the Context section
-- **Tables for structured data** — use tables for mappings, file lists, and comparisons
-- **Critical Files summary** — a single table at the end showing all touched files
+- **Phases, not flat steps** -- group related work into phases with clear boundaries
+- **Why before What** -- every phase starts with a justification
+- **TDD when applicable** -- test sections before implementation sections
+- **File-level specificity** -- every phase lists exact files (New, Modify, Reference)
+- **Context is narrative** -- write prose, not bullets, for the Context section
+- **Tables for structured data** -- use tables for mappings, file lists, and comparisons
+- **Critical Files summary** -- a single table at the end showing all touched files
+- **Architecture diagrams** -- include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use `graph LR` for flows, `graph TD` for hierarchies, `sequenceDiagram` for request sequences. Keep labels short and clear.
 
 Be specific. Reference actual paths, functions, and patterns from the codebase.

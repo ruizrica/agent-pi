@@ -310,6 +310,20 @@ export function generateSpecViewerHTML(opts: {
     font-size: 12px;
     line-height: 1.6;
   }
+  /* ── Mermaid Diagrams ────────────────── */
+  .mermaid-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 12px 0;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+  }
   .markdown-body blockquote {
     border-left: 3px solid var(--accent);
     background: var(--accent-dim);
@@ -820,6 +834,8 @@ export function generateSpecViewerHTML(opts: {
 
 <!-- marked.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+<!-- mermaid.js (diagram renderer) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
@@ -845,6 +861,53 @@ export function generateSpecViewerHTML(opts: {
   // ── Marked config ─────────────────────────────
   if (typeof marked !== 'undefined') {
     marked.setOptions({ gfm: true, breaks: true });
+  }
+
+  // ── Mermaid config ────────────────────────────
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#1e2228',
+        primaryColor: '#2980b9',
+        primaryTextColor: '#e2e8f0',
+        primaryBorderColor: '#2e343e',
+        lineColor: '#8892a0',
+        secondaryColor: '#252a32',
+        tertiaryColor: '#1a1d23',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: '14px',
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      securityLevel: 'loose',
+    });
+  }
+
+  // ── Render Mermaid diagrams ───────────────────
+  function renderMermaidDiagrams(container) {
+    if (typeof mermaid === 'undefined') return;
+    var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
+    if (codeBlocks.length === 0) return;
+    var blocks = Array.from(codeBlocks);
+    blocks.forEach(function(codeEl, idx) {
+      var preEl = codeEl.parentElement;
+      var source = codeEl.textContent || '';
+      var wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-container';
+      var id = 'mermaid-diagram-' + idx + '-' + Date.now();
+      try {
+        mermaid.render(id, source).then(function(result) {
+          wrapper.innerHTML = result.svg;
+          preEl.parentNode.replaceChild(wrapper, preEl);
+        }).catch(function(err) {
+          console.warn('Mermaid render error for diagram ' + idx + ':', err);
+        });
+      } catch(e) {
+        console.warn('Mermaid render error:', e);
+      }
+    });
   }
 
   // ── Step Bar ──────────────────────────────────
@@ -934,6 +997,7 @@ export function generateSpecViewerHTML(opts: {
     md = md.replace(/^(\\s*- \\[[ xX]\\] )(\\d+)\\./gm, '$1$2\\\\.');
     var html = marked.parse(md);
     renderedView.innerHTML = html;
+    renderMermaidDiagrams(renderedView);
 
     // Make sections commentable
     makeCommentable(renderedView, doc.key);

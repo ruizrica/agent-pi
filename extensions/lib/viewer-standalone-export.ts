@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 
 const BRAND_IMAGE_URL = "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/agent.png?alt=media&token=152539b8-8d0c-46e4-950f-190c317ed6c8";
 const MARKED_CDN_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+const MERMAID_CDN_URL = "https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js";
 
 function timestampForFileName(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -84,6 +85,8 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-card img { display: block; width: 100%; height: auto; border-radius: 6px; background: #0f1115; }
   .visual-card iframe { width: 100%; min-height: 420px; border: 1px solid var(--border); border-radius: 6px; background: white; }
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
+  .mermaid-container { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin: 12px 0; text-align: center; overflow-x: auto; }
+  .mermaid-container svg { max-width: 100%; height: auto; }
   .footer-note { margin-top: 18px; color: var(--text-dim); font-size: 12px; text-align: center; font-family: var(--mono); }
 </style>
 </head>
@@ -99,6 +102,46 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     <div class="footer-note">This export is standalone and read-only. External assets are limited to approved CDNs and the provided brand image URL.</div>
   </div>
   <script src="${MARKED_CDN_URL}"><\/script>
+  <script src="${MERMAID_CDN_URL}"><\/script>
+  <script>
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true, background: '#1e2228', primaryColor: '#2980b9',
+        primaryTextColor: '#e2e8f0', primaryBorderColor: '#2e343e',
+        lineColor: '#8892a0', secondaryColor: '#252a32', tertiaryColor: '#1a1d23',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontSize: '14px'
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      securityLevel: 'loose'
+    });
+  }
+  function renderMermaidDiagrams(container) {
+    if (typeof mermaid === 'undefined') return;
+    var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
+    if (codeBlocks.length === 0) return;
+    var blocks = Array.from(codeBlocks);
+    blocks.forEach(function(codeEl, idx) {
+      var preEl = codeEl.parentElement;
+      var source = codeEl.textContent || '';
+      var wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-container';
+      var id = 'mermaid-diagram-' + idx + '-' + Date.now();
+      try {
+        mermaid.render(id, source).then(function(result) {
+          wrapper.innerHTML = result.svg;
+          preEl.parentNode.replaceChild(wrapper, preEl);
+        }).catch(function(err) {
+          console.warn('Mermaid render error for diagram ' + idx + ':', err);
+        });
+      } catch(e) {
+        console.warn('Mermaid render error:', e);
+      }
+    });
+  }
+  <\/script>
   <script>${script}</script>
 </body>
 </html>`;
@@ -112,6 +155,7 @@ export function createPlanStandaloneExport(opts: { title: string; markdown: stri
 const state = ${state};
 marked.setOptions({ gfm: true, breaks: true });
 document.getElementById('content').innerHTML = marked.parse(state.markdown || '');
+renderMermaidDiagrams(document.getElementById('content'));
 document.querySelectorAll('#content input, #content textarea, #content button, #content [contenteditable="true"]').forEach(function(el) {
   el.disabled = true;
   el.setAttribute('readonly', 'readonly');
@@ -170,6 +214,7 @@ document.getElementById('filesMeta').textContent = 'Base ref: ' + (report.baseRe
 if (report.summary && report.summary.trim()) {
   document.getElementById('summarySection').style.display = 'block';
   document.getElementById('summaryContent').innerHTML = renderMarkdownWithTables(report.summary);
+  renderMermaidDiagrams(document.getElementById('summaryContent'));
 }
 if (report.taskMarkdown && report.taskMarkdown.trim()) {
   document.getElementById('tasksSection').style.display = 'block';
@@ -290,6 +335,7 @@ root.innerHTML = docs.map(function(doc) {
   }
   return '<section class="section"><div class="section-header"><div class="section-label">' + escapeHtml(doc.label) + '</div><div class="section-path">' + escapeHtml(doc.filePath) + '</div></div><div class="markdown-body">' + marked.parse(doc.markdown || '') + '</div></section>';
 }).join('');
+renderMermaidDiagrams(root);
 `;
 	return baseDocument({ title: opts.title, label: "Spec", body, script });
 }

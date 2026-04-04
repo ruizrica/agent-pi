@@ -105,15 +105,19 @@ Read the task carefully and classify its complexity:
 
 **Simple tasks** (single-file fix, config change, rename) — skip scouts, gather context yourself with a quick read or two, then move to Phase 2.
 
-**Everything else** — spawn **4 scout subagents** in parallel to gather context across different areas of the codebase. Each scout gets a focused, targeted reconnaissance task.
+**Medium tasks** — spawn **4 scout subagents** in parallel to gather context across different areas of the codebase.
 
-#### How to spawn scouts:
-1. Identify 4 distinct areas to investigate based on the task (examples below)
-2. Use \`subagent_create_batch\` to spawn all 4 at once with \`name: "scout"\`
-3. Wait for all scouts to report back (results arrive as follow-up messages)
+**Large/complex tasks** — spawn up to **8 subagents** (scouts and builders) to gather context and begin early preparation work in parallel.
+
+Use **scouts** for read-only reconnaissance (finding files, tracing patterns, reading code). Use **builders** for heavier analysis that may involve running commands, checking build output, or producing structured summaries.
+
+#### How to spawn agents:
+1. Identify 4-8 distinct areas to investigate based on the task
+2. Use \`subagent_create_batch\` to spawn all at once — use \`name: "scout"\` for reconnaissance and \`name: "builder"\` for heavier analysis
+3. Wait for all agents to report back (results arrive as follow-up messages)
 4. Synthesize their findings into the context you need for planning
 
-#### Example scout dispatch:
+#### Example: Medium task (4 scouts)
 \`\`\`
 subagent_create_batch {
   agents: [
@@ -125,24 +129,42 @@ subagent_create_batch {
 }
 \`\`\`
 
-#### Typical scout assignments (pick 4 that fit the task):
+#### Example: Large task (8 scouts + builders)
+\`\`\`
+subagent_create_batch {
+  agents: [
+    { name: "scout", task: "Map the directory structure for [area A]. Report files, exports, entry points.", summary: "Structure scout A" },
+    { name: "scout", task: "Map the directory structure for [area B]. Report files, exports, entry points.", summary: "Structure scout B" },
+    { name: "scout", task: "Find all existing patterns for [relevant pattern]. Show examples with paths and line numbers.", summary: "Pattern scout" },
+    { name: "scout", task: "Trace the data flow from [A] to [B]. List every file involved.", summary: "Data flow scout" },
+    { name: "scout", task: "Check test infrastructure near [area]. Find test patterns, fixtures, and how tests run.", summary: "Test scout" },
+    { name: "scout", task: "Map imports, exports, and dependency chains for [affected files].", summary: "Dependency scout" },
+    { name: "builder", task: "Run the build/typecheck for [project area] and report any existing errors or warnings.", summary: "Build check" },
+    { name: "builder", task: "Analyze [config files] and produce a summary of current settings, env vars, and feature flags.", summary: "Config analysis" }
+  ]
+}
+\`\`\`
+
+#### Typical scout assignments (pick 4-8 that fit the task):
 - **Structure scout** — map directory layout, find relevant files, identify entry points
 - **Pattern scout** — find existing patterns, conventions, and reusable code for the task
 - **Data flow scout** — trace how data moves through the relevant subsystem
 - **Test scout** — find test patterns, fixtures, and testing infrastructure
 - **Dependency scout** — map imports, exports, and dependency chains for affected files
 - **Config scout** — check configuration files, environment setup, build tooling
+- **Builder: build check** — run build/typecheck and report existing errors or warnings
+- **Builder: analysis** — produce structured summaries of complex subsystems
 
-After scouts report back, synthesize their findings — identify files that need changes, existing patterns to follow, reusable components, and any gaps or concerns.
+After agents report back, synthesize their findings — identify files that need changes, existing patterns to follow, reusable components, and any gaps or concerns.
 
-#### Scout lifecycle management:
-- Scouts have a **10-minute timeout** — if a scout hangs, it will be automatically killed
-- Scouts **auto-dismiss** their widgets 30 seconds after completing work
-- When you spawn a new batch, any leftover done/error scouts are **auto-cleaned** first
-- You **cannot spawn a new batch** while scouts from a previous batch are still running
-- If scouts are stuck, use \`subagent_cleanup {}\` to kill stale agents and clear widgets
-- ALWAYS wait for all scouts to report back before moving to Phase 2 (planning)
-- Do NOT spawn a second batch of scouts to "add more context" — synthesize what you have
+#### Agent lifecycle management:
+- Scouts have a **10-minute timeout**, builders have a **30-minute timeout** — if an agent hangs, it will be automatically killed
+- Agents **auto-dismiss** their widgets 30 seconds after completing work
+- When you spawn a new batch, any leftover done/error agents are **auto-cleaned** first
+- You **cannot spawn a new batch** while agents from a previous batch are still running
+- If agents are stuck, use \`subagent_cleanup {}\` to kill stale agents and clear widgets
+- ALWAYS wait for all agents to report back before moving to Phase 2 (planning)
+- Do NOT spawn a second batch to "add more context" — synthesize what you have
 
 ### Phase 2: Write a Structured Plan
 Write the plan to \`.context/todo.md\` following the **structured plan format** below.
@@ -165,6 +187,14 @@ Reference actual code — no hand-waving.>
 | Source | Target |
 |--------|--------|
 | ...    | ...    |
+
+## Architecture (optional — include when the plan involves multiple components, services, or a non-trivial data/request flow)
+
+\`\`\`mermaid
+graph LR
+    A[Component] --> B[Component]
+    B --> C[Component]
+\`\`\`
 
 ---
 
@@ -230,6 +260,7 @@ Reference actual code — no hand-waving.>
 - **Context is narrative** — write prose, not bullets, for the Context section
 - **Tables for structured data** — use tables for mappings, file lists, and comparisons
 - **Critical Files summary** — a single table at the end showing all touched files
+- **Architecture diagrams** — include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use `graph LR` for flows, `graph TD` for hierarchies, `sequenceDiagram` for request sequences. Keep labels short and clear.
 
 ### Phase 2b: Follow-up Questions (when needed)
 - If clarification is needed before planning, write questions to a markdown file
@@ -254,6 +285,10 @@ Reference actual code — no hand-waving.>
 - Commit frequently, even for incomplete work
 - Mark items complete in .context/todo.md as you go
 - If you discover the plan needs adjustment, stop and re-plan
+- **For plans with independent phases**: spawn up to **8 builder subagents** in parallel to implement non-overlapping phases simultaneously
+- **For sequential phases**: implement them yourself or dispatch one builder at a time
+- Use \`subagent_create_batch\` with \`name: "builder"\` for implementation agents
+- Each builder should get a clear, self-contained task with specific files to modify and expected outcomes
 
 ### Phase 5: Completion Report (when plan has 3+ phases)
 - After all implementation phases are done, call \`show_report\` to open the completion report viewer
@@ -267,7 +302,8 @@ Reference actual code — no hand-waving.>
 - Keep changes minimal and focused
 - ALWAYS use the structured plan format (phases, not flat numbered steps)
 - For plans with 3+ phases, ALWAYS present a completion report at the end
-- ALWAYS wait for all scouts to finish before spawning new ones
+- ALWAYS wait for all agents (scouts + builders) to finish before spawning new ones
+- Spawn up to 8 agents per batch — use scouts for recon, builders for implementation
 - Check \`subagent_list\` if unsure about active agent status before spawning
 - Use \`subagent_cleanup {}\` to clear stale/zombie agents if needed
 
@@ -314,6 +350,14 @@ Existing Code to Leverage, Out of Scope
 ### Phase 5: Implement
 Once approved, proceed with implementation.
 Optionally use /microtasks to break spec into executable tasks.
+
+#### Multi-Agent Implementation
+For large specs with independent work streams, spawn up to **8 subagents** (scouts + builders) to parallelize:
+- **Scouts** (up to 4): Gather context on areas the spec touches before building
+- **Builders** (up to 8): Implement independent features/modules in parallel
+- Use \`subagent_create_batch\` with \`name: "scout"\` or \`name: "builder"\`
+- Each builder gets a self-contained task: specific files, requirements from the spec, and expected test outcomes
+- Wait for all agents to complete before running integration tests
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS use commander_spec: create/shape/write operations for tracking

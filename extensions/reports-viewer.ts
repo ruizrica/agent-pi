@@ -4,9 +4,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
@@ -15,36 +15,46 @@ import { generateReportsViewerHTML } from "./lib/reports-viewer-html.ts";
 import { loadReportIndex } from "./lib/report-index.ts";
 
 function openBrowser(url: string): void {
-	try { execSync(`open "${url}"`, { stdio: "ignore" }); } catch {
-		try { execSync(`xdg-open "${url}"`, { stdio: "ignore" }); } catch {
-			try { execSync(`start "${url}"`, { stdio: "ignore" }); } catch {}
+	try { execFileSync("open", [url], { stdio: "ignore" }); } catch {
+		try { execFileSync("xdg-open", [url], { stdio: "ignore" }); } catch {
+			try { execFileSync("cmd", ["/c", "start", url], { stdio: "ignore" }); } catch {}
 		}
 	}
 }
 
-function quoteArg(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
+/** Shell metacharacters that must never appear in paths passed to child processes. */
+const SHELL_META = /[`$|;&(){}\\<>\n\r]/;
+
+/** Validate and resolve a report path before execution. */
+function validatePath(raw: string): string {
+	const abs = resolve(raw);
+	if (SHELL_META.test(abs)) {
+		throw new Error(`Path contains disallowed characters: ${abs}`);
+	}
+	if (!existsSync(abs)) {
+		throw new Error(`Path does not exist: ${abs}`);
+	}
+	return abs;
 }
 
 function openOriginalReport(entry: any): void {
 	const target = entry.viewerPath || entry.sourcePath;
 	if (!target) throw new Error("No source path available for this report");
-	const path = String(target);
+	const safePath = validatePath(String(target));
+	const cwd = process.cwd();
+	const command = entry.category === "spec" ? "/spec" : "/show-file";
 
 	if (process.platform === "darwin") {
-		if (entry.category === "spec") {
-			execSync(`open -na Terminal --args bash -lc ${quoteArg(`cd ${quoteArg(process.cwd())} && pi /spec ${quoteArg(path)}`)}`, { stdio: "ignore", shell: true });
-		} else {
-			execSync(`open -na Terminal --args bash -lc ${quoteArg(`cd ${quoteArg(process.cwd())} && pi /show-file ${quoteArg(path)}`)}`, { stdio: "ignore", shell: true });
-		}
+		execFileSync("open", ["-na", "Terminal", "--args", "bash", "-lc", `cd '${cwd}' && pi ${command} '${safePath}'`], { stdio: "ignore" });
 		return;
 	}
 
-	if (entry.category === "spec") {
-		execSync(`bash -lc ${quoteArg(`cd ${quoteArg(process.cwd())} && pi /spec ${quoteArg(path)} >/dev/null 2>&1 &`)}`, { stdio: "ignore", shell: true });
-	} else {
-		execSync(`bash -lc ${quoteArg(`cd ${quoteArg(process.cwd())} && pi /show-file ${quoteArg(path)} >/dev/null 2>&1 &`)}`, { stdio: "ignore", shell: true });
-	}
+	// Linux: spawn detached so the process outlives this one (replaces bash "... &")
+	const child = spawn("bash", ["-lc", `cd '${cwd}' && pi ${command} '${safePath}'`], {
+		stdio: "ignore",
+		detached: true,
+	});
+	child.unref();
 }
 
 function startReportsServer(title: string): Promise<{ port: number; server: Server; waitForResult: () => Promise<void> }> {
