@@ -254,6 +254,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// LAYER 1: Tool Call Gate (pre-execution)
 	// ================================================================
 
+	// ORDERING: This hook MUST fire before tasks.ts tool_call gate. Currently
+	// guaranteed by filesystem alphabetical order (security-guard < tasks).
+	// If this file is renamed, verify security checks still run first.
 	pi.on("tool_call", async (event, ctx) => {
 		if (!policy.settings.enabled) return { block: false };
 

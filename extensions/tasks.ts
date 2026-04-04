@@ -322,6 +322,9 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_tree", async (_event, ctx) => reconstructState(ctx));
 
 	// ── Blocking gate ──────────────────────────────────────────────────
+	// ORDERING: security-guard.ts tool_call hook fires before this one
+	// (filesystem alphabetical: security-guard < tasks). Do not rename
+	// this file to sort before security-guard without updating both.
 
 	pi.on("tool_call", async (event, _ctx) => {
 		// Sub-agents manage their own task discipline — don't gate them
