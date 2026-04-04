@@ -300,8 +300,8 @@ export default function (pi: ExtensionAPI) {
 
 			const details = msg.details as TasksDetails | undefined;
 			if (details) {
-				tasks = details.tasks;
-				nextId = details.nextId;
+				tasks = details.tasks ?? [];
+				nextId = details.nextId ?? nextId;
 				listTitle = details.listTitle;
 				listDescription = details.listDescription;
 				if (details.syncState) {
@@ -335,6 +335,9 @@ export default function (pi: ExtensionAPI) {
 		const readOnlyTools = ["read", "grep", "find", "ls", "glob"];
 		if (readOnlyTools.includes(event.toolName)) return { block: false };
 
+		// Safety: corrupted state (e.g. undefined tasks from bad session reconstruction) should never block
+		if (!Array.isArray(tasks)) return { block: false };
+
 		const pending = tasks.filter((t) => t.status !== "done");
 		const active = tasks.filter((t) => t.status === "inprogress");
 
@@ -345,7 +348,7 @@ export default function (pi: ExtensionAPI) {
 		if (pending.length === 0) {
 			return {
 				block: true,
-				reason: "All tasks are done. You MUST use `tasks add` for new tasks or `tasks new-list` to start a fresh list before using any other tools.",
+				reason: "All tasks are done. Use `tasks add` to add new tasks, `tasks new-list` to start a fresh list, or `tasks clear` to reset.",
 			};
 		}
 		if (active.length === 0) {
@@ -365,6 +368,7 @@ export default function (pi: ExtensionAPI) {
 		// injecting a user message that can break tool_use/tool_result pairing
 		if (process.env.PI_SUBAGENT === "1") return;
 
+		if (!Array.isArray(tasks)) return;
 		const incomplete = tasks.filter((t) => t.status !== "done");
 		if (incomplete.length === 0 || nudgedThisCycle) return;
 

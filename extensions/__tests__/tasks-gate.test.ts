@@ -112,6 +112,87 @@ describe("read-only tool bypass", () => {
 	});
 });
 
+// ── Gate behavior when tasks array is corrupted ────────────────────────
+
+type TaskStatus = "idle" | "inprogress" | "done";
+interface Task { id: number; text: string; status: TaskStatus }
+
+/**
+ * Mirrors the gate logic from tasks.ts tool_call handler (lines ~326-358).
+ * Extracted here so we can test edge cases without the full extension harness.
+ */
+function gateDecision(
+	tasks: Task[] | undefined | null,
+	toolName: string,
+	isSubagent: boolean,
+): { block: boolean; reason?: string } {
+	if (isSubagent) return { block: false };
+	if (shouldBypassTaskGate(toolName)) return { block: false };
+
+	// Safety: corrupted state should never block
+	if (!Array.isArray(tasks)) return { block: false };
+
+	if (tasks.length === 0) return { block: false };
+
+	const pending = tasks.filter(t => t.status !== "done");
+	const active = tasks.filter(t => t.status === "inprogress");
+
+	if (pending.length === 0) {
+		return {
+			block: true,
+			reason: "All tasks are done. Use `tasks add` to add new tasks, `tasks new-list` to start a fresh list, or `tasks clear` to reset.",
+		};
+	}
+	if (active.length === 0) {
+		return {
+			block: true,
+			reason: "No task is in progress. You MUST use `tasks toggle` to mark a task as inprogress before doing any work.",
+		};
+	}
+
+	return { block: false };
+}
+
+describe("gate with corrupted/undefined tasks", () => {
+	it("should NOT block when tasks is undefined", () => {
+		const result = gateDecision(undefined, "bash", false);
+		expect(result.block).toBe(false);
+	});
+
+	it("should NOT block when tasks is null", () => {
+		const result = gateDecision(null, "bash", false);
+		expect(result.block).toBe(false);
+	});
+
+	it("should NOT crash when tasks is undefined (no .filter error)", () => {
+		expect(() => gateDecision(undefined, "bash", false)).not.toThrow();
+	});
+});
+
+describe("all-done gate message includes clear option", () => {
+	it("should mention tasks clear in the block reason", () => {
+		const allDone: Task[] = [
+			{ id: 1, text: "task one", status: "done" },
+			{ id: 2, text: "task two", status: "done" },
+		];
+		const result = gateDecision(allDone, "bash", false);
+		expect(result.block).toBe(true);
+		expect(result.reason).toContain("tasks clear");
+	});
+
+	it("should mention tasks add in the block reason", () => {
+		const allDone: Task[] = [{ id: 1, text: "task one", status: "done" }];
+		const result = gateDecision(allDone, "bash", false);
+		expect(result.reason).toContain("tasks add");
+	});
+
+	it("should mention tasks new-list in the block reason", () => {
+		const allDone: Task[] = [{ id: 1, text: "task one", status: "done" }];
+		const result = gateDecision(allDone, "bash", false);
+		expect(result.reason).toContain("tasks new-list");
+	});
+});
+
 describe("PI_SUBAGENT env var bypass", () => {
 	function shouldBypassForSubagent(): boolean {
 		return process.env.PI_SUBAGENT === "1";
