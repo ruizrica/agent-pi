@@ -15,6 +15,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSecurityReportHTML, type SecurityReportData, type SecurityReportFinding } from "./lib/security-report-html.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { saveScanSnapshot, loadHistoryForReport } from "./lib/security-history.ts";
 
 function openBrowser(url: string): void {
   try { execSync(`open \"${url}\"`, { stdio: "ignore" }); } catch {
@@ -178,6 +179,17 @@ export default function (pi: ExtensionAPI) {
         findings: parseFindings(p.findings_markdown || ""),
         mitigations: parseList(p.mitigations),
       };
+
+      // Load history BEFORE saving the current scan so delta compares against the previous one
+      try {
+        const history = loadHistoryForReport(report);
+        report.history = history;
+      } catch {}
+
+      // Persist current scan to history
+      try {
+        saveScanSnapshot(report);
+      } catch {}
 
       cleanup();
       const { port, server, waitForClose } = await startServer(report);
