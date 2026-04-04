@@ -260,7 +260,7 @@ graph LR
 - **Context is narrative** — write prose, not bullets, for the Context section
 - **Tables for structured data** — use tables for mappings, file lists, and comparisons
 - **Critical Files summary** — a single table at the end showing all touched files
-- **Architecture diagrams** — include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use `graph LR` for flows, `graph TD` for hierarchies, `sequenceDiagram` for request sequences. Keep labels short and clear.
+- **Architecture diagrams** — include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use \`graph LR\` for flows, \`graph TD\` for hierarchies, \`sequenceDiagram\` for request sequences. Keep labels short and clear.
 
 ### Phase 2b: Follow-up Questions (when needed)
 - If clarification is needed before planning, write questions to a markdown file
