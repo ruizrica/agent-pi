@@ -87,6 +87,8 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
   .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; }
   .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: center center; }
+  .mermaid-container svg .nodeLabel, .mermaid-container svg .label, .mermaid-container svg .edgeLabel, .mermaid-container svg text, .mermaid-container svg text tspan, .mermaid-container svg foreignObject div { color: #1a1a1a !important; fill: #1a1a1a !important; }
+  .mermaid-container svg .edgeLabel text, .mermaid-container svg .edgeLabel tspan { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
   .mermaid-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10; opacity: 0.6; transition: opacity 0.2s; }
   .mermaid-container:hover .mermaid-toolbar { opacity: 1; }
   .mermaid-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.15s, color 0.15s; padding: 0; }

@@ -201,6 +201,20 @@ export function generatePlanViewerHTML(opts: {
     transition: transform 0.2s ease;
     transform-origin: center center;
   }
+  .mermaid-container svg .nodeLabel,
+  .mermaid-container svg .label,
+  .mermaid-container svg .edgeLabel,
+  .mermaid-container svg text,
+  .mermaid-container svg text tspan,
+  .mermaid-container svg foreignObject div {
+    color: #1a1a1a !important;
+    fill: #1a1a1a !important;
+  }
+  .mermaid-container svg .edgeLabel text,
+  .mermaid-container svg .edgeLabel tspan {
+    color: #e2e8f0 !important;
+    fill: #e2e8f0 !important;
+  }
   .mermaid-toolbar {
     position: absolute;
     top: 8px;
