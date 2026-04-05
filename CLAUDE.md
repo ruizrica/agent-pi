@@ -89,5 +89,11 @@ Structure: `raw/` (ingested content) → `wiki/` (compiled articles with `[[wiki
 
 ---
 
+## Plan Format — Architecture Diagrams Required
+
+Every plan written to `.context/todo.md` MUST include an `## Architecture` section with a mermaid diagram, unless the change is a trivial single-file fix (typo, config tweak). The plan viewer renders mermaid diagrams interactively with zoom, pan, fullscreen, and SVG download. Use `graph LR` for data/request flows, `graph TD` for hierarchies, `sequenceDiagram` for multi-step interactions.
+
+---
+
 ## When In Doubt
 If a user instruction is ambiguous, **ask for clarification**. Do not assume the most aggressive interpretation. "Do it" means "do the local work" — not "deploy to the world."
