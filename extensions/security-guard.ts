@@ -1,5 +1,6 @@
 // ABOUTME: Pre-tool-hook security system — blocks destructive commands, detects prompt injection, prevents data exfiltration.
 // ABOUTME: Three-layer defense: tool_call gate, context content scanner, and system prompt hardening.
+// NOTE: This system protects Pi's own operations. Not to be confused with vuln-scanner.ts which scans external projects.
 /**
  * Security Guard — Multi-layer agent defense system
  *

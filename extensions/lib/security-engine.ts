@@ -1,5 +1,6 @@
 // ABOUTME: Pure-function security detection engine — pattern matching for threats, injection, and exfiltration.
 // ABOUTME: Loaded by security-guard.ts; all functions are stateless and testable in isolation.
+// NOTE: This engine protects Pi's own operations. Not to be confused with vuln-scanner-engine.ts which scans external projects.
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
