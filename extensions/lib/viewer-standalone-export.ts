@@ -233,6 +233,16 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       try {
         mermaid.render(id, source).then(function(result) {
           wrapper.innerHTML = result.svg;
+          wrapper.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node path, .node .label-container').forEach(function(el) {
+            el.style.fill = 'transparent'; el.style.stroke = '#5a9fd4'; el.style.strokeWidth = '1.5px';
+            el.setAttribute('fill', 'transparent'); el.setAttribute('stroke', '#5a9fd4');
+          });
+          wrapper.querySelectorAll('.node .nodeLabel, .node text, .node tspan, .label .nodeLabel, .label text, .label tspan').forEach(function(el) {
+            el.style.color = '#e2e8f0'; el.style.fill = '#e2e8f0'; if (el.setAttribute) el.setAttribute('fill', '#e2e8f0');
+          });
+          wrapper.querySelectorAll('.node foreignObject div, .node foreignObject span, .label foreignObject div, .label foreignObject span').forEach(function(el) {
+            el.style.color = '#e2e8f0';
+          });
           createMermaidToolbar(wrapper, idx);
           preEl.parentNode.replaceChild(wrapper, preEl);
         }).catch(function(err) {
