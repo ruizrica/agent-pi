@@ -312,17 +312,123 @@ export function generateSpecViewerHTML(opts: {
   }
   /* ── Mermaid Diagrams ────────────────── */
   .mermaid-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: transparent;
+    border: none;
     border-radius: 6px;
     padding: 20px;
+    padding-top: 44px;
     margin: 12px 0;
     text-align: center;
-    overflow-x: auto;
+    overflow: hidden;
+    position: relative;
   }
   .mermaid-container svg {
     max-width: 100%;
     height: auto;
+    transition: transform 0.2s ease;
+    transform-origin: center center;
+  }
+  .mermaid-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .mermaid-container:hover .mermaid-toolbar {
+    opacity: 1;
+  }
+  .mermaid-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 4px;
+    width: 30px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-toolbar button svg.tb-icon {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.92);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 6px;
+    z-index: 10001;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 36px;
+    height: 34px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay .fs-content {
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mermaid-fullscreen-overlay .fs-content svg {
+    transition: transform 0.2s ease;
+    transform-origin: center center;
   }
   .markdown-body blockquote {
     border-left: 3px solid var(--accent);
@@ -870,19 +976,126 @@ export function generateSpecViewerHTML(opts: {
       theme: 'dark',
       themeVariables: {
         darkMode: true,
-        background: '#1e2228',
-        primaryColor: '#2980b9',
-        primaryTextColor: '#e2e8f0',
-        primaryBorderColor: '#2e343e',
+        background: 'transparent',
+        primaryColor: '#6db3e8',
+        primaryTextColor: '#1a1d23',
+        primaryBorderColor: '#5a9fd4',
         lineColor: '#8892a0',
-        secondaryColor: '#252a32',
-        tertiaryColor: '#1a1d23',
+        secondaryColor: '#8ec8f0',
+        tertiaryColor: '#a8d4f2',
+        nodeTextColor: '#1a1d23',
+        nodeBorder: '#5a9fd4',
+        mainBkg: '#6db3e8',
+        clusterBkg: 'rgba(90, 159, 212, 0.12)',
+        clusterBorder: '#5a9fd4',
+        titleColor: '#e2e8f0',
+        edgeLabelBackground: 'transparent',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        fontSize: '14px',
+        fontSize: '16px',
       },
       flowchart: { curve: 'basis', padding: 20 },
       securityLevel: 'loose',
     });
+  }
+
+  // ── SVG icon helpers for toolbar ──────────────
+  var TB_ICONS = {
+    zoomIn: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    zoomOut: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    reset: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+    fullscreen: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+    download: '<svg class="tb-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  };
+
+  // ── Mermaid toolbar injection ──────────────────
+  function createMermaidToolbar(wrapper, idx) {
+    var currentZoom = 1;
+    var toolbar = document.createElement('div');
+    toolbar.className = 'mermaid-toolbar';
+
+    function makeBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    function applyZoom(z) {
+      currentZoom = Math.max(0.25, Math.min(4, z));
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'scale(' + currentZoom + ')';
+    }
+
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
+    wrapper.appendChild(toolbar);
+  }
+
+  // ── Fullscreen overlay ────────────────────────
+  function openMermaidFullscreen(wrapper) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-fullscreen-overlay';
+    var fsZoom = 1;
+
+    var fsToolbar = document.createElement('div');
+    fsToolbar.className = 'fs-toolbar';
+
+    function makeFsBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      var fsSvg = overlay.querySelector('.fs-content svg');
+      if (fsSvg) fsSvg.style.transform = 'scale(' + fsZoom + ')';
+    }
+
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
+    overlay.appendChild(fsToolbar);
+
+    var content = document.createElement('div');
+    content.className = 'fs-content';
+    content.innerHTML = svg.outerHTML;
+    overlay.appendChild(content);
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
+    });
+    document.body.appendChild(overlay);
+  }
+
+  // ── Download SVG ──────────────────────────────
+  function downloadMermaidSVG(wrapper, idx) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var serializer = new XMLSerializer();
+    var svgStr = serializer.serializeToString(svg);
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram-' + idx + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // ── Render Mermaid diagrams ───────────────────
@@ -900,6 +1113,7 @@ export function generateSpecViewerHTML(opts: {
       try {
         mermaid.render(id, source).then(function(result) {
           wrapper.innerHTML = result.svg;
+          createMermaidToolbar(wrapper, idx);
           preEl.parentNode.replaceChild(wrapper, preEl);
         }).catch(function(err) {
           console.warn('Mermaid render error for diagram ' + idx + ':', err);
