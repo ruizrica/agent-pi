@@ -231,6 +231,169 @@ const WIKI_SECTION_MAP: Record<string, string> = {
 
 const WIKI_SECTION_NAMES = Object.keys(WIKI_SECTION_MAP);
 
+// ── Delta Detection ──────────────────────────────────────────────────
+
+interface DeltaResult {
+	updated: string[];
+	unchanged: string[];
+	created: string[];
+	changelog: string;
+}
+
+function normalizeForCompare(text: string): string {
+	return text
+		.replace(/\r\n/g, "\n")
+		.replace(/\r/g, "\n")
+		.replace(/[ \t]+$/gm, "")  // trailing whitespace per line
+		.replace(/\n{3,}/g, "\n\n") // collapse triple+ newlines
+		.trim();
+}
+
+function contentChanged(existingBody: string | null, newBody: string): boolean {
+	if (existingBody === null) return true;
+	return normalizeForCompare(existingBody) !== normalizeForCompare(newBody);
+}
+
+function stripFrontmatter(content: string): string {
+	const match = content.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/);
+	return match ? match[1].trim() : content.trim();
+}
+
+async function readExistingWikiSection(target: LearnTarget, sectionTitle: string): Promise<string | null> {
+	const sectionPath = wikiPath(target.wikiSlug, `${sectionTitle}.md`);
+	const result = await obsidianExec("read", { path: sectionPath });
+	if (!result.success || !result.stdout.trim()) return null;
+	return stripFrontmatter(result.stdout);
+}
+
+async function readExistingWikiSections(target: LearnTarget): Promise<Map<string, string>> {
+	const existing = new Map<string, string>();
+	for (const name of WIKI_SECTION_NAMES) {
+		const title = `${target.displayName} ${name}`;
+		const body = await readExistingWikiSection(target, title);
+		if (body !== null) {
+			existing.set(title, body);
+		}
+	}
+	return existing;
+}
+
+// ── Changelog ────────────────────────────────────────────────────────
+
+function changelogPath(wikiSlug: string): string {
+	return `wiki/${wikiSlug}/_changelog.md`;
+}
+
+function buildChangelogEntry(target: LearnTarget, delta: DeltaResult, now: Date = new Date()): string {
+	const date = now.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+	const lines: string[] = [];
+
+	lines.push(`## ${date}`);
+	lines.push("");
+
+	// Summary line
+	const parts: string[] = [];
+	if (delta.created.length > 0) parts.push(`${delta.created.length} created`);
+	if (delta.updated.length > 0) parts.push(`${delta.updated.length} updated`);
+	if (delta.unchanged.length > 0) parts.push(`${delta.unchanged.length} unchanged`);
+	lines.push(`**Summary:** ${parts.join(", ")}`);
+	lines.push(`**Target:** ${target.resolvedPath}`);
+	lines.push("");
+
+	if (delta.created.length > 0) {
+		lines.push("### Created");
+		for (const name of delta.created) lines.push(`- ${name}`);
+		lines.push("");
+	}
+
+	if (delta.updated.length > 0) {
+		lines.push("### Updated");
+		for (const name of delta.updated) lines.push(`- ${name}`);
+		lines.push("");
+	}
+
+	if (delta.unchanged.length > 0) {
+		lines.push("### Unchanged");
+		for (const name of delta.unchanged) lines.push(`- ${name} (skipped)`);
+		lines.push("");
+	}
+
+	return lines.join("\n").trimEnd();
+}
+
+async function appendChangelog(target: LearnTarget, delta: DeltaResult): Promise<void> {
+	const clPath = changelogPath(target.wikiSlug);
+	const entry = buildChangelogEntry(target, delta);
+
+	// Read existing changelog
+	const existing = await obsidianExec("read", { path: clPath });
+	let content: string;
+
+	if (existing.success && existing.stdout.trim()) {
+		// Prepend new entry after the title header (newest first)
+		const existingContent = existing.stdout.trim();
+		const titleMatch = existingContent.match(/^(# [^\n]+\n\n?)/);
+		if (titleMatch) {
+			const header = titleMatch[1];
+			const rest = existingContent.slice(header.length);
+			content = `${header}${entry}\n\n---\n\n${rest}`;
+		} else {
+			content = `# Changelog — ${target.displayName}\n\n${entry}\n\n---\n\n${existingContent}`;
+		}
+	} else {
+		content = `# Changelog — ${target.displayName}\n\n${entry}`;
+	}
+
+	await obsidianExec("create", { path: clPath, content, overwrite: true });
+}
+
+// ── Master Index Merge ───────────────────────────────────────────────
+
+async function mergeMasterIndex(target: LearnTarget, sections: LearnSection[]): Promise<void> {
+	const newEntry = `- [[wiki/${target.wikiSlug}/_index|${target.displayName}]] — validated codebase learn snapshot (${sections.length} articles)`;
+
+	const existing = await obsidianExec("read", { path: masterIndexPath() });
+	if (existing.success && existing.stdout.trim()) {
+		const lines = existing.stdout.split("\n");
+		const entryPattern = new RegExp(`^- \\[\\[wiki/${target.wikiSlug}/`);
+		let replaced = false;
+		const merged = lines.map((line) => {
+			if (entryPattern.test(line)) {
+				replaced = true;
+				return newEntry;
+			}
+			return line;
+		});
+		if (!replaced) {
+			// Find the "## Wiki Topics" section and append
+			const topicsIdx = merged.findIndex((l) => l.match(/^## Wiki Topics/));
+			if (topicsIdx >= 0) {
+				// Find first entry line after the header, or append at end
+				let insertIdx = merged.length;
+				for (let i = topicsIdx + 1; i < merged.length; i++) {
+					if (merged[i].startsWith("- [[wiki/")) {
+						insertIdx = i + 1; // insert after last entry
+					}
+				}
+				merged.splice(insertIdx, 0, newEntry);
+			} else {
+				merged.push("", "## Wiki Topics", "", newEntry);
+			}
+		}
+		await obsidianExec("create", {
+			path: masterIndexPath(),
+			content: merged.join("\n"),
+			overwrite: true,
+		});
+	} else {
+		await obsidianExec("create", {
+			path: masterIndexPath(),
+			content: buildMasterIndexContent(target, sections),
+			overwrite: true,
+		});
+	}
+}
+
 // ── Chain Output Parser ──────────────────────────────────────────────
 
 interface ParsedWikiSection {
@@ -398,8 +561,22 @@ async function writeRawNote(target: LearnTarget, sections: LearnSection[]) {
 	});
 }
 
-async function writeWiki(target: LearnTarget, sections: LearnSection[]) {
+async function writeWikiWithDelta(target: LearnTarget, sections: LearnSection[]): Promise<DeltaResult> {
+	// Read existing sections for comparison
+	const existing = await readExistingWikiSections(target);
+
+	const delta: DeltaResult = { updated: [], unchanged: [], created: [], changelog: "" };
+
 	for (const section of sections) {
+		const existingBody = existing.get(section.title) ?? null;
+		const isNew = existingBody === null;
+		const changed = contentChanged(existingBody, section.body);
+
+		if (!changed) {
+			delta.unchanged.push(section.title);
+			continue; // Skip write — content is identical
+		}
+
 		const content = [
 			buildFrontmatter({
 				title: section.title,
@@ -417,21 +594,31 @@ async function writeWiki(target: LearnTarget, sections: LearnSection[]) {
 			content,
 			overwrite: true,
 		});
+
+		if (isNew) {
+			delta.created.push(section.title);
+		} else {
+			delta.updated.push(section.title);
+		}
 	}
 
+	// Always update the index (it's small and lists articles)
 	await obsidianExec("create", {
 		path: indexPath(target.wikiSlug),
 		content: buildWikiIndexContent(target, sections),
 		overwrite: true,
 	});
 
-	await obsidianExec("create", {
-		path: masterIndexPath(),
-		content: buildMasterIndexContent(target, sections),
-		overwrite: true,
-	});
+	// Merge master index instead of overwriting
+	await mergeMasterIndex(target, sections);
+
+	// Build changelog entry and append
+	delta.changelog = buildChangelogEntry(target, delta);
+	await appendChangelog(target, delta);
 
 	await obsidianExec("health", {});
+
+	return delta;
 }
 
 function buildLearnSectionsFromChainOutput(target: LearnTarget, parsedSections: ParsedWikiSection[]): LearnSection[] {
@@ -509,10 +696,17 @@ export async function executeLearnFromChainOutput(
 	const sections = buildLearnSectionsFromChainOutput(target, parsedSections);
 
 	await writeRawNote(target, sections);
-	await writeWiki(target, sections);
+	const delta = await writeWikiWithDelta(target, sections);
+
+	// Build delta-aware notification
+	const deltaParts: string[] = [];
+	if (delta.created.length > 0) deltaParts.push(`${delta.created.length} created`);
+	if (delta.updated.length > 0) deltaParts.push(`${delta.updated.length} updated`);
+	if (delta.unchanged.length > 0) deltaParts.push(`${delta.unchanged.length} unchanged`);
+	const deltaLine = deltaParts.length > 0 ? deltaParts.join(", ") : "no changes detected";
 
 	notify(
-		`Learned ${target.displayName} → wiki/${target.wikiSlug}\n${parsedSections.length} wiki sections; ${aggregation.summary}`,
+		`Learned ${target.displayName} → wiki/${target.wikiSlug}\n${deltaLine}`,
 		aggregation.coverage.validated ? "success" : "warning",
 	);
 }
@@ -527,8 +721,37 @@ async function executeLearn(args: string, ctx: any) {
 	const aggregation = aggregateLearnResults(createFallbackResults(target), assignments);
 	const sections = buildLearnSections(target, aggregation);
 	await writeRawNote(target, sections);
-	await writeWiki(target, sections);
-	ctx.ui.notify(`Learned ${target.displayName} → wiki/${target.wikiSlug}\n${aggregation.summary}`, aggregation.coverage.validated ? "success" : "warning");
+	const delta = await writeWikiWithDelta(target, sections);
+
+	const deltaParts: string[] = [];
+	if (delta.created.length > 0) deltaParts.push(`${delta.created.length} created`);
+	if (delta.updated.length > 0) deltaParts.push(`${delta.updated.length} updated`);
+	if (delta.unchanged.length > 0) deltaParts.push(`${delta.unchanged.length} unchanged`);
+	const deltaLine = deltaParts.length > 0 ? deltaParts.join(", ") : "no changes detected";
+
+	ctx.ui.notify(`Learned ${target.displayName} → wiki/${target.wikiSlug}\n${deltaLine}; ${aggregation.summary}`, aggregation.coverage.validated ? "success" : "warning");
+}
+
+/**
+ * Read existing wiki content for a target — used by agent-chain.ts to inject
+ * existing documentation into chain prompts for delta-aware re-learns.
+ */
+export async function readExistingWikiForTarget(
+	targetPath: string,
+	cwd: string,
+): Promise<string | null> {
+	const target = createLearnTarget(targetPath, cwd);
+	const existing = await readExistingWikiSections(target);
+	if (existing.size === 0) return null;
+
+	const lines: string[] = [];
+	for (const [title, body] of existing) {
+		lines.push(`### ${title}`);
+		lines.push("");
+		lines.push(body);
+		lines.push("");
+	}
+	return lines.join("\n").trimEnd();
 }
 
 export const __testExports = {
@@ -545,6 +768,11 @@ export const __testExports = {
 	buildWikiIndexContent,
 	buildMasterIndexContent,
 	parseChainOutputToWikiSections,
+	normalizeForCompare,
+	contentChanged,
+	stripFrontmatter,
+	buildChangelogEntry,
+	changelogPath,
 };
 
 export default function (pi: ExtensionAPI) {
@@ -553,6 +781,8 @@ export default function (pi: ExtensionAPI) {
 
 		// Expose the chain-output writer globally for agent-chain.ts to call
 		(globalThis as any).__piLearnFromChainOutput = executeLearnFromChainOutput;
+		// Expose existing wiki reader for injecting context into chain prompts
+		(globalThis as any).__piLearnReadExisting = readExistingWikiForTarget;
 	});
 
 	pi.registerTool({

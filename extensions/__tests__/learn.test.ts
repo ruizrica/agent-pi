@@ -15,6 +15,11 @@ const {
 	buildWikiIndexContent,
 	buildMasterIndexContent,
 	parseChainOutputToWikiSections,
+	normalizeForCompare,
+	contentChanged,
+	stripFrontmatter,
+	buildChangelogEntry,
+	changelogPath,
 } = __testExports;
 
 describe("learn", () => {
@@ -139,5 +144,94 @@ describe("learn", () => {
 		expect(raw).toContain("Assignments completed: 8");
 		expect(index).toContain("## Articles");
 		expect(master).toContain("validated codebase learn snapshot");
+	});
+});
+
+describe("learn — delta detection", () => {
+	it("normalizeForCompare trims whitespace and collapses newlines", () => {
+		expect(normalizeForCompare("  hello  \n\n\n  world  \n")).toBe("hello\n\n  world");
+		expect(normalizeForCompare("same")).toBe(normalizeForCompare("same"));
+		expect(normalizeForCompare("a\r\nb")).toBe(normalizeForCompare("a\nb"));
+	});
+
+	it("contentChanged returns false for identical content", () => {
+		expect(contentChanged("hello world", "hello world")).toBe(false);
+	});
+
+	it("contentChanged returns false for whitespace-only differences", () => {
+		expect(contentChanged("hello  \n\n\nworld\n", "hello\n\nworld")).toBe(false);
+	});
+
+	it("contentChanged returns true for different content", () => {
+		expect(contentChanged("version 1", "version 2")).toBe(true);
+	});
+
+	it("contentChanged returns true when existing is null (new file)", () => {
+		expect(contentChanged(null, "new content")).toBe(true);
+	});
+
+	it("stripFrontmatter removes YAML frontmatter", () => {
+		const withFm = "---\ntitle: Test\ndate: 2025-01-01\n---\n\n# Hello\n\nWorld";
+		expect(stripFrontmatter(withFm)).toBe("# Hello\n\nWorld");
+	});
+
+	it("stripFrontmatter returns content as-is when no frontmatter", () => {
+		const noFm = "# Hello\n\nWorld";
+		expect(stripFrontmatter(noFm)).toBe("# Hello\n\nWorld");
+	});
+});
+
+describe("learn — changelog", () => {
+	it("changelogPath returns correct path", () => {
+		expect(changelogPath("codebase-demo")).toBe("wiki/codebase-demo/_changelog.md");
+	});
+
+	it("buildChangelogEntry formats a fresh learn (all created)", () => {
+		const target = createLearnTarget(".", "/repo/demo", new Date("2025-04-05T08:30:00.000Z"));
+		const delta = {
+			created: ["demo Overview", "demo Architecture", "demo Conventions", "demo Testing"],
+			updated: [],
+			unchanged: [],
+			changelog: "",
+		};
+		const entry = buildChangelogEntry(target, delta, new Date("2025-04-05T08:30:00.000Z"));
+		expect(entry).toContain("2025-04-05");
+		expect(entry).toContain("**Summary:** 4 created");
+		expect(entry).toContain("### Created");
+		expect(entry).toContain("- demo Overview");
+		expect(entry).not.toContain("### Updated");
+		expect(entry).not.toContain("### Unchanged");
+	});
+
+	it("buildChangelogEntry formats a re-learn (mix of updated/unchanged)", () => {
+		const target = createLearnTarget(".", "/repo/demo", new Date("2025-04-05T08:30:00.000Z"));
+		const delta = {
+			created: [],
+			updated: ["demo Architecture", "demo Testing"],
+			unchanged: ["demo Overview", "demo Conventions"],
+			changelog: "",
+		};
+		const entry = buildChangelogEntry(target, delta, new Date("2025-04-05T10:00:00.000Z"));
+		expect(entry).toContain("**Summary:** 2 updated, 2 unchanged");
+		expect(entry).toContain("### Updated");
+		expect(entry).toContain("- demo Architecture");
+		expect(entry).toContain("### Unchanged");
+		expect(entry).toContain("- demo Overview (skipped)");
+		expect(entry).not.toContain("### Created");
+	});
+
+	it("buildChangelogEntry formats a no-op re-learn (all unchanged)", () => {
+		const target = createLearnTarget(".", "/repo/demo", new Date("2025-04-05T08:30:00.000Z"));
+		const delta = {
+			created: [],
+			updated: [],
+			unchanged: ["demo Overview", "demo Architecture", "demo Conventions", "demo Testing"],
+			changelog: "",
+		};
+		const entry = buildChangelogEntry(target, delta, new Date("2025-04-05T12:00:00.000Z"));
+		expect(entry).toContain("**Summary:** 4 unchanged");
+		expect(entry).not.toContain("### Created");
+		expect(entry).not.toContain("### Updated");
+		expect(entry).toContain("### Unchanged");
 	});
 });

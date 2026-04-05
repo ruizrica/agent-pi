@@ -942,8 +942,20 @@ export default function (pi: ExtensionAPI) {
 			// Activate the learn chain
 			activateChain(learnChain);
 
-			// Build task string — $ORIGINAL in prompts will be the target path
-			const task = targetPath;
+			// Check for existing wiki content to enable delta-aware re-learns
+			let task = targetPath;
+			const learnReader = (globalThis as any).__piLearnReadExisting;
+			if (learnReader) {
+				try {
+					const existingContent = await learnReader(targetPath, ctx.cwd);
+					if (existingContent) {
+						task = `${targetPath}\n\n## Existing Wiki Content\n\nThis codebase has been learned before. Below is the current documentation. Focus on what's new or changed — preserve existing documentation that's still accurate.\n\n${existingContent}`;
+						ctx.ui.notify("Existing wiki found — running delta-aware re-learn", "info");
+					}
+				} catch {
+					// Ignore read errors — proceed with full learn
+				}
+			}
 
 			// Run the chain
 			const result = await runChain(task, ctx);
