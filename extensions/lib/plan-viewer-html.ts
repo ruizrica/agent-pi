@@ -296,13 +296,12 @@ export function generatePlanViewerHTML(opts: {
     max-width: 95vw;
     max-height: 90vh;
     overflow: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 20px;
   }
   .mermaid-fullscreen-overlay .fs-content svg {
-    transition: transform 0.2s ease;
-    transform-origin: center center;
+    display: block;
+    margin: auto;
+    transition: width 0.2s ease, height 0.2s ease;
   }
   .markdown-body blockquote {
     border-left: 3px solid var(--accent);
@@ -1141,10 +1140,18 @@ export function generatePlanViewerHTML(opts: {
       return btn;
     }
 
+    var origWidth = 0;
+    var origHeight = 0;
+
     function applyFsZoom(z) {
       fsZoom = Math.max(0.25, Math.min(6, z));
       var fsSvg = overlay.querySelector('.fs-content svg');
-      if (fsSvg) fsSvg.style.transform = 'scale(' + fsZoom + ')';
+      if (fsSvg && origWidth && origHeight) {
+        fsSvg.style.width = (origWidth * fsZoom) + 'px';
+        fsSvg.style.height = (origHeight * fsZoom) + 'px';
+        fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
+        fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+      }
     }
 
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
@@ -1165,6 +1172,15 @@ export function generatePlanViewerHTML(opts: {
       if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
     });
     document.body.appendChild(overlay);
+
+    // Capture original SVG dimensions after overlay is in the DOM
+    var fsSvg = content.querySelector('svg');
+    if (fsSvg) {
+      fsSvg.style.maxWidth = 'none';
+      var rect = fsSvg.getBoundingClientRect();
+      origWidth = rect.width || fsSvg.viewBox.baseVal.width || 800;
+      origHeight = rect.height || fsSvg.viewBox.baseVal.height || 600;
+    }
   }
 
   // ── Download SVG ──────────────────────────────

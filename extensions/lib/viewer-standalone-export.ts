@@ -98,8 +98,8 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .mermaid-fullscreen-overlay .fs-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; width: 36px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background 0.15s, color 0.15s; padding: 0; }
   .mermaid-fullscreen-overlay .fs-toolbar button:hover { background: var(--accent); color: var(--text); border-color: var(--accent); }
   .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .mermaid-fullscreen-overlay .fs-content { max-width: 95vw; max-height: 90vh; overflow: auto; display: flex; align-items: center; justify-content: center; }
-  .mermaid-fullscreen-overlay .fs-content svg { transition: transform 0.2s ease; transform-origin: center center; }
+  .mermaid-fullscreen-overlay .fs-content { max-width: 95vw; max-height: 90vh; overflow: auto; padding: 20px; }
+  .mermaid-fullscreen-overlay .fs-content svg { display: block; margin: auto; transition: width 0.2s ease, height 0.2s ease; }
   .footer-note { margin-top: 18px; color: var(--text-dim); font-size: 12px; text-align: center; font-family: var(--mono); }
 </style>
 </head>
@@ -176,10 +176,17 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
       return btn;
     }
+    var origWidth = 0;
+    var origHeight = 0;
     function applyFsZoom(z) {
       fsZoom = Math.max(0.25, Math.min(6, z));
       var fsSvg = overlay.querySelector('.fs-content svg');
-      if (fsSvg) fsSvg.style.transform = 'scale(' + fsZoom + ')';
+      if (fsSvg && origWidth && origHeight) {
+        fsSvg.style.width = (origWidth * fsZoom) + 'px';
+        fsSvg.style.height = (origHeight * fsZoom) + 'px';
+        fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
+        fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+      }
     }
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
@@ -193,6 +200,14 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
     document.addEventListener('keydown', function handler(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); } });
     document.body.appendChild(overlay);
+    // Capture original SVG dimensions after overlay is in the DOM
+    var fsSvg = content.querySelector('svg');
+    if (fsSvg) {
+      fsSvg.style.maxWidth = 'none';
+      var rect = fsSvg.getBoundingClientRect();
+      origWidth = rect.width || fsSvg.viewBox.baseVal.width || 800;
+      origHeight = rect.height || fsSvg.viewBox.baseVal.height || 600;
+    }
   }
   function downloadMermaidSVG(wrapper, idx) {
     var svg = wrapper.querySelector('svg');
