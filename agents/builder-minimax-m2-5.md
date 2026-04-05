@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-minimax-m2-5
 description: MiniMax M2.5 Builder — builder-only implementation agent using openrouter/minimax/minimax-m2.5

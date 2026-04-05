@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-qwen3-5-122b-a10b
 description: Qwen 3.5 122B A10B Builder — builder-only implementation agent using openrouter/qwen/qwen3.5-122b-a10b

@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-qwen3-coder
 description: Qwen 3 Coder Builder — builder-only implementation agent using openrouter/qwen/qwen3-coder

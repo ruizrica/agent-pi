@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-qwen3-5-flash-02-23
 description: Qwen 3.5 Flash 02-23 Builder — builder-only implementation agent using openrouter/qwen/qwen3.5-flash-02-23

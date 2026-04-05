@@ -204,11 +204,35 @@ export function scanToolkitAgentDefs(
 /**
  * Resolve an agent definition by name (case-insensitive).
  * Returns the AgentDef if found, undefined otherwise.
+ *
+ * When modelsConfig is provided, supports dynamic builder variant resolution:
+ * if name matches `builder-*` and no .md file exists, generates a def from
+ * the base `builder.md` with the model overridden from models.json.
  */
 export function resolveAgentByName(
 	name: string,
 	agentDefs: Map<string, AgentDef>,
+	modelsConfig?: AgentModelsConfig,
 ): AgentDef | undefined {
 	const key = name.toLowerCase();
-	return agentDefs.get(key);
+	const direct = agentDefs.get(key);
+	if (direct) return direct;
+
+	// Dynamic builder variant resolution: builder-{model-slug} → base builder.md + model from models.json
+	if (key.startsWith("builder-") && modelsConfig) {
+		const base = agentDefs.get("builder");
+		if (base) {
+			const entry = modelsConfig.agents[key];
+			if (entry) {
+				return {
+					...base,
+					name: key,
+					description: `${key} Builder — dynamic variant using ${buildModelString(entry)}`,
+					model: buildModelString(entry),
+				};
+			}
+		}
+	}
+
+	return undefined;
 }

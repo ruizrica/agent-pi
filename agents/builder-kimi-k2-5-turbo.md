@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-kimi-k2-5-turbo
 description: Kimi K2.5 Turbo Builder — builder-only implementation agent using Fireworks AI Fire Pass

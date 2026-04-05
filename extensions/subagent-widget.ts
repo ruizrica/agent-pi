@@ -215,7 +215,7 @@ export default function (pi: ExtensionAPI) {
 		// 2) Agent definition model (from .md file, resolved via models.json)
 		// 3) models.json agent entry (even without .md file)
 		// 4) models.json default entry
-		const agentDef = resolveAgentByName(state.name, knownAgents);
+		const agentDef = resolveAgentByName(state.name, knownAgents, modelsConfig || undefined);
 		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
 		const model = resolveToolkitWorkerModel(
 			state.name,
@@ -889,7 +889,7 @@ export default function (pi: ExtensionAPI) {
 
 	function preSpawnScout(ctx: any) {
 		// Only pre-spawn if scout agent definition exists
-		const scoutDef = resolveAgentByName("scout", knownAgents);
+		const scoutDef = resolveAgentByName("scout", knownAgents, modelsConfig || undefined);
 		if (!scoutDef) return;
 
 		const id = nextId++;

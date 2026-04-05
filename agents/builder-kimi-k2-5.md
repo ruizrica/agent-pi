@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-kimi-k2-5
 description: Kimi K2.5 Builder — builder-only implementation agent using openrouter/moonshotai/kimi-k2.5

@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-gemini-3-1-flash-lite-preview
 description: Gemini 3.1 Flash Lite Preview Builder — builder-only implementation agent using openrouter/google/gemini-3.1-flash-lite-preview

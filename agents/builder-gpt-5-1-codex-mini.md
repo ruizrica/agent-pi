@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file can be removed. Builder variants are now dynamically resolved from builder.md + models.json. -->
 ---
 name: builder-gpt-5-1-codex-mini
 description: GPT-5.1 Codex Mini Builder — builder-only implementation agent using openrouter/openai/gpt-5.1-codex-mini

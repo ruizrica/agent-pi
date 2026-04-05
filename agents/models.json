@@ -55,6 +55,38 @@
     "builder-kimi-k2-5-turbo": {
       "provider": "fireworks",
       "model": "accounts/fireworks/routers/kimi-k2p5-turbo"
+    },
+    "builder-kimi-k2-5": {
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k2.5"
+    },
+    "builder-qwen3-coder": {
+      "provider": "openrouter",
+      "model": "qwen/qwen3-coder"
+    },
+    "builder-qwen3-coder-next": {
+      "provider": "openrouter",
+      "model": "qwen/qwen3-coder:next"
+    },
+    "builder-qwen3-5-flash-02-23": {
+      "provider": "openrouter",
+      "model": "qwen/qwen3.5-flash-02-23"
+    },
+    "builder-qwen3-5-122b-a10b": {
+      "provider": "openrouter",
+      "model": "qwen/qwen3.5-122b-a10b"
+    },
+    "builder-minimax-m2-5": {
+      "provider": "openrouter",
+      "model": "minimax/minimax-m2.5"
+    },
+    "builder-gpt-5-1-codex-mini": {
+      "provider": "openrouter",
+      "model": "openai/gpt-5.1-codex-mini"
+    },
+    "builder-gemini-3-1-flash-lite-preview": {
+      "provider": "openrouter",
+      "model": "google/gemini-3-1-flash-lite-preview"
     }
   }
 }
