@@ -198,6 +198,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// System prompt fingerprints for leakage detection (OWASP #7)
 	let promptFingerprints: string[] = [];
 
+	/** Dedupe inline cards across repeated `context` invocations (same detections = one card until reset). */
+	let shownContextCardKeys = new Set<string>();
+
 	// ── Security event inline card ───────────────────────────────────────────
 	// Dark gray card that flows with conversation (like memory-cycle cards).
 	// Rendered via sendMessage + registerMessageRenderer.
@@ -205,12 +208,16 @@ export default function securityGuard(pi: ExtensionAPI) {
 	interface GuardCardDetails {
 		action: string;   // e.g. "stripped 2 injection(s)" or "action blocked"
 		detail: string;   // e.g. tool name / reason
+		/** default "warn" — use "muted" for non-blocking content annotations */
+		tone?: "warn" | "muted";
 	}
 
 	function renderGuardCard(message: any, _options: any, theme: any) {
 		const details: GuardCardDetails = message.details || {};
 		const title = theme.fg("muted", "security-guard");
-		const action = theme.bold(theme.fg("warning", details.action || "event"));
+		const tone = details.tone ?? "warn";
+		const actionColor = tone === "muted" ? "muted" : "warning";
+		const action = theme.bold(theme.fg(actionColor, details.action || "event"));
 		const detail = theme.fg("dim", details.detail || "");
 
 		const body = `${title}  │  ${action}  │  ${detail}`;
@@ -223,13 +230,25 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	pi.registerMessageRenderer<GuardCardDetails>("security-guard-event", renderGuardCard);
 
-	function emitGuardCard(action: string, detail: string) {
+	function emitGuardCard(
+		action: string,
+		detail: string,
+		opts?: { tone?: GuardCardDetails["tone"] },
+	) {
 		pi.sendMessage({
 			customType: "security-guard-event",
 			content: `security-guard | ${action} | ${detail}`,
 			display: true,
-			details: { action, detail },
+			details: { action, detail, tone: opts?.tone ?? "warn" },
 		});
+	}
+
+	/** Compact tool label for aggregated context-scan cards */
+	function formatContextToolsDetail(tools: Set<string>): string {
+		if (tools.size === 0) return "tool output";
+		if (tools.size === 1) return [...tools][0];
+		const arr = [...tools].sort();
+		return `${arr[0]} +${tools.size - 1}`;
 	}
 
 	// ================================================================
@@ -437,6 +456,13 @@ export default function securityGuard(pi: ExtensionAPI) {
 		const maxResultChars = (policy.settings as any).max_tool_result_chars ?? 100000;
 
 		let anyModified = false;
+		let contextUnsafeShellRefTotal = 0;
+		const contextUnsafeShellTools = new Set<string>();
+		const contextShellFingerprintParts: string[] = [];
+		let contextInjectionRedactionsTotal = 0;
+		const contextInjectionTools = new Set<string>();
+		const contextInjectionFingerprintParts: string[] = [];
+
 		const repairedMessages = messages.map((msg: any) => {
 			// Only scan toolResult messages — these come from files/commands the agent read
 			if (msg.role !== "toolResult") return msg;
@@ -527,7 +553,14 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 					if (cleaned !== resultText) {
 						resultText = cleaned;
-						emitGuardCard(`stripped ${redactions.length} injection(s)`, toolLabel);
+						contextInjectionRedactionsTotal += redactions.length;
+						contextInjectionTools.add(toolLabel);
+						for (const r of redactions) {
+							const pat = r.rulePattern ?? "";
+							contextInjectionFingerprintParts.push(
+								`${toolLabel}:${pat}:${r.matched}`,
+							);
+						}
 					}
 				}
 
@@ -548,9 +581,12 @@ export default function securityGuard(pi: ExtensionAPI) {
 							matched: t.matched,
 							action: "warned",
 						});
+						const pat = t.rulePattern ?? "";
+						contextShellFingerprintParts.push(`${toolLabel}:${t.lineIndex}:${pat}:${t.matched}`);
 					}
 
-					emitGuardCard(`annotated ${unsafeShell.length} unsafe shell ref(s)`, toolLabel);
+					contextUnsafeShellRefTotal += unsafeShell.length;
+					contextUnsafeShellTools.add(toolLabel);
 				}
 
 				if (resultText !== block.text) {
@@ -567,6 +603,27 @@ export default function securityGuard(pi: ExtensionAPI) {
 			}
 			return msg;
 		});
+
+		if (contextInjectionRedactionsTotal > 0) {
+			const injKey = `injection:${[...new Set(contextInjectionFingerprintParts)].sort().join("|")}`;
+			if (!shownContextCardKeys.has(injKey)) {
+				shownContextCardKeys.add(injKey);
+				emitGuardCard(
+					`stripped ${contextInjectionRedactionsTotal} injection(s)`,
+					formatContextToolsDetail(contextInjectionTools),
+				);
+			}
+		}
+		if (contextUnsafeShellRefTotal > 0) {
+			const shellKey = `unsafe_shell:${[...new Set(contextShellFingerprintParts)].sort().join("|")}`;
+			if (!shownContextCardKeys.has(shellKey)) {
+				shownContextCardKeys.add(shellKey);
+				emitGuardCard(
+					`annotated ${contextUnsafeShellRefTotal} unsafe shell ref(s)`,
+					formatContextToolsDetail(contextUnsafeShellTools),
+				);
+			}
+		}
 
 		// ── System prompt leakage detection (OWASP #7) ──────────────
 		if (promptFingerprints.length > 0 && (policy.settings as any).detect_prompt_leakage !== false) {
@@ -706,6 +763,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 	pi.on("input", async (_event, _ctx) => {
 		budgetCounters.turn = 0;
 		budgetCounters.bashTurn = 0;
+		shownContextCardKeys.clear();
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -713,6 +771,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		initPolicy(cwd);
 		stats = freshStats();
 		budgetCounters = { turn: 0, session: 0, bashTurn: 0 };
+		shownContextCardKeys.clear();
 
 		if (ctx?.ui?.setStatus) {
 			ctx.ui.setStatus("security", "🛡️ Security Guard");
@@ -723,6 +782,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		// Re-init on session switch (cwd might change)
 		const cwd = ctx?.cwd || defaultRoot;
 		initPolicy(cwd);
+		shownContextCardKeys.clear();
 
 		// Keep stats across session switches (they're cumulative)
 		if (ctx?.ui?.setStatus) {
