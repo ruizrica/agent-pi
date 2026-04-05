@@ -16,6 +16,8 @@ Before writing any code, orient yourself:
 4. **Check `.context/todo.md`** if it exists -- it contains the current plan with checked/unchecked items.
 5. **Check for spec files** in `.context/` or any spec folder referenced in the task -- they contain feature requirements and design decisions that guide your implementation.
 
+6. **Stay in your working directory.** Always search and operate within the working directory first. Do NOT use broad searches (e.g., `find ~` or `find /`) or navigate to other projects unless the user explicitly asks you to work elsewhere.
+
 Do NOT start coding until you understand the project structure and conventions.
 
 ## Role

@@ -379,6 +379,7 @@ export default function (pi: ExtensionAPI) {
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
 				env: { ...process.env, PI_SUBAGENT: "1" },
+				cwd: ctx.cwd,
 			});
 
 			// Track for escape-cancel integration

@@ -207,11 +207,11 @@ export default function (pi: ExtensionAPI) {
 	// ── Build context prefix for subagent orientation ──────────────────────
 	// Gathers working directory, top-level structure, git status, and active
 	// plan so subagents can orient immediately without blind exploration.
-	function buildContextPrefix(): string {
+	function buildContextPrefix(cwd: string): string {
 		const lines: string[] = ["## Working Context"];
 		// 1. Working directory
-		const cwd = process.cwd();
 		lines.push(`Working directory: ${cwd}`);
+		lines.push(`IMPORTANT: Always look in this directory first. Do NOT search, read, or modify files outside it unless explicitly asked.`);
 
 		// 2. Top-level directory listing (fast, sync)
 		try {
@@ -261,7 +261,7 @@ export default function (pi: ExtensionAPI) {
 		// Inject context prefix unless the prompt already has explicit working directory info
 		// or this is a standby/warmup spawn (no real task yet)
 		if (!state.standby && !prompt.includes("Working directory:")) {
-			const prefix = buildContextPrefix();
+			const prefix = buildContextPrefix(ctx.cwd);
 			prompt = prefix + "\n## Task\n" + prompt;
 		}
 
@@ -427,6 +427,7 @@ export default function (pi: ExtensionAPI) {
 				}, {
 					task: prompt,
 					sessionFile: state.sessionFile,
+					cwd: ctx.cwd,
 					env: spawnEnv,
 					onStdoutLine: (line: string) => processLine(state, line),
 					onStderr: (chunk: string) => {
@@ -455,6 +456,7 @@ export default function (pi: ExtensionAPI) {
 			], {
 				stdio: ["ignore", "pipe", "pipe"],
 				env: spawnEnv,
+				cwd: ctx.cwd,
 			});
 
 			state.proc = proc;

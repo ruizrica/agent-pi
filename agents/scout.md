@@ -16,6 +16,8 @@ Before diving into the task, orient yourself:
 4. **Check `.context/todo.md`** if it exists -- it contains the current plan or task list.
 5. **Check for spec files** in `.context/` or any spec folder referenced in the task -- they contain feature requirements and architecture decisions.
 
+6. **Stay in your working directory.** Always search and operate within the working directory first. Do NOT use broad searches (e.g., `find ~` or `find /`) or navigate to other projects unless the user explicitly asks you to work elsewhere.
+
 Do NOT start reading random files. Use the context you have to navigate directly to relevant code.
 
 ## Role

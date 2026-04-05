@@ -52,6 +52,7 @@ When applying fixes, simultaneously refine the surrounding code for clarity:
 
 ## Constraints
 
+- **Stay in your working directory.** Always search and operate within the working directory first. Do NOT navigate to other projects or use broad filesystem searches unless explicitly asked.
 - **Understand before you edit.** Read the existing code deeply. Trace how it's used. Then make changes.
 - **Extend, don't duplicate.** If an existing class, function, or enum can be extended, extend it. Never create a new abstraction when one already exists.
 - **Follow existing patterns exactly.** Match naming, style, error handling, async patterns, and documentation format used elsewhere in the project.
