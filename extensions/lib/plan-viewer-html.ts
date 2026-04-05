@@ -1231,6 +1231,36 @@ export function generatePlanViewerHTML(opts: {
   }
 
   // ── Render Mermaid diagrams ───────────────────
+  // Patch mermaid's internal SVG <style> to use outline nodes + light text
+  function fixMermaidSvgStyles(wrapper) {
+    var styleEl = wrapper.querySelector('svg style');
+    if (!styleEl) return;
+    var css = styleEl.textContent || '';
+    // Node shapes: transparent fill, light border
+    css = css.replace(
+      /\.node rect,[^{]*\.node path\{[^}]*\}/g,
+      function(m) {
+        return m.replace(/fill:[^;]+;/g, 'fill:transparent;')
+                .replace(/stroke:[^;]+;/g, 'stroke:#5a9fd4;')
+                .replace(/stroke-width:[^;]+;/g, 'stroke-width:1.5px;');
+      }
+    );
+    // Text/label colors: light
+    css = css.replace(/\.label text,[^{]*\{[^}]*\}/g, function(m) {
+      return m.replace(/fill:[^;]+;/g, 'fill:#e2e8f0;').replace(/color:[^;]+;/g, 'color:#e2e8f0;');
+    });
+    // Also fix the top-level fill on the svg container
+    css = css.replace(/\{font-family:[^}]*fill:#333;/g, function(m) {
+      return m.replace(/fill:#333/, 'fill:#e2e8f0');
+    });
+    // Cluster labels
+    css = css.replace(/\.cluster-label text\{fill:[^}]+\}/g, '.cluster-label text{fill:#e2e8f0;}');
+    css = css.replace(/\.cluster-label span\{color:[^}]+\}/g, '.cluster-label span{color:#e2e8f0;}');
+    // Cluster rect: subtle bg
+    css = css.replace(/\.cluster rect\{fill:[^;]+;/g, '.cluster rect{fill:rgba(90,159,212,0.08);');
+    styleEl.textContent = css;
+  }
+
   function renderMermaidDiagrams(container) {
     if (typeof mermaid === 'undefined') return;
     var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
@@ -1245,23 +1275,7 @@ export function generatePlanViewerHTML(opts: {
       try {
         mermaid.render(id, source).then(function(result) {
           wrapper.innerHTML = result.svg;
-          // Force outline-only nodes: strip inline fill, set stroke
-          wrapper.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node path, .node .label-container').forEach(function(el) {
-            el.style.fill = 'transparent';
-            el.style.stroke = '#5a9fd4';
-            el.style.strokeWidth = '1.5px';
-            el.setAttribute('fill', 'transparent');
-            el.setAttribute('stroke', '#5a9fd4');
-          });
-          // Force light text on all node labels
-          wrapper.querySelectorAll('.node .nodeLabel, .node text, .node tspan, .label .nodeLabel, .label text, .label tspan').forEach(function(el) {
-            el.style.color = '#e2e8f0';
-            el.style.fill = '#e2e8f0';
-            if (el.setAttribute) el.setAttribute('fill', '#e2e8f0');
-          });
-          wrapper.querySelectorAll('.node foreignObject div, .node foreignObject span, .label foreignObject div, .label foreignObject span').forEach(function(el) {
-            el.style.color = '#e2e8f0';
-          });
+          fixMermaidSvgStyles(wrapper);
           createMermaidToolbar(wrapper, idx);
           preEl.parentNode.replaceChild(wrapper, preEl);
         }).catch(function(err) {
