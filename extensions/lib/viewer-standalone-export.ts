@@ -87,8 +87,10 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
   .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; }
   .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: center center; }
-  .mermaid-container svg .nodeLabel, .mermaid-container svg .label, .mermaid-container svg .edgeLabel, .mermaid-container svg text, .mermaid-container svg text tspan, .mermaid-container svg foreignObject div { color: #1a1a1a !important; fill: #1a1a1a !important; }
-  .mermaid-container svg .edgeLabel text, .mermaid-container svg .edgeLabel tspan { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+  .mermaid-container .node rect, .mermaid-container .node circle, .mermaid-container .node ellipse, .mermaid-container .node polygon, .mermaid-container .node path { fill: transparent !important; stroke: #5a9fd4 !important; stroke-width: 1.5px !important; }
+  .mermaid-container .node .nodeLabel, .mermaid-container .node text, .mermaid-container .node tspan, .mermaid-container .node foreignObject *, .mermaid-container .label foreignObject *, .mermaid-container .label text, .mermaid-container .label tspan { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+  .mermaid-container .cluster rect { fill: rgba(90, 159, 212, 0.08) !important; stroke: #5a9fd4 !important; }
+  .mermaid-container .cluster-label text, .mermaid-container .cluster-label tspan, .mermaid-container .cluster-label foreignObject * { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
   .mermaid-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10; opacity: 0.6; transition: opacity 0.2s; }
   .mermaid-container:hover .mermaid-toolbar { opacity: 1; }
   .mermaid-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.15s, color 0.15s; padding: 0; }
@@ -123,15 +125,15 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       startOnLoad: false,
       theme: 'base',
       themeVariables: {
-        darkMode: true, background: 'transparent', primaryColor: '#6db3e8',
-        primaryTextColor: '#1a1a1a', primaryBorderColor: '#5a9fd4',
-        lineColor: '#8892a0', secondaryColor: '#8ec8f0', tertiaryColor: '#a8d4f2',
-        nodeTextColor: '#1a1a1a', nodeBorder: '#5a9fd4', mainBkg: '#6db3e8',
-        clusterBkg: 'rgba(90, 159, 212, 0.12)', clusterBorder: '#5a9fd4',
+        darkMode: true, background: 'transparent', primaryColor: 'transparent',
+        primaryTextColor: '#e2e8f0', primaryBorderColor: '#5a9fd4',
+        lineColor: '#8892a0', secondaryColor: 'transparent', tertiaryColor: 'transparent',
+        nodeTextColor: '#e2e8f0', nodeBorder: '#5a9fd4', mainBkg: 'transparent',
+        clusterBkg: 'rgba(90, 159, 212, 0.08)', clusterBorder: '#5a9fd4',
         titleColor: '#e2e8f0', edgeLabelBackground: 'transparent',
-        actorTextColor: '#1a1a1a', signalTextColor: '#1a1a1a',
-        labelTextColor: '#1a1a1a', loopTextColor: '#1a1a1a',
-        noteBkgColor: '#a8d4f2', noteTextColor: '#1a1a1a',
+        actorTextColor: '#e2e8f0', signalTextColor: '#e2e8f0',
+        labelTextColor: '#e2e8f0', loopTextColor: '#e2e8f0',
+        noteBkgColor: 'rgba(90, 159, 212, 0.15)', noteTextColor: '#e2e8f0',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontSize: '16px'
       },
       flowchart: { curve: 'basis', padding: 20 },

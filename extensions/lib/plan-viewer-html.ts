@@ -201,17 +201,33 @@ export function generatePlanViewerHTML(opts: {
     transition: transform 0.2s ease;
     transform-origin: center center;
   }
-  .mermaid-container svg .nodeLabel,
-  .mermaid-container svg .label,
-  .mermaid-container svg .edgeLabel,
-  .mermaid-container svg text,
-  .mermaid-container svg text tspan,
-  .mermaid-container svg foreignObject div {
-    color: #1a1a1a !important;
-    fill: #1a1a1a !important;
+  /* Mermaid nodes: transparent fill with light border, light text */
+  .mermaid-container .node rect,
+  .mermaid-container .node circle,
+  .mermaid-container .node ellipse,
+  .mermaid-container .node polygon,
+  .mermaid-container .node path {
+    fill: transparent !important;
+    stroke: #5a9fd4 !important;
+    stroke-width: 1.5px !important;
   }
-  .mermaid-container svg .edgeLabel text,
-  .mermaid-container svg .edgeLabel tspan {
+  .mermaid-container .node .nodeLabel,
+  .mermaid-container .node text,
+  .mermaid-container .node tspan,
+  .mermaid-container .node foreignObject *,
+  .mermaid-container .label foreignObject *,
+  .mermaid-container .label text,
+  .mermaid-container .label tspan {
+    color: #e2e8f0 !important;
+    fill: #e2e8f0 !important;
+  }
+  .mermaid-container .cluster rect {
+    fill: rgba(90, 159, 212, 0.08) !important;
+    stroke: #5a9fd4 !important;
+  }
+  .mermaid-container .cluster-label text,
+  .mermaid-container .cluster-label tspan,
+  .mermaid-container .cluster-label foreignObject * {
     color: #e2e8f0 !important;
     fill: #e2e8f0 !important;
   }
@@ -1022,25 +1038,25 @@ export function generatePlanViewerHTML(opts: {
       themeVariables: {
         darkMode: true,
         background: 'transparent',
-        primaryColor: '#6db3e8',
-        primaryTextColor: '#1a1a1a',
+        primaryColor: 'transparent',
+        primaryTextColor: '#e2e8f0',
         primaryBorderColor: '#5a9fd4',
         lineColor: '#8892a0',
-        secondaryColor: '#8ec8f0',
-        tertiaryColor: '#a8d4f2',
-        nodeTextColor: '#1a1a1a',
+        secondaryColor: 'transparent',
+        tertiaryColor: 'transparent',
+        nodeTextColor: '#e2e8f0',
         nodeBorder: '#5a9fd4',
-        mainBkg: '#6db3e8',
-        clusterBkg: 'rgba(90, 159, 212, 0.12)',
+        mainBkg: 'transparent',
+        clusterBkg: 'rgba(90, 159, 212, 0.08)',
         clusterBorder: '#5a9fd4',
         titleColor: '#e2e8f0',
         edgeLabelBackground: 'transparent',
-        actorTextColor: '#1a1a1a',
-        signalTextColor: '#1a1a1a',
-        labelTextColor: '#1a1a1a',
-        loopTextColor: '#1a1a1a',
-        noteBkgColor: '#a8d4f2',
-        noteTextColor: '#1a1a1a',
+        actorTextColor: '#e2e8f0',
+        signalTextColor: '#e2e8f0',
+        labelTextColor: '#e2e8f0',
+        loopTextColor: '#e2e8f0',
+        noteBkgColor: 'rgba(90, 159, 212, 0.15)',
+        noteTextColor: '#e2e8f0',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         fontSize: '16px',
       },
