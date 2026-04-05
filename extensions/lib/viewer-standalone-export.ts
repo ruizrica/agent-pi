@@ -87,10 +87,7 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
   .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; }
   .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: center center; }
-  .mermaid-container .node rect, .mermaid-container .node circle, .mermaid-container .node ellipse, .mermaid-container .node polygon, .mermaid-container .node path { fill: transparent !important; stroke: #5a9fd4 !important; stroke-width: 1.5px !important; }
-  .mermaid-container .node .nodeLabel, .mermaid-container .node text, .mermaid-container .node tspan, .mermaid-container .node foreignObject *, .mermaid-container .label foreignObject *, .mermaid-container .label text, .mermaid-container .label tspan { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
-  .mermaid-container .cluster rect { fill: rgba(90, 159, 212, 0.08) !important; stroke: #5a9fd4 !important; }
-  .mermaid-container .cluster-label text, .mermaid-container .cluster-label tspan, .mermaid-container .cluster-label foreignObject * { color: #e2e8f0 !important; fill: #e2e8f0 !important; }
+
   .mermaid-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10; opacity: 0.6; transition: opacity 0.2s; }
   .mermaid-container:hover .mermaid-toolbar { opacity: 1; }
   .mermaid-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.15s, color 0.15s; padding: 0; }
@@ -123,17 +120,10 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   if (typeof mermaid !== 'undefined') {
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'base',
+      theme: 'dark',
       themeVariables: {
-        darkMode: true, background: 'transparent', primaryColor: 'transparent',
-        primaryTextColor: '#e2e8f0', primaryBorderColor: '#5a9fd4',
-        lineColor: '#8892a0', secondaryColor: 'transparent', tertiaryColor: 'transparent',
-        nodeTextColor: '#e2e8f0', nodeBorder: '#5a9fd4', mainBkg: 'transparent',
-        clusterBkg: 'rgba(90, 159, 212, 0.08)', clusterBorder: '#5a9fd4',
-        titleColor: '#e2e8f0', edgeLabelBackground: 'transparent',
-        actorTextColor: '#e2e8f0', signalTextColor: '#e2e8f0',
-        labelTextColor: '#e2e8f0', loopTextColor: '#e2e8f0',
-        noteBkgColor: 'rgba(90, 159, 212, 0.15)', noteTextColor: '#e2e8f0',
+        primaryColor: '#2a2d35', primaryBorderColor: '#5a9fd4',
+        primaryTextColor: '#e2e8f0', lineColor: '#5a9fd4',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontSize: '16px'
       },
       flowchart: { curve: 'basis', padding: 20 },
@@ -219,22 +209,6 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
-  function fixMermaidSvgStyles(wrapper) {
-    var styleEl = wrapper.querySelector('svg style');
-    if (!styleEl) return;
-    var css = styleEl.textContent || '';
-    css = css.replace(/\.node rect,[^{]*\.node path\{[^}]*\}/g, function(m) {
-      return m.replace(/fill:[^;]+;/g, 'fill:transparent;').replace(/stroke:[^;]+;/g, 'stroke:#5a9fd4;').replace(/stroke-width:[^;]+;/g, 'stroke-width:1.5px;');
-    });
-    css = css.replace(/\.label text,[^{]*\{[^}]*\}/g, function(m) {
-      return m.replace(/fill:[^;]+;/g, 'fill:#e2e8f0;').replace(/color:[^;]+;/g, 'color:#e2e8f0;');
-    });
-    css = css.replace(/\{font-family:[^}]*fill:#333;/g, function(m) { return m.replace(/fill:#333/, 'fill:#e2e8f0'); });
-    css = css.replace(/\.cluster-label text\{fill:[^}]+\}/g, '.cluster-label text{fill:#e2e8f0;}');
-    css = css.replace(/\.cluster-label span\{color:[^}]+\}/g, '.cluster-label span{color:#e2e8f0;}');
-    css = css.replace(/\.cluster rect\{fill:[^;]+;/g, '.cluster rect{fill:rgba(90,159,212,0.08);');
-    styleEl.textContent = css;
-  }
   function renderMermaidDiagrams(container) {
     if (typeof mermaid === 'undefined') return;
     var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
@@ -249,7 +223,6 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       try {
         mermaid.render(id, source).then(function(result) {
           wrapper.innerHTML = result.svg;
-          fixMermaidSvgStyles(wrapper);
           createMermaidToolbar(wrapper, idx);
           preEl.parentNode.replaceChild(wrapper, preEl);
         }).catch(function(err) {

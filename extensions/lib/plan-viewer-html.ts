@@ -201,36 +201,7 @@ export function generatePlanViewerHTML(opts: {
     transition: transform 0.2s ease;
     transform-origin: center center;
   }
-  /* Mermaid nodes: transparent fill with light border, light text */
-  .mermaid-container .node rect,
-  .mermaid-container .node circle,
-  .mermaid-container .node ellipse,
-  .mermaid-container .node polygon,
-  .mermaid-container .node path {
-    fill: transparent !important;
-    stroke: #5a9fd4 !important;
-    stroke-width: 1.5px !important;
-  }
-  .mermaid-container .node .nodeLabel,
-  .mermaid-container .node text,
-  .mermaid-container .node tspan,
-  .mermaid-container .node foreignObject *,
-  .mermaid-container .label foreignObject *,
-  .mermaid-container .label text,
-  .mermaid-container .label tspan {
-    color: #e2e8f0 !important;
-    fill: #e2e8f0 !important;
-  }
-  .mermaid-container .cluster rect {
-    fill: rgba(90, 159, 212, 0.08) !important;
-    stroke: #5a9fd4 !important;
-  }
-  .mermaid-container .cluster-label text,
-  .mermaid-container .cluster-label tspan,
-  .mermaid-container .cluster-label foreignObject * {
-    color: #e2e8f0 !important;
-    fill: #e2e8f0 !important;
-  }
+
   .mermaid-toolbar {
     position: absolute;
     top: 8px;
@@ -1034,29 +1005,12 @@ export function generatePlanViewerHTML(opts: {
   if (typeof mermaid !== 'undefined') {
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'base',
+      theme: 'dark',
       themeVariables: {
-        darkMode: true,
-        background: 'transparent',
-        primaryColor: 'transparent',
-        primaryTextColor: '#e2e8f0',
+        primaryColor: '#2a2d35',
         primaryBorderColor: '#5a9fd4',
-        lineColor: '#8892a0',
-        secondaryColor: 'transparent',
-        tertiaryColor: 'transparent',
-        nodeTextColor: '#e2e8f0',
-        nodeBorder: '#5a9fd4',
-        mainBkg: 'transparent',
-        clusterBkg: 'rgba(90, 159, 212, 0.08)',
-        clusterBorder: '#5a9fd4',
-        titleColor: '#e2e8f0',
-        edgeLabelBackground: 'transparent',
-        actorTextColor: '#e2e8f0',
-        signalTextColor: '#e2e8f0',
-        labelTextColor: '#e2e8f0',
-        loopTextColor: '#e2e8f0',
-        noteBkgColor: 'rgba(90, 159, 212, 0.15)',
-        noteTextColor: '#e2e8f0',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#5a9fd4',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         fontSize: '16px',
       },
@@ -1231,36 +1185,6 @@ export function generatePlanViewerHTML(opts: {
   }
 
   // ── Render Mermaid diagrams ───────────────────
-  // Patch mermaid's internal SVG <style> to use outline nodes + light text
-  function fixMermaidSvgStyles(wrapper) {
-    var styleEl = wrapper.querySelector('svg style');
-    if (!styleEl) return;
-    var css = styleEl.textContent || '';
-    // Node shapes: transparent fill, light border
-    css = css.replace(
-      /\.node rect,[^{]*\.node path\{[^}]*\}/g,
-      function(m) {
-        return m.replace(/fill:[^;]+;/g, 'fill:transparent;')
-                .replace(/stroke:[^;]+;/g, 'stroke:#5a9fd4;')
-                .replace(/stroke-width:[^;]+;/g, 'stroke-width:1.5px;');
-      }
-    );
-    // Text/label colors: light
-    css = css.replace(/\.label text,[^{]*\{[^}]*\}/g, function(m) {
-      return m.replace(/fill:[^;]+;/g, 'fill:#e2e8f0;').replace(/color:[^;]+;/g, 'color:#e2e8f0;');
-    });
-    // Also fix the top-level fill on the svg container
-    css = css.replace(/\{font-family:[^}]*fill:#333;/g, function(m) {
-      return m.replace(/fill:#333/, 'fill:#e2e8f0');
-    });
-    // Cluster labels
-    css = css.replace(/\.cluster-label text\{fill:[^}]+\}/g, '.cluster-label text{fill:#e2e8f0;}');
-    css = css.replace(/\.cluster-label span\{color:[^}]+\}/g, '.cluster-label span{color:#e2e8f0;}');
-    // Cluster rect: subtle bg
-    css = css.replace(/\.cluster rect\{fill:[^;]+;/g, '.cluster rect{fill:rgba(90,159,212,0.08);');
-    styleEl.textContent = css;
-  }
-
   function renderMermaidDiagrams(container) {
     if (typeof mermaid === 'undefined') return;
     var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
@@ -1275,7 +1199,6 @@ export function generatePlanViewerHTML(opts: {
       try {
         mermaid.render(id, source).then(function(result) {
           wrapper.innerHTML = result.svg;
-          fixMermaidSvgStyles(wrapper);
           createMermaidToolbar(wrapper, idx);
           preEl.parentNode.replaceChild(wrapper, preEl);
         }).catch(function(err) {
