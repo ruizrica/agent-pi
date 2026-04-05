@@ -923,6 +923,70 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("learn", {
+		description: "Learn a codebase/folder — deep reconnaissance compiled into structured Obsidian wiki documentation",
+		handler: async (args, ctx) => {
+			widgetCtx = ctx;
+			const scope = (args || "").trim();
+			const targetPath = scope || ctx.cwd;
+
+			ctx.ui.notify(`Starting codebase learn: ${targetPath}...`, "info");
+
+			// Find learn chain
+			const learnChain = chains.find(c => c.name === "learn");
+			if (!learnChain) {
+				ctx.ui.notify("Learn chain not found in .pi/agents/agent-chain.yaml", "error");
+				return;
+			}
+
+			// Activate the learn chain
+			activateChain(learnChain);
+
+			// Build task string — $ORIGINAL in prompts will be the target path
+			const task = targetPath;
+
+			// Run the chain
+			const result = await runChain(task, ctx);
+
+			// Hide chain widget — learn is done
+			widgetCtx.ui.setWidget("agent-chain", undefined);
+
+			if (!result.success) {
+				ctx.ui.notify(`Learn failed: ${result.output.slice(0, 200)}`, "error");
+				return;
+			}
+
+			// Write raw report backup
+			const reportPath = join(ctx.cwd, ".pi", "learn-report.md");
+			const reportDir = dirname(reportPath);
+			if (!existsSync(reportDir)) {
+				mkdirSync(reportDir, { recursive: true });
+			}
+			writeFileSync(reportPath, result.output, "utf-8");
+
+			// Call into learn.ts's Obsidian writing logic via global hook
+			const learnWriter = (globalThis as any).__piLearnFromChainOutput;
+			if (learnWriter) {
+				try {
+					await learnWriter(
+						result.output,
+						targetPath,
+						ctx.cwd,
+						(msg: string, type: string) => ctx.ui.notify(msg, type),
+					);
+				} catch (err: any) {
+					ctx.ui.notify(`Obsidian write failed: ${err?.message || "unknown error"}`, "error");
+					ctx.ui.notify(`Raw report saved to ${reportPath}`, "info");
+				}
+			} else {
+				ctx.ui.notify(
+					`Learn chain complete! Report saved to ${reportPath}\n(Obsidian integration not loaded — load learn.ts extension for wiki writing)`,
+					"warning",
+				);
+			}
+		},
+	});
+
 	// ── System Prompt Override ───────────────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {

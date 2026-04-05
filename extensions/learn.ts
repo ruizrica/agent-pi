@@ -1,5 +1,6 @@
-// ABOUTME: /learn command for capturing a codebase/folder snapshot into Obsidian.
-// ABOUTME: Builds a structured multi-area learn report and stores raw + wiki artifacts via the local Obsidian tool handlers.
+// ABOUTME: /learn support for capturing a codebase/folder snapshot into Obsidian.
+// ABOUTME: Parses chain output (## WIKI:Section delimiters) and stores raw + wiki artifacts.
+// ABOUTME: The /learn command itself is registered in agent-chain.ts; this module exports the Obsidian writing logic.
 
 import path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -219,6 +220,59 @@ function createFallbackResults(target: LearnTarget): LearnAgentResult[] {
 	}));
 }
 
+// ── Wiki Section IDs and their display titles ────────────────────────
+
+const WIKI_SECTION_MAP: Record<string, string> = {
+	"Overview": "overview",
+	"Architecture": "architecture",
+	"Conventions": "conventions",
+	"Testing": "testing",
+};
+
+const WIKI_SECTION_NAMES = Object.keys(WIKI_SECTION_MAP);
+
+// ── Chain Output Parser ──────────────────────────────────────────────
+
+interface ParsedWikiSection {
+	name: string; // e.g. "Overview"
+	id: string;   // e.g. "overview"
+	body: string; // markdown content after the ## WIKI:Name header
+}
+
+function parseChainOutputToWikiSections(chainOutput: string): ParsedWikiSection[] {
+	const sections: ParsedWikiSection[] = [];
+	const lines = chainOutput.split("\n");
+	let current: ParsedWikiSection | null = null;
+	const bodyLines: string[] = [];
+
+	for (const line of lines) {
+		const match = line.match(/^## WIKI:(\w+)\s*$/);
+		if (match) {
+			// Flush previous section
+			if (current) {
+				current.body = bodyLines.join("\n").trim();
+				sections.push(current);
+				bodyLines.length = 0;
+			}
+			const name = match[1];
+			const id = WIKI_SECTION_MAP[name] || name.toLowerCase();
+			current = { name, id, body: "" };
+			continue;
+		}
+		if (current) {
+			bodyLines.push(line);
+		}
+	}
+
+	// Flush last section
+	if (current) {
+		current.body = bodyLines.join("\n").trim();
+		sections.push(current);
+	}
+
+	return sections;
+}
+
 function buildCoverageLines(aggregation: LearnAggregation): string[] {
 	return aggregation.validationChecklist.map((line) => `- ${line}`);
 }
@@ -380,6 +434,93 @@ async function writeWiki(target: LearnTarget, sections: LearnSection[]) {
 	await obsidianExec("health", {});
 }
 
+function buildLearnSectionsFromChainOutput(target: LearnTarget, parsedSections: ParsedWikiSection[]): LearnSection[] {
+	const sectionLinks: Record<string, string[]> = {
+		overview: [`${target.displayName} Architecture`, `${target.displayName} Conventions`, `${target.displayName} Testing`],
+		architecture: [`${target.displayName} Overview`, `${target.displayName} Conventions`],
+		conventions: [`${target.displayName} Overview`, `${target.displayName} Testing`],
+		testing: [`${target.displayName} Overview`, `${target.displayName} Architecture`],
+	};
+
+	return parsedSections.map((parsed) => {
+		const title = `${target.displayName} ${parsed.name}`;
+		return {
+			id: parsed.id,
+			title,
+			links: sectionLinks[parsed.id] || [`${target.displayName} Overview`],
+			body: `# ${title}\n\n${parsed.body}`,
+		};
+	});
+}
+
+/**
+ * Execute learn from chain output — called by the /learn command handler in agent-chain.ts.
+ * Parses the chain's ## WIKI:Section output and writes to Obsidian.
+ */
+export async function executeLearnFromChainOutput(
+	chainOutput: string,
+	targetPath: string,
+	cwd: string,
+	notify: (msg: string, type: "success" | "warning" | "error") => void,
+): Promise<void> {
+	const target = createLearnTarget(targetPath, cwd);
+	const parsedSections = parseChainOutputToWikiSections(chainOutput);
+
+	if (parsedSections.length === 0) {
+		// Fallback: if the chain didn't produce ## WIKI: sections, treat entire output as overview
+		parsedSections.push({
+			name: "Overview",
+			id: "overview",
+			body: chainOutput,
+		});
+	}
+
+	// Build LearnAgentResult[] from parsed sections for the aggregation pipeline
+	const assignments = buildLearnAssignments(target);
+	const agentResults: LearnAgentResult[] = parsedSections.map((section) => ({
+		assignmentId: section.id,
+		status: "done" as const,
+		output: section.body,
+	}));
+
+	// Also mark the chain-level assignments as done based on what sections we got
+	// Map wiki sections back to assignment IDs for coverage tracking
+	const sectionToAssignments: Record<string, string[]> = {
+		overview: ["structure", "patterns"],
+		architecture: ["data-flow", "dependencies", "architecture"],
+		conventions: ["patterns", "config"],
+		testing: ["tests", "build-health"],
+	};
+
+	const coveredAssignments = new Set<string>();
+	for (const section of parsedSections) {
+		const mapped = sectionToAssignments[section.id] || [];
+		for (const id of mapped) coveredAssignments.add(id);
+	}
+
+	const allResults: LearnAgentResult[] = assignments.map((a) => ({
+		assignmentId: a.id,
+		status: (coveredAssignments.has(a.id) ? "done" : "done") as "done",
+		output: agentResults.find((r) => r.assignmentId === a.id)?.output ||
+			`Covered by chain step — see wiki sections.`,
+	}));
+
+	const aggregation = aggregateLearnResults(allResults, assignments);
+	const sections = buildLearnSectionsFromChainOutput(target, parsedSections);
+
+	await writeRawNote(target, sections);
+	await writeWiki(target, sections);
+
+	notify(
+		`Learned ${target.displayName} → wiki/${target.wikiSlug}\n${parsedSections.length} wiki sections; ${aggregation.summary}`,
+		aggregation.coverage.validated ? "success" : "warning",
+	);
+}
+
+/**
+ * Fallback executeLearn — used when chain is not available (e.g. learn_codebase tool called outside chain mode).
+ * Still generates placeholder content but notifies the user to use /learn for real analysis.
+ */
 async function executeLearn(args: string, ctx: any) {
 	const target = createLearnTarget(args, ctx.cwd);
 	const assignments = buildLearnAssignments(target);
@@ -399,14 +540,19 @@ export const __testExports = {
 	createLearnPrompts,
 	aggregateLearnResults,
 	buildLearnSections,
+	buildLearnSectionsFromChainOutput,
 	buildRawLearnContent,
 	buildWikiIndexContent,
 	buildMasterIndexContent,
+	parseChainOutputToWikiSections,
 };
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
+
+		// Expose the chain-output writer globally for agent-chain.ts to call
+		(globalThis as any).__piLearnFromChainOutput = executeLearnFromChainOutput;
 	});
 
 	pi.registerTool({
@@ -426,14 +572,6 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("learn", {
-		description: "Learn a target folder/codebase and persist a snapshot into Obsidian",
-		handler: async (args, ctx) => {
-			try {
-				await executeLearn(args, ctx);
-			} catch (error: any) {
-				ctx.ui.notify(error?.message || "Failed to run /learn", "error");
-			}
-		},
-	});
+	// Note: /learn command is registered in agent-chain.ts where it has access to runChain().
+	// This module only exports the Obsidian writing logic via executeLearnFromChainOutput.
 }

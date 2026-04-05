@@ -10,9 +10,11 @@ const {
 	createLearnPrompts,
 	aggregateLearnResults,
 	buildLearnSections,
+	buildLearnSectionsFromChainOutput,
 	buildRawLearnContent,
 	buildWikiIndexContent,
 	buildMasterIndexContent,
+	parseChainOutputToWikiSections,
 } = __testExports;
 
 describe("learn", () => {
@@ -54,6 +56,68 @@ describe("learn", () => {
 		expect(aggregation.coverage.percent).toBe(13);
 		expect(aggregation.coverage.validated).toBe(false);
 		expect(aggregation.validationChecklist.join("\n")).toContain("Coverage validated: no");
+	});
+
+	it("parses chain output with ## WIKI: delimiters into sections", () => {
+		const chainOutput = [
+			"Some preamble that should be ignored.",
+			"",
+			"## WIKI:Overview",
+			"",
+			"### Project Summary",
+			"This is a Node.js project.",
+			"- Entry: `src/index.ts:1`",
+			"",
+			"## WIKI:Architecture",
+			"",
+			"### Component Map",
+			"| Component | Files |",
+			"|-----------|-------|",
+			"| Auth | src/auth/ |",
+			"",
+			"## WIKI:Conventions",
+			"",
+			"### Naming",
+			"- kebab-case files",
+			"",
+			"## WIKI:Testing",
+			"",
+			"### Framework",
+			"Vitest with supertest.",
+		].join("\n");
+
+		const sections = parseChainOutputToWikiSections(chainOutput);
+		expect(sections).toHaveLength(4);
+		expect(sections.map((s: any) => s.name)).toEqual(["Overview", "Architecture", "Conventions", "Testing"]);
+		expect(sections.map((s: any) => s.id)).toEqual(["overview", "architecture", "conventions", "testing"]);
+		expect(sections[0].body).toContain("Node.js project");
+		expect(sections[0].body).toContain("src/index.ts:1");
+		expect(sections[1].body).toContain("Component Map");
+		expect(sections[2].body).toContain("kebab-case");
+		expect(sections[3].body).toContain("Vitest");
+	});
+
+	it("parses empty chain output gracefully", () => {
+		const sections = parseChainOutputToWikiSections("no wiki sections here");
+		expect(sections).toHaveLength(0);
+	});
+
+	it("builds wiki learn sections from parsed chain output", () => {
+		const target = createLearnTarget(".", "/repo/demo", new Date("2025-04-05T08:30:00.000Z"));
+		const parsed = [
+			{ name: "Overview", id: "overview", body: "Real analysis content about demo project." },
+			{ name: "Architecture", id: "architecture", body: "Component map with evidence." },
+			{ name: "Conventions", id: "conventions", body: "Naming and patterns." },
+			{ name: "Testing", id: "testing", body: "Vitest + supertest." },
+		];
+		const sections = buildLearnSectionsFromChainOutput(target, parsed);
+		expect(sections).toHaveLength(4);
+		expect(sections[0].title).toBe("demo Overview");
+		expect(sections[0].body).toContain("Real analysis content");
+		expect(sections[0].links).toContain("demo Architecture");
+		expect(sections[1].title).toBe("demo Architecture");
+		expect(sections[2].title).toBe("demo Conventions");
+		expect(sections[3].title).toBe("demo Testing");
 	});
 
 	it("builds richer learn sections and raw content", () => {
