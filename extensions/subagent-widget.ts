@@ -204,12 +204,67 @@ export default function (pi: ExtensionAPI) {
 		} catch {}
 	}
 
+	// ── Build context prefix for subagent orientation ──────────────────────
+	// Gathers working directory, top-level structure, git status, and active
+	// plan so subagents can orient immediately without blind exploration.
+	function buildContextPrefix(): string {
+		const lines: string[] = ["## Working Context"];
+		// 1. Working directory
+		const cwd = process.cwd();
+		lines.push(`Working directory: ${cwd}`);
+
+		// 2. Top-level directory listing (fast, sync)
+		try {
+			const entries = fs.readdirSync(cwd, { withFileTypes: true });
+			const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules").map(e => e.name + "/");
+			const files = entries.filter(e => e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".json") || e.name.endsWith(".ts") || e.name === ".env")).map(e => e.name);
+			const topLevel = [...dirs.slice(0, 10), ...files.slice(0, 5)].join(" ");
+			if (topLevel) lines.push(`Top-level: ${topLevel}`);
+		} catch {}
+
+		// 3. Git status (truncated, sync)
+		try {
+			const { execSync } = require("child_process");
+			const status = execSync("git status --short 2>/dev/null", { cwd, encoding: "utf-8", timeout: 3000 }).trim();
+			if (status) {
+				const statusLines = status.split("\n");
+				const modified = statusLines.filter(l => l.startsWith(" M") || l.startsWith("M ")).length;
+				const untracked = statusLines.filter(l => l.startsWith("??")).length;
+				const added = statusLines.filter(l => l.startsWith("A ")).length;
+				const parts: string[] = [];
+				if (modified) parts.push(`${modified} modified`);
+				if (added) parts.push(`${added} added`);
+				if (untracked) parts.push(`${untracked} untracked`);
+				if (parts.length) lines.push(`Git status: ${parts.join(", ")}`);
+			}
+		} catch {}
+
+		// 4. Active plan title (first meaningful line of .context/todo.md)
+		try {
+			const todoPath = path.join(cwd, ".context", "todo.md");
+			if (fs.existsSync(todoPath)) {
+				const content = fs.readFileSync(todoPath, "utf-8");
+				const titleLine = content.split("\n").find(l => l.startsWith("# "));
+				if (titleLine) lines.push(`Active plan: ${titleLine.replace(/^# /, "").trim()}`);
+			}
+		} catch {}
+
+		return lines.join("\n") + "\n";
+	}
+
 	function spawnAgent(
 		state: SubState,
 		prompt: string,
 		ctx: any,
 		peerNames?: string[],
 	): Promise<void> {
+		// Inject context prefix unless the prompt already has explicit working directory info
+		// or this is a standby/warmup spawn (no real task yet)
+		if (!state.standby && !prompt.includes("Working directory:")) {
+			const prefix = buildContextPrefix();
+			prompt = prefix + "\n## Task\n" + prompt;
+		}
+
 		// Model resolution priority:
 		// 1) Caller-specified override (state.model set by tool call)
 		// 2) Agent definition model (from .md file, resolved via models.json)
