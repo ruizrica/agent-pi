@@ -76,6 +76,14 @@ Apply these as you implement — every change is an opportunity to improve clari
 6. Verify the code is simpler and more maintainable than before
 7. Summarize what was done and any follow-up needed
 
+## Knowledge Base (Obsidian Memory)
+
+You have access to a persistent knowledge base via `obsidian_memory` if the tool is available.
+- **Before building**: Search for existing patterns or prior work -- `{ operation: "search", query: "relevant topic" }`
+- **After building**: Ingest key learnings, how-tos, gotchas, and architectural decisions -- `{ operation: "ingest", title: "...", content: "...", tags: "..." }`
+- **For documentation-heavy work**: Compile findings into wiki articles -- `{ operation: "write", wiki: "...", title: "...", content: "..." }`
+- The knowledge base lives at /Users/ricardo/Workshop/Obsidian with raw/ (ingested content) and wiki/ (compiled articles)
+
 ## Output
 
 - Show key code changes (not every line if large)

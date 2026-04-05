@@ -754,6 +754,29 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	// ── System Prompt: Memory Awareness ─────────────────────────────
+
+	pi.on("before_agent_start", async (event, _ctx) => {
+		const memoryPrompt = `\n\n## Obsidian Knowledge Base (Agent Memory)
+
+You have access to a persistent Karpathy-style knowledge base via the \`obsidian_memory\` tool.
+Vault: ${VAULT_NAME} at ${VAULT_PATH}
+
+**Use it actively:**
+- **Before research tasks**: Check if we already have knowledge — \`{ operation: "search", query: "..." }\`
+- **After completing work**: Ingest learnings, how-tos, and findings — \`{ operation: "ingest", title: "...", content: "...", tags: "..." }\`
+- **When asked about past work**: Search the wiki — \`{ operation: "search", query: "..." }\` then \`{ operation: "read", path: "..." }\`
+- **For building knowledge**: Compile raw content into wiki articles — \`{ operation: "write", wiki: "...", title: "...", content: "..." }\`
+- **Navigate relationships**: Follow links — \`{ operation: "backlinks", file: "..." }\` and \`{ operation: "links", file: "..." }\`
+
+**Workflow**: ingest raw → compile wiki → maintain indexes → search & navigate → health check
+**Quick ref**: operations include ingest, search, read, write, write:index, write:master_index, backlinks, links, list, list:wikis, health, stats, open`;
+
+		return {
+			systemPrompt: (event.systemPrompt || "") + memoryPrompt,
+		};
+	});
+
 	// ── Session Start Hook ──────────────────────────────────────────
 
 	pi.on("session_start", async (_event, _ctx) => {

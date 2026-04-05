@@ -73,5 +73,21 @@ The following actions always require explicit user confirmation:
 
 ---
 
+## Obsidian Knowledge Base (Agent Memory)
+
+A persistent Karpathy-style knowledge base is available via the `obsidian_memory` tool.
+Vault location: `/Users/ricardo/Workshop/Obsidian`
+
+**Actively use it:**
+- **Search before work** -- check if we already have relevant knowledge: `{ operation: "search", query: "..." }`
+- **Ingest after work** -- save learnings, how-tos, research findings: `{ operation: "ingest", title: "...", content: "...", tags: "..." }`
+- **Build wikis** -- compile raw content into structured articles: `{ operation: "write", wiki: "...", title: "...", content: "..." }`
+- **Navigate** -- follow links between articles: `{ operation: "backlinks", file: "..." }` and `{ operation: "links", file: "..." }`
+- **Health check** -- maintain data integrity: `{ operation: "health" }`
+
+Structure: `raw/` (ingested content) → `wiki/` (compiled articles with `[[wiki links]]` and indexes)
+
+---
+
 ## When In Doubt
 If a user instruction is ambiguous, **ask for clarification**. Do not assume the most aggressive interpretation. "Do it" means "do the local work" — not "deploy to the world."

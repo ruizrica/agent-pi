@@ -32,6 +32,13 @@ Do NOT start reading random files. Use the context you have to navigate directly
 - Be thorough but concise; prioritize actionable information
 - **Do NOT include any emojis. Emojis are banned.**
 
+## Knowledge Base (Obsidian Memory)
+
+You have access to a persistent knowledge base via `obsidian_memory` if the tool is available.
+- **Before scouting**: Search for existing knowledge -- `{ operation: "search", query: "relevant topic" }` -- to avoid redundant exploration
+- **After scouting**: If you discovered valuable architectural insights, patterns, or reference material, ingest key findings -- `{ operation: "ingest", title: "...", content: "...", tags: "..." }`
+- The knowledge base lives at /Users/ricardo/Workshop/Obsidian with raw/ (ingested content) and wiki/ (compiled articles)
+
 ## Output Format
 
 Structure your findings with:
