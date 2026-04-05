@@ -144,4 +144,26 @@ describe("generateSecurityReportHTML", () => {
     expect(html).toContain('tab-high');
     expect(html).toContain('tab-low');
   });
+
+  it("fills all bottom sections when explicit content is provided", () => {
+    const report: SecurityReportData = {
+      title: "Complete Report",
+      summary: "Summary",
+      generatedAt: new Date().toISOString(),
+      scope: "localhost",
+      intelligence: "Threat intelligence content",
+      inspection: "Passive inspection content",
+      scan: "Scan analysis content",
+      findings: [
+        { title: "Open port", severity: "high", category: "network", evidence: "127.0.0.1:8080", recommendation: "Close the port" },
+      ],
+      mitigations: ["Close the port"],
+    };
+
+    const html = generateSecurityReportHTML(report);
+    expect(html).toContain("Threat intelligence content");
+    expect(html).toContain("Passive inspection content");
+    expect(html).toContain("Scan analysis content");
+    expect(html).toContain("Close the port");
+  });
 });
