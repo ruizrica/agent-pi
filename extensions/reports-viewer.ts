@@ -1,26 +1,19 @@
 // ABOUTME: Persisted reports browser for plans, questions, specs, and completion reports.
 // ABOUTME: Opens a search-first /reports view with recent category sections and full-screen tables.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { join, resolve } from "node:path";
+import { type Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateReportsViewerHTML } from "./lib/reports-viewer-html.ts";
 import { loadReportIndex } from "./lib/report-index.ts";
-
-function openBrowser(url: string): void {
-	try { execFileSync("open", [url], { stdio: "ignore" }); } catch {
-		try { execFileSync("xdg-open", [url], { stdio: "ignore" }); } catch {
-			try { execFileSync("cmd", ["/c", "start", url], { stdio: "ignore" }); } catch {}
-		}
-	}
-}
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 
 /** Shell metacharacters that must never appear in paths passed to child processes. */
 const SHELL_META = /[`$|;&(){}\\<>\n\r]/;
@@ -58,9 +51,9 @@ function openOriginalReport(entry: any): void {
 }
 
 function startReportsServer(title: string): Promise<{ port: number; server: Server; waitForResult: () => Promise<void> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: () => void;
-		const resultPromise = new Promise<void>((res) => { resolveResult = res; });
+	return new Promise(async (resolveSetup) => {
+		let resolveResult!: () => void;
+		const resultPromise = new Promise<void>((resolve) => { resolveResult = resolve; });
 		let lastHeartbeat = Date.now();
 		const heartbeatCheck = setInterval(() => {
 			if (Date.now() - lastHeartbeat > 15_000) {
@@ -69,78 +62,60 @@ function startReportsServer(title: string): Promise<{ port: number; server: Serv
 			}
 		}, 5_000);
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-			if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-			const url = new URL(req.url || "/", "http://localhost");
-
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateReportsViewerHTML({ title, port, entries: loadReportIndex().entries });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/heartbeat") {
-				lastHeartbeat = Date.now();
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/open") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body || "{}");
-						const entry = loadReportIndex().entries.find((item) => item.id === data.id);
-						if (!entry) throw new Error("Report not found");
-						openOriginalReport(entry);
+		const { port, server, waitForResult } = await createViewerServer({
+			getHtml: (port) => {
+				return generateReportsViewerHTML({ title, port, entries: loadReportIndex().entries });
+			},
+			routes: [
+				{
+					method: "POST",
+					path: "/heartbeat",
+					handler: async (_req, res) => {
+						lastHeartbeat = Date.now();
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
-					} catch (err: any) {
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: false, error: err?.message || "Open failed" }));
-					}
-				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/result") {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
+					},
+				},
+				{
+					method: "POST",
+					path: "/open",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", () => {
+							try {
+								const data = JSON.parse(body || "{}");
+								const entry = loadReportIndex().entries.find((item) => item.id === data.id);
+								if (!entry) throw new Error("Report not found");
+								openOriginalReport(entry);
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: true }));
+							} catch (err: any) {
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: false, error: err?.message || "Open failed" }));
+							}
+						});
+					},
+				},
+			],
+			onResult: () => {
 				resolveResult!();
-				return;
-			}
-
-			res.writeHead(404);
-			res.end("Not found");
+			},
 		});
 
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise.finally(() => clearInterval(heartbeatCheck)),
-			});
+		// Hook the shared result promise to ours
+		waitForResult().then(() => {
+			clearInterval(heartbeatCheck);
+			resolveResult!();
+		}).catch(() => {
+			clearInterval(heartbeatCheck);
+			resolveResult!();
+		});
+
+		resolveSetup({
+			port,
+			server,
+			waitForResult: () => resultPromise,
 		});
 	});
 }

@@ -1,6 +1,7 @@
 // ABOUTME: Web Chat Extension — opens a LAN-accessible chat interface that relays to the main Pi session.
 // ABOUTME: Phone acts as a thin client — messages are injected into THIS session via pi.sendUserMessage().
 // ABOUTME: Uses WebSocket for reliable streaming through cloudflared tunnels.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext, MessageUpdateEvent, ToolExecutionStartEvent, ToolExecutionEndEvent } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
@@ -9,6 +10,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
+
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { randomInt } from "node:crypto";
@@ -18,6 +20,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateWebChatHTML } from "./lib/web-chat-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { openBrowser } from "./lib/viewer-server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -653,21 +656,7 @@ function startChatServer(
 	});
 }
 
-// ── Browser Opener ───────────────────────────────────────────────────
 
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
-}
 
 // ── Tool Parameters ──────────────────────────────────────────────────
 

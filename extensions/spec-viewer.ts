@@ -1,20 +1,19 @@
 // ABOUTME: Spec Viewer — opens a multi-page browser GUI for reviewing, commenting, and approving specifications.
 // ABOUTME: Wizard-style navigation between spec docs, inline comment threads, visual asset gallery, markdown editing.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, basename, dirname, extname, resolve, relative } from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -177,175 +176,90 @@ function startSpecViewerServer(
 	documents: SpecDocument[],
 	title: string,
 	existingComments: SpecComment[],
-): Promise<{ port: number; server: Server; waitForResult: () => Promise<SpecViewerResult> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: (result: SpecViewerResult) => void;
-		const resultPromise = new Promise<SpecViewerResult>((res) => {
-			resolveResult = res;
-		});
+): Promise<ViewerServerHandle> {
+	return createViewerServer({
+		getHtml: (port) => generateSpecViewerHTML({
+			documents,
+			title,
+			port,
+			existingComments: JSON.stringify(existingComments),
+		}),
+		routes: [
+			{
+				method: "GET",
+				path: "/file",
+				handler: async (req, res, url) => {
+					const relPath = url.searchParams.get("path");
+					if (!relPath) {
+						res.writeHead(400);
+						res.end("Missing path parameter");
+						return;
+					}
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+					// Security: prevent directory traversal
+					const absPath = resolve(folderPath, relPath);
+					const normalizedFolder = resolve(folderPath);
+					if (!absPath.startsWith(normalizedFolder)) {
+						res.writeHead(403);
+						res.end("Access denied");
+						return;
+					}
 
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateSpecViewerHTML({
-					documents,
-					title,
-					port,
-					existingComments: JSON.stringify(existingComments),
-				});
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// Serve files from spec folder (path-restricted)
-			if (req.method === "GET" && url.pathname === "/file") {
-				const relPath = url.searchParams.get("path");
-				if (!relPath) {
-					res.writeHead(400);
-					res.end("Missing path parameter");
-					return;
-				}
-
-				// Security: prevent directory traversal
-				const absPath = resolve(folderPath, relPath);
-				const normalizedFolder = resolve(folderPath);
-				if (!absPath.startsWith(normalizedFolder)) {
-					res.writeHead(403);
-					res.end("Access denied");
-					return;
-				}
-
-				try {
-					const data = readFileSync(absPath);
-					const ext = extname(absPath).toLowerCase();
-					const contentType = MIME_TYPES[ext] || "application/octet-stream";
-					res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "public, max-age=300" });
-					res.end(data);
-				} catch {
-					res.writeHead(404);
-					res.end("File not found");
-				}
-				return;
-			}
-
-			// Handle result submission
-			if (req.method === "POST" && url.pathname === "/result") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
 					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
-							action: data.action || "declined",
-							comments: data.comments || [],
-							markdownChanges: data.markdownChanges || {},
-							modified: data.modified || false,
-						});
+						const data = readFileSync(absPath);
+						const ext = extname(absPath).toLowerCase();
+						const contentType = MIME_TYPES[ext] || "application/octet-stream";
+						res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "public, max-age=300" });
+						res.end(data);
 					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
+						res.writeHead(404);
+						res.end("File not found");
 					}
-				});
-				return;
-			}
-
-			// Save comments
-			if (req.method === "POST" && url.pathname === "/save") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						const commentsPath = join(folderPath, "spec-comments.json");
-						writeFileSync(commentsPath, JSON.stringify({ comments: data.comments || [] }, null, 2), "utf-8");
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/export-standalone") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body || "{}");
-						const exportDocs = buildStandaloneSpecDocuments(folderPath, documents, data.markdownChanges || {});
-						const html = createSpecStandaloneExport({ title, documents: exportDocs });
-						const saved = saveStandaloneExport({ filePrefix: "spec-readonly", html });
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
-			});
-		});
+				},
+			},
+			{
+				method: "POST",
+				path: "/save",
+				handler: async (req, res) => {
+					let body = "";
+					req.on("data", (chunk) => { body += chunk; });
+					req.on("end", () => {
+						try {
+							const data = JSON.parse(body);
+							const commentsPath = join(folderPath, "spec-comments.json");
+							writeFileSync(commentsPath, JSON.stringify({ comments: data.comments || [] }, null, 2), "utf-8");
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true }));
+						} catch (err: any) {
+							res.writeHead(500, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: err.message }));
+						}
+					});
+				},
+			},
+			{
+				method: "POST",
+				path: "/export-standalone",
+				handler: async (req, res) => {
+					let body = "";
+					req.on("data", (chunk) => { body += chunk; });
+					req.on("end", () => {
+						try {
+							const data = JSON.parse(body || "{}");
+							const exportDocs = buildStandaloneSpecDocuments(folderPath, documents, data.markdownChanges || {});
+							const html = createSpecStandaloneExport({ title, documents: exportDocs });
+							const saved = saveStandaloneExport({ filePrefix: "spec-readonly", html });
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
+						} catch (err: any) {
+							res.writeHead(500, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: err.message }));
+						}
+					});
+				},
+			},
+		],
 	});
-}
-
-// ── Browser Helper ───────────────────────────────────────────────────
-
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
 }
 
 // ── Comment Formatting ───────────────────────────────────────────────
@@ -374,8 +288,8 @@ const ShowSpecParams = Type.Object({
 
 export default function (pi: ExtensionAPI) {
 	let piRef = pi;
-	let activeServer: Server | null = null;
-	let activeSession: { kind: "spec"; title: string; url: string; server: Server; onClose: () => void } | null = null;
+	let activeServer: any = null;
+	let activeSession: { kind: "spec"; title: string; url: string; server: any; onClose: () => void } | null = null;
 
 	function cleanupServer() {
 		const server = activeServer;
@@ -415,20 +329,20 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start server
-		const { port, server, waitForResult } = await startSpecViewerServer(
+		const handle = await startSpecViewerServer(
 			folderPath,
 			documents,
 			title,
 			existingComments,
 		);
-		activeServer = server;
+		activeServer = handle.server;
 
-		const url = `http://127.0.0.1:${port}`;
+		const url = `http://127.0.0.1:${handle.port}`;
 		activeSession = {
 			kind: "spec",
 			title: "Spec viewer",
 			url,
-			server,
+			server: handle.server,
 			onClose: () => {
 				activeServer = null;
 				activeSession = null;
@@ -439,7 +353,7 @@ export default function (pi: ExtensionAPI) {
 		notifyViewerOpen(ctx, activeSession);
 
 		try {
-			const result = await waitForResult();
+			const result = await handle.waitForResult();
 
 			// Save any markdown changes back to files
 			if (result.modified && result.markdownChanges) {

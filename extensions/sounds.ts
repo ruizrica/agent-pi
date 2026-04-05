@@ -1,14 +1,16 @@
 // ABOUTME: Soundcn Extension — Browser-based sound viewer with Pi lifecycle hook notifications.
 // ABOUTME: /sounds command opens browser UI to browse, preview, and assign sounds from soundcn.xyz to Pi events.
 
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
+
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { openBrowser } from "./lib/viewer-server.ts";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSoundsViewerHTML, type CatalogItem } from "./lib/sounds-viewer-html.ts";
@@ -237,19 +239,7 @@ function startSoundsServer(
 	});
 }
 
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
-}
+
 
 // ── Extension ────────────────────────────────────────────────────────
 

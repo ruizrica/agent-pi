@@ -1,14 +1,12 @@
 // ABOUTME: Research sessions browser for autoresearch lifecycle tracking.
 // ABOUTME: Opens a web viewer to browse, search, and resume saved research sessions.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateResearchViewerHTML } from "./lib/research-viewer-html.ts";
@@ -19,76 +17,47 @@ import {
 	type ResearchSessionSummary,
 } from "./lib/research-session.ts";
 
-function openBrowser(url: string): void {
-	try { execSync(`open "${url}"`, { stdio: "ignore" }); } catch {
-		try { execSync(`xdg-open "${url}"`, { stdio: "ignore" }); } catch {
-			try { execSync(`start "${url}"`, { stdio: "ignore" }); } catch {}
+async function startResearchServer(title: string): Promise<{ port: number; server: Server; waitForResult: () => Promise<void> }> {
+	let resolveResult: () => void;
+	const resultPromise = new Promise<void>((res) => { resolveResult = res; });
+	let lastHeartbeat = Date.now();
+	const heartbeatCheck = setInterval(() => {
+		if (Date.now() - lastHeartbeat > 15_000) {
+			clearInterval(heartbeatCheck);
+			resolveResult!();
 		}
-	}
-}
+	}, 5_000);
 
-function startResearchServer(title: string): Promise<{ port: number; server: Server; waitForResult: () => Promise<void> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: () => void;
-		const resultPromise = new Promise<void>((res) => { resolveResult = res; });
-		let lastHeartbeat = Date.now();
-		const heartbeatCheck = setInterval(() => {
-			if (Date.now() - lastHeartbeat > 15_000) {
-				clearInterval(heartbeatCheck);
-				resolveResult!();
-			}
-		}, 5_000);
-
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-			if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-			const url = new URL(req.url || "/", "http://localhost");
-
-			// Main page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const sessions = listResearchSessions();
-				const html = generateResearchViewerHTML({ title, port, sessions });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Logo
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// Heartbeat
-			if (req.method === "POST" && url.pathname === "/heartbeat") {
+	const routes = [
+		{
+			method: "POST" as const,
+			path: "/heartbeat",
+			handler: (req: any, res: any) => {
 				lastHeartbeat = Date.now();
 				res.writeHead(200, { "Content-Type": "application/json" });
 				res.end(JSON.stringify({ ok: true }));
-				return;
-			}
-
-			// API: List all sessions (summaries)
-			if (req.method === "GET" && url.pathname === "/api/sessions") {
+			},
+		},
+		{
+			method: "GET" as const,
+			path: "/api/sessions",
+			handler: (req: any, res: any) => {
 				const sessions = listResearchSessions();
 				res.writeHead(200, { "Content-Type": "application/json" });
 				res.end(JSON.stringify(sessions));
-				return;
-			}
-
-			// API: Get single session (full detail)
-			if (req.method === "GET" && url.pathname.startsWith("/api/sessions/")) {
-				const id = decodeURIComponent(url.pathname.slice("/api/sessions/".length));
+			},
+		},
+		{
+			method: "GET" as const,
+			path: "/api/sessions/:id",
+			handler: (req: any, res: any, url: any) => {
+				const pathname = url.pathname;
+				if (!pathname.startsWith("/api/sessions/")) {
+					res.writeHead(404);
+					res.end();
+					return;
+				}
+				const id = decodeURIComponent(pathname.slice("/api/sessions/".length));
 				const session = loadResearchSession(id);
 				if (session) {
 					res.writeHead(200, { "Content-Type": "application/json" });
@@ -97,30 +66,29 @@ function startResearchServer(title: string): Promise<{ port: number; server: Ser
 					res.writeHead(404, { "Content-Type": "application/json" });
 					res.end(JSON.stringify({ error: "Session not found" }));
 				}
-				return;
-			}
+			},
+		},
+	];
 
-			// Close
-			if (req.method === "POST" && url.pathname === "/result") {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-				resolveResult!();
-				return;
-			}
-
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise.finally(() => clearInterval(heartbeatCheck)),
-			});
-		});
+	const handle = await createViewerServer({
+		getHtml: (port) => {
+			const sessions = listResearchSessions();
+			return generateResearchViewerHTML({ title, port, sessions });
+		},
+		routes,
+		onResult: () => {
+			resolveResult!();
+		},
 	});
+
+	return {
+		port: handle.port,
+		server: handle.server,
+		waitForResult: async () => {
+			await handle.waitForResult();
+			clearInterval(heartbeatCheck);
+		},
+	};
 }
 
 const ShowResearchParams = Type.Object({

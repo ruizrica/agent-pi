@@ -1,13 +1,14 @@
 // ABOUTME: Lightweight local file viewer/editor that opens in the browser without Commander.
 // ABOUTME: Serves a local web UI for viewing and optionally editing a single file directly from the CLI.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { basename, extname, resolve, dirname, join } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { execSync, spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateFileViewerHTML } from "./lib/file-viewer-html.ts";
@@ -17,20 +18,6 @@ interface FileViewerResult {
 	action: "done";
 	modified: boolean;
 	content: string;
-}
-
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
 }
 
 function parseRange(content: string, lineRange?: string): string {
@@ -105,81 +92,40 @@ function detectLanguage(filePath: string): string {
 	return map[ext] || "";
 }
 
-function startFileViewerServer(opts: {
+async function startFileViewerServer(opts: {
 	filePath: string;
 	title: string;
 	editable: boolean;
 	lineRange?: string;
 	language?: string;
 }): Promise<{ port: number; server: Server; waitForResult: () => Promise<FileViewerResult> }> {
-	return new Promise((resolveSetup, rejectSetup) => {
-		let initialContent = "";
-		try {
-			initialContent = readFileSync(opts.filePath, "utf-8");
-		} catch (err) {
-			rejectSetup(err);
-			return;
-		}
+	let initialContent = "";
+	try {
+		initialContent = readFileSync(opts.filePath, "utf-8");
+	} catch (err) {
+		throw err;
+	}
 
-		let resolveResult: (result: FileViewerResult) => void;
-		const resultPromise = new Promise<FileViewerResult>((res) => {
-			resolveResult = res;
-		});
+	let resolveResult: (result: FileViewerResult) => void;
+	const resultPromise = new Promise<FileViewerResult>((res) => {
+		resolveResult = res;
+	});
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
+	const routes = [
+		{
+			method: "GET" as const,
+			path: "/favicon.ico",
+			handler: (req: any, res: any) => {
 				res.writeHead(204);
 				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", "http://localhost");
-
-			if (url.pathname === "/favicon.ico") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-				res.setHeader("Pragma", "no-cache");
-				res.setHeader("Expires", "0");
-				const html = generateFileViewerHTML({
-					title: opts.title,
-					filePath: opts.filePath,
-					content: parseRange(initialContent, opts.lineRange),
-					port,
-					lineRange: opts.lineRange,
-					editable: opts.editable,
-					language: opts.language,
-				});
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/open-editor") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/open-editor",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body || "{}");
@@ -191,12 +137,14 @@ function startFileViewerServer(opts: {
 						res.end(JSON.stringify({ ok: false, error: err?.message || "Editor launch failed" }));
 					}
 				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/save") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/save",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						if (!opts.editable) throw new Error("This viewer is read-only");
@@ -210,39 +158,38 @@ function startFileViewerServer(opts: {
 						res.end(JSON.stringify({ ok: false, error: err?.message || "Save failed" }));
 					}
 				});
-				return;
-			}
+			},
+		},
+	];
 
-			if (req.method === "POST" && url.pathname === "/result") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body || "{}");
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
-							action: "done",
-							modified: !!data.modified,
-							content: typeof data.content === "string" ? data.content : initialContent,
-						});
-					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: false, error: "Invalid JSON" }));
-					}
-				});
-				return;
-			}
-
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({ port: addr.port, server, waitForResult: () => resultPromise });
-		});
+	const handle = await createViewerServer({
+		getHtml: (port) => {
+			const html = generateFileViewerHTML({
+				title: opts.title,
+				filePath: opts.filePath,
+				content: parseRange(initialContent, opts.lineRange),
+				port,
+				lineRange: opts.lineRange,
+				editable: opts.editable,
+				language: opts.language,
+			});
+			return html;
+		},
+		routes,
+		onResult: (data) => {
+			resolveResult!({
+				action: "done",
+				modified: !!data.modified,
+				content: typeof data.content === "string" ? data.content : initialContent,
+			});
+		},
 	});
+
+	return {
+		port: handle.port,
+		server: handle.server,
+		waitForResult: handle.waitForResult,
+	};
 }
 
 const ShowFileParams = Type.Object({

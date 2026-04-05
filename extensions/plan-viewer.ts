@@ -1,15 +1,15 @@
 // ABOUTME: Interactive Plan Viewer — opens a GUI browser window for markdown plan review.
 // ABOUTME: Supports plan mode (approve/edit/reorder) and questions mode (inline answers). Markdown-driven UI.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
@@ -31,82 +31,23 @@ interface ViewerResult {
 
 // ── HTTP Server for GUI Window ───────────────────────────────────────
 
-function startViewerServer(
+async function startViewerServer(
 	markdown: string,
 	title: string,
 	purpose: ViewerPurpose,
 ): Promise<{ port: number; server: Server; waitForResult: () => Promise<ViewerResult> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: (result: ViewerResult) => void;
-		const resultPromise = new Promise<ViewerResult>((res) => {
-			resolveResult = res;
-		});
+	let resolveResult: (result: ViewerResult) => void;
+	const resultPromise = new Promise<ViewerResult>((res) => {
+		resolveResult = res;
+	});
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			// CORS headers for local dev
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generatePlanViewerHTML({ markdown, title, mode: purpose, port });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo image
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// Handle result submission (approve/decline)
-			if (req.method === "POST" && url.pathname === "/result") {
+	const routes = [
+		{
+			method: "POST" as const,
+			path: "/save",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
-							action: data.action || "declined",
-							markdown: data.markdown || markdown,
-							modified: data.modified || false,
-							answers: data.answers,
-							answerMap: data.answerMap,
-						});
-					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
-					}
-				});
-				return;
-			}
-
-			// Handle save to desktop
-			if (req.method === "POST" && url.pathname === "/save") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -123,12 +64,14 @@ function startViewerServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/export-standalone") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/export-standalone",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -145,43 +88,29 @@ function startViewerServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
-				return;
-			}
+			},
+		},
+	];
 
-			// 404 for everything else
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		// Listen on random port
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
+	const handle = await createViewerServer({
+		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port }),
+		routes,
+		onResult: (data) => {
+			resolveResult!({
+				action: data.action || "declined",
+				markdown: data.markdown || markdown,
+				modified: data.modified || false,
+				answers: data.answers,
+				answerMap: data.answerMap,
 			});
-		});
+		},
 	});
-}
 
-function openBrowser(url: string): void {
-	try {
-		// macOS
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			// Linux
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			// Windows fallback
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {
-				// Give up silently — URL is logged anyway
-			}
-		}
-	}
+	return {
+		port: handle.port,
+		server: handle.server,
+		waitForResult: handle.waitForResult,
+	};
 }
 
 // ── Tool Parameters ──────────────────────────────────────────────────

@@ -1,15 +1,16 @@
 // ABOUTME: Completion Report Viewer — opens a GUI browser window showing work summary, file diffs, and rollback controls.
 // ABOUTME: Gathers git diff data, renders interactive report with per-file rollback capability.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCompletionReportHTML, type ReportData, type ChangedFile } from "./lib/completion-report-html.ts";
@@ -271,62 +272,28 @@ function gatherReportData(cwd: string, title: string, summary: string, baseRef: 
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
-function startReportServer(
+async function startReportServer(
 	report: ReportData,
 	cwd: string,
 ): Promise<{ port: number; server: Server; waitForResult: () => Promise<ReportResult> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: (result: ReportResult) => void;
-		let settled = false;
-		const settle = (result: ReportResult) => {
-			if (settled) return;
-			settled = true;
-			resolveResult!(result);
-		};
-		const resultPromise = new Promise<ReportResult>((res) => {
-			resolveResult = res;
-		});
+	let resolveResult: (result: ReportResult) => void;
+	let settled = false;
+	const settle = (result: ReportResult) => {
+		if (settled) return;
+		settled = true;
+		resolveResult!(result);
+	};
+	const resultPromise = new Promise<ReportResult>((res) => {
+		resolveResult = res;
+	});
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateCompletionReportHTML({ report, port });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo image
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// Handle rollback
-			if (req.method === "POST" && url.pathname === "/rollback") {
+	const routes = [
+		{
+			method: "POST" as const,
+			path: "/rollback",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -360,34 +327,14 @@ function startReportServer(
 						res.end(JSON.stringify({ error: "Invalid JSON" }));
 					}
 				});
-				return;
-			}
-
-			// Handle result (done)
-			if (req.method === "POST" && url.pathname === "/result") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/save",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						settle({
-							action: data.action || "done",
-							rolledBackFiles: data.rolledBackFiles || [],
-						});
-					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
-					}
-				});
-				return;
-			}
-
-			// Handle save to desktop
-			if (req.method === "POST" && url.pathname === "/save") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -404,10 +351,12 @@ function startReportServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/export-standalone") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/export-standalone",
+			handler: (req: any, res: any) => {
 				try {
 					const html = createCompletionReportStandaloneExport(report);
 					const saved = saveStandaloneExport({ filePrefix: "report-readonly", html });
@@ -417,41 +366,31 @@ function startReportServer(
 					res.writeHead(500, { "Content-Type": "application/json" });
 					res.end(JSON.stringify({ error: err.message }));
 				}
-				return;
-			}
+			},
+		},
+	];
 
-			// 404
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		server.on("close", () => {
-			settle({ action: "closed", rolledBackFiles: [] });
-		});
-
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
+	const handle = await createViewerServer({
+		getHtml: (port) => generateCompletionReportHTML({ report, port }),
+		routes,
+		onResult: (data) => {
+			settle({
+				action: data.action || "done",
+				rolledBackFiles: data.rolledBackFiles || [],
 			});
-		});
+		},
 	});
-}
 
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
+	// server.on('close') should also resolve the promise
+	handle.server.on("close", () => {
+		settle({ action: "closed", rolledBackFiles: [] });
+	});
+
+	return {
+		port: handle.port,
+		server: handle.server,
+		waitForResult: handle.waitForResult,
+	};
 }
 
 // ── Tool Parameters ──────────────────────────────────────────────────
