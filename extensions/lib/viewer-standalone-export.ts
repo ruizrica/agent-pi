@@ -119,14 +119,17 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   if (typeof mermaid !== 'undefined') {
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme: 'base',
       themeVariables: {
         darkMode: true, background: 'transparent', primaryColor: '#6db3e8',
-        primaryTextColor: '#1a1d23', primaryBorderColor: '#5a9fd4',
+        primaryTextColor: '#1a1a1a', primaryBorderColor: '#5a9fd4',
         lineColor: '#8892a0', secondaryColor: '#8ec8f0', tertiaryColor: '#a8d4f2',
-        nodeTextColor: '#1a1d23', nodeBorder: '#5a9fd4', mainBkg: '#6db3e8',
+        nodeTextColor: '#1a1a1a', nodeBorder: '#5a9fd4', mainBkg: '#6db3e8',
         clusterBkg: 'rgba(90, 159, 212, 0.12)', clusterBorder: '#5a9fd4',
         titleColor: '#e2e8f0', edgeLabelBackground: 'transparent',
+        actorTextColor: '#1a1a1a', signalTextColor: '#1a1a1a',
+        labelTextColor: '#1a1a1a', loopTextColor: '#1a1a1a',
+        noteBkgColor: '#a8d4f2', noteTextColor: '#1a1a1a',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontSize: '16px'
       },
       flowchart: { curve: 'basis', padding: 20 },
