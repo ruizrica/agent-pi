@@ -85,8 +85,10 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-card img { display: block; width: 100%; height: auto; border-radius: 6px; background: #0f1115; }
   .visual-card iframe { width: 100%; min-height: 420px; border: 1px solid var(--border); border-radius: 6px; background: white; }
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
-  .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; }
-  .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: center center; }
+  .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; cursor: grab; }
+  .mermaid-container.dragging { cursor: grabbing; user-select: none; }
+  .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: 0 0; }
+  .mermaid-container.dragging svg { transition: none; }
 
   .mermaid-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10; opacity: 0.6; transition: opacity 0.2s; }
   .mermaid-container:hover .mermaid-toolbar { opacity: 1; }
@@ -98,8 +100,10 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .mermaid-fullscreen-overlay .fs-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; width: 36px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background 0.15s, color 0.15s; padding: 0; }
   .mermaid-fullscreen-overlay .fs-toolbar button:hover { background: var(--accent); color: var(--text); border-color: var(--accent); }
   .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .mermaid-fullscreen-overlay .fs-content { max-width: 95vw; max-height: 90vh; overflow: auto; padding: 20px; }
-  .mermaid-fullscreen-overlay .fs-content svg { display: block; margin: auto; transition: width 0.2s ease, height 0.2s ease; }
+  .mermaid-fullscreen-overlay .fs-content { max-width: 95vw; max-height: 90vh; overflow: hidden; padding: 20px; cursor: grab; position: relative; }
+  .mermaid-fullscreen-overlay .fs-content.dragging { cursor: grabbing; user-select: none; }
+  .mermaid-fullscreen-overlay .fs-content svg { display: block; margin: auto; transition: width 0.2s ease, height 0.2s ease, transform 0.2s ease; transform-origin: 0 0; }
+  .mermaid-fullscreen-overlay .fs-content.dragging svg { transition: none; }
   .footer-note { margin-top: 18px; color: var(--text-dim); font-size: 12px; text-align: center; font-family: var(--mono); }
 </style>
 </head>
@@ -138,8 +142,33 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     download: '<svg class="tb-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
     close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   };
+  function setupDragToPan(container, getZoom, getPan, setPan) {
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var startPanX = 0, startPanY = 0;
+    container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-toolbar') || e.target.closest('.fs-toolbar')) return;
+      if (getZoom() <= 1) return;
+      isDragging = true;
+      startX = e.clientX; startY = e.clientY;
+      var pan = getPan(); startPanX = pan.x; startPanY = pan.y;
+      container.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      setPan(startPanX + (e.clientX - startX), startPanY + (e.clientY - startY));
+      e.preventDefault();
+    });
+    window.addEventListener('mouseup', function() {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('dragging');
+    });
+  }
   function createMermaidToolbar(wrapper, idx) {
     var currentZoom = 1;
+    var panX = 0, panY = 0;
     var toolbar = document.createElement('div');
     toolbar.className = 'mermaid-toolbar';
     function makeBtn(iconHtml, title, onClick) {
@@ -149,14 +178,19 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
       return btn;
     }
+    function applyTransform() {
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+    }
     function applyZoom(z) {
       currentZoom = Math.max(0.25, Math.min(4, z));
-      var svg = wrapper.querySelector('svg');
-      if (svg) svg.style.transform = 'scale(' + currentZoom + ')';
+      if (currentZoom <= 1) { panX = 0; panY = 0; }
+      applyTransform();
     }
+    setupDragToPan(wrapper, function() { return currentZoom; }, function() { return { x: panX, y: panY }; }, function(x, y) { panX = x; panY = y; applyTransform(); });
     toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
     toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
-    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { panX = 0; panY = 0; applyZoom(1); }));
     toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
     toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
     wrapper.appendChild(toolbar);
@@ -167,6 +201,7 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     var overlay = document.createElement('div');
     overlay.className = 'mermaid-fullscreen-overlay';
     var fsZoom = 1;
+    var fsPanX = 0, fsPanY = 0;
     var fsToolbar = document.createElement('div');
     fsToolbar.className = 'fs-toolbar';
     function makeFsBtn(iconHtml, title, onClick) {
@@ -178,25 +213,31 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     }
     var origWidth = 0;
     var origHeight = 0;
-    function applyFsZoom(z) {
-      fsZoom = Math.max(0.25, Math.min(6, z));
+    function applyFsTransform() {
       var fsSvg = overlay.querySelector('.fs-content svg');
       if (fsSvg && origWidth && origHeight) {
         fsSvg.style.width = (origWidth * fsZoom) + 'px';
         fsSvg.style.height = (origHeight * fsZoom) + 'px';
         fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
         fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+        fsSvg.style.transform = 'translate(' + fsPanX + 'px, ' + fsPanY + 'px)';
       }
+    }
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      if (fsZoom <= 1) { fsPanX = 0; fsPanY = 0; }
+      applyFsTransform();
     }
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
-    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { fsPanX = 0; fsPanY = 0; applyFsZoom(1); }));
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
     overlay.appendChild(fsToolbar);
     var content = document.createElement('div');
     content.className = 'fs-content';
     content.innerHTML = svg.outerHTML;
     overlay.appendChild(content);
+    setupDragToPan(content, function() { return fsZoom; }, function() { return { x: fsPanX, y: fsPanY }; }, function(x, y) { fsPanX = x; fsPanY = y; applyFsTransform(); });
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
     document.addEventListener('keydown', function handler(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); } });
     document.body.appendChild(overlay);

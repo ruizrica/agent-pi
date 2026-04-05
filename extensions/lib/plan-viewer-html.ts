@@ -194,12 +194,20 @@ export function generatePlanViewerHTML(opts: {
     text-align: center;
     overflow: hidden;
     position: relative;
+    cursor: grab;
+  }
+  .mermaid-container.dragging {
+    cursor: grabbing;
+    user-select: none;
   }
   .mermaid-container svg {
     max-width: 100%;
     height: auto;
     transition: transform 0.2s ease;
-    transform-origin: center center;
+    transform-origin: 0 0;
+  }
+  .mermaid-container.dragging svg {
+    transition: none;
   }
 
   .mermaid-toolbar {
@@ -295,13 +303,23 @@ export function generatePlanViewerHTML(opts: {
   .mermaid-fullscreen-overlay .fs-content {
     max-width: 95vw;
     max-height: 90vh;
-    overflow: auto;
+    overflow: hidden;
     padding: 20px;
+    cursor: grab;
+    position: relative;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging {
+    cursor: grabbing;
+    user-select: none;
   }
   .mermaid-fullscreen-overlay .fs-content svg {
     display: block;
     margin: auto;
-    transition: width 0.2s ease, height 0.2s ease;
+    transition: width 0.2s ease, height 0.2s ease, transform 0.2s ease;
+    transform-origin: 0 0;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging svg {
+    transition: none;
   }
   .markdown-body blockquote {
     border-left: 3px solid var(--accent);
@@ -1093,9 +1111,44 @@ export function generatePlanViewerHTML(opts: {
     close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   };
 
+  // ── Drag-to-pan helper for any container with an SVG ──
+  function setupDragToPan(container, getZoom, getPan, setPan) {
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var startPanX = 0, startPanY = 0;
+
+    container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-toolbar') || e.target.closest('.fs-toolbar')) return;
+      if (getZoom() <= 1) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var pan = getPan();
+      startPanX = pan.x;
+      startPanY = pan.y;
+      container.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      setPan(startPanX + dx, startPanY + dy);
+      e.preventDefault();
+    });
+
+    window.addEventListener('mouseup', function() {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('dragging');
+    });
+  }
+
   // ── Mermaid toolbar injection ──────────────────
   function createMermaidToolbar(wrapper, idx) {
     var currentZoom = 1;
+    var panX = 0, panY = 0;
     var toolbar = document.createElement('div');
     toolbar.className = 'mermaid-toolbar';
 
@@ -1107,15 +1160,27 @@ export function generatePlanViewerHTML(opts: {
       return btn;
     }
 
+    function applyTransform() {
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+    }
+
     function applyZoom(z) {
       currentZoom = Math.max(0.25, Math.min(4, z));
-      var svg = wrapper.querySelector('svg');
-      if (svg) svg.style.transform = 'scale(' + currentZoom + ')';
+      if (currentZoom <= 1) { panX = 0; panY = 0; }
+      applyTransform();
     }
+
+    setupDragToPan(
+      wrapper,
+      function() { return currentZoom; },
+      function() { return { x: panX, y: panY }; },
+      function(x, y) { panX = x; panY = y; applyTransform(); }
+    );
 
     toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
     toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
-    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { panX = 0; panY = 0; applyZoom(1); }));
     toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
     toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
     wrapper.appendChild(toolbar);
@@ -1128,6 +1193,7 @@ export function generatePlanViewerHTML(opts: {
     var overlay = document.createElement('div');
     overlay.className = 'mermaid-fullscreen-overlay';
     var fsZoom = 1;
+    var fsPanX = 0, fsPanY = 0;
 
     var fsToolbar = document.createElement('div');
     fsToolbar.className = 'fs-toolbar';
@@ -1143,20 +1209,26 @@ export function generatePlanViewerHTML(opts: {
     var origWidth = 0;
     var origHeight = 0;
 
-    function applyFsZoom(z) {
-      fsZoom = Math.max(0.25, Math.min(6, z));
+    function applyFsTransform() {
       var fsSvg = overlay.querySelector('.fs-content svg');
       if (fsSvg && origWidth && origHeight) {
         fsSvg.style.width = (origWidth * fsZoom) + 'px';
         fsSvg.style.height = (origHeight * fsZoom) + 'px';
         fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
         fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+        fsSvg.style.transform = 'translate(' + fsPanX + 'px, ' + fsPanY + 'px)';
       }
+    }
+
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      if (fsZoom <= 1) { fsPanX = 0; fsPanY = 0; }
+      applyFsTransform();
     }
 
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
-    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { fsPanX = 0; fsPanY = 0; applyFsZoom(1); }));
     fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
     overlay.appendChild(fsToolbar);
 
@@ -1164,6 +1236,13 @@ export function generatePlanViewerHTML(opts: {
     content.className = 'fs-content';
     content.innerHTML = svg.outerHTML;
     overlay.appendChild(content);
+
+    setupDragToPan(
+      content,
+      function() { return fsZoom; },
+      function() { return { x: fsPanX, y: fsPanY }; },
+      function(x, y) { fsPanX = x; fsPanY = y; applyFsTransform(); }
+    );
 
     overlay.addEventListener('click', function(e) {
       if (e.target === overlay) overlay.remove();
