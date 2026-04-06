@@ -118,8 +118,8 @@ describe("SPEC_PROMPT", () => {
 		expect(SPEC_PROMPT.length).toBeGreaterThan(0);
 	});
 
-	it("contains 'context-os'", () => {
-		expect(SPEC_PROMPT.toLowerCase()).toContain("context-os");
+	it("contains '.kiro/specs'", () => {
+		expect(SPEC_PROMPT).toContain(".kiro/specs");
 	});
 
 	it("contains 'spec'", () => {
@@ -128,6 +128,24 @@ describe("SPEC_PROMPT", () => {
 
 	it("contains 'requirements.md'", () => {
 		expect(SPEC_PROMPT).toContain("requirements.md");
+	});
+
+	it("contains 'design.md'", () => {
+		expect(SPEC_PROMPT).toContain("design.md");
+	});
+
+	it("contains 'tasks.md'", () => {
+		expect(SPEC_PROMPT).toContain("tasks.md");
+	});
+
+	it("requires a mermaid architecture diagram in the spec document", () => {
+		expect(SPEC_PROMPT.toLowerCase()).toContain("mermaid");
+		expect(SPEC_PROMPT).toContain("Architecture");
+	});
+
+	it("uses Kiro templates via commander_workflow", () => {
+		expect(SPEC_PROMPT).toContain('workflow: "kiro"');
+		expect(SPEC_PROMPT).toContain("template:get");
 	});
 
 	it("contains 'commander_mailbox'", () => {

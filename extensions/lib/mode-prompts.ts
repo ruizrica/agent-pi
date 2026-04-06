@@ -312,55 +312,68 @@ graph LR
 - ALWAYS broadcast status: \`commander_mailbox\` at plan start, approval, and completion
 `;
 
-/** Context-os spec-driven workflow: Q&A → spec → Commander → implement. */
-export const SPEC_PROMPT = `You are in SPEC mode. Follow the context-os spec-driven workflow for every feature request.
+/** Kiro spec-driven workflow: requirements → spec design → tasks → approval → implement. */
+export const SPEC_PROMPT = `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
 
 ## Workflow
 
 ### Phase 1: Initialize Spec
-Create a dated spec folder:
-  context-os/specs/YYYY-MM-DD-feature-name/
-    planning/
-    planning/visuals/
-    implementation/
-Save the user's raw idea to planning/initialization.md
+Create a Kiro-style spec folder:
+  .kiro/specs/feature-name/
+    visuals/
+Save the user's raw idea to initialization.md
+- Keep the feature/spec name stable once chosen
+- Use \`commander_spec\` to create and track the spec record before writing documents
 
 ### Phase 2: Shape Requirements
-Write follow-up questions to planning/questions.md, then present with show_plan:
-- Generate 4-8 numbered clarifying questions with sensible defaults
-- Frame as "I'm assuming X, is that correct?"
+Gather clarifications, then write requirements.md using the Kiro requirements template:
+- Generate 4-8 numbered clarifying questions with sensible defaults when needed
+- Frame assumptions as "I'm assuming X, is that correct?"
 - Use \`_Default: value_\` format for defaults
-- Always include a visual assets request (planning/visuals/)
+- Always include a visual assets request for \`visuals/\`
 - Always include a reusability check for existing code
-- Call \`show_plan { file_path: "planning/questions.md", title: "Requirements", mode: "questions" }\`
-- Process answers, check for visual files, ask follow-ups if needed
-Save results to planning/requirements.md
+- Use \`show_plan { file_path: ".kiro/specs/feature-name/questions.md", title: "Requirements", mode: "questions" }\` if follow-up questions are needed
+- Use \`commander_workflow { operation: "template:get", workflow: "kiro", template_type: "requirements" }\`
+- Save the final requirements to \`requirements.md\`
+- Use EARS acceptance criteria (WHEN/IF/THEN/SHALL)
+- Use \`commander_spec\` shape/write operations to track progress
 
-### Phase 3: Write Spec
-Create spec.md with: Goal, User Stories, Requirements, Visual Design,
-Existing Code to Leverage, Out of Scope
+### Phase 3: Write the Spec Document
+Write the main spec design to \`design.md\` using the Kiro design template:
+- Use \`commander_workflow { operation: "template:get", workflow: "kiro", template_type: "design" }\`
+- Treat \`design.md\` as the spec document shown in the viewer
+- Include: Overview, Architecture, Components and Interfaces, Data Models, Error Handling, Testing Strategy
+- ALWAYS include at least one mermaid diagram in the Architecture section
+- Call out existing code to reuse and explicit out-of-scope items where relevant
 
-### Phase 4: Present & Open
-- Use \`show_spec { folder_path: "context-os/specs/YYYY-MM-DD-feature-name/" }\` to open the
-  multi-page spec viewer in the browser — it auto-discovers spec.md, requirements, tasks, and visuals
+### Phase 4: Create Tasks
+Write \`tasks.md\` using the Kiro tasks template:
+- Use \`commander_workflow { operation: "template:get", workflow: "kiro", template_type: "tasks" }\`
+- Convert the approved design into actionable checkbox tasks with requirement references
+- Use the Kiro two-level task hierarchy and keep tasks implementation-ready
+- Use \`commander_spec { operation: "create_tasks", ... }\` when appropriate for tracking
+
+### Phase 5: Present & Open
+- Use \`show_spec { folder_path: ".kiro/specs/feature-name/" }\` to open the multi-page spec viewer in the browser
+- The viewer keeps the existing HTML template and auto-discovers Kiro documents (\`requirements.md\`, \`design.md\`, \`tasks.md\`) plus visuals and legacy spec layouts
 - The viewer supports inline comments, markdown editing, and approve/request-changes flow
-- If user approves: proceed to Phase 5
-- If user requests changes: review their inline comments and iterate on the spec
+- If user requests changes: review their inline comments and iterate on the affected document
+- If user approves: only then proceed to implementation
 
-### Phase 5: Implement
-Once approved, proceed with implementation.
-Optionally use /microtasks to break spec into executable tasks.
+### Phase 6: Implement
+Once all three Kiro documents are ready and approved, proceed with implementation.
+Optionally use /microtasks to break tasks.md into executable work.
 
 #### Multi-Agent Implementation
 For large specs with independent work streams, spawn up to **8 subagents** (scouts + builders) to parallelize:
 - **Scouts** (up to 4): Gather context on areas the spec touches before building
 - **Builders** (up to 8): Implement independent features/modules in parallel
 - Use \`subagent_create_batch\` with \`name: "scout"\` or \`name: "builder"\`
-- Each builder gets a self-contained task: specific files, requirements from the spec, and expected test outcomes
+- Each builder gets a self-contained task: specific files, requirements from \`tasks.md\`, and expected test outcomes
 - Wait for all agents to complete before running integration tests
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS use commander_spec: create/shape/write operations for tracking
-- ALWAYS use commander_workflow template:get contextos: get structured templates
-- ALWAYS use commander_mailbox: send status at spec creation, shaping, and approval
+- ALWAYS use commander_spec: create, shape, write, and create_tasks operations for tracking
+- ALWAYS use commander_workflow template:get with workflow \`kiro\` for requirements, design, and tasks templates
+- ALWAYS use commander_mailbox: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
 `;

@@ -5,10 +5,12 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname, resolve, relative } from "node:path";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { discoverSpecDocuments } from "./lib/spec-documents.ts";
+import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaffold.ts";
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
@@ -49,106 +51,6 @@ const MIME_TYPES: Record<string, string> = {
 	".js": "application/javascript",
 	".json": "application/json",
 };
-
-// ── Folder Discovery ─────────────────────────────────────────────────
-
-function discoverSpecDocuments(folderPath: string): SpecDocument[] {
-	const docs: SpecDocument[] = [];
-
-	// 1. spec.md — main spec document
-	const specPath = join(folderPath, "spec.md");
-	if (existsSync(specPath)) {
-		docs.push({
-			key: "spec",
-			label: "Spec",
-			markdown: readFileSync(specPath, "utf-8"),
-			filePath: "spec.md",
-		});
-	}
-
-	// 2. planning/requirements.md
-	const reqPath = join(folderPath, "planning", "requirements.md");
-	if (existsSync(reqPath)) {
-		docs.push({
-			key: "requirements",
-			label: "Requirements",
-			markdown: readFileSync(reqPath, "utf-8"),
-			filePath: "planning/requirements.md",
-		});
-	}
-
-	// 3. Tasks — planning/tasks.md or any tasks*.md in folder
-	const tasksPath = join(folderPath, "planning", "tasks.md");
-	if (existsSync(tasksPath)) {
-		docs.push({
-			key: "tasks",
-			label: "Tasks",
-			markdown: readFileSync(tasksPath, "utf-8"),
-			filePath: "planning/tasks.md",
-		});
-	} else {
-		// Check root for tasks*.md
-		try {
-			const rootFiles = readdirSync(folderPath);
-			const taskFile = rootFiles.find((f) => f.startsWith("tasks") && f.endsWith(".md"));
-			if (taskFile) {
-				docs.push({
-					key: "tasks",
-					label: "Tasks",
-					markdown: readFileSync(join(folderPath, taskFile), "utf-8"),
-					filePath: taskFile,
-				});
-			}
-		} catch {}
-	}
-
-	// 4. Visuals — planning/visuals/ folder
-	const visualsDir = join(folderPath, "planning", "visuals");
-	if (existsSync(visualsDir)) {
-		try {
-			const visualFiles = readdirSync(visualsDir)
-				.filter((f) => {
-					const ext = extname(f).toLowerCase();
-					return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".html", ".htm"].includes(ext);
-				})
-				.map((f) => join("planning", "visuals", f));
-
-			if (visualFiles.length > 0) {
-				docs.push({
-					key: "visuals",
-					label: "Visuals",
-					markdown: "",
-					filePath: "planning/visuals/",
-					isVisuals: true,
-					visualFiles,
-				});
-			}
-		} catch {}
-	}
-
-	// 5. Other planning docs (excluding already-added ones)
-	const planningDir = join(folderPath, "planning");
-	if (existsSync(planningDir)) {
-		try {
-			const knownFiles = new Set(["requirements.md", "tasks.md", "initialization.md", "questions.md"]);
-			const planningFiles = readdirSync(planningDir)
-				.filter((f) => f.endsWith(".md") && !knownFiles.has(f))
-				.sort();
-
-			for (const file of planningFiles) {
-				const key = "other-" + file.replace(".md", "");
-				docs.push({
-					key,
-					label: basename(file, ".md").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-					markdown: readFileSync(join(planningDir, file), "utf-8"),
-					filePath: join("planning", file),
-				});
-			}
-		} catch {}
-	}
-
-	return docs;
-}
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
@@ -280,8 +182,9 @@ function formatCommentsForAgent(comments: SpecComment[]): string {
 // ── Tool Parameters ──────────────────────────────────────────────────
 
 const ShowSpecParams = Type.Object({
-	folder_path: Type.String({ description: "Path to the spec folder (e.g. context-os/specs/2025-06-25-feature/)" }),
+	folder_path: Type.String({ description: "Path to the spec folder (e.g. .kiro/specs/feature-name/)" }),
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
+	feature_idea: Type.Optional(Type.String({ description: "Optional raw feature idea used to scaffold Kiro spec documents when the folder is empty" })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -304,6 +207,34 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ── Core viewer logic ────────────────────────────────────────────
+
+	function prepareSpecFolder(
+		folderPath: string,
+		title: string,
+		featureIdea?: string,
+	): SpecScaffoldResult {
+		return ensureKiroSpecScaffold({
+			folderPath,
+			title,
+			featureIdea,
+		});
+	}
+
+	function parseSpecCommandArgs(args: string): { folderPath: string; featureIdea?: string } {
+		const trimmedArgs = args.trim();
+		const ideaFlag = " --idea ";
+		const ideaIndex = trimmedArgs.indexOf(ideaFlag);
+		if (ideaIndex === -1) {
+			return { folderPath: trimmedArgs };
+		}
+
+		const folderPath = trimmedArgs.slice(0, ideaIndex).trim();
+		const featureIdea = trimmedArgs.slice(ideaIndex + ideaFlag.length).trim();
+		return {
+			folderPath,
+			featureIdea: featureIdea || undefined,
+		};
+	}
 
 	async function runSpecViewer(
 		ctx: ExtensionContext,
@@ -408,8 +339,8 @@ export default function (pi: ExtensionAPI) {
 		label: "Show Spec",
 		description:
 			"Open a multi-page spec viewer in the browser. Displays all spec documents " +
-			"(spec.md, requirements, tasks, visuals) as wizard steps with inline comment " +
-			"threads and markdown editing. Takes a spec folder path and auto-discovers documents.\n\n" +
+			"(Kiro-style requirements.md, design.md, tasks.md, plus visuals and legacy spec layouts) " +
+			"as wizard steps with inline comment threads and markdown editing. Takes a spec folder path, auto-discovers documents, and scaffolds missing Kiro docs for empty spec folders.\n\n" +
 			"The user can:\n" +
 			"- Navigate between documents using wizard steps\n" +
 			"- Add inline comments on any section (Google Docs-style)\n" +
@@ -419,25 +350,28 @@ export default function (pi: ExtensionAPI) {
 		parameters: ShowSpecParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const { folder_path, title: titleParam } = params as {
+			const { folder_path, title: titleParam, feature_idea } = params as {
 				folder_path: string;
 				title?: string;
+				feature_idea?: string;
 			};
 
-			// Resolve folder path
 			const folderPath = resolve(folder_path);
-			if (!existsSync(folderPath) || !statSync(folderPath).isDirectory()) {
+			if (existsSync(folderPath) && !statSync(folderPath).isDirectory()) {
 				return {
-					content: [{ type: "text" as const, text: `Error: folder not found: ${folder_path}` }],
+					content: [{ type: "text" as const, text: `Error: path is not a folder: ${folder_path}` }],
 				};
 			}
 
 			const displayTitle = titleParam || basename(folderPath);
+			const scaffoldResult = prepareSpecFolder(folderPath, displayTitle, feature_idea);
+			const scaffoldedNote = scaffoldResult.createdFiles.length > 0
+				? ` Scaffolded: ${scaffoldResult.createdFiles.join(", ")}.`
+				: "";
 
 			try {
 				const result = await runSpecViewer(ctx, folderPath, displayTitle);
 
-				// Handle approved
 				if (result.action === "approved") {
 					const modifiedNote = result.modified
 						? " (spec was edited by user — use the updated version)"
@@ -455,17 +389,17 @@ export default function (pi: ExtensionAPI) {
 					return {
 						content: [{
 							type: "text" as const,
-							text: `Spec approved by user.${modifiedNote} Modified files have been saved.`,
+							text: `Spec approved by user.${modifiedNote} Modified files have been saved.${scaffoldedNote}`,
 						}],
 						details: {
 							action: "approved" as const,
 							modified: result.modified,
 							folderPath: folder_path,
+							scaffoldedFiles: scaffoldResult.createdFiles,
 						},
 					};
 				}
 
-				// Handle changes requested
 				if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
 					const modifiedNote = result.modified
@@ -484,26 +418,27 @@ export default function (pi: ExtensionAPI) {
 					return {
 						content: [{
 							type: "text" as const,
-							text: `User requested changes to the spec. Comments:\n\n${commentSummary}${modifiedNote}`,
+							text: `User requested changes to the spec. Comments:\n\n${commentSummary}${modifiedNote}${scaffoldedNote}`,
 						}],
 						details: {
 							action: "changes_requested" as const,
 							comments: result.comments,
 							modified: result.modified,
 							folderPath: folder_path,
+							scaffoldedFiles: scaffoldResult.createdFiles,
 						},
 					};
 				}
 
-				// Declined / closed
 				return {
 					content: [{
 						type: "text" as const,
-						text: "User closed the spec viewer without approving. Ask if they want changes or have feedback.",
+						text: `User closed the spec viewer without approving. Ask if they want changes or have feedback.${scaffoldedNote}`,
 					}],
 					details: {
 						action: "declined" as const,
 						folderPath: folder_path,
+						scaffoldedFiles: scaffoldResult.createdFiles,
 					},
 				};
 			} catch (err: any) {
@@ -556,26 +491,30 @@ export default function (pi: ExtensionAPI) {
 	// ── /spec command ────────────────────────────────────────────────
 
 	pi.registerCommand("spec", {
-		description: "Open the spec viewer for a spec folder (e.g. /spec context-os/specs/2025-06-25-feature/)",
+		description: "Open the spec viewer for a spec folder (e.g. /spec .kiro/specs/feature-name/ --idea add a checkout flow). Empty folders are scaffolded with Kiro spec documents.",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui.notify("/spec requires interactive mode", "error");
 				return;
 			}
 
-			const folderPath = args.trim();
+			const { folderPath, featureIdea } = parseSpecCommandArgs(args);
 			if (!folderPath) {
-				ctx.ui.notify("Usage: /spec <folder-path>", "error");
+				ctx.ui.notify("Usage: /spec <folder-path> [--idea <feature idea>]", "error");
 				return;
 			}
 
 			const resolved = resolve(folderPath);
-			if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+			if (existsSync(resolved) && !statSync(resolved).isDirectory()) {
 				ctx.ui.notify(`Not a folder: ${folderPath}`, "error");
 				return;
 			}
 
 			const displayTitle = basename(resolved);
+			const scaffoldResult = prepareSpecFolder(resolved, displayTitle, featureIdea);
+			if (scaffoldResult.createdFiles.length > 0) {
+				ctx.ui.notify(`Scaffolded Kiro spec docs: ${scaffoldResult.createdFiles.join(", ")}`, "info");
+			}
 
 			try {
 				const result = await runSpecViewer(ctx, resolved, displayTitle);
