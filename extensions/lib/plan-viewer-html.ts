@@ -1473,11 +1473,27 @@ export function generatePlanViewerHTML(opts: {
 
   function renderQuestions() {
     const container = document.getElementById('renderedView');
-    const lines = markdown.split('\\n');
+    const rawLines = markdown.split('\\n');
     let html = '';
     let qNum = 0;
 
-    // First pass: render non-question content as markdown, questions as interactive cards
+    // Pre-process: merge standalone default lines with their preceding question
+    const lines = [];
+    var lastQIdx = -1;
+    for (var li = 0; li < rawLines.length; li++) {
+      if (isStandaloneDefault(rawLines[li])) {
+        if (lastQIdx >= 0 && !extractDefaultValue(lines[lastQIdx])) {
+          lines[lastQIdx] = lines[lastQIdx] + ' ' + rawLines[li].trim();
+          continue;
+        }
+      }
+      lines.push(rawLines[li]);
+      if (!isStandaloneDefault(rawLines[li]) && isQuestionLine(rawLines[li])) {
+        lastQIdx = lines.length - 1;
+      }
+    }
+
+    // Render non-question content as markdown, questions as interactive cards
     let buffer = [];
 
     for (const line of lines) {
@@ -1518,15 +1534,31 @@ export function generatePlanViewerHTML(opts: {
     updateProgress();
   }
 
+  function isStandaloneDefault(line) {
+    var trimmed = line.trim();
+    if (!/\\b_?Default:\\s/i.test(trimmed)) return false;
+    // Strip the default portion plus any list/heading markers
+    var withoutDefault = trimmed
+      .replace(/_?Default:[^_]*_?$/gi, '')
+      .replace(/^\\s*[-*+]\\s+/, '')
+      .replace(/^\\s*\\d+[.)\\s]+/, '')
+      .replace(/^#+\\s*/, '')
+      .trim();
+    // If no meaningful text remains, it's a standalone default line
+    return withoutDefault.length < 5;
+  }
+
   function isQuestionLine(line) {
     const trimmed = line.trim();
+    // Never treat standalone default lines as questions
+    if (isStandaloneDefault(line)) return false;
     // Numbered question: "1. ... ?" or "1) ... ?"
     if (/^\\d+[.)\\s]/.test(trimmed) && (trimmed.endsWith('?') || /Default:/i.test(trimmed))) return true;
     // Bullet question ending with ?
     if (/^[-*+]\\s/.test(trimmed) && trimmed.endsWith('?')) return true;
     // Any line ending with ? that's not too short
     if (trimmed.endsWith('?') && trimmed.length > 10) return true;
-    // Line containing Default:
+    // Line containing Default: (only if there's actual question text too)
     if (/\\b_?Default:\\s/i.test(trimmed) && trimmed.length > 10) return true;
     return false;
   }
