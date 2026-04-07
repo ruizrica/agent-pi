@@ -263,13 +263,32 @@ graph LR
 - **Architecture diagrams** — include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use \`graph LR\` for flows, \`graph TD\` for hierarchies, \`sequenceDiagram\` for request sequences. Keep labels short and clear.
 
 ### Phase 2b: Follow-up Questions (when needed)
-- If clarification is needed before planning, write questions to a markdown file
-- Use numbered list format: \`1. What framework should we use? _Default: React_\`
-- Include sensible defaults in \`_Default: value_\` format where possible
+- If clarification is needed before planning, write questions to \`.context/questions.md\`
 - Call \`show_plan\` in questions mode to collect answers:
   \`show_plan { file_path: ".context/questions.md", title: "Clarifying Questions", mode: "questions" }\`
-- The user can answer each question inline and submit
-- Use the returned answers to refine your plan
+- The user answers inline and submits — use their answers to refine your plan
+
+#### Question-Writing Rules (STRICT)
+1. **One question = one decision.** Never ask overlapping questions. If two concerns are related, merge them into one question. Each question covers a distinct choice.
+2. **Lettered options.** Every multi-choice question uses A) B) C) on separate lines. One short line per option.
+3. **No pre-answering.** NEVER write "I'm assuming", "I think", "I'd recommend", or explain why one option is better. Present all options neutrally. The \`_Default:_\` tag is the only hint — keep it to a letter or short value.
+4. **Concise.** Each question is: one question line + option lines + optional \`_Default: X_\` line. No preamble paragraphs, no context sections, no codebase analysis within questions.
+5. **3-8 questions total.** More than 8 means you should merge related decisions.
+
+Example:
+\`\`\`
+1. What testing scope should we target?
+   A) Unit tests only
+   B) Unit + integration tests
+   C) Unit + integration + E2E tests
+   _Default: B_
+
+2. Which database should we use?
+   A) PostgreSQL
+   B) SQLite
+   C) MongoDB
+   _Default: A_
+\`\`\`
 
 ### Phase 3: Present & Approve
 - Write the plan to .context/todo.md first
@@ -327,16 +346,22 @@ Save the user's raw idea to initialization.md
 
 ### Phase 2: Shape Requirements
 Gather clarifications, then write requirements.md using the Kiro requirements template:
-- Generate 4-8 numbered clarifying questions with sensible defaults when needed
-- Frame assumptions as "I'm assuming X, is that correct?"
-- Use \`_Default: value_\` format for defaults
+- Generate 3-8 clarifying questions following the question-writing rules below
+- Write questions to \`.kiro/specs/feature-name/questions.md\`
+- Use \`show_plan { file_path: ".kiro/specs/feature-name/questions.md", title: "Requirements", mode: "questions" }\` to collect answers
 - Always include a visual assets request for \`visuals/\`
 - Always include a reusability check for existing code
-- Use \`show_plan { file_path: ".kiro/specs/feature-name/questions.md", title: "Requirements", mode: "questions" }\` if follow-up questions are needed
 - Use \`commander_workflow { operation: "template:get", workflow: "kiro", template_type: "requirements" }\`
 - Save the final requirements to \`requirements.md\`
 - Use EARS acceptance criteria (WHEN/IF/THEN/SHALL)
 - Use \`commander_spec\` shape/write operations to track progress
+
+#### Question-Writing Rules (STRICT)
+1. **One question = one decision.** Never ask overlapping questions. If two concerns are related, merge them into one question. Each question covers a distinct choice.
+2. **Lettered options.** Every multi-choice question uses A) B) C) on separate lines. One short line per option.
+3. **No pre-answering.** NEVER write "I'm assuming", "I think", "I'd recommend", or explain why one option is better. Present all options neutrally. The \`_Default:_\` tag is the only hint — keep it to a letter or short value.
+4. **Concise.** Each question is: one question line + option lines + optional \`_Default: X_\` line. No preamble paragraphs, no context sections, no codebase analysis within questions.
+5. **3-8 questions total.** More than 8 means you should merge related decisions.
 
 ### Phase 3: Write the Spec Document
 Write the main spec design to \`design.md\` using the Kiro design template:

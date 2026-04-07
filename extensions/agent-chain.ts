@@ -39,6 +39,9 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parseChainYaml, type ChainStep, type ChainDef } from "./lib/parse-chain-yaml.ts";
+import { discoverModules, formatModuleGroups, formatSelectedModulesForChain, groupModulesByType, type DiscoveredModule, type ModuleManifest } from "./lib/module-discovery.ts";
+import { parseChainOutput, extractQualityScores } from "./lib/test-gen-parser.ts";
+import { storeDrafts } from "./lib/gopher-draft-storage.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -143,6 +146,7 @@ function scanAgentDirs(cwd: string, extProjectDir?: string, modelsConfig?: Agent
 // ── Extension ────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
+	const piRef = pi;
 	let allAgents: Map<string, AgentDef> = new Map();
 	let chains: ChainDef[] = [];
 	let activeChain: ChainDef | null = null;
@@ -996,6 +1000,183 @@ export default function (pi: ExtensionAPI) {
 					"warning",
 				);
 			}
+		},
+	});
+
+	// ── /test-gen command ────────────────────────
+
+	pi.registerCommand("test-gen", {
+		description: "Thoughtful test generation — discover modules, plan strategy, generate and review tests with iterative feedback",
+		handler: async (args, ctx) => {
+			widgetCtx = ctx;
+			const scope = (args || "").trim();
+
+			// Step 1: Discover modules
+			ctx.ui.notify("Discovering testable modules...", "info");
+			let manifest: ModuleManifest;
+			try {
+				manifest = discoverModules(ctx.cwd);
+			} catch (err: any) {
+				ctx.ui.notify(`Module discovery failed: ${err?.message || "unknown error"}`, "error");
+				return;
+			}
+
+			if (manifest.modules.length === 0) {
+				ctx.ui.notify("No testable modules found. Check that your project has exported functions, components, or routes.", "warning");
+				return;
+			}
+
+			ctx.ui.notify(
+				`Found ${manifest.modules.length} modules (${manifest.coverageGaps} without tests) in ${manifest.projectName} (${manifest.framework})`,
+				"info",
+			);
+
+			// Step 2: Module selection
+			let selectedModules: DiscoveredModule[];
+
+			if (scope) {
+				// Filter by scope argument (path prefix or module type)
+				selectedModules = manifest.modules.filter(m =>
+					m.relativePath.includes(scope) ||
+					m.name.toLowerCase().includes(scope.toLowerCase()) ||
+					m.type === scope
+				);
+				if (selectedModules.length === 0) {
+					ctx.ui.notify(`No modules match scope "${scope}". Try a different path or module name.`, "warning");
+					return;
+				}
+				ctx.ui.notify(`Scope filter: ${selectedModules.length} modules matching "${scope}"`, "info");
+			} else {
+				// Interactive selection
+				const selectionOptions = [
+					`All high priority (${manifest.modules.filter(m => m.suggestedPriority === "high").length} modules)`,
+					`All uncovered modules (${manifest.coverageGaps} modules)`,
+					`All modules (${manifest.modules.length} modules)`,
+					"Select by type...",
+				];
+
+				const choice = await ctx.ui.select("Select modules to test", selectionOptions);
+				if (choice === undefined) return;
+
+				switch (choice) {
+					case selectionOptions[0]:
+						selectedModules = manifest.modules.filter(m => m.suggestedPriority === "high");
+						break;
+					case selectionOptions[1]:
+						selectedModules = manifest.modules.filter(m => m.coverageStatus === "none");
+						break;
+					case selectionOptions[2]:
+						selectedModules = manifest.modules;
+						break;
+					case selectionOptions[3]: {
+						const groups = groupModulesByType(manifest.modules);
+						const typeOptions = Array.from(groups.entries()).map(([type, mods]) =>
+							`${type} (${mods.length} modules, ${mods.filter(m => m.coverageStatus === "none").length} uncovered)`
+						);
+						const typeChoice = await ctx.ui.select("Select module type", typeOptions);
+						if (typeChoice === undefined) return;
+						const typeIdx = typeOptions.indexOf(typeChoice);
+						const selectedType = Array.from(groups.keys())[typeIdx];
+						selectedModules = groups.get(selectedType) || [];
+						break;
+					}
+					default:
+						selectedModules = manifest.modules.filter(m => m.suggestedPriority === "high");
+				}
+			}
+
+			if (selectedModules.length === 0) {
+				ctx.ui.notify("No modules selected.", "info");
+				return;
+			}
+
+			// Step 3: Estimate and confirm
+			const estMinutes = Math.ceil(selectedModules.length * 2.5); // ~2.5 min per module for full pipeline
+			ctx.ui.notify(
+				`Starting test generation for ${selectedModules.length} modules\n` +
+				`Estimated time: ~${estMinutes} minutes\n` +
+				`Pipeline: Scout → Planner → Builder (2 passes) → Reviewer (2 passes) → Test Viewer`,
+				"info",
+			);
+
+			// Step 4: Find and activate test-generation chain
+			const testGenChain = chains.find(c => c.name === "test-generation");
+			if (!testGenChain) {
+				ctx.ui.notify("test-generation chain not found in agent-chain.yaml", "error");
+				return;
+			}
+
+			activateChain(testGenChain);
+
+			// Step 5: Format input and run chain
+			const task = formatSelectedModulesForChain(selectedModules, manifest);
+			const result = await runChain(task, ctx);
+
+			// Hide chain widget
+			widgetCtx.ui.setWidget("agent-chain", undefined);
+
+			if (!result.success) {
+				ctx.ui.notify(`Test generation failed: ${result.output.slice(0, 200)}`, "error");
+				// Still save partial output
+				const reportPath = join(ctx.cwd, ".pi", "test-gen-report.md");
+				const reportDir = dirname(reportPath);
+				if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
+				writeFileSync(reportPath, result.output, "utf-8");
+				ctx.ui.notify(`Partial output saved to ${reportPath}`, "info");
+				return;
+			}
+
+			// Step 6: Parse output into features
+			const features = parseChainOutput(result.output);
+
+			if (features.length === 0) {
+				ctx.ui.notify("Chain completed but no test files were parsed from the output. Saving raw output.", "warning");
+				const reportPath = join(ctx.cwd, ".pi", "test-gen-report.md");
+				const reportDir = dirname(reportPath);
+				if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
+				writeFileSync(reportPath, result.output, "utf-8");
+				ctx.ui.notify(`Raw output saved to ${reportPath}`, "info");
+				return;
+			}
+
+			// Step 7: Store as Gopher drafts
+			try {
+				const drafts = storeDrafts(features, ctx.cwd);
+				ctx.ui.notify(`Stored ${drafts.length} draft(s) in .gopher/`, "info");
+			} catch (err: any) {
+				ctx.ui.notify(`Draft storage failed: ${err?.message || "unknown"} — opening test viewer anyway`, "warning");
+			}
+
+			// Step 8: Extract quality scores for summary
+			const scores = extractQualityScores(result.output);
+			const avgScore = scores.size > 0
+				? (Array.from(scores.values()).reduce((a, b) => a + b, 0) / scores.size).toFixed(1)
+				: "N/A";
+
+			// Step 9: Open test viewer via sendMessage (triggers show_test_viewer)
+			const elapsed = Math.round(result.elapsed / 1000);
+			piRef.sendMessage(
+				{
+					customType: "test-gen-complete",
+					content: `Test generation complete! ${features.length} feature/test pair(s) generated in ${elapsed}s.\n` +
+						`Average quality score: ${avgScore}/10\n\n` +
+						`Call \`show_test_viewer\` with these features to let the user review and approve:\n\n` +
+						`\`\`\`json\n${JSON.stringify(features.map(f => ({ name: f.name, gherkin: f.gherkin, playwright_code: f.playwrightCode, file_path: f.filePath })), null, 2)}\n\`\`\``,
+					display: true,
+				},
+				{ deliverAs: "followUp" as any, triggerTurn: true },
+			);
+
+			// Also save raw report
+			const reportPath = join(ctx.cwd, ".pi", "test-gen-report.md");
+			const reportDir = dirname(reportPath);
+			if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
+			writeFileSync(reportPath, result.output, "utf-8");
+
+			ctx.ui.notify(
+				`Test generation complete! ${features.length} features, avg score ${avgScore}/10, ${elapsed}s elapsed.\nReport: ${reportPath}`,
+				"success",
+			);
 		},
 	});
 

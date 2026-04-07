@@ -62,3 +62,9 @@ team-b-builders:
   - builder-qwen3-5-122b-a10b
   - builder-qwen3-coder-next
   - builder-gpt-5-1-codex-mini
+
+test-gen:
+  - test-scout
+  - test-planner
+  - test-builder
+  - test-reviewer

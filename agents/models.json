@@ -87,6 +87,22 @@
     "builder-gemini-3-1-flash-lite-preview": {
       "provider": "openrouter",
       "model": "google/gemini-3-1-flash-lite-preview"
+    },
+    "test-scout": {
+      "provider": "x-ai",
+      "model": "grok-4.1-fast"
+    },
+    "test-planner": {
+      "provider": "openai-codex",
+      "model": "gpt-5.4"
+    },
+    "test-builder": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5"
+    },
+    "test-reviewer": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-6"
     }
   }
 }

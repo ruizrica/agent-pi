@@ -1,5 +1,7 @@
 {
-  "assignments": {},
+  "assignments": {
+    "agent_end": "night-elf-female-incoming-02"
+  },
   "volume": 0.4,
   "enabled": true
 }

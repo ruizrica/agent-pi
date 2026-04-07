@@ -175,3 +175,218 @@ learn:
       prompt: "# Step 4: Architecture Synthesis\n\nProduce a comprehensive architectural summary of the codebase, synthesizing findings from all previous steps.\n\nTarget folder: $ORIGINAL\n\n## Source Data\n\n### Structure & Patterns (Step 1)\n$INPUT_1\n\n### Data Flow & Dependencies (Step 2)\n$INPUT_2\n\n### Config, Tests & Build Health (Step 3)\n$INPUT_3\n\n## Your Task\n\nSynthesize the reconnaissance data into a clear architectural picture:\n\n1. **System Architecture Overview** — what kind of system is this, what does it do, and how is it organized at the highest level\n\n2. **Component Map** — list every major component/module/subsystem with:\n   - Its responsibility (one sentence)\n   - Its key files and entry points\n   - Its dependencies (what it imports/uses)\n   - Its dependents (what uses it)\n\n3. **Architectural Patterns** — document the architectural style:\n   - Monolith, microservices, serverless, event-driven, etc.\n   - MVC, CQRS, hexagonal, clean architecture, etc.\n   - How these patterns are applied in practice (with file references)\n\n4. **Extension Points** — where and how the system is designed to be extended:\n   - Plugin systems, middleware chains, hook registries\n   - Configuration-driven behavior\n   - Abstract base classes or interfaces for extension\n\n5. **Architecture Diagram** — produce a mermaid diagram showing the major components and their relationships\n\n6. **Technical Debt & Risk Areas** — based on the evidence:\n   - Areas of high complexity or tight coupling\n   - Missing abstractions or leaky boundaries\n   - Stale or abandoned subsystems\n   - Scaling concerns\n\nBe evidence-based. Every claim must reference specific files and line numbers from the previous steps."
     - agent: reviewer
       prompt: "# Step 5: Wiki Compilation\n\nCompile all reconnaissance findings into 4 structured wiki sections for the Obsidian knowledge base.\n\nTarget folder: $ORIGINAL\n\n## Source Data\n\n### Structure & Patterns (Step 1)\n$INPUT_1\n\n### Data Flow & Dependencies (Step 2)\n$INPUT_2\n\n### Config, Tests & Build Health (Step 3)\n$INPUT_3\n\n### Architecture Synthesis (Step 4)\n$INPUT_4\n\n## Delta-Aware Re-Learn\n\nIf `## Existing Wiki Content` appears in the target folder section above ($ORIGINAL), this is a **re-learn** of a previously documented codebase. In that case:\n- Compare your new findings against the existing documentation\n- Focus on what's genuinely new or changed since the last learn\n- If a section is substantially the same as the existing version, reproduce it as-is so the delta detection system can skip unnecessary writes\n- Incorporate new findings, updated file paths, changed patterns, and new components\n- Remove stale information that no longer applies\n\nIf no existing wiki content is present, this is a first-time learn — produce everything from scratch.\n\n## Your Task\n\nProduce exactly 4 wiki sections, each clearly delimited with a `## WIKI:` header. These sections will be parsed and stored as separate Obsidian wiki articles.\n\n### Output Format (STRICT)\n\nYou MUST produce your output with exactly these 4 section headers. Each section should be comprehensive, evidence-backed, and useful as standalone reference documentation.\n\n```\n## WIKI:Overview\n\n[Project name, purpose, tech stack, entry points, key metrics (file count, dependency count, test count). This is the front page — make it immediately useful for someone new to the codebase. Include a quick-start section: how to install, build, run, and test.]\n\n## WIKI:Architecture\n\n[System architecture, component map, subsystem boundaries, data flows, architectural patterns, extension points, mermaid diagram. This is the deep technical reference — include every component, its files, and its relationships.]\n\n## WIKI:Conventions\n\n[Coding patterns, naming conventions, file organization, error handling, async patterns, import/export style, reusable utilities, configuration approach. This is the style guide — someone should be able to match the codebase's conventions after reading this.]\n\n## WIKI:Testing\n\n[Test framework, test structure, test patterns, fixtures, mocks, coverage, how to run tests, build health, CI/CD. This is the testing reference — someone should be able to write a correctly-structured test after reading this.]\n```\n\n## Rules\n\n1. Every section MUST start with `## WIKI:SectionName` on its own line\n2. Use only these 4 section names: Overview, Architecture, Conventions, Testing\n3. Include file paths and line numbers throughout — this is reference documentation\n4. Do NOT include the `## WIKI:` prefix in your actual content headings — use `###` and lower for content structure\n5. Be comprehensive but structured — use tables, bullet lists, and code blocks generously\n6. Cross-reference between sections using [[wiki links]] where appropriate"
+
+test-generation:
+  description: "Thoughtful test generation — discover, plan, generate, review, iterate, and present"
+  steps:
+    - agent: test-scout
+      prompt: |
+        # Phase 1: Deep Module Discovery & Context Gathering
+
+        Analyze the codebase for the selected modules and gather deep context for test generation.
+
+        ## Selected Modules
+        $INPUT
+
+        ## Tasks
+        1. For each selected module, read the source code thoroughly — do not skim
+        2. Identify all exported functions, methods, components, and their full signatures
+        3. Map input parameters, return types, side effects, and error conditions
+        4. Find edge cases: null inputs, empty arrays, boundary values, race conditions, async timing
+        5. Identify integration points with other modules (imports, API calls, event emissions)
+        6. Note any existing tests and the patterns they use
+        7. Document the module's business logic and behavior contracts
+
+        Produce a detailed context report for each module with all the above information.
+        Structure each module section with: ## Module: <name>, ### Exports, ### Types, ### Dependencies, ### Edge Cases, ### Existing Tests
+
+    - agent: test-planner
+      prompt: |
+        # Phase 2: Test Strategy & Scenario Planning
+
+        Based on the deep context gathered by the scout, create a comprehensive test plan.
+
+        ## Module Context
+        $INPUT
+
+        ## Original Request
+        $ORIGINAL
+
+        ## Tasks
+        1. For each module, define test scenarios covering:
+           - Happy path behavior (normal usage)
+           - Edge cases and boundary conditions (empty, null, max, min)
+           - Error handling and failure modes (invalid input, network errors, timeouts)
+           - Integration with dependencies (mock strategies, fixture needs)
+        2. Prioritize scenarios by risk and impact (high/medium/low)
+        3. Define the Gherkin feature structure: Feature name, Background setup, Scenario names, Step templates
+        4. Specify what assertions and checks each test needs
+        5. Identify shared setup (Background steps) and reusable data fixtures
+        6. Estimate test count per module
+
+        Produce a structured test plan. For each module, include:
+        ## Module: <name>
+        ### Scenarios (prioritized)
+        ### Gherkin Structure
+        ### Assertion Strategy
+        ### Shared Setup & Fixtures
+        ### Estimated Tests: N
+
+    - agent: test-builder
+      prompt: |
+        # Phase 3: Test Generation (Pass 1)
+
+        Generate Gherkin feature specs and Playwright test code based on the test plan.
+
+        ## Test Plan
+        $INPUT
+
+        ## Module Context (from Discovery)
+        $INPUT_1
+
+        ## Quality Standards — Gherkin
+        - Use behavior-focused scenario names (describe WHAT, not HOW)
+        - Given/When/Then flow must read naturally as a sentence
+        - Use Scenario Outline with Examples table for parameterized tests
+        - Tags: @smoke for critical paths, @regression for full suite, @api/@component/@unit for type
+        - Background steps only for truly shared setup (used by ALL scenarios in the feature)
+        - Each scenario tests ONE behavior
+
+        ## Quality Standards — Playwright
+        - Page Object Model: create page classes for component interaction
+        - Test isolation: each test runs independently, no shared state
+        - Locator strategy: prefer data-testid, then role, then CSS, then text (in that order)
+        - Waits: use auto-wait, explicit waitFor, never arbitrary setTimeout
+        - Assertions: use expect() with custom messages explaining what failed and why
+        - Test data: use factories or fixtures, never hardcode magic values inline
+
+        ## Output Format
+        For each module, produce exactly:
+        ```
+        === FILE: <module-name>.feature ===
+        [complete Gherkin feature file]
+        === END FILE ===
+
+        === FILE: <module-name>.spec.ts ===
+        [complete Playwright test file]
+        === END FILE ===
+        ```
+
+        Generate tests for ALL modules in the plan. Do not skip any.
+
+    - agent: test-reviewer
+      prompt: |
+        # Phase 4: Test Quality Review (Pass 1)
+
+        Review the generated tests for quality, coverage, and correctness. Be rigorous.
+
+        ## Generated Tests
+        $INPUT
+
+        ## Test Plan (reference)
+        $INPUT_2
+
+        ## Module Context (reference)
+        $INPUT_1
+
+        ## Review Criteria
+
+        ### Gherkin Quality (weight: 25%)
+        - Are scenarios behavior-focused (not implementation details)?
+        - Is Given/When/Then natural and readable?
+        - Are Scenario Outlines used where parameterization adds value?
+        - Are tags consistent and meaningful?
+        - Do Background steps avoid over-sharing?
+
+        ### Playwright Quality (weight: 25%)
+        - Does each test stand alone (proper isolation)?
+        - Are locators robust (data-testid preferred)?
+        - Are waits explicit and appropriate (no arbitrary timeouts)?
+        - Is POM applied correctly?
+        - Are assertions meaningful with clear failure messages?
+
+        ### Coverage Quality (weight: 25%)
+        - Are all planned scenarios from the test plan covered?
+        - Are edge cases actually tested (not just happy paths)?
+        - Are error conditions tested with proper assertions?
+        - Is there redundancy that should be eliminated?
+
+        ### Correctness (weight: 25%)
+        - Would these tests actually compile and run?
+        - Are selectors, URLs, and API paths plausible for the codebase?
+        - Are test data and fixtures realistic?
+
+        ## Output Format
+        For each module:
+        ### Module: <name>
+        - **Quality Score:** X/10
+        - **Issues:** (numbered list with file references)
+        - **Improvements:** (numbered list with code examples)
+
+        ### Overall Assessment
+        - **Verdict:** APPROVED / NEEDS ITERATION
+        - **Summary:** (2-3 sentences)
+
+    - agent: test-builder
+      prompt: |
+        # Phase 5: Test Improvement (Pass 2)
+
+        Improve the tests based on reviewer feedback. Address every issue raised.
+
+        ## Reviewer Feedback
+        $INPUT
+
+        ## Original Tests (Pass 1)
+        $INPUT_3
+
+        ## Module Context
+        $INPUT_1
+
+        ## Test Plan
+        $INPUT_2
+
+        ## Instructions
+        1. Read every issue in the reviewer feedback carefully
+        2. Apply every improvement suggestion
+        3. Fix every correctness problem identified
+        4. Do NOT remove test scenarios unless the reviewer explicitly said to remove them
+        5. Maintain the === FILE === delimiter format exactly
+        6. Focus on: better assertions, better isolation, better scenario names, better locators
+
+        Produce the improved test files in the same format as Pass 1.
+
+    - agent: test-reviewer
+      prompt: |
+        # Phase 6: Final Quality Review (Pass 2)
+
+        Final review of the improved tests. This is the last gate before presenting to the user.
+
+        ## Improved Tests
+        $INPUT
+
+        ## Pass 1 Review (reference)
+        $INPUT_4
+
+        ## Module Context (reference)
+        $INPUT_1
+
+        ## Instructions
+        1. Verify that ALL Pass 1 issues were addressed
+        2. Check for any new issues introduced by the improvements
+        3. Produce final quality scores
+        4. Note any remaining minor items as annotations (not blockers)
+
+        ## Output Format
+        For each module:
+        ### Module: <name>
+        - **Final Score:** X/10
+        - **Pass 1 Issues Resolved:** Y/Z
+        - **New Issues:** (list or "None")
+        - **Annotations for Developer:** (minor notes, not blockers)
+
+        ### Final Verdict
+        - **Status:** APPROVED / APPROVED_WITH_NOTES
+        - **Summary:** (overall assessment)
+
+        ### Final Test Content
+        [Repeat the improved tests with any last minor adjustments, using === FILE === format]
