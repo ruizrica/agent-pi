@@ -334,6 +334,22 @@ export default function (pi: ExtensionAPI) {
 		if (["dispatch_agent", "dispatch_agents", "ask_user", "run_chain", "advance_phase", "pipeline_status"].includes(event.toolName)) return { block: false };
 		if (event.toolName.startsWith("commander_")) return { block: false };
 
+		// Subagent management tools — meta-orchestration, never gated
+		if (event.toolName.startsWith("subagent_")) return { block: false };
+
+		// Viewer/UI tools — showing plans, reports, boards, etc. is not codebase work
+		if (event.toolName.startsWith("show_") || event.toolName === "close_viewer") return { block: false };
+
+		// Mode/lifecycle tools — switching modes, cycling memory, learning codebases
+		if (["set_mode", "cycle_memory", "learn_codebase", "complex_problem_loop_start", "complex_problem_loop_advance", "debug_capture"].includes(event.toolName)) return { block: false };
+
+		// Knowledge/memory tools
+		if (event.toolName === "obsidian_memory") return { block: false };
+
+		// Utility/infra tools — email, web testing, security scanning, tool discovery
+		if (["web_remote", "safe_port_scan", "security_news", "send_email", "network_inspect", "call_tool", "tool_search"].includes(event.toolName)) return { block: false };
+		if (event.toolName.startsWith("chrome_devtools_")) return { block: false };
+
 		// Allow read-only exploration without task ceremony
 		const readOnlyTools = ["read", "grep", "find", "ls", "glob"];
 		if (readOnlyTools.includes(event.toolName)) return { block: false };
@@ -348,11 +364,11 @@ export default function (pi: ExtensionAPI) {
 		if (tasks.length === 0) {
 			return { block: false };
 		}
+		// All tasks done — nudge to create a new list but don't block.
+		// Hard-blocking here causes deadlocks: agents can't do preparatory work
+		// (reading files, spawning scouts) before creating a new task list.
 		if (pending.length === 0) {
-			return {
-				block: true,
-				reason: "All tasks are done. Use `tasks add` to add new tasks, `tasks new-list` to start a fresh list, or `tasks clear` to reset.",
-			};
+			return { block: false };
 		}
 		if (active.length === 0) {
 			return {
@@ -403,7 +419,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Tasks",
 		description:
 			"Manage your task list. You MUST add tasks before using any other tools. " +
-			"Actions: new-list (text=title, description), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
+			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and description. " +
 			"IMPORTANT: If the user's new request does not fit the current list's theme, use clear to wipe the slate and new-list to start fresh.",
@@ -448,15 +464,51 @@ export default function (pi: ExtensionAPI) {
 					listTitle = params.text;
 					listDescription = params.description || undefined;
 					syncState = emptySyncState();
+
+					// Support initial tasks: new-list with texts[] creates the list AND adds tasks in one call
+					const initialItems = params.texts?.length ? params.texts : [];
+					const initialTasks: Task[] = [];
+					for (const item of initialItems) {
+						const t: Task = { id: nextId++, text: item, status: "idle", lastUpdatedAt: nowIso(), lastUpdatedBy: currentActor() };
+						tasks.push(t);
+						initialTasks.push(t);
+					}
+
 					saveSharedStateIfNeeded("new-list", `Started shared list "${listTitle}".`);
 
-					// Group creation deferred to first `add` — avoids empty tasks[] rejection
+					// Sync initial tasks to Commander if any were provided
+					if (initialTasks.length > 0 && !isExternalSyncActive()) {
+						if (shouldCreateGroup(syncState)) {
+							syncState = markGroupCreationInFlight(syncState);
+							const localIds = initialTasks.map((t) => t.id);
+							const payload = buildGroupCreatePayload(
+								listTitle || "Tasks",
+								listDescription || listTitle || "Tasks",
+								initialTasks.map((t) => t.text),
+								process.cwd(),
+							);
+							syncToCommander("group-create", async (client) => {
+								const res = await client.callTool("commander_task", payload);
+								const parsed = parseGroupCreateResult(res);
+								if (parsed) {
+									syncState = applyGroupCreateResult(syncState, localIds, parsed);
+									for (const lid of localIds) {
+										syncState = updateMappingStatus(syncState, lid, "idle");
+									}
+								} else {
+									syncState = { ...syncState, groupCreationInFlight: false };
+								}
+							});
+						}
+					}
+
+					let msg = `New list: "${listTitle}"${listDescription ? ` — ${listDescription}` : ""}`;
+					if (initialTasks.length > 0) {
+						msg += `\nAdded ${initialTasks.length} tasks: ${initialTasks.map((t) => `#${t.id}`).join(", ")}`;
+					}
 
 					const result = {
-						content: [{
-							type: "text" as const,
-							text: `New list: "${listTitle}"${listDescription ? ` — ${listDescription}` : ""}`,
-						}],
+						content: [{ type: "text" as const, text: msg }],
 						details: makeDetails("new-list"),
 					};
 					refreshUI(ctx);
