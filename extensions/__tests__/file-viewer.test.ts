@@ -10,13 +10,13 @@ describe("file-viewer implementation", () => {
 	});
 
 	it("keeps the open-editor endpoint for menu-triggered launches", () => {
-		expect(source).toContain('url.pathname === "/open-editor"');
+		expect(source).toContain('path: "/open-editor"');
 		expect(source).toContain("launchEditor(String(data.editor || \"\"), opts.filePath)");
 	});
 
-	it("serves the shared logo asset route", () => {
-		expect(source).toContain('url.pathname === "/logo.png"');
-		expect(source).toContain('"assets", "agent-logo.png"');
+	it("delegates shared HTTP boilerplate to createViewerServer", () => {
+		expect(source).toContain("createViewerServer({");
+		expect(source).toContain("Uses shared viewer server factory for HTTP server boilerplate");
 	});
 
 	it("passes language metadata into generateFileViewerHTML", () => {

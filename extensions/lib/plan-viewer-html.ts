@@ -1,6 +1,8 @@
 // ABOUTME: Self-contained HTML template for the Plan Viewer GUI window.
 // ABOUTME: Renders markdown with marked.js, supports checkboxes, inline editing, reorder, approve/decline.
 
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+
 /**
  * Generate the full HTML page for the plan viewer window.
  * This is a single self-contained page with all CSS/JS inlined.
@@ -996,7 +998,7 @@ export function generatePlanViewerHTML(opts: {
 <!-- marked.js (markdown parser) — loaded from CDN for simplicity -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
 <!-- mermaid.js (diagram renderer) -->
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
@@ -1035,6 +1037,8 @@ export function generatePlanViewerHTML(opts: {
       securityLevel: 'loose',
     });
   }
+
+  ${getMermaidNormalizationBrowserScript()}
 
   // ── Render ────────────────────────────────────
   function render() {
@@ -1287,7 +1291,7 @@ export function generatePlanViewerHTML(opts: {
     var blocks = Array.from(codeBlocks);
     blocks.forEach(function(codeEl, idx) {
       var preEl = codeEl.parentElement;
-      var source = codeEl.textContent || '';
+      var source = normalizeMermaidSource(codeEl.textContent || '');
       var wrapper = document.createElement('div');
       wrapper.className = 'mermaid-container';
       var id = 'mermaid-diagram-' + idx + '-' + Date.now();

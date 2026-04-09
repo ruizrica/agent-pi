@@ -119,10 +119,11 @@ export function createViewerServer(config: ViewerServerConfig): Promise<ViewerSe
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
 
-						// Call onResult callback if provided
-						if (config.onResult && !resultResolved) {
+						if (!resultResolved) {
 							resultResolved = true;
-							config.onResult(data);
+							if (config.onResult) {
+								config.onResult(data);
+							}
 							resolveResult(data);
 						}
 					} catch {

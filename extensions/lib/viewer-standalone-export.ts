@@ -1,10 +1,11 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
 
 const BRAND_IMAGE_URL = "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/agent.png?alt=media&token=152539b8-8d0c-46e4-950f-190c317ed6c8";
 const MARKED_CDN_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
-const MERMAID_CDN_URL = "https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js";
+const MERMAID_CDN_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js";
 
 function timestampForFileName(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -134,6 +135,7 @@ function baseDocument(opts: { title: string; label: string; body: string; script
       securityLevel: 'loose'
     });
   }
+  ${getMermaidNormalizationBrowserScript()}
   var TB_ICONS = {
     zoomIn: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
     zoomOut: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
@@ -272,7 +274,7 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     var blocks = Array.from(codeBlocks);
     blocks.forEach(function(codeEl, idx) {
       var preEl = codeEl.parentElement;
-      var source = codeEl.textContent || '';
+      var source = normalizeMermaidSource(codeEl.textContent || '');
       var wrapper = document.createElement('div');
       wrapper.className = 'mermaid-container';
       var id = 'mermaid-diagram-' + idx + '-' + Date.now();

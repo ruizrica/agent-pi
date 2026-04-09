@@ -1,6 +1,8 @@
 // ABOUTME: Self-contained HTML template for the Spec Viewer GUI window.
 // ABOUTME: Multi-page wizard with step navigation, inline comments, markdown editing, visuals gallery, approve/request-changes.
 
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+
 export interface SpecDocument {
 	/** Unique key (e.g. "spec", "requirements", "tasks", "visuals") */
 	key: string;
@@ -887,7 +889,7 @@ export function generateSpecViewerHTML(opts: {
 <!-- marked.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
 <!-- mermaid.js (diagram renderer) -->
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
@@ -932,6 +934,8 @@ export function generateSpecViewerHTML(opts: {
       securityLevel: 'loose',
     });
   }
+
+  ${getMermaidNormalizationBrowserScript()}
 
   // ── SVG icon helpers for toolbar ──────────────
   var TB_ICONS = {
@@ -1119,7 +1123,7 @@ export function generateSpecViewerHTML(opts: {
     var blocks = Array.from(codeBlocks);
     blocks.forEach(function(codeEl, idx) {
       var preEl = codeEl.parentElement;
-      var source = codeEl.textContent || '';
+      var source = normalizeMermaidSource(codeEl.textContent || '');
       var wrapper = document.createElement('div');
       wrapper.className = 'mermaid-container';
       var id = 'mermaid-diagram-' + idx + '-' + Date.now();

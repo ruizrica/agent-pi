@@ -1,6 +1,8 @@
 // ABOUTME: Self-contained HTML template for the Completion Report viewer GUI window.
 // ABOUTME: Renders work summary, file diffs with syntax highlighting, and per-file rollback controls.
 
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+
 /**
  * Data structure for a single changed file.
  */
@@ -955,7 +957,7 @@ export function generateCompletionReportHTML(opts: {
 <!-- marked.js (markdown parser) -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
 <!-- mermaid.js (diagram renderer) -->
-<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
@@ -988,6 +990,8 @@ export function generateCompletionReportHTML(opts: {
         securityLevel: 'loose',
       });
     }
+
+    ${getMermaidNormalizationBrowserScript()}
 
     // Title
     document.getElementById('titleText').textContent = report.title;
@@ -1238,7 +1242,7 @@ export function generateCompletionReportHTML(opts: {
     var blocks = Array.from(codeBlocks);
     blocks.forEach(function(codeEl, idx) {
       var preEl = codeEl.parentElement;
-      var source = codeEl.textContent || '';
+      var source = normalizeMermaidSource(codeEl.textContent || '');
       var wrapper = document.createElement('div');
       wrapper.className = 'mermaid-container';
       var id = 'mermaid-diagram-' + idx + '-' + Date.now();
