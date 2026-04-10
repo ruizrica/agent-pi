@@ -798,6 +798,100 @@ export function generateSpecViewerHTML(opts: {
   }
   .toast.show { opacity: 1; }
 
+  /* ── Approved State ──────────────────── */
+  .approved-banner {
+    background: var(--surface);
+    border: 1px solid var(--success);
+    border-left: 4px solid var(--success);
+    border-radius: 6px;
+    margin: 12px 16px 0;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .approved-banner .approved-content {
+    min-width: 0;
+    flex: 1;
+  }
+  .approved-banner .approved-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .approved-banner .approved-actions .btn {
+    white-space: nowrap;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+  .approved-banner .approved-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--success);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .approved-banner .approved-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--success);
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .approved-banner .approved-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-top: 2px;
+  }
+
+  /* When approved, disable all interactive elements */
+  body.approved-state .commentable:hover {
+    background: transparent;
+    border-left-color: transparent;
+    cursor: default;
+  }
+  body.approved-state .view-toggle { display: none; }
+  body.approved-state .footer-wrapper { display: none; }
+  body.approved-state .header .modified-badge { display: none !important; }
+  body.approved-state .content { padding-bottom: 24px; }
+  body.approved-state .comment-input-popup { display: none !important; }
+  body.approved-state .comment-sidebar { display: none !important; }
+  body.approved-state .step-item { cursor: default; pointer-events: none; }
+  body.approved-state .step-item.active { cursor: default; }
+  body.approved-state .visual-card { cursor: default; }
+
   /* ── Responsive ──────────────────────── */
   @media (max-width: 700px) {
     .content { padding: 12px 12px 100px; }
@@ -1555,28 +1649,55 @@ export function generateSpecViewerHTML(opts: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     }).then(function() {
-      // Show full-screen completion overlay for all actions
-      var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10000;';
-
-      var heading, sub;
       if (action === 'approved') {
-        heading = '\u2713 Spec Approved';
-        sub = 'Returning to terminal\u2026';
-      } else if (action === 'changes_requested') {
-        heading = 'Changes Requested';
-        sub = 'Returning to terminal\u2026';
-      } else {
-        heading = 'Closed';
-        sub = 'You can close this tab.';
-      }
+        // Show approved banner + read-only content (matches plan viewer pattern)
+        var label = 'Spec Approved';
+        var sub = 'The agent will now proceed with implementation.';
 
-      var msg = document.createElement('div');
-      msg.style.cssText = 'text-align:center;font-family:var(--font,monospace);';
-      msg.innerHTML = '<p style="color:var(--success,#50fa7b);font-size:24px;margin-bottom:8px;">' + heading +
-        '</p><p style="color:#888;font-size:14px;">' + sub + '</p>';
-      overlay.appendChild(msg);
-      document.body.appendChild(overlay);
+        // Insert approved banner after header
+        var banner = document.createElement('div');
+        banner.className = 'approved-banner';
+        banner.innerHTML = '<div class="approved-icon">&#10003;</div>' +
+          '<div class="approved-content"><div class="approved-text">' + label + '</div>' +
+          '<div class="approved-sub">' + sub + '</div></div>' +
+          '<div class="approved-actions">' +
+          '<button class="icon-btn" onclick="copyToClipboard()" title="Copy to clipboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+          '<button class="icon-btn" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></button>' +
+          '</div>';
+        var header = document.querySelector('.header');
+        header.parentNode.insertBefore(banner, header.nextSibling);
+
+        // Switch to approved state (disables interactivity via CSS)
+        document.body.classList.add('approved-state');
+
+        // Update header badge
+        var badge = document.querySelector('.header .badge');
+        if (badge) {
+          badge.textContent = 'APPROVED';
+          badge.style.color = 'var(--success)';
+          badge.style.borderColor = 'var(--success)';
+        }
+
+        // Ensure rendered view is showing (not raw)
+        if (currentView === 'raw') {
+          setView('rendered');
+        }
+      } else if (action === 'changes_requested') {
+        // Show full-screen overlay for changes requested
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10000;';
+        var msg = document.createElement('div');
+        msg.style.cssText = 'text-align:center;font-family:var(--font,monospace);';
+        msg.innerHTML = '<p style="color:var(--warning);font-size:24px;margin-bottom:8px;">Changes Requested</p>' +
+          '<p style="color:#888;font-size:14px;">Returning to terminal&#8230;</p>';
+        overlay.appendChild(msg);
+        document.body.appendChild(overlay);
+      } else {
+        // Closed/declined — show simple close message
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-muted);font-family:var(--font);">' +
+          '<div style="text-align:center"><p style="font-size:20px;margin-bottom:8px;">Closed</p>' +
+          '<p style="color:var(--text-dim);">You can close this tab.</p></div></div>';
+      }
     }).catch(function() {
       showToast('Failed to send result');
     });
