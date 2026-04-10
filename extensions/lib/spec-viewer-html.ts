@@ -40,27 +40,34 @@ export function generateSpecViewerHTML(opts: {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title} — Spec Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #1a1d23;
-    --surface: #1e2228;
-    --surface2: #252a32;
-    --border: #2e343e;
-    --text: #e2e8f0;
-    --text-muted: #8892a0;
-    --text-dim: #555d6e;
+    --bg: #1e1e24;
+    --surface: #252530;
+    --surface2: #2d2d3a;
+    --border: #454558;
+    --border-subtle: #3a3a48;
+    --text: #f0f0f5;
+    --text-muted: #b8b8c8;
+    --text-dim: #606078;
     --accent: #2980b9;
-    --accent-hover: #3a9ad5;
+    --accent-hover: #5dade2;
     --accent-dim: rgba(41, 128, 185, 0.12);
-    --success: #48d889;
-    --success-bg: rgba(72, 216, 137, 0.08);
-    --warning: #f0b429;
-    --warning-bg: rgba(240, 180, 41, 0.08);
-    --error: #e85858;
+    --success: #2ecc71;
+    --success-bg: rgba(46, 204, 113, 0.1);
+    --warning: #f1c40f;
+    --warning-bg: rgba(241, 196, 15, 0.1);
+    --error: #e74c3c;
     --comment-accent: var(--accent);
     --comment-dim: var(--accent-dim);
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
-    --mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --font: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -69,49 +76,51 @@ export function generateSpecViewerHTML(opts: {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    font-size: 15px;
-    line-height: 1.65;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
     height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* ── Header ──────────────────────────── */
   .header {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px;
-    margin: 12px 16px 0;
-    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
     flex-shrink: 0;
     z-index: 100;
+    box-shadow: var(--shadow-sm);
   }
   .header-logo {
-    height: 20px;
+    height: 22px;
     width: auto;
-    image-rendering: pixelated;
-    opacity: 0.6;
+    opacity: 0.9;
     flex-shrink: 0;
   }
   .header .badge {
-    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(41, 128, 185, 0.15);
     color: var(--accent);
     font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border: 1px solid var(--accent);
-    border-radius: 4px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border: 1px solid rgba(41, 128, 185, 0.3);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.04em;
     font-family: var(--mono);
   }
   .header .title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text);
     flex: 1;
@@ -128,11 +137,11 @@ export function generateSpecViewerHTML(opts: {
     font-family: var(--mono);
     font-weight: 600;
     color: var(--warning);
-    border: 1px solid var(--warning);
+    background: rgba(241, 196, 15, 0.1);
+    border: 1px solid rgba(241, 196, 15, 0.3);
     padding: 2px 8px;
-    border-radius: 4px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.04em;
     display: none;
   }
 
@@ -140,12 +149,10 @@ export function generateSpecViewerHTML(opts: {
   .step-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin: 8px 16px 0;
-    padding: 6px 8px;
+    gap: 8px;
+    padding: 12px 24px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
     overflow-x: auto;
   }
@@ -154,46 +161,27 @@ export function generateSpecViewerHTML(opts: {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 14px;
-    border-radius: 4px;
+    padding: 8px 16px;
     cursor: pointer;
     font-size: 13px;
     font-family: var(--mono);
     font-weight: 500;
-    color: var(--text-dim);
+    color: var(--text-muted);
     transition: all 0.15s;
     white-space: nowrap;
-    border: 1px solid transparent;
+    border: none;
     position: relative;
   }
-  .step-item:hover { color: var(--text-muted); background: var(--surface2); }
+  .step-item:hover { color: var(--text); background: var(--surface2); }
   .step-item.active {
-    color: var(--accent);
-    background: var(--accent-dim);
-    border-color: var(--accent);
+    color: #fff;
+    background: var(--accent);
   }
   .step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    font-size: 11px;
-    font-weight: 700;
-    border: 1.5px solid var(--text-dim);
-    color: var(--text-dim);
-    flex-shrink: 0;
-  }
-  .step-item.active .step-num {
-    border-color: var(--accent);
-    color: var(--accent);
+    display: none;
   }
   .step-connector {
-    width: 16px;
-    height: 1px;
-    background: var(--border);
-    flex-shrink: 0;
+    display: none;
   }
   .step-comment-dot {
     width: 6px;
@@ -217,8 +205,7 @@ export function generateSpecViewerHTML(opts: {
   .view-toggle {
     display: flex;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
     overflow: hidden;
   }
   .view-toggle button {
@@ -226,7 +213,7 @@ export function generateSpecViewerHTML(opts: {
     font-size: 11px;
     font-family: var(--mono);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.04em;
     background: transparent;
     color: var(--text-dim);
     border: none;
@@ -235,8 +222,8 @@ export function generateSpecViewerHTML(opts: {
   }
   .view-toggle button:hover { color: var(--text-muted); }
   .view-toggle button.active {
-    background: var(--accent-dim);
-    color: var(--accent);
+    background: var(--accent);
+    color: #fff;
     font-weight: 600;
   }
 
@@ -249,9 +236,10 @@ export function generateSpecViewerHTML(opts: {
   }
   .content {
     flex: 1;
-    padding: 12px 24px 100px;
+    padding: 32px 40px 100px;
     overflow-y: auto;
     min-height: 0;
+    max-width: 900px;
   }
   .comment-sidebar {
     width: 280px;
@@ -271,52 +259,47 @@ export function generateSpecViewerHTML(opts: {
     line-height: 1.3;
   }
   .markdown-body h1 {
-    font-size: 22px;
-    color: var(--accent);
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 10px;
-    letter-spacing: -0.3px;
-  }
-  .markdown-body h2 {
-    font-size: 16px;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-family: var(--mono);
+    font-size: 24px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 12px;
     font-weight: 700;
   }
-  .markdown-body h3 { font-size: 15px; color: var(--text); }
-  .markdown-body p { margin: 8px 0; color: var(--text-muted); font-size: 14px; }
+  .markdown-body h2 {
+    font-size: 20px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .markdown-body h3 { font-size: 16px; color: var(--text); font-weight: 600; }
+  .markdown-body h4 { font-size: 14px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .markdown-body p { margin: 8px 0; color: var(--text); font-size: 14px; line-height: 1.7; }
   .markdown-body ul, .markdown-body ol { margin: 8px 0; padding-left: 24px; }
-  .markdown-body li { margin: 4px 0; color: var(--text-muted); font-size: 14px; }
+  .markdown-body li { margin: 6px 0; color: var(--text); font-size: 14px; line-height: 1.6; }
   .markdown-body code {
     background: var(--surface2);
-    color: var(--accent);
-    padding: 2px 6px;
-    border-radius: 3px;
+    color: #22d3ee;
+    padding: 1px 6px;
     font-family: var(--mono);
     font-size: 12px;
   }
   .markdown-body pre {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
+    background: #011627;
+    border: 1px solid var(--border-subtle);
+    padding: 12px 16px;
     overflow-x: auto;
     margin: 12px 0;
   }
   .markdown-body pre code {
     background: none;
     padding: 0;
-    color: var(--text-muted);
+    color: #d6deeb;
     font-size: 12px;
     line-height: 1.6;
   }
   /* ── Mermaid Diagrams ────────────────── */
   .mermaid-container {
-    background: transparent;
-    border: none;
-    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
     padding: 20px;
     padding-top: 44px;
     margin: 12px 0;
@@ -354,9 +337,8 @@ export function generateSpecViewerHTML(opts: {
   }
   .mermaid-toolbar button {
     background: var(--surface2);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
     color: var(--text-muted);
-    border-radius: 4px;
     width: 30px;
     height: 28px;
     cursor: pointer;
@@ -402,9 +384,8 @@ export function generateSpecViewerHTML(opts: {
   }
   .mermaid-fullscreen-overlay .fs-toolbar button {
     background: var(--surface2);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
     color: var(--text-muted);
-    border-radius: 6px;
     width: 36px;
     height: 34px;
     cursor: pointer;
@@ -451,43 +432,43 @@ export function generateSpecViewerHTML(opts: {
     transition: none;
   }
   .markdown-body blockquote {
-    border-left: 3px solid var(--accent);
-    background: var(--accent-dim);
-    padding: 12px 16px;
-    border-radius: 0 6px 6px 0;
+    border-left: 4px solid var(--accent);
+    background: var(--surface2);
+    padding: 14px 18px;
     margin: 12px 0;
     color: var(--text-muted);
     font-size: 14px;
+    font-style: italic;
   }
   .markdown-body table {
     border-collapse: collapse;
     margin: 12px 0;
     width: 100%;
-    font-size: 13px;
+    font-size: 14px;
+    box-shadow: 0 0 0 1px var(--border-subtle);
   }
   .markdown-body th, .markdown-body td {
-    border: 1px solid var(--border);
-    padding: 8px 12px;
+    padding: 10px 16px;
     text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .markdown-body th {
-    background: var(--surface);
+    background: var(--surface2);
     font-weight: 600;
-    color: var(--accent);
+    color: var(--text);
     text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
   }
-  .markdown-body td { color: var(--text-muted); }
+  .markdown-body td { color: var(--text); }
   .markdown-body hr {
     border: none;
-    border-top: 1px solid var(--border);
-    margin: 24px 0;
+    border-top: 1px solid var(--border-subtle);
+    margin: 28px 0;
   }
   .markdown-body a { color: var(--accent); text-decoration: none; }
   .markdown-body a:hover { text-decoration: underline; }
-  .markdown-body strong { color: var(--text); font-weight: 600; }
+  .markdown-body strong { color: var(--text); font-weight: 700; }
   .markdown-body em { color: var(--text-muted); }
 
   /* ── Commentable sections ────────────── */
@@ -498,7 +479,6 @@ export function generateSpecViewerHTML(opts: {
     margin-left: -14px;
     transition: border-color 0.15s, background 0.15s;
     cursor: pointer;
-    border-radius: 0 4px 4px 0;
   }
   .commentable:hover {
     border-left-color: var(--comment-accent);
@@ -528,9 +508,8 @@ export function generateSpecViewerHTML(opts: {
   /* ── Comment Cards (sidebar) ─────────── */
   .comment-card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--comment-accent);
-    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    border-left: 2px solid var(--comment-accent);
     padding: 12px;
     margin-bottom: 8px;
     font-size: 13px;
@@ -572,7 +551,6 @@ export function generateSpecViewerHTML(opts: {
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -580,7 +558,7 @@ export function generateSpecViewerHTML(opts: {
     transition: all 0.15s;
   }
   .comment-card:hover .comment-delete { opacity: 1; }
-  .comment-card .comment-delete:hover { color: var(--error); background: rgba(232, 88, 88, 0.1); }
+  .comment-card .comment-delete:hover { color: var(--error); background: rgba(231, 76, 60, 0.1); }
 
   /* ── Comment Input (inline popup) ────── */
   .comment-input-popup {
@@ -588,10 +566,9 @@ export function generateSpecViewerHTML(opts: {
     z-index: 150;
     background: var(--surface);
     border: 1px solid var(--comment-accent);
-    border-radius: 6px;
     padding: 12px;
     width: 320px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-lg);
     display: none;
     animation: popIn 0.15s ease;
   }
@@ -603,8 +580,7 @@ export function generateSpecViewerHTML(opts: {
     width: 100%;
     min-height: 60px;
     background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
     color: var(--text);
     font-family: var(--font);
     font-size: 13px;
@@ -629,8 +605,7 @@ export function generateSpecViewerHTML(opts: {
   }
   .visual-card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
     overflow: hidden;
     cursor: pointer;
     transition: border-color 0.15s;
@@ -670,8 +645,7 @@ export function generateSpecViewerHTML(opts: {
   .lightbox img {
     max-width: 90vw;
     max-height: 90vh;
-    border-radius: 6px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    box-shadow: var(--shadow-lg);
   }
   .lightbox-close {
     position: absolute;
@@ -681,7 +655,6 @@ export function generateSpecViewerHTML(opts: {
     height: 36px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 50%;
     color: var(--text);
     font-size: 18px;
     cursor: pointer;
@@ -693,9 +666,8 @@ export function generateSpecViewerHTML(opts: {
   /* ── Raw Markdown View ───────────────── */
   .raw-view {
     display: none;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: #011627;
+    border: 1px solid var(--border-subtle);
     padding: 20px;
     flex: 1;
     min-height: 300px;
@@ -729,15 +701,15 @@ export function generateSpecViewerHTML(opts: {
   .footer {
     background: var(--surface);
     border-top: 1px solid var(--border);
-    padding: 10px 20px;
+    padding: 16px 24px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.2);
   }
   .footer .spacer { flex: 1; }
   .btn {
-    padding: 7px 18px;
-    border-radius: 4px;
+    padding: 8px 18px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -747,28 +719,28 @@ export function generateSpecViewerHTML(opts: {
     transition: all 0.15s;
     font-family: var(--font);
   }
-  .btn:hover { background: var(--border); color: var(--text); }
+  .btn:hover { background: var(--border); color: var(--text); box-shadow: var(--shadow-sm); }
   .btn-primary {
-    background: transparent;
-    color: var(--accent);
+    background: var(--accent);
+    color: #fff;
     border-color: var(--accent);
     font-weight: 600;
   }
-  .btn-primary:hover { background: var(--accent-dim); color: var(--accent-hover); }
+  .btn-primary:hover { background: #1a5276; border-color: #1a5276; color: #fff; box-shadow: var(--shadow-md); }
   .btn-success {
-    background: transparent;
-    color: var(--success);
+    background: var(--success);
+    color: #fff;
     border-color: var(--success);
     font-weight: 600;
   }
-  .btn-success:hover { background: var(--success-bg); }
+  .btn-success:hover { background: #27ae60; border-color: #27ae60; box-shadow: var(--shadow-md); }
   .btn-warning {
-    background: transparent;
-    color: var(--warning);
+    background: var(--warning);
+    color: #000;
     border-color: var(--warning);
     font-weight: 600;
   }
-  .btn-warning:hover { background: var(--warning-bg); }
+  .btn-warning:hover { background: #d4ac0d; border-color: #d4ac0d; box-shadow: var(--shadow-md); }
   .btn-ghost {
     background: transparent;
     border-color: transparent;
@@ -783,11 +755,10 @@ export function generateSpecViewerHTML(opts: {
     bottom: 70px;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--surface);
-    color: var(--accent);
-    border: 1px solid var(--accent);
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
     padding: 8px 20px;
-    border-radius: 4px;
     font-size: 13px;
     font-family: var(--mono);
     font-weight: 500;
@@ -795,22 +766,22 @@ export function generateSpecViewerHTML(opts: {
     transition: opacity 0.3s;
     pointer-events: none;
     z-index: 200;
+    box-shadow: var(--shadow-lg);
   }
   .toast.show { opacity: 1; }
 
   /* ── Approved State ──────────────────── */
   .approved-banner {
     background: var(--surface);
-    border: 1px solid var(--success);
-    border-left: 4px solid var(--success);
-    border-radius: 6px;
-    margin: 12px 16px 0;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    border-left: 2px solid var(--success);
     padding: 16px 24px;
     display: flex;
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
     z-index: 100;
+    box-shadow: var(--shadow-sm);
   }
   .approved-banner .approved-content {
     min-width: 0;
@@ -830,7 +801,6 @@ export function generateSpecViewerHTML(opts: {
   .icon-btn {
     width: 32px;
     height: 32px;
-    border-radius: 6px;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text-muted);
@@ -894,12 +864,11 @@ export function generateSpecViewerHTML(opts: {
 
   /* ── Responsive ──────────────────────── */
   @media (max-width: 700px) {
-    .content { padding: 12px 12px 100px; }
-    .header { padding: 10px 12px; margin: 8px 8px 0; }
-    .step-bar { margin: 6px 8px 0; }
+    .content { padding: 12px 12px 100px; max-width: 100%; }
+    .header { padding: 12px 16px; }
+    .step-bar { padding: 8px 16px; }
     .comment-sidebar { display: none !important; }
-    .footer { padding: 10px 12px; }
-    .step-bar { overflow-x: auto; }
+    .footer { padding: 12px 16px; }
   }
 </style>
 </head>
@@ -1017,12 +986,20 @@ export function generateSpecViewerHTML(opts: {
       startOnLoad: false,
       theme: 'dark',
       themeVariables: {
-        primaryColor: '#2a2d35',
-        primaryBorderColor: '#5a9fd4',
-        primaryTextColor: '#e2e8f0',
-        lineColor: '#5a9fd4',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        fontSize: '16px',
+        primaryColor: '#252530',
+        primaryBorderColor: '#2980b9',
+        primaryTextColor: '#f0f0f5',
+        secondaryColor: '#2d2d3a',
+        tertiaryColor: '#363645',
+        lineColor: '#5dade2',
+        mainBkg: '#252530',
+        nodeBorder: '#454558',
+        clusterBkg: '#2d2d3a',
+        clusterBorder: '#454558',
+        titleColor: '#f0f0f5',
+        edgeLabelBackground: '#252530',
+        fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: '14px',
       },
       flowchart: { curve: 'basis', padding: 20 },
       securityLevel: 'loose',
