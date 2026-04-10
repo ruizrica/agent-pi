@@ -1,6 +1,6 @@
 // ABOUTME: Interactive Plan Viewer — opens a GUI browser window for markdown plan review.
 // ABOUTME: Supports plan mode (approve/edit/reorder) and questions mode (inline answers). Markdown-driven UI.
-// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
+// ABOUTME: Prefers Commander's native viewer when it is healthy, then falls back to the local browser viewer.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { openAndWaitInCommander } from "./lib/commander-viewer.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -35,12 +36,7 @@ async function startViewerServer(
 	markdown: string,
 	title: string,
 	purpose: ViewerPurpose,
-): Promise<{ port: number; server: Server; waitForResult: () => Promise<ViewerResult> }> {
-	let resolveResult: (result: ViewerResult) => void;
-	const resultPromise = new Promise<ViewerResult>((res) => {
-		resolveResult = res;
-	});
-
+): Promise<{ port: number; server: Server; waitForResult: () => Promise<any> }> {
 	const routes = [
 		{
 			method: "POST" as const,
@@ -95,15 +91,6 @@ async function startViewerServer(
 	const handle = await createViewerServer({
 		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port }),
 		routes,
-		onResult: (data) => {
-			resolveResult!({
-				action: data.action || "declined",
-				markdown: data.markdown || markdown,
-				modified: data.modified || false,
-				answers: data.answers,
-				answerMap: data.answerMap,
-			});
-		},
 	});
 
 	return {
@@ -142,6 +129,35 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function saveModifiedMarkdown(filePath: string, result: ViewerResult) {
+		if (!result.modified || !result.markdown) return;
+		try {
+			writeFileSync(filePath, result.markdown, "utf-8");
+		} catch {
+			// Silently fail
+		}
+	}
+
+	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult) {
+		try {
+			upsertPersistedReport({
+				category: purpose,
+				title,
+				summary: result.answers || result.markdown,
+				sourcePath: filePath,
+				viewerPath: filePath,
+				viewerLabel: title,
+				tags: [purpose, "markdown"],
+				metadata: {
+					action: result.action,
+					modified: result.modified,
+				},
+			});
+		} catch {
+			// Persistence is best-effort; viewer result should still return.
+		}
+	}
+
 	// ── Core viewer logic (shared by tool + command) ─────────────────
 
 	async function runViewer(
@@ -154,6 +170,35 @@ export default function (pi: ExtensionAPI) {
 	): Promise<ViewerResult> {
 		// Clean up any previous server
 		cleanupServer();
+
+		// Try Commander first for plan mode, but only treat it as approved once
+		// Commander reports a real user action. Otherwise fall back to browser.
+		if (purpose === "plan") {
+			const commanderResult = await openAndWaitInCommander(
+				{
+					content: markdown,
+					title: title || "Plan Viewer",
+					reportType: "plan",
+					mode: "approve",
+					format: "markdown",
+				},
+				ctx,
+				{ signal, includeContent: true },
+			);
+
+			if (commanderResult.inCommander) {
+				const updatedMarkdown = commanderResult.content || markdown;
+				const result: ViewerResult = {
+					action: commanderResult.action === "approved" ? "approved" : "declined",
+					markdown: updatedMarkdown,
+					modified: updatedMarkdown !== markdown,
+				};
+				saveModifiedMarkdown(filePath, result);
+				persistViewerResult(filePath, title, purpose, result);
+				return result;
+			}
+			// Fall through to browser if Commander is unavailable, unhealthy, or times out.
+		}
 
 		// Start HTTP server
 		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose);
@@ -185,36 +230,19 @@ export default function (pi: ExtensionAPI) {
 				})
 				: null;
 
-			const result = await (abortPromise
+			const rawResult = await (abortPromise
 				? Promise.race([waitForResult(), abortPromise])
 				: waitForResult());
+			const result: ViewerResult = {
+				action: rawResult?.action || "declined",
+				markdown: rawResult?.markdown || markdown,
+				modified: rawResult?.modified || false,
+				answers: rawResult?.answers,
+				answerMap: rawResult?.answerMap,
+			};
 
-			// Auto-save the modified markdown back to the source file
-			if (result.modified && result.markdown) {
-				try {
-					writeFileSync(filePath, result.markdown, "utf-8");
-				} catch {
-					// Silently fail
-				}
-			}
-
-			try {
-				upsertPersistedReport({
-					category: purpose,
-					title,
-					summary: result.answers || result.markdown,
-					sourcePath: filePath,
-					viewerPath: filePath,
-					viewerLabel: title,
-					tags: [purpose, "markdown"],
-					metadata: {
-						action: result.action,
-						modified: result.modified,
-					},
-				});
-			} catch {
-				// Persistence is best-effort; viewer result should still return.
-			}
+			saveModifiedMarkdown(filePath, result);
+			persistViewerResult(filePath, title, purpose, result);
 
 			return result;
 		} finally {
@@ -262,7 +290,19 @@ export default function (pi: ExtensionAPI) {
 			const displayTitle = title || basename(file_path, ".md");
 
 			// Open viewer and wait for result
-			const result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal);
+			let result: ViewerResult;
+			try {
+				result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal);
+			} catch (err: any) {
+				// Handle user cancellation / abort gracefully
+				if (err?.message === "Aborted" || signal?.aborted) {
+					return {
+						content: [{ type: "text" as const, text: "Plan viewer was cancelled by user. Ask if they want to re-open it or proceed differently." }],
+						details: { action: "declined" as const, purpose, modified: false, filePath: file_path },
+					};
+				}
+				throw err;
+			}
 
 			// ── Questions mode result ────────────────────────────────
 			if (purpose === "questions") {
