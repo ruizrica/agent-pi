@@ -4,16 +4,39 @@
 import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { isClaudeCliAgent, toClaudeProfileName } from "./claude-config.ts";
+import { spawnClaudeCli } from "./claude-cli.ts";
+import { buildClaudeContextPacket } from "./claude-context.ts";
+import { buildCursorCliArgs } from "./cursor-cli.ts";
+import { buildCodexCliArgs } from "./codex-cli.ts";
+import { buildDroidCliArgs } from "./droid-cli.ts";
+import { buildGeminiCliArgs } from "./gemini-cli.ts";
+import { buildOpenCodeCliArgs } from "./opencode-cli.ts";
+
+export const TOOLKIT_CLI_AGENT_ALIASES = new Map<string, string>([
+	["cursor-agent", "cursor-worker"],
+	["codex-agent", "codex-worker"],
+	["droid-agent", "droid-worker"],
+	["gemini-agent", "gemini-worker"],
+	["opencode-agent", "opencode-worker"],
+]);
 
 export const TOOLKIT_CLI_AGENTS = new Set([
+	"cursor-worker",
 	"cursor-agent",
+	"codex-worker",
 	"codex-agent",
+	"gemini-worker",
 	"gemini-agent",
 	"qwen-agent",
+	"opencode-worker",
 	"opencode-agent",
 	"groq-agent",
+	"droid-worker",
 	"droid-agent",
 	"crush-agent",
+	"claude-worker",
+	"claude-advisor",
 ]);
 
 export const TOOLKIT_WORKER_MODEL = "anthropic/claude-haiku-4-5-20251001";
@@ -29,8 +52,10 @@ export interface ToolkitWorkerSpawnOptions {
 	sessionFile?: string;
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
+	model?: string;
 	onStdoutLine?: (line: string) => void;
 	onStderr?: (chunk: string) => void;
+	onSpawn?: (proc: any) => void;
 }
 
 interface ToolkitCliCommand {
@@ -44,12 +69,19 @@ export interface ToolkitWorkerResult {
 	output: string;
 }
 
+export function normalizeToolkitAgentName(name: string | undefined | null): string {
+	if (!name) return "";
+	const key = name.toLowerCase();
+	return TOOLKIT_CLI_AGENT_ALIASES.get(key) || key;
+}
+
 export function isToolkitCliAgent(name: string | undefined | null): boolean {
 	if (!name) return false;
 	return TOOLKIT_CLI_AGENTS.has(name.toLowerCase());
 }
 
 export function resolveToolkitWorkerModel(agentName: string, fallbackModel: string): string {
+	if (isClaudeCliAgent(agentName)) return fallbackModel;
 	return isToolkitCliAgent(agentName) ? TOOLKIT_WORKER_MODEL : fallbackModel;
 }
 
@@ -82,26 +114,31 @@ export function getToolkitWorkerArgs(agentDef: ToolkitWorkerAgentDef, options: T
 }
 
 function getToolkitCliCommand(agentName: string): ToolkitCliCommand | null {
-	switch (agentName.toLowerCase()) {
-		case "cursor-agent":
+	switch (normalizeToolkitAgentName(agentName)) {
+		case "cursor-worker":
 			return {
 				command: "cursor-agent",
-				args: (task: string) => ["--print", "--output-format", "text", task],
+				args: (task: string, cwd?: string) => buildCursorCliArgs(task, cwd),
 			};
-		case "codex-agent":
+		case "codex-worker":
 			return {
 				command: "codex",
-				args: (task: string, cwd?: string) => ["exec", "--skip-git-repo-check", ...(cwd ? ["--cd", cwd] : []), task],
+				args: (task: string, cwd?: string) => buildCodexCliArgs(task, cwd),
 			};
-		case "droid-agent":
+		case "droid-worker":
 			return {
 				command: "droid",
-				args: (task: string, cwd?: string) => ["exec", "--output-format", "text", "--auto", "low", ...(cwd ? ["--cwd", cwd] : []), task],
+				args: (task: string, cwd?: string) => buildDroidCliArgs(task, cwd),
 			};
-		case "gemini-agent":
+		case "gemini-worker":
 			return {
 				command: "gemini",
-				args: (task: string) => ["-p", task],
+				args: (task: string) => buildGeminiCliArgs(task),
+			};
+		case "opencode-worker":
+			return {
+				command: "opencode",
+				args: (task: string, cwd?: string) => buildOpenCodeCliArgs(task, cwd),
 			};
 		case "qwen-agent":
 			return {
@@ -132,6 +169,42 @@ export function spawnToolkitWorker(
 	agentDef: ToolkitWorkerAgentDef,
 	options: ToolkitWorkerSpawnOptions,
 ): Promise<ToolkitWorkerResult> {
+	if (isClaudeCliAgent(agentDef.name)) {
+		const hasContextPrefix = options.task.includes("## Working Context") || options.task.includes("Working directory:");
+		return spawnClaudeCli({
+			profile: toClaudeProfileName(agentDef.name),
+			task: options.task,
+			cwd: options.cwd,
+			env: options.env,
+			model: options.model,
+			tools: agentDef.tools,
+			systemPrompt: agentDef.systemPrompt,
+			contextPacket: hasContextPrefix
+				? options.task
+				: buildClaudeContextPacket({
+					cwd: options.cwd || process.cwd(),
+					task: options.task,
+				}),
+			onSpawn: options.onSpawn,
+			onTextDelta: (text: string) => {
+				if (!text) return;
+				options.onStdoutLine?.(JSON.stringify({
+					type: "message_update",
+					assistantMessageEvent: {
+						type: "text_delta",
+						delta: text,
+					},
+				}));
+			},
+			onToolStart: (toolName: string) => options.onStdoutLine?.(JSON.stringify({ type: "tool_execution_start", tool: toolName })),
+			onStderr: options.onStderr,
+		}).then(({ exitCode, elapsed, output, result }) => ({
+			exitCode,
+			elapsed,
+			output: result || output,
+		}));
+	}
+
 	return new Promise((resolve) => {
 		const cliCommand = getToolkitCliCommand(agentDef.name);
 		const command = cliCommand?.command || "pi";
@@ -143,6 +216,7 @@ export function spawnToolkitWorker(
 			env: { ...process.env, ...options.env, PI_SUBAGENT: "1" },
 			cwd: options.cwd,
 		});
+		options.onSpawn?.(proc);
 
 		const startTime = Date.now();
 		let output = "";

@@ -1,8 +1,9 @@
 // ABOUTME: Tests toolkit CLI worker helpers and routing behavior.
 
 import { describe, it, expect } from "vitest";
-import { 
+import {
 	isToolkitCliAgent,
+	normalizeToolkitAgentName,
 	resolveToolkitWorkerModel,
 	TOOLKIT_WORKER_MODEL,
 	getToolkitWorkerArgs,
@@ -10,16 +11,33 @@ import {
 import { resolveAgentModelString, type AgentModelsConfig } from "../lib/agent-defs.ts";
 
 describe("toolkit CLI agent detection", () => {
-	it("detects toolkit agents", () => {
+	it("detects toolkit workers and legacy aliases", () => {
+		expect(isToolkitCliAgent("codex-worker")).toBe(true);
 		expect(isToolkitCliAgent("codex-agent")).toBe(true);
-		expect(isToolkitCliAgent("CURSOR-AGENT")).toBe(true);
+		expect(isToolkitCliAgent("CURSOR-WORKER")).toBe(true);
+		expect(isToolkitCliAgent("opencode-worker")).toBe(true);
 		expect(isToolkitCliAgent("builder")).toBe(false);
+	});
+
+	it("normalizes legacy toolkit aliases to worker names", () => {
+		expect(normalizeToolkitAgentName("cursor-agent")).toBe("cursor-worker");
+		expect(normalizeToolkitAgentName("codex-agent")).toBe("codex-worker");
+		expect(normalizeToolkitAgentName("droid-agent")).toBe("droid-worker");
+		expect(normalizeToolkitAgentName("gemini-agent")).toBe("gemini-worker");
+		expect(normalizeToolkitAgentName("opencode-agent")).toBe("opencode-worker");
+		expect(normalizeToolkitAgentName("qwen-agent")).toBe("qwen-agent");
 	});
 });
 
 describe("toolkit worker model resolution", () => {
 	it("forces toolkit agents onto the shared worker model", () => {
+		expect(resolveToolkitWorkerModel("codex-worker", "openai/gpt-4o")).toBe(TOOLKIT_WORKER_MODEL);
 		expect(resolveToolkitWorkerModel("codex-agent", "openai/gpt-4o")).toBe(TOOLKIT_WORKER_MODEL);
+	});
+
+	it("preserves configured Claude profile models", () => {
+		expect(resolveToolkitWorkerModel("claude-worker", "anthropic/claude-haiku-4-5")).toBe("anthropic/claude-haiku-4-5");
+		expect(resolveToolkitWorkerModel("claude-advisor", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
 	});
 
 	it("preserves non-toolkit fallback models", () => {
@@ -30,7 +48,7 @@ describe("toolkit worker model resolution", () => {
 describe("toolkit worker args", () => {
 	it("builds pi args with the shared worker model", () => {
 		const args = getToolkitWorkerArgs({
-			name: "codex-agent",
+			name: "codex-worker",
 			tools: "bash,read",
 			systemPrompt: "Use Codex CLI",
 		}, {
@@ -51,7 +69,8 @@ describe("agent model config split", () => {
 		default: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
 		agents: {
 			reviewer: { provider: "anthropic", model: "claude-opus-4-6" },
-			"codex-agent": { provider: "openai-codex", model: "gpt-5.4" },
+			"codex-worker": { provider: "openai-codex", model: "gpt-5.4" },
+			"claude-worker": { provider: "anthropic", model: "claude-haiku-4-5" },
 		},
 	};
 
@@ -60,6 +79,11 @@ describe("agent model config split", () => {
 	});
 
 	it("overrides toolkit agents to the shared worker model even if config differs", () => {
+		expect(resolveAgentModelString("codex-worker", config)).toBe(TOOLKIT_WORKER_MODEL);
 		expect(resolveAgentModelString("codex-agent", config)).toBe(TOOLKIT_WORKER_MODEL);
+	});
+
+	it("preserves Claude profile models from config", () => {
+		expect(resolveAgentModelString("claude-worker", config)).toBe("anthropic/claude-haiku-4-5");
 	});
 });

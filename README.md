@@ -175,6 +175,48 @@ plan-build:
   - reviewer
 ```
 
+### Claude CLI Roles
+
+Pi can now integrate Claude Code CLI in two distinct ways:
+
+- **`claude-worker`** — an execution-oriented Claude subagent that behaves like a normal worker with live widget updates and a compact rolling console preview.
+- **`claude-advisor`** — an Opus-backed advisor that reviews shared task context on demand and returns recommendations, risks, alternatives, and next actions.
+
+This follows an **executor + advisor** pattern:
+
+- the main Pi executor keeps the primary loop,
+- `claude-worker` can be dispatched like any other worker,
+- `claude-advisor` is called only when high-value advice is needed,
+- both receive the same shared context packet built from the working directory, active plan, task, and file hints.
+
+Example usage:
+
+```text
+dispatch_agent { agent: "claude-worker", task: "Implement the approved refactor plan" }
+claude_advisor { question: "Should we split this into worker and advisor runtimes?", files: ["extensions/lib/toolkit-cli.ts", "extensions/subagent-widget.ts"] }
+```
+
+### Toolkit Worker Roles
+
+Pi also exposes execution-oriented worker wrappers for installed third-party coding CLIs:
+
+- **`cursor-worker`** — wraps Cursor Agent headless mode
+- **`codex-worker`** — wraps `codex exec`
+- **`droid-worker`** — wraps `droid exec`
+- **`gemini-worker`** — wraps Gemini CLI headless prompt mode
+- **`opencode-worker`** — wraps `opencode run`
+
+These workers follow the same task-oriented pattern as `claude-worker`: they receive the Pi task prompt, run non-interactively in the current workspace, and stream their CLI output back into the Pi widget/follow-up flow.
+
+Legacy names such as `cursor-agent`, `codex-agent`, `droid-agent`, `gemini-agent`, and `opencode-agent` remain supported as compatibility aliases, but new usage should prefer the `*-worker` names.
+
+Example usage:
+
+```text
+dispatch_agent { agent: "codex-worker", task: "Implement the approved refactor plan" }
+dispatch_agent { agent: "opencode-worker", task: "Summarize the repo structure and propose the next edits" }
+```
+
 ### Chains
 
 Chains are sequential pipelines defined in `agents/agent-chain.yaml`. Each step specifies an agent and a prompt template with `$INPUT` (previous output) and `$ORIGINAL` (user's original prompt).

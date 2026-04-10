@@ -27,6 +27,10 @@ function makeModelsConfig(): AgentModelsConfig {
 			planner: { provider: "github-copilot", model: "gemini-3.1-pro-preview" },
 			tester: { provider: "anthropic", model: "claude-haiku-4-5" },
 			"red-team": { provider: "anthropic", model: "claude-haiku-4-5" },
+			"codex-worker": { provider: "openai-codex", model: "gpt-5.4" },
+			"opencode-worker": { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+			"claude-worker": { provider: "anthropic", model: "claude-haiku-4-5" },
+			"claude-advisor": { provider: "anthropic", model: "claude-opus-4-6" },
 		},
 	};
 }
@@ -141,7 +145,15 @@ describe("subagent model resolution (end-to-end)", () => {
 
 	describe("toolkit agents", () => {
 		it("force toolkit agents onto the shared worker model", () => {
+			expect(resolveModel(undefined, "CODEX-WORKER")).toBe(TOOLKIT_WORKER_MODEL);
 			expect(resolveModel(undefined, "CODEX-AGENT")).toBe(TOOLKIT_WORKER_MODEL);
+			expect(resolveModel(undefined, "OPENCODE-WORKER")).toBe(TOOLKIT_WORKER_MODEL);
+			expect(resolveModel(undefined, "OPENCODE-AGENT")).toBe(TOOLKIT_WORKER_MODEL);
+		});
+
+		it("preserve Claude profile models", () => {
+			expect(resolveModel(undefined, "CLAUDE-WORKER")).toBe("anthropic/claude-haiku-4-5");
+			expect(resolveModel(undefined, "CLAUDE-ADVISOR")).toBe("anthropic/claude-opus-4-6");
 		});
 	});
 
@@ -174,6 +186,18 @@ describe("tools resolution from agent defs", () => {
 	it("builder gets full tools", () => {
 		expect(resolveAgentByName("BUILDER", knownAgents)?.tools)
 			.toBe("read,write,edit,bash,grep,find,ls");
+	});
+
+	it("legacy toolkit aliases resolve to worker defs when present", () => {
+		knownAgents.set("codex-worker", {
+			name: "codex-worker",
+			description: "codex worker",
+			tools: "read,write,edit,bash,grep,find,ls",
+			model: "anthropic/claude-haiku-4-5-20251001",
+			systemPrompt: "You are a codex worker.",
+			file: "/path/to/codex-worker.md",
+		});
+		expect(resolveAgentByName("CODEX-AGENT", knownAgents)?.name).toBe("codex-worker");
 	});
 
 	it("unknown agent returns undefined", () => {
