@@ -144,6 +144,7 @@ export default function (pi: ExtensionAPI) {
 				category: purpose,
 				title,
 				summary: result.answers || result.markdown,
+				content: result.markdown,
 				sourcePath: filePath,
 				viewerPath: filePath,
 				viewerLabel: title,

@@ -198,6 +198,7 @@ export default function (pi: ExtensionAPI) {
 						category: "completion",
 						title: report.title,
 						summary: report.summary,
+						content: report.summary,
 						sourcePath: join(ctx.cwd || process.cwd(), ".context", "network-security-chain-design.md"),
 						viewerPath: join(ctx.cwd || process.cwd(), ".context", "network-security-chain-design.md"),
 						viewerLabel: report.title,

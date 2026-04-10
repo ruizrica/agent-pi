@@ -16,6 +16,7 @@ import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExpo
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
+import { showReport, isCommanderAvailable } from "./lib/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -259,7 +260,42 @@ export default function (pi: ExtensionAPI) {
 			} catch {}
 		}
 
-		// Start server
+		// Try Commander first (multi-page spec viewer in native UI)
+		if (isCommanderAvailable()) {
+			// Build multi-page content for Commander's SpecViewerModal
+			const content = JSON.stringify({
+				folderPath,
+				pages: documents.map((doc) => ({
+					name: doc.label,
+					filePath: doc.filePath,
+					content: doc.markdown,
+				})),
+			});
+
+			const result = await showReport({
+				content,
+				title: title || "Spec Viewer",
+				reportType: "spec",
+				mode: "approve",
+				format: "markdown",
+			}, ctx);
+
+			if (result.inCommander) {
+				// Commander is handling the display
+				// For now, return approved since Commander will handle it
+				// TODO: Implement proper wait for Commander result
+				ctx.ui.notify("Spec opened in Commander", "info");
+				return {
+					action: "approved",
+					comments: existingComments,
+					markdownChanges: {},
+					modified: false,
+				};
+			}
+			// Fall through to browser if Commander failed
+		}
+
+		// Start browser-based server
 		const handle = await startSpecViewerServer(
 			folderPath,
 			documents,
@@ -308,10 +344,12 @@ export default function (pi: ExtensionAPI) {
 
 			try {
 				const editedDocCount = result.markdownChanges ? Object.keys(result.markdownChanges).length : 0;
+				const specContent = documents.map((doc) => `# ${doc.label}\n\n${doc.markdown}`).join("\n\n");
 				upsertPersistedReport({
 					category: "spec",
 					title,
 					summary: `${documents.length} document(s) reviewed${result.comments.length ? `, ${result.comments.length} comment(s)` : ""}`,
+					content: specContent,
 					sourcePath: folderPath,
 					viewerPath: folderPath,
 					viewerLabel: title,

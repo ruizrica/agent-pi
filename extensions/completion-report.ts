@@ -489,6 +489,7 @@ export default function (pi: ExtensionAPI) {
 						category: "completion",
 						title,
 						summary,
+						content: report.taskMarkdown || summary,
 						sourcePath: join(cwd, ".context", "todo.md"),
 						viewerPath: join(cwd, ".context", "todo.md"),
 						viewerLabel: title,
