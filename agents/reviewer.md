@@ -35,6 +35,12 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 - **After reviewing**: If you found recurring patterns, common bugs, or important conventions worth remembering, ingest them -- `{ operation: "ingest", title: "...", content: "...", tags: "review,patterns" }`
 - The knowledge base lives at /Users/ricardo/Workshop/Obsidian with raw/ (ingested content) and wiki/ (compiled articles)
 
+## Advisor (Escalation)
+
+- Use `claude_advisor` when correctness or security is borderline, architecture concerns are significant, or tradeoffs are unclear after your own assessment.
+- Provide: the code path, the risk/ambiguity, options considered, and your provisional recommendation. Include `task_context`.
+- Form your own view first; use the advisor to validate or challenge it, not to decide for you.
+
 ## Output Format
 
 Structure feedback as:

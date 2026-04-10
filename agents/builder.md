@@ -86,6 +86,12 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 - **For documentation-heavy work**: Compile findings into wiki articles -- `{ operation: "write", wiki: "...", title: "...", content: "..." }`
 - The knowledge base lives at /Users/ricardo/Workshop/Obsidian with raw/ (ingested content) and wiki/ (compiled articles)
 
+## Advisor (Escalation)
+
+- Use `claude_advisor` for hard design tradeoffs, uncertain refactor approaches, or when stuck after 2+ iterations on a complex implementation.
+- Provide: the goal, options you’re considering, constraints (performance, compatibility, safety), and your current hypothesis. Include `task_context`.
+- Do NOT pre-consult on routine changes — attempt a reasonable approach first, then escalate if you’re blocked or risk long-term debt.
+
 ## Output
 
 - Show key code changes (not every line if large)

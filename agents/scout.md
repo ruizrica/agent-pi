@@ -41,6 +41,12 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 - **After scouting**: If you discovered valuable architectural insights, patterns, or reference material, ingest key findings -- `{ operation: "ingest", title: "...", content: "...", tags: "..." }`
 - The knowledge base lives at /Users/ricardo/Workshop/Obsidian with raw/ (ingested content) and wiki/ (compiled articles)
 
+## Advisor (Escalation)
+
+- Use `claude_advisor` only when architecture is ambiguous, conventions conflict, or entry points are unclear after initial recon.
+- Provide: the ambiguity, the candidate options, and what decision you need. Include `task_context` when calling.
+- Do NOT use the advisor for routine file discovery or simple pattern searches.
+
 ## Output Format
 
 Structure your findings with:

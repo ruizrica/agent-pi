@@ -30,6 +30,8 @@ import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
+import { isClaudeCliAgent } from "./lib/claude-config.ts";
+import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
@@ -183,25 +185,42 @@ export default function (pi: ExtensionAPI) {
 		widgetBoxes.get(id)?.invalidate();
 	}
 
+	function setSummaryFromText(state: SubState, text: string) {
+		const latest = text
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.pop();
+		if (latest) state.summary = latest;
+	}
+
 	// ── Streaming helpers ─────────────────────────────────────────────────────
 
 	function processLine(state: SubState, line: string) {
-		if (!line.trim()) return;
+		const trimmed = line.trim();
+		if (!trimmed) return;
 		try {
-			const event = JSON.parse(line);
+			const event = JSON.parse(trimmed);
 			const type = event.type;
 
 			if (type === "message_update") {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === "text_delta") {
-					state.textChunks.push(delta.delta || "");
+					const text = delta.delta || "";
+					state.textChunks.push(text);
+					setSummaryFromText(state, text);
 					invalidateWidget(state.id);
 				}
 			} else if (type === "tool_execution_start") {
 				state.toolCount++;
 				invalidateWidget(state.id);
 			}
-		} catch {}
+		} catch {
+			if (isClaudeCliAgent(state.name) && isClaudeDisplayNoise(trimmed)) return;
+			state.textChunks.push(trimmed + "\n");
+			state.summary = trimmed;
+			invalidateWidget(state.id);
+		}
 	}
 
 	// ── Build context prefix for subagent orientation ──────────────────────
@@ -283,6 +302,7 @@ export default function (pi: ExtensionAPI) {
 		const commanderExtPath = path.join(extDir, "commander-mcp.ts");
 		const footerExtPath = path.join(extDir, "footer.ts");
 		const memoryCycleExtPath = path.join(extDir, "memory-cycle.ts");
+		const claudeAdvisorExtPath = path.join(extDir, "claude-advisor.ts");
 
 		// Commander integration
 		const commanderAvail = isCommanderAvailable();
@@ -290,7 +310,12 @@ export default function (pi: ExtensionAPI) {
 
 		// Tools: use agent definition tools if available, else default set
 		let tools = agentDef?.tools || "read,bash,grep,find,ls";
-		const extensions = ["-e", tasksExtPath, "-e", footerExtPath, "-e", memoryCycleExtPath];
+		const extensions = [
+			"-e", tasksExtPath,
+			"-e", footerExtPath,
+			"-e", memoryCycleExtPath,
+			"-e", claudeAdvisorExtPath,
+		];
 		if (commanderAvail) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
 			// go in --tools (which only accepts built-in names and warns on unknowns).
@@ -327,6 +352,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		return new Promise<void>((resolve) => {
+			let toolkitFinalOutput = "";
 			const startTime = Date.now();
 			const isScout = (globalThis as any).__piScoutId === state.id;
 			const timer = setInterval(() => {
@@ -376,7 +402,8 @@ export default function (pi: ExtensionAPI) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
-						const summary = state.textChunks.join("").trim().split("\n").pop() || agentLabel;
+						const finalText = (isToolkitCliAgent(state.name) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
+						const summary = finalText.trim().split("\n").pop() || agentLabel;
 						if (state.status === "done") {
 							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch(() => {});
 						} else {
@@ -386,7 +413,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 
-				const result = state.textChunks.join("");
+				const result = (isToolkitCliAgent(state.name) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
 
 				// Standby spawns (warmup) suppress notification and follow-up message
 				if (!state.standby) {
@@ -429,14 +456,19 @@ export default function (pi: ExtensionAPI) {
 					sessionFile: state.sessionFile,
 					cwd: ctx.cwd,
 					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { state.proc = proc; },
 					onStdoutLine: (line: string) => processLine(state, line),
 					onStderr: (chunk: string) => {
-						if (chunk.trim()) {
-							state.textChunks.push(chunk);
-							invalidateWidget(state.id);
+						for (const line of chunk.split("\n")) {
+							if (line.trim()) processLine(state, line);
 						}
 					},
-				}).then(({ exitCode }) => {
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					if (isToolkitCliAgent(state.name) && toolkitFinalOutput.trim()) {
+						state.summary = toolkitFinalOutput.trim().split("\n").pop() || state.summary;
+					}
 					finish(exitCode);
 				});
 				return;

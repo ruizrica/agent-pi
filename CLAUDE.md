@@ -89,6 +89,25 @@ Structure: `raw/` (ingested content) → `wiki/` (compiled articles with `[[wiki
 
 ---
 
+## Advisor Strategy (Default Pattern)
+
+- Use the `claude_advisor` tool to consult an Opus-level advisor **only** for hard decisions: ambiguous architecture, high-impact tradeoffs, or when stuck after a reasonable attempt.
+- Do **not** use the advisor for routine tasks, simple file edits, or straightforward tests.
+- Provide the advisor with a concise question, your current options, constraints, and a brief `task_context`. Include relevant `files` when helpful.
+- The advisor is read-only — it does not call tools or produce user-facing output. It returns guidance, risks, alternatives, and next actions for you to execute.
+- Be cost-conscious: advisor tokens are billed at Opus rates; keep calls targeted.
+
+**Example**
+```
+claude_advisor {
+  question: "Should we split the service into read/write paths or keep a single handler?",
+  task_context: "Current design: monolith handler in api/server.ts; performance concerns under load",
+  files: ["api/server.ts", "api/routes/index.ts"]
+}
+```
+
+---
+
 ## Plan Format — Architecture Diagrams Required
 
 Every plan written to `.context/todo.md` MUST include an `## Architecture` section with a mermaid diagram, unless the change is a trivial single-file fix (typo, config tweak). The plan viewer renders mermaid diagrams interactively with zoom, pan, fullscreen, and SVG download. Use `graph LR` for data/request flows, `graph TD` for hierarchies, `sequenceDiagram` for multi-step interactions.
