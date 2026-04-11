@@ -1,7 +1,7 @@
 ---
 name: pi
-description: Unified entry point to Pi operational modes. Invoke as /pi <mode> <task>. Modes: plan, spec, team, pipeline, chain. Triggers on /pi or when user says "switch to plan mode", "use spec mode", "start a pipeline".
-allowed-tools: set_mode
+description: "Unified entry point to Pi operational modes. Invoke as /pi <mode> <task>. Modes: plan, spec, team, pipeline, chain. Triggers on /pi or when user says 'switch to plan mode', 'use spec mode', 'start a pipeline'."
+allowed-tools: [set_mode]
 ---
 
 <!-- ABOUTME: Unified /pi skill that routes to all Pi operational modes via set_mode. -->
