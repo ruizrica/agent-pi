@@ -53,6 +53,67 @@ Pi discovers all extensions, themes, and skills automatically.
 5. **`/chain`** — Switch between chain workflows
 6. **`/tex`** — Open Text Tools in the browser
 
+## Cloud Code Plugin / Skill
+
+This repo now ships a **Claude Code plugin scaffold** and a **`pi-agent-orchestrator` skill** so Cloud Code can treat the local Pi agent suite as an orchestration backend.
+
+### What it adds
+
+- **Plugin manifest** — `.claude-plugin/plugin.json`
+- **Local marketplace metadata** — `.claude-plugin/marketplace.json`
+- **Cloud Code skill** — `skills/pi-agent-orchestrator/SKILL.md`
+- **Bridge CLI** — `scripts/pi-agent-orchestrator.mjs`
+
+### Local install in Claude Code
+
+```bash
+/plugin marketplace add .
+/plugin install pi-agent-orchestrator@agent-pi-marketplace
+```
+
+### Bridge quick start
+
+Inspect the available Pi orchestration surface:
+
+```bash
+node scripts/pi-agent-orchestrator.mjs inspect
+```
+
+Plan the orchestration mode before launching anything broad:
+
+```bash
+node scripts/pi-agent-orchestrator.mjs plan --mode auto --agent-count 1 --write-scope narrow
+```
+
+Dispatch a single Pi agent:
+
+```bash
+node scripts/pi-agent-orchestrator.mjs dispatch \
+  --agent scout \
+  --task "Map the current auth flow and list the key files." \
+  --execute
+```
+
+Run an approved chain:
+
+```bash
+node scripts/pi-agent-orchestrator.mjs chain \
+  --chain plan-build-review \
+  --task "Implement the approved feature end to end." \
+  --approved true \
+  --execute
+```
+
+### OAuth / Auth note
+
+The Cloud Code skill does **not** add a new OAuth flow. It reuses the existing token bridge already implemented in `extensions/oauth-provider.ts`:
+
+- `CLAUDE_CODE_OAUTH_TOKEN`
+- `PI_CLAUDE_OAUTH_TOKEN`
+- fallback: `ANTHROPIC_OAUTH_TOKEN`
+
+That keeps Cloud Code usage inside the same approved auth path already supported by this package.
+
 ## Package Structure
 
 ```
@@ -102,6 +163,7 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **agent-chain** | Sequential pipeline — each step's output feeds into the next via `$INPUT` |
 | **pipeline-team** | 5-phase hybrid — UNDERSTAND → GATHER → PLAN → EXECUTE → REVIEW |
 | **subagent-widget** | Background subagent management with live status widgets |
+| **claude-advisor** | On-demand Opus advisor tool backed by Claude Code CLI |
 | **toolkit-commands** | Dynamic slash commands from markdown files |
 
 ### Security

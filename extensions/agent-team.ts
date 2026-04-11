@@ -34,6 +34,8 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
+import { isClaudeCliAgent } from "./lib/claude-config.ts";
+import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
@@ -540,6 +542,7 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolve) => {
+			let toolkitFinalOutput = "";
 			// Build env — include Commander task ID when available
 			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
 			if (commanderAvailable) {
@@ -564,12 +567,12 @@ export default function (pi: ExtensionAPI) {
 					state.sessionFile = agentSessionFile;
 				}
 
-				let full = textChunks.join("");
+				let full = (isToolkitCliAgent(state.def.name) ? toolkitFinalOutput : textChunks.join("")) || textChunks.join("");
 				if ((code !== 0 && code !== null) && stderrBuf.trim()) {
 					if (isContextLossError(stderrBuf)) {
 						full = "Context overflow: agent session broke tool_use/tool_result pairing. Clear session and re-dispatch.";
 						state.sessionFile = null;
-					} else {
+					} else if (!(isToolkitCliAgent(state.def.name) && toolkitFinalOutput.trim())) {
 						full = full.trim() ? `${full}\n\n--- stderr ---\n${stderrBuf.trim()}` : stderrBuf.trim();
 					}
 				}
@@ -583,7 +586,7 @@ export default function (pi: ExtensionAPI) {
 				}, 30_000);
 
 				if (commanderAvailable && taskId !== undefined) {
-					const summary = textChunks.join("").trim().split("\n").pop() || canonicalName;
+					const summary = full.trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
 						commanderSync((client) => postCompleteTask(client, taskId, canonicalName, summary));
 					} else {
@@ -601,8 +604,10 @@ export default function (pi: ExtensionAPI) {
 			};
 
 			const handleStdoutLine = (line: string) => {
+				const trimmed = line.trim();
+				if (!trimmed) return;
 				try {
-					const event = JSON.parse(line);
+					const event = JSON.parse(trimmed);
 					if (event.type === "message_update") {
 						const delta = event.assistantMessageEvent;
 						if (delta?.type === "text_delta") {
@@ -612,7 +617,7 @@ export default function (pi: ExtensionAPI) {
 							const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
 							state.lastWork = last;
 							state.summary = last;
-							state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-3);
+							state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-4);
 							invalidateAgentWidget(state);
 						}
 					} else if (event.type === "tool_execution_start") {
@@ -640,7 +645,17 @@ export default function (pi: ExtensionAPI) {
 							invalidateAgentWidget(state);
 						}
 					}
-				} catch {}
+				} catch {
+					if (isClaudeCliAgent(state.def.name) && isClaudeDisplayNoise(trimmed)) return;
+					textChunks.push(trimmed + "\n");
+					state.textChunks.push(trimmed + "\n");
+					state.lastWork = trimmed;
+					state.summary = trimmed;
+					state.summaryLines = state.summaryLines?.[state.summaryLines.length - 1] === trimmed
+						? state.summaryLines
+						: [...(state.summaryLines || []), trimmed].slice(-4);
+					invalidateAgentWidget(state);
+				}
 			};
 
 			let stderrBuf = "";
@@ -650,9 +665,19 @@ export default function (pi: ExtensionAPI) {
 					sessionFile: agentSessionFile,
 					cwd: ctx.cwd,
 					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { state.proc = proc; },
 					onStdoutLine: handleStdoutLine,
 					onStderr: (chunk: string) => { stderrBuf += chunk; },
-				}).then(({ exitCode }) => finish(exitCode, stderrBuf));
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					if (isToolkitCliAgent(state.def.name) && toolkitFinalOutput.trim()) {
+						state.lastWork = toolkitFinalOutput.trim().split("\n").pop() || state.lastWork;
+						state.summary = state.lastWork;
+						state.summaryLines = state.summary ? [state.summary] : state.summaryLines;
+					}
+					finish(exitCode, stderrBuf);
+				});
 				return;
 			}
 

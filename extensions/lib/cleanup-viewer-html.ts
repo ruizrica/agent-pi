@@ -764,7 +764,7 @@ export function generateCleanupViewerHTML(opts: {
     showStatus('Scanning directory...', true);
     hideResults();
 
-    fetch('http://localhost:' + PORT + '/scan', {
+    fetch('http://127.0.0.1:' + PORT + '/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ directory: dir, categories: cats })
@@ -894,7 +894,7 @@ export function generateCleanupViewerHTML(opts: {
       });
     });
 
-    fetch('http://localhost:' + PORT + '/analyze', {
+    fetch('http://127.0.0.1:' + PORT + '/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ summary: scanData.summary, sampleFiles: sampleFiles })
@@ -978,7 +978,7 @@ export function generateCleanupViewerHTML(opts: {
 
     var files = Array.from(selectedFiles);
 
-    fetch('http://localhost:' + PORT + '/delete', {
+    fetch('http://127.0.0.1:' + PORT + '/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: files })
@@ -1042,7 +1042,7 @@ export function generateCleanupViewerHTML(opts: {
   };
 
   function loadHistory() {
-    fetch('http://localhost:' + PORT + '/history')
+    fetch('http://127.0.0.1:' + PORT + '/history')
     .then(function(r) { return r.json(); })
     .then(function(entries) {
       var list = document.getElementById('history-list');
@@ -1065,7 +1065,7 @@ export function generateCleanupViewerHTML(opts: {
 
   // -- Done --
   window.done = function() {
-    fetch('http://localhost:' + PORT + '/result', {
+    fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'done', deletedCount: 0 })
@@ -1074,7 +1074,7 @@ export function generateCleanupViewerHTML(opts: {
 
   window.addEventListener('pagehide', function() {
     try {
-      navigator.sendBeacon('http://localhost:' + PORT + '/result', JSON.stringify({ action: 'closed' }));
+      navigator.sendBeacon('http://127.0.0.1:' + PORT + '/result', JSON.stringify({ action: 'closed' }));
     } catch(e) {}
   });
 

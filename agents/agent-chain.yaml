@@ -390,3 +390,15 @@ test-generation:
 
         ### Final Test Content
         [Repeat the improved tests with any last minor adjustments, using === FILE === format]
+
+dream:
+  description: "Context consolidation and memory compaction — scan, extract insights, verify, and clean"
+  steps:
+    - agent: dream-scanner
+      prompt: "# Dream Cycle: Phase 1 — Scan & Inventory\n\nScan all context artifacts and produce a categorized manifest.\n\nUser context: $ORIGINAL\n\nScan targets:\n- .context/ (plans, questions, session state, reports, ad-hoc files)\n- .kiro/specs/ (feature specifications)\n- skills/ (project-local learned skills)\n- Obsidian vault (raw files, wiki articles, health status)\n\nFor each artifact, assess: keep, consolidate, archive, or delete.\n\nProduce a JSON manifest with categories, insights to extract, and recommendations."
+    - agent: dream-compiler
+      prompt: "# Dream Cycle: Phase 2 — Extract & Compile\n\nBased on the scanner's manifest, extract insights and create reusable knowledge.\n\n**Scanner Manifest:**\n$INPUT\n\nFor each 'consolidate' artifact:\n1. Read the full content\n2. Extract key learnings and patterns\n3. Create skills for repeatable patterns (skills/<name>/SKILL.md)\n4. Ingest raw learnings to Obsidian (obsidian_memory ingest)\n5. Compile wiki articles for structured knowledge (obsidian_memory write)\n6. Update Obsidian indexes\n\nProduce an action log with skills created, content ingested, and archive/delete lists."
+    - agent: dream-verifier
+      prompt: "# Dream Cycle: Phase 3 — Verify Safety\n\nIndependently verify the consolidation plan before cleanup.\n\n**Scanner Manifest:**\n$INPUT_1\n\n**Compiler Action Log:**\n$INPUT_2\n\nVerification checklist:\n- [ ] Read delete candidates — confirm no unique insights remain\n- [ ] Verify archive items have insights extracted\n- [ ] Check created skills have valid frontmatter\n- [ ] Confirm Obsidian content was written (search to verify)\n- [ ] Cross-reference all consolidate items have corresponding actions\n\nProduce a verified cleanup plan: approved deletions, rejected deletions (with reasons), approved archives, and final cleanup actions."
+    - agent: dream-cleaner
+      prompt: "# Dream Cycle: Phase 4 — Execute Cleanup\n\nExecute the verified cleanup plan.\n\n**Verified Cleanup Plan:**\n$INPUT\n\nSteps:\n1. Create .context/archive/YYYY-MM-DD/ directory\n2. Archive approved files (add archive header with metadata)\n3. Delete approved files (only within .context/)\n4. Reset session-state.json to fresh state\n5. Clean empty directories\n6. Run obsidian_memory health check\n7. Update .context/dream-state.json with last dream timestamp\n\nProduce a final dream report with summary stats, actions taken, skills created, Obsidian content, and recommendations."

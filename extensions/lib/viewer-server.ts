@@ -1,11 +1,18 @@
 // ABOUTME: Shared viewer HTTP server factory — eliminates duplicated server boilerplate across viewer extensions.
 // ABOUTME: Provides createViewerServer() for standard CORS, logo, HTML serving, and openBrowser() helper.
+// ABOUTME: Now supports routing to Commander when available.
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+import * as net from "node:net";
+
+// Commander MCP connection check state
+let commanderAvailableCache: boolean | null = null;
+let commanderCacheTime = 0;
+const COMMANDER_CACHE_TTL = 5000; // 5 second cache
 
 export interface ViewerRoute {
 	method: "GET" | "POST";

@@ -1133,7 +1133,7 @@ export function generateTestViewerHTML(opts: {
 
   window.saveToDesktop = function() {
     syncEdits();
-    fetch('http://localhost:' + PORT + '/save', {
+    fetch('http://127.0.0.1:' + PORT + '/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ features: features }),
@@ -1146,7 +1146,7 @@ export function generateTestViewerHTML(opts: {
 
   window.downloadStandalone = function() {
     syncEdits();
-    fetch('http://localhost:' + PORT + '/export-standalone', {
+    fetch('http://127.0.0.1:' + PORT + '/export-standalone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ features: features }),
@@ -1164,7 +1164,7 @@ export function generateTestViewerHTML(opts: {
       modified: isAnyModified(),
     };
 
-    fetch('http://localhost:' + PORT + '/result', {
+    fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

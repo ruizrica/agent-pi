@@ -1,5 +1,5 @@
-// ABOUTME: Tests for the /pi skill and /pi slash command — validates SKILL.md, command registration, and mode coverage.
-// ABOUTME: Ensures the unified Pi mode entry point references all 5 operational modes and is registered as a slash command.
+// ABOUTME: Tests for the /pi skill (Pi runtime) and /pi slash command (Claude Code bridge dispatch).
+// ABOUTME: Validates SKILL.md frontmatter, command bridge references, and coverage of all 5 operational modes.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -63,7 +63,7 @@ describe("/pi skill", () => {
 const commandPath = join(repoRoot, ".claude-plugin", "commands", "pi.md");
 const pluginPath = join(repoRoot, ".claude-plugin", "plugin.json");
 
-describe("/pi slash command", () => {
+describe("/pi slash command (Claude Code bridge)", () => {
 	it("is registered in plugin.json", () => {
 		const plugin = JSON.parse(readFileSync(pluginPath, "utf-8"));
 		expect(Array.isArray(plugin.commands)).toBe(true);
@@ -73,13 +73,23 @@ describe("/pi slash command", () => {
 	it("command file exists with valid frontmatter", () => {
 		const raw = readFileSync(commandPath, "utf-8");
 		const frontmatter = parseFrontmatter(raw);
-		expect(frontmatter.description).toContain("Pi operational modes");
+		expect(frontmatter.description).toContain("Pi");
 		expect(frontmatter["argument-hint"]).toBeTruthy();
+	});
+
+	it("allowed-tools includes Bash for bridge execution", () => {
+		const raw = readFileSync(commandPath, "utf-8");
+		expect(raw).toContain("Bash");
 	});
 
 	it("command body uses $ARGUMENTS for argument substitution", () => {
 		const raw = readFileSync(commandPath, "utf-8");
 		expect(raw).toContain("$ARGUMENTS");
+	});
+
+	it("command body references the pi-agent-orchestrator bridge", () => {
+		const raw = readFileSync(commandPath, "utf-8");
+		expect(raw).toContain("pi-agent-orchestrator");
 	});
 
 	it("command body references all 5 modes", () => {
@@ -88,5 +98,12 @@ describe("/pi slash command", () => {
 		for (const mode of ["plan", "spec", "team", "pipeline", "chain"]) {
 			expect(body.toLowerCase()).toContain(mode);
 		}
+	});
+
+	it("command body references key bridge commands", () => {
+		const raw = readFileSync(commandPath, "utf-8");
+		expect(raw).toContain("dispatch");
+		expect(raw).toContain("batch");
+		expect(raw).toContain("chain");
 	});
 });

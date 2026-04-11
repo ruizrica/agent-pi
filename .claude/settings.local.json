@@ -12,7 +12,8 @@
       "Bash(agent-browser snapshot:*)",
       "Bash(agent-browser open:*)",
       "Bash(agent-browser screenshot:*)",
-      "mcp__obsidian-memory__obsidian_memory"
+      "mcp__obsidian-memory__obsidian_memory",
+      "Bash(grep -r \"enabledPlugins\\\\|disabledPlugins\" /Users/ricardo/.claude/*.json /Users/ricardo/.claude/plugins/data)"
     ]
   }
 }

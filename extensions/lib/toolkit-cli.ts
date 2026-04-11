@@ -41,6 +41,14 @@ export const TOOLKIT_CLI_AGENTS = new Set([
 
 export const TOOLKIT_WORKER_MODEL = "anthropic/claude-haiku-4-5-20251001";
 
+const MINIMAL_WIDGET_TOOLKIT_WORKERS = new Set([
+	"cursor-worker",
+	"codex-worker",
+	"droid-worker",
+	"gemini-worker",
+	"opencode-worker",
+]);
+
 export interface ToolkitWorkerAgentDef {
 	name: string;
 	tools: string;
@@ -67,6 +75,7 @@ export interface ToolkitWorkerResult {
 	exitCode: number;
 	elapsed: number;
 	output: string;
+	stderr?: string;
 }
 
 export function normalizeToolkitAgentName(name: string | undefined | null): string {
@@ -78,6 +87,11 @@ export function normalizeToolkitAgentName(name: string | undefined | null): stri
 export function isToolkitCliAgent(name: string | undefined | null): boolean {
 	if (!name) return false;
 	return TOOLKIT_CLI_AGENTS.has(name.toLowerCase());
+}
+
+export function hideToolkitWidgetMetadata(name: string | undefined | null): boolean {
+	if (!name) return false;
+	return MINIMAL_WIDGET_TOOLKIT_WORKERS.has(normalizeToolkitAgentName(name));
 }
 
 export function resolveToolkitWorkerModel(agentName: string, fallbackModel: string): string {
@@ -211,6 +225,7 @@ export function spawnToolkitWorker(
 		const args = cliCommand
 			? cliCommand.args(options.task, options.cwd)
 			: getToolkitWorkerArgs(agentDef, options);
+		const isDroidWorker = agentDef.name === "droid-worker";
 		const proc = spawn(command, args, {
 			stdio: ["ignore", "pipe", "pipe"],
 			env: { ...process.env, ...options.env, PI_SUBAGENT: "1" },
@@ -220,11 +235,14 @@ export function spawnToolkitWorker(
 
 		const startTime = Date.now();
 		let output = "";
+		let stdoutOutput = "";
+		let stderrOutput = "";
 		let buffer = "";
 
 		proc.stdout?.setEncoding("utf-8");
 		proc.stdout?.on("data", (chunk: string) => {
 			output += chunk;
+			stdoutOutput += chunk;
 			buffer += chunk;
 			const lines = buffer.split("\n");
 			buffer = lines.pop() || "";
@@ -236,10 +254,13 @@ export function spawnToolkitWorker(
 		proc.stderr?.setEncoding("utf-8");
 		proc.stderr?.on("data", (chunk: string) => {
 			output += chunk;
+			stderrOutput += chunk;
 			if (chunk) options.onStderr?.(chunk);
-			const lines = chunk.split("\n");
-			for (const line of lines) {
-				if (line.trim()) options.onStdoutLine?.(line);
+			if (!isDroidWorker) {
+				const lines = chunk.split("\n");
+				for (const line of lines) {
+					if (line.trim()) options.onStdoutLine?.(line);
+				}
 			}
 		});
 
@@ -251,15 +272,34 @@ export function spawnToolkitWorker(
 				exitCode: 1,
 				elapsed: Date.now() - startTime,
 				output: msg,
+				stderr: msg,
 			});
 		});
 
-		proc.on("close", (code) => {
+		proc.on("close", (code, signal) => {
 			if (buffer.trim()) options.onStdoutLine?.(buffer);
+
+			if (isDroidWorker) {
+				const normalized = normalizeDroidCliResult({
+					exitCode: code,
+					signal: signal ?? null,
+					stdout: stdoutOutput,
+					stderr: stderrOutput,
+				});
+				resolve({
+					exitCode: normalized.exitCode,
+					elapsed: Date.now() - startTime,
+					output: normalized.output,
+					stderr: normalized.stderr,
+				});
+				return;
+			}
+
 			resolve({
 				exitCode: code ?? 1,
 				elapsed: Date.now() - startTime,
 				output,
+				stderr: stderrOutput.trim() || undefined,
 			});
 		});
 	});

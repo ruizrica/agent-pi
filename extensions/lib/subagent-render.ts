@@ -1,6 +1,8 @@
 // ABOUTME: Pure render logic for subagent widget — title, summary, border count
 // ABOUTME: Extracted from subagent-widget.ts for testability
 
+import { hideToolkitWidgetMetadata } from "./toolkit-cli.ts";
+
 export interface SubRenderState {
 	id: number;
 	status: "running" | "done" | "error";
@@ -58,7 +60,14 @@ export function renderSubagentWidget(
 		? ` · Turn ${state.turnCount}`
 		: "";
 
-	const modelSuffix = state.model ? ` | ${state.model}` : "";
+	const hideMetadata = hideToolkitWidgetMetadata(state.name);
+	const metadataParts: string[] = [];
+	if (!hideMetadata && state.toolCount > 0) {
+		metadataParts.push(`Tools: ${state.toolCount}`);
+	}
+	if (!hideMetadata && state.model) {
+		metadataParts.push(state.model);
+	}
 
 	// Timeout warning label when approaching watchdog limit
 	let timeoutLabel = "";
@@ -71,13 +80,14 @@ export function renderSubagentWidget(
 		}
 	}
 
-	// Line 1: spinner + title + stats + model (summary shown on line 2)
+	const metadataSuffix = metadataParts.length > 0 ? ` | ${metadataParts.join(" | ")}` : "";
+
+	// Line 1: spinner + title + stats + optional metadata (summary shown on line 2)
 	lines.push(
 		theme.bold(spinner + title) +
 		turnLabel +
 		` | (${Math.round(state.elapsed / 1000)}s)` +
-		` | Tools: ${state.toolCount}` +
-		modelSuffix +
+		metadataSuffix +
 		timeoutLabel
 	);
 

@@ -27,6 +27,7 @@ export function generateSoundsViewerHTML(opts: {
 	const { catalog, config, port } = opts;
 	const escapedCatalog = JSON.stringify(catalog).replace(/<\//g, "<\\/");
 	const escapedConfig = JSON.stringify(config).replace(/<\//g, "<\\/");
+	const escapedCustomSounds = JSON.stringify(config.customSounds || []).replace(/<\//g, "<\\/");
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -729,6 +730,33 @@ export function generateSoundsViewerHTML(opts: {
     50% { opacity: 0.5; }
   }
   .playing-indicator { animation: pulse 1s ease-in-out infinite; color: var(--accent); }
+
+  /* ── Custom Sounds ────────────────────── */
+  .sidebar-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 16px;
+  }
+  .cat-item.pinned .custom-star {
+    color: #f1c40f;
+    margin-right: 2px;
+  }
+  .sound-card.custom-sound {
+    border-left: 3px solid var(--purple);
+  }
+  .custom-badge {
+    font-size: 9px;
+    font-family: var(--mono);
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--purple-dim);
+    color: var(--purple);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: 2px;
+  }
 </style>
 </head>
 <body>
@@ -811,6 +839,20 @@ export function generateSoundsViewerHTML(opts: {
   const PORT = ${port};
   const catalog = ${escapedCatalog};
   const config = JSON.parse(JSON.stringify(${escapedConfig}));
+
+  // ── Custom Sounds Merge ────────────────────────
+  var rawCustomSounds = ${escapedCustomSounds};
+  rawCustomSounds.forEach(function(cs) {
+    catalog.push({
+      name: cs.id,
+      title: cs.label,
+      description: 'Custom sound',
+      categories: ['custom'],
+      _isCustom: true,
+      _url: cs.url,
+      meta: { format: 'mp3' },
+    });
+  });
 
   // ── State ──────────────────────────────────
   let activeCategory = 'all';
@@ -925,11 +967,19 @@ export function generateSoundsViewerHTML(opts: {
       counts[primary] = (counts[primary] || 0) + 1;
     });
 
+    var customCount = counts['custom'] || 0;
+    delete counts['custom'];
+
     // Sort by count desc
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
     const el = document.getElementById('categoryList');
     let html = '<div class="cat-item active" data-cat="all" onclick="setCategory(\\'all\\')"><span>All</span><span class="count">' + catalog.length + '</span></div>';
+    if (customCount > 0) {
+      html += '<div class="cat-item pinned" data-cat="custom" onclick="setCategory(\\\'' + 'custom' + '\\\')">' +
+        '<span><span class="custom-star">★</span> Custom</span><span class="count">' + customCount + '</span></div>';
+      html += '<div class="sidebar-divider"></div>';
+    }
     sorted.forEach(([cat, count]) => {
       const label = cat.charAt(0).toUpperCase() + cat.slice(1);
       html += '<div class="cat-item" data-cat="' + cat + '" onclick="setCategory(\\'' + cat + '\\')">' +
@@ -987,6 +1037,7 @@ export function generateSoundsViewerHTML(opts: {
     grid.innerHTML = sounds.map(s => {
       const isPlaying = playingSound === s.name;
       const isAssigned = Object.values(config.assignments).includes(s.name);
+      const isCustom = !!s._isCustom;
       const duration = s.meta?.duration ? s.meta.duration.toFixed(2) + 's' : '—';
       const size = s.meta?.sizeKb ? s.meta.sizeKb + 'KB' : '—';
       const license = s.meta?.license || '—';
@@ -995,10 +1046,10 @@ export function generateSoundsViewerHTML(opts: {
         .filter(([_, v]) => v === s.name)
         .map(([k]) => HOOKS.find(h => h.name === k)?.label || k);
 
-      return '<div class="sound-card' + (isPlaying ? ' playing' : '') + (isAssigned ? ' assigned' : '') + '" data-name="' + s.name + '">' +
+      return '<div class="sound-card' + (isPlaying ? ' playing' : '') + (isAssigned ? ' assigned' : '') + (isCustom ? ' custom-sound' : '') + '" data-name="' + s.name + '">' +
         '<div class="card-top">' +
           '<div class="card-info">' +
-            '<div class="card-title" onclick="openDetail(\\'' + s.name + '\\')" style="cursor:pointer">' + esc(s.title) + '</div>' +
+            '<div class="card-title" onclick="openDetail(\\'' + s.name + '\\')" style="cursor:pointer">' + esc(s.title) + (isCustom ? ' <span class="custom-badge">CUSTOM</span>' : '') + '</div>' +
             '<div class="card-desc">' + esc(s.description) + '</div>' +
           '</div>' +
         '</div>' +
@@ -1067,17 +1118,27 @@ export function generateSoundsViewerHTML(opts: {
     if (detailSound === name) renderDetail(name);
 
     try {
-      // Fetch sound data via local proxy (avoids CORS)
-      const resp = await fetch('/api/sound/' + encodeURIComponent(name));
-      if (!resp.ok) throw new Error('Failed to fetch sound');
-      const data = await resp.json();
-
-      // Extract dataUri from the file content
-      const fileContent = data.files?.[0]?.content || '';
-      const match = fileContent.match(/dataUri:\\s*"(data:audio\\/[^"]+)"/);
-      if (!match) throw new Error('No audio data found');
-
-      const dataUri = match[1];
+      // Resolve audio data — custom sounds use proxy, catalog sounds use soundcn API
+      var sound = catalog.find(function(x) { return x.name === name; });
+      var dataUri;
+      if (sound && sound._isCustom) {
+        var resp = await fetch('/api/proxy-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: sound._url })
+        });
+        if (!resp.ok) throw new Error('Failed to fetch custom sound');
+        var proxyData = await resp.json();
+        dataUri = proxyData.dataUri;
+      } else {
+        var resp = await fetch('/api/sound/' + encodeURIComponent(name));
+        if (!resp.ok) throw new Error('Failed to fetch sound');
+        var data = await resp.json();
+        var fileContent = data.files?.[0]?.content || '';
+        var match = fileContent.match(/dataUri:\\s*"(data:audio\\/[^"]+)"/);
+        if (!match) throw new Error('No audio data found');
+        dataUri = match[1];
+      }
       const base64 = dataUri.split(',')[1];
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
@@ -1151,31 +1212,41 @@ export function generateSoundsViewerHTML(opts: {
       config.assignments[hookName] = soundName;
       showToast('Assigned to ' + HOOKS.find(h => h.name === hookName)?.label, 'success');
 
-      // Install the sound data if we have it cached from playback
-      const cachedUri = window.__lastPlayedData?.[soundName];
-      if (cachedUri) {
+      // Install sound for hook playback
+      var snd = catalog.find(function(x) { return x.name === soundName; });
+      if (snd && snd._isCustom) {
         try {
-          await fetch('http://127.0.0.1:' + PORT + '/install', {
+          await fetch('http://127.0.0.1:' + PORT + '/install-from-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: soundName, dataUri: cachedUri }),
+            body: JSON.stringify({ name: soundName, url: snd._url }),
           });
         } catch {}
       } else {
-        // Fetch and install
-        try {
-          const resp = await fetch('/api/sound/' + encodeURIComponent(soundName));
-          const data = await resp.json();
-          const fileContent = data.files?.[0]?.content || '';
-          const match = fileContent.match(/dataUri:\\s*"(data:audio\\/[^"]+)"/);
-          if (match) {
+        var cachedUri = window.__lastPlayedData?.[soundName];
+        if (cachedUri) {
+          try {
             await fetch('http://127.0.0.1:' + PORT + '/install', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: soundName, dataUri: match[1] }),
+              body: JSON.stringify({ name: soundName, dataUri: cachedUri }),
             });
-          }
-        } catch {}
+          } catch {}
+        } else {
+          try {
+            var resp = await fetch('/api/sound/' + encodeURIComponent(soundName));
+            var data = await resp.json();
+            var fileContent = data.files?.[0]?.content || '';
+            var match = fileContent.match(/dataUri:\\s*"(data:audio\\/[^"]+)"/);
+            if (match) {
+              await fetch('http://127.0.0.1:' + PORT + '/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: soundName, dataUri: match[1] }),
+              });
+            }
+          } catch {}
+        }
       }
     }
 
@@ -1275,7 +1346,7 @@ export function generateSoundsViewerHTML(opts: {
 
     document.getElementById('detailPanel').innerHTML =
       '<div class="detail-header">' +
-        '<h2>' + esc(s.title) + '</h2>' +
+        '<h2>' + esc(s.title) + (s._isCustom ? ' <span class="custom-badge">CUSTOM</span>' : '') + '</h2>' +
         '<p>' + esc(s.description) + '</p>' +
         (assignedHooks.length ? '<div style="margin-top:8px;font-size:12px;color:var(--success)">' + icon('check') + ' Assigned to: ' + assignedHooks.join(', ') + '</div>' : '') +
       '</div>' +

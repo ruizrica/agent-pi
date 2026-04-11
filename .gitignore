@@ -32,3 +32,7 @@ commands/private/
 
 # Stakpak session files
 .stakpak/session*
+
+# Mako Security
+.mako-security.yml
+.makoignore

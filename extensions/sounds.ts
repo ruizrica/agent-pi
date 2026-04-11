@@ -20,7 +20,7 @@ import {
 } from "./lib/sounds-config.ts";
 import {
 	playInstalledSound, installSound, uninstallSound, isSoundInstalled,
-	cleanupAllPlayback,
+	installSoundFromUrl, cleanupAllPlayback,
 } from "./lib/sounds-player.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 
@@ -224,6 +224,64 @@ function startSoundsServer(
 				return;
 			}
 
+			// Install sound from URL (for custom sounds)
+			if (req.method === "POST" && url.pathname === "/install-from-url") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", async () => {
+					try {
+						const data = JSON.parse(body);
+						if (data.name && data.url) {
+							await installSoundFromUrl(data.name, data.url);
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true }));
+						} else {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: "Missing name or url" }));
+						}
+					} catch (err: any) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Install from URL failed" }));
+					}
+				});
+				return;
+			}
+
+			// Proxy audio URL (for custom sounds — avoids CORS in browser)
+			if (req.method === "POST" && url.pathname === "/api/proxy-audio") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", async () => {
+					try {
+						const data = JSON.parse(body);
+						if (!data.url) {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: "Missing url" }));
+							return;
+						}
+						const upstream = await fetch(data.url);
+						if (!upstream.ok) {
+							res.writeHead(upstream.status, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: `Upstream returned ${upstream.status}` }));
+							return;
+						}
+						const buf = Buffer.from(await upstream.arrayBuffer());
+						const base64 = buf.toString("base64");
+						const mime = upstream.headers.get("content-type") || "audio/mpeg";
+						const dataUri = `data:${mime};base64,${base64}`;
+						res.writeHead(200, {
+							"Content-Type": "application/json",
+							"Cache-Control": "public, max-age=3600",
+						});
+						res.end(JSON.stringify({ dataUri }));
+					} catch (err: any) {
+						res.writeHead(502, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Proxy audio failed" }));
+					}
+				});
+				return;
+			}
+
 			res.writeHead(404);
 			res.end("Not found");
 		});
@@ -315,6 +373,7 @@ export default function (pi: ExtensionAPI) {
 					assignments: result.assignments as Partial<Record<HookName, string>>,
 					volume: typeof result.volume === "number" ? result.volume : currentConfig.volume,
 					enabled: typeof result.enabled === "boolean" ? result.enabled : currentConfig.enabled,
+					customSounds: currentConfig.customSounds,
 				};
 				saveConfig(currentConfig);
 				updateStatus(ctx);

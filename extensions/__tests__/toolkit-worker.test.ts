@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
 	isToolkitCliAgent,
 	normalizeToolkitAgentName,
+	hideToolkitWidgetMetadata,
 	resolveToolkitWorkerModel,
 	TOOLKIT_WORKER_MODEL,
 	getToolkitWorkerArgs,
@@ -26,6 +27,13 @@ describe("toolkit CLI agent detection", () => {
 		expect(normalizeToolkitAgentName("gemini-agent")).toBe("gemini-worker");
 		expect(normalizeToolkitAgentName("opencode-agent")).toBe("opencode-worker");
 		expect(normalizeToolkitAgentName("qwen-agent")).toBe("qwen-agent");
+	});
+
+	it("hides widget metadata only for external toolkit workers", () => {
+		expect(hideToolkitWidgetMetadata("cursor-worker")).toBe(true);
+		expect(hideToolkitWidgetMetadata("codex-agent")).toBe(true);
+		expect(hideToolkitWidgetMetadata("claude-worker")).toBe(false);
+		expect(hideToolkitWidgetMetadata("scout")).toBe(false);
 	});
 });
 

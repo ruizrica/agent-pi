@@ -874,7 +874,7 @@ ${deltaMarkup(report.history?.delta)}
 
     // Notify server that user acknowledged the report
     if (PORT > 0) {
-      fetch('http://localhost:' + PORT + '/result', {
+      fetch('http://127.0.0.1:' + PORT + '/result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'acknowledged' }),
@@ -899,7 +899,7 @@ ${deltaMarkup(report.history?.delta)}
   // ── Save to Desktop ──
   window.saveToDesktop = function() {
     if (PORT > 0) {
-      fetch('http://localhost:' + PORT + '/save', {
+      fetch('http://127.0.0.1:' + PORT + '/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       }).then(function(r) { return r.json(); }).then(function(data) {

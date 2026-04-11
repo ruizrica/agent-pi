@@ -50,6 +50,17 @@ export const HOOK_DESCRIPTIONS: Record<HookName, string> = {
 	session_compact: "Plays when context is compacted",
 };
 
+// ── Custom Sounds ────────────────────────────────────────────────────
+
+export interface CustomSound {
+	/** Unique identifier used as assignment key (e.g. "custom:completion-s2") */
+	id: string;
+	/** Display label shown in the UI */
+	label: string;
+	/** Direct audio URL */
+	url: string;
+}
+
 // ── Config Types ─────────────────────────────────────────────────────
 
 export interface SoundsConfig {
@@ -59,6 +70,8 @@ export interface SoundsConfig {
 	volume: number;
 	/** Global enable/disable toggle */
 	enabled: boolean;
+	/** User-provided custom sounds */
+	customSounds: CustomSound[];
 }
 
 // ── Paths ────────────────────────────────────────────────────────────
@@ -74,6 +87,7 @@ function defaultConfig(): SoundsConfig {
 		assignments: {},
 		volume: 0.5,
 		enabled: true,
+		customSounds: [],
 	};
 }
 
@@ -88,6 +102,7 @@ export function loadConfig(): SoundsConfig {
 				assignments: parsed.assignments || {},
 				volume: typeof parsed.volume === "number" ? parsed.volume : 0.5,
 				enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : true,
+				customSounds: Array.isArray(parsed.customSounds) ? parsed.customSounds : [],
 			};
 		}
 	} catch {

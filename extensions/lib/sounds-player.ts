@@ -76,6 +76,18 @@ export function installSound(name: string, dataUri: string): void {
 	writeFileSync(filePath, JSON.stringify(data), "utf-8");
 }
 
+/** Download a sound from a URL and install it to the local cache */
+export async function installSoundFromUrl(name: string, url: string): Promise<void> {
+	ensureSoundsDir();
+	const resp = await fetch(url);
+	if (!resp.ok) throw new Error(`Failed to fetch sound from URL: ${resp.status}`);
+	const buffer = Buffer.from(await resp.arrayBuffer());
+	const base64 = buffer.toString("base64");
+	const mime = resp.headers.get("content-type") || "audio/mpeg";
+	const dataUri = `data:${mime};base64,${base64}`;
+	installSound(name, dataUri);
+}
+
 export function uninstallSound(name: string): void {
 	const filePath = join(SOUNDS_DIR, `${name}.json`);
 	try {
