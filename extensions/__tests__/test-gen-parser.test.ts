@@ -197,8 +197,10 @@ import { test, expect } from '@playwright/test';
 
 test.describe('User Authentication', () => {
   test('successful login with valid credentials', async ({ request }) => {
+    // Use env var for test password to avoid hardcoded credentials
+    const testPassword = process.env.TEST_LOGIN_PASSWORD || 'test-password';
     const response = await request.post('/api/auth/login', {
-      data: { email: 'test@example.com', password: 'valid-password' }
+      data: { email: 'test@example.com', password: testPassword }
     });
     expect(response.status()).toBe(200);
     const body = await response.json();

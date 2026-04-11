@@ -10,6 +10,11 @@ exclude:
   - extensions/__tests__/subagent-model-resolution.test.ts
   # Vendored minified library — not our code
   - extensions/lib/marked.min.js
+  # Vulnerability scanner test fixtures — intentionally contain synthetic vulnerable patterns for detection validation
+  - extensions/__tests__/vuln-scanner-engine.test.ts
+  - extensions/__tests__/vuln-scanner-installer.test.ts
+  # Test files that read other files for validation (false positive for LLM context exfiltration)
+  - extensions/__tests__/advisor-strategy.test.ts
 
 ignore:
   # AI prompt construction — internal system prompt assembly (not user input)
@@ -37,3 +42,19 @@ ignore:
   - rule: ENTROPY-DETECT
     paths: ["extensions/lib/secure-installer.ts"]
     reason: "Security policy template strings containing regex patterns for credential detection — not actual secrets"
+
+  # Spec scaffold — markdown template literals misidentified as SQL injection (no actual SQL)
+  - rule: SAST-INJ-001
+    paths: ["extensions/lib/spec-scaffold.ts"]
+    reason: "Markdown template literals for requirements document generation — no database queries, false positive"
+
+  # Vulnerability scanner code — pattern detection rules are false positives (scanner detects its own rules)
+  - rule: SAST-XSS-003
+    paths: ["extensions/lib/vuln-scanner-engine.ts"]
+    reason: "Pattern detection rules in vulnerability scanner — regex patterns, not actual innerHTML usage"
+  - rule: SAST-XSS-003
+    paths: ["extensions/test-viewer.ts"]
+    reason: "innerHTML usage with escapeHtml() sanitization — not a real XSS vulnerability"
+  - rule: ENTROPY-DETECT
+    paths: ["extensions/lib/vuln-scanner-installer.ts"]
+    reason: "Regex patterns for detecting API keys (sk-[a-zA-Z0-9]), GitHub tokens, etc. — detection rules, not actual secrets"
