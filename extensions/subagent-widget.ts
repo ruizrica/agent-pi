@@ -185,15 +185,6 @@ export default function (pi: ExtensionAPI) {
 		widgetBoxes.get(id)?.invalidate();
 	}
 
-	function setSummaryFromText(state: SubState, text: string) {
-		const latest = text
-			.split("\n")
-			.map((line) => line.trim())
-			.filter(Boolean)
-			.pop();
-		if (latest) state.summary = latest;
-	}
-
 	// ── Streaming helpers ─────────────────────────────────────────────────────
 
 	function processLine(state: SubState, line: string) {
@@ -206,9 +197,7 @@ export default function (pi: ExtensionAPI) {
 			if (type === "message_update") {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === "text_delta") {
-					const text = delta.delta || "";
-					state.textChunks.push(text);
-					setSummaryFromText(state, text);
+					state.textChunks.push(delta.delta || "");
 					invalidateWidget(state.id);
 				}
 			} else if (type === "tool_execution_start") {
@@ -218,7 +207,6 @@ export default function (pi: ExtensionAPI) {
 		} catch {
 			if (isClaudeCliAgent(state.name) && isClaudeDisplayNoise(trimmed)) return;
 			state.textChunks.push(trimmed + "\n");
-			state.summary = trimmed;
 			invalidateWidget(state.id);
 		}
 	}
