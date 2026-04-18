@@ -9,6 +9,8 @@ export interface CatalogItem {
 	description: string;
 	categories: string[];
 	author?: string;
+	imageUrl?: string;
+	cachedImageUrl?: string;
 	meta?: {
 		duration?: number;
 		format?: string;
@@ -305,6 +307,29 @@ export function generateSoundsViewerHTML(opts: {
     display: flex;
     align-items: flex-start;
     gap: 10px;
+  }
+  .card-image {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .card-image-fallback {
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
   }
   .card-info { flex: 1; min-width: 0; }
   .card-title {
@@ -1022,6 +1047,13 @@ export function generateSoundsViewerHTML(opts: {
   }
 
   // ── Render Sound Grid ──────────────────────
+  function imageMarkup(sound) {
+    if (!sound) return '';
+    var src = sound.cachedImageUrl || sound.imageUrl;
+    if (!src) return '<div class="card-image"><div class="card-image-fallback">♪</div></div>';
+    return '<div class="card-image"><img src="' + esc(src) + '" alt="' + esc(sound.title || sound.name) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=\\'card-image-fallback\\'>♪</div>\'" /></div>';
+  }
+
   function renderSounds() {
     const sounds = getFilteredSounds();
     const grid = document.getElementById('soundGrid');
@@ -1048,6 +1080,7 @@ export function generateSoundsViewerHTML(opts: {
 
       return '<div class="sound-card' + (isPlaying ? ' playing' : '') + (isAssigned ? ' assigned' : '') + (isCustom ? ' custom-sound' : '') + '" data-name="' + s.name + '">' +
         '<div class="card-top">' +
+          imageMarkup(s) +
           '<div class="card-info">' +
             '<div class="card-title" onclick="openDetail(\\'' + s.name + '\\')" style="cursor:pointer">' + esc(s.title) + (isCustom ? ' <span class="custom-badge">CUSTOM</span>' : '') + '</div>' +
             '<div class="card-desc">' + esc(s.description) + '</div>' +
@@ -1120,6 +1153,19 @@ export function generateSoundsViewerHTML(opts: {
     try {
       // Resolve audio data — custom sounds use proxy, catalog sounds use soundcn API
       var sound = catalog.find(function(x) { return x.name === name; });
+      if (sound && sound.imageUrl && !sound.cachedImageUrl) {
+        try {
+          var imageResp = await fetch('/api/image-by-sound/' + encodeURIComponent(name));
+          if (imageResp.ok) {
+            var imageData = await imageResp.json();
+            if (imageData && imageData.url) {
+              sound.cachedImageUrl = imageData.url;
+              renderSounds();
+              if (detailSound === name) renderDetail(name);
+            }
+          }
+        } catch {}
+      }
       var dataUri;
       if (sound && sound._isCustom) {
         var resp = await fetch('/api/proxy-audio', {
@@ -1346,6 +1392,7 @@ export function generateSoundsViewerHTML(opts: {
 
     document.getElementById('detailPanel').innerHTML =
       '<div class="detail-header">' +
+        ((s.cachedImageUrl || s.imageUrl) ? '<div style="margin-bottom:12px"><div class="card-image" style="width:80px;height:80px"><img src="' + esc(s.cachedImageUrl || s.imageUrl) + '" alt="' + esc(s.title || s.name) + '" onerror="this.parentElement.innerHTML=\'<div class=\\'card-image-fallback\\'>♪</div>\'" /></div></div>' : '') +
         '<h2>' + esc(s.title) + (s._isCustom ? ' <span class="custom-badge">CUSTOM</span>' : '') + '</h2>' +
         '<p>' + esc(s.description) + '</p>' +
         (assignedHooks.length ? '<div style="margin-top:8px;font-size:12px;color:var(--success)">' + icon('check') + ' Assigned to: ' + assignedHooks.join(', ') + '</div>' : '') +

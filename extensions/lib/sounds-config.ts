@@ -79,6 +79,11 @@ export interface SoundsConfig {
 const EXT_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 export const CONFIG_PATH = join(EXT_DIR, "sounds-config.json");
 export const SOUNDS_DIR = join(EXT_DIR, "sounds");
+export const SOUNDS_IMAGE_CACHE_DIR = join(EXT_DIR, "sounds-image-cache");
+
+export function getSoundImageCacheDir(): string {
+	return SOUNDS_IMAGE_CACHE_DIR;
+}
 
 // ── Defaults ─────────────────────────────────────────────────────────
 
@@ -154,5 +159,11 @@ export function getAssignedSoundNames(config: SoundsConfig): string[] {
 export function ensureSoundsDir(): void {
 	if (!existsSync(SOUNDS_DIR)) {
 		mkdirSync(SOUNDS_DIR, { recursive: true });
+	}
+}
+
+export function ensureSoundsImageCacheDir(): void {
+	if (!existsSync(SOUNDS_IMAGE_CACHE_DIR)) {
+		mkdirSync(SOUNDS_IMAGE_CACHE_DIR, { recursive: true });
 	}
 }

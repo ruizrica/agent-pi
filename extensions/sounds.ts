@@ -19,6 +19,10 @@ import {
 	type SoundsConfig, type HookName, ALL_HOOKS, HOOK_DISPLAY_NAMES,
 } from "./lib/sounds-config.ts";
 import {
+	ensureCachedImage,
+	readCachedImageEntry,
+} from "./lib/sounds-image-cache.ts";
+import {
 	playInstalledSound, installSound, uninstallSound, isSoundInstalled,
 	installSoundFromUrl, cleanupAllPlayback,
 } from "./lib/sounds-player.ts";
@@ -37,6 +41,12 @@ interface SoundsViewerResult {
 
 let cachedCatalog: CatalogItem[] | null = null;
 
+function getCatalogImageUrl(item: any): string | undefined {
+	const direct = item?.imageUrl || item?.image || item?.thumbnail || item?.artwork;
+	if (typeof direct === "string" && /^https?:\/\//.test(direct)) return direct;
+	return undefined;
+}
+
 async function fetchCatalog(): Promise<CatalogItem[]> {
 	if (cachedCatalog) return cachedCatalog;
 
@@ -54,6 +64,7 @@ async function fetchCatalog(): Promise<CatalogItem[]> {
 			description: item.description || "",
 			categories: item.categories || [],
 			author: item.author,
+			imageUrl: getCatalogImageUrl(item),
 			meta: item.meta,
 		}));
 
@@ -80,6 +91,7 @@ function startSoundsServer(
 			}
 		}, 5_000);
 
+		const catalogByName = new Map(catalog.map((item) => [item.name, item]));
 		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 			res.setHeader("Access-Control-Allow-Origin", "*");
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -114,6 +126,55 @@ function startSoundsServer(
 					res.writeHead(404);
 					res.end();
 				}
+				return;
+			}
+
+			// Serve cached catalog images
+			if (req.method === "GET" && url.pathname.startsWith("/api/image/")) {
+				const key = decodeURIComponent(url.pathname.slice("/api/image/".length));
+				if (!/^[a-f0-9]{24}$/.test(key)) {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid image key" }));
+					return;
+				}
+				const cached = readCachedImageEntry(key);
+				if (!cached || !existsSync(cached.filePath)) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Image not cached" }));
+					return;
+				}
+				try {
+					const imageData = readFileSync(cached.filePath);
+					res.writeHead(200, {
+						"Content-Type": cached.contentType,
+						"Cache-Control": "public, max-age=604800, immutable",
+					});
+					res.end(imageData);
+				} catch (err: any) {
+					res.writeHead(500, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: err?.message || "Failed to read cached image" }));
+				}
+				return;
+			}
+
+			if (req.method === "GET" && url.pathname.startsWith("/api/image-by-sound/")) {
+				const name = decodeURIComponent(url.pathname.slice("/api/image-by-sound/".length));
+				const item = catalogByName.get(name);
+				if (!item?.imageUrl) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "No image configured for sound" }));
+					return;
+				}
+				(async () => {
+					try {
+						const cached = await ensureCachedImage(item.imageUrl!);
+						res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+						res.end(JSON.stringify({ key: cached.key, url: `/api/image/${cached.key}` }));
+					} catch (err: any) {
+						res.writeHead(502, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Failed to cache image" }));
+					}
+				})();
 				return;
 			}
 
@@ -320,6 +381,7 @@ export default function (pi: ExtensionAPI) {
 
 	function updateStatus(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const count = getActiveAssignmentCount(currentConfig);
 		if (!currentConfig.enabled) {
 			ctx.ui.setStatus("sounds", "🔇 Sounds OFF");
