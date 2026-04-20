@@ -13,7 +13,10 @@
       "Bash(agent-browser open:*)",
       "Bash(agent-browser screenshot:*)",
       "mcp__obsidian-memory__obsidian_memory",
-      "Bash(grep -r \"enabledPlugins\\\\|disabledPlugins\" /Users/ricardo/.claude/*.json /Users/ricardo/.claude/plugins/data)"
+      "Bash(grep -r \"enabledPlugins\\\\|disabledPlugins\" /Users/ricardo/.claude/*.json /Users/ricardo/.claude/plugins/data)",
+      "Read(//Users/ricardo/.claude/**)"
     ]
-  }
+  },
+  "prefersReducedMotion": true,
+  "outputStyle": "Explanatory"
 }

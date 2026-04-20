@@ -3,6 +3,15 @@
 
 export const MODES = ["NORMAL", "PLAN", "SPEC", "PIPELINE", "TEAM", "CHAIN"] as const;
 export type Mode = typeof MODES[number];
+export type ModeOverlay = "CLAUDE";
+
+export interface ModeOverlayState {
+	claude: boolean;
+}
+
+export const DEFAULT_MODE_OVERLAY: ModeOverlayState = {
+	claude: false,
+};
 
 /** Advance to the next mode in the cycle, wrapping CHAIN → NORMAL. */
 export function nextMode(current: Mode): Mode {
@@ -32,6 +41,7 @@ export function modeColor(mode: Mode): string {
 
 const BOLD_WHITE = "\x1b[1;97m";
 const BOLD_DARK = "\x1b[1;30m";
+const DARK_ORANGE_BG = "\x1b[48;2;180;90;0m";
 
 const MODE_TEXT_ANSI: Record<Mode, string> = {
 	NORMAL: "",
@@ -43,7 +53,8 @@ const MODE_TEXT_ANSI: Record<Mode, string> = {
 };
 
 /** ANSI text color for the mode bar. Dark gray on light backgrounds, bold white on dark. */
-export function modeTextAnsi(mode: Mode): string {
+export function modeTextAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	if (overlay.claude && mode !== "NORMAL") return BOLD_WHITE;
 	return MODE_TEXT_ANSI[mode];
 }
 
@@ -59,11 +70,22 @@ const ANSI_BG: Record<Mode, string> = {
 };
 
 /** ANSI background color for the mode bar. Dodger blue for all active modes. */
-export function modeBgAnsi(mode: Mode): string {
+export function modeBgAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	if (overlay.claude && mode !== "NORMAL") return DARK_ORANGE_BG;
 	return ANSI_BG[mode];
 }
 
+export function modeDisplayName(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	if (overlay.claude && mode !== "NORMAL") return `${mode} + CLAUDE`;
+	return mode;
+}
+
 /** Status label for a mode. NORMAL returns empty string, others return "[MODE]". */
-export function modeLabel(mode: Mode): string {
-	return mode === "NORMAL" ? "" : `[${mode}]`;
+export function modeLabel(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	if (mode === "NORMAL") return "";
+	return `[${modeDisplayName(mode, overlay)}]`;
+}
+
+export function isClaudeOverlayActive(overlay: ModeOverlayState | undefined | null): boolean {
+	return !!overlay?.claude;
 }

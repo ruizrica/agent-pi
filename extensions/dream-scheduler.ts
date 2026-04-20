@@ -1,176 +1,62 @@
-// ABOUTME: Dream scheduler extension - reminds users to run /dream for context hygiene.
-// ABOUTME: Tracks last dream date in .context/dream-state.json and suggests when stale.
-/**
- * Dream Scheduler - Gentle reminders for context consolidation
- *
- * On session start, checks .context/dream-state.json to see when the last
- * /dream cycle ran. If it's been longer than the configured interval (default 24h),
- * displays a gentle reminder in the startup banner.
- *
- * Also provides:
- *   /dream-status  - Check when last dream ran and next recommended time
- *   /dream-config  - Configure the reminder interval
- */
+// ABOUTME: Global-first dream scheduler for Pi's memory consolidation system.
+// ABOUTME: Tracks dream freshness in ~/.pi/dream/dream-state.json and reminds users when global memory is stale.
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { Box, Text } from "@mariozechner/pi-tui";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import {
+	DEFAULT_DREAM_STATE,
+	formatNextDream,
+	formatTimeSince,
+	getHoursSinceLastDream,
+	getDreamRoot,
+	readDreamState,
+	writeDreamState,
+} from "./lib/dream-state.js";
 
-// ── Types ────────────────────────────────────────────────────────────
-
-interface DreamState {
-	lastDream: string | null;
-	intervalHours: number;
-	enabled: boolean;
-	lastSummary?: {
-		filesArchived: number;
-		filesDeleted: number;
-		skillsCreated: number;
-		obsidianIngests: number;
-	};
-}
-
-const DEFAULT_STATE: DreamState = {
-	lastDream: null,
-	intervalHours: 24,
-	enabled: true,
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function getDreamStatePath(): string {
-	return path.join(process.cwd(), ".context", "dream-state.json");
-}
-
-function readDreamState(): DreamState {
-	const statePath = getDreamStatePath();
-	try {
-		if (fs.existsSync(statePath)) {
-			const content = fs.readFileSync(statePath, "utf-8");
-			return { ...DEFAULT_STATE, ...JSON.parse(content) };
-		}
-	} catch {
-		// Ignore parse errors, return default
-	}
-	return { ...DEFAULT_STATE };
-}
-
-function writeDreamState(state: DreamState): void {
-	const statePath = getDreamStatePath();
-	const contextDir = path.dirname(statePath);
-
-	// Ensure .context directory exists
-	if (!fs.existsSync(contextDir)) {
-		fs.mkdirSync(contextDir, { recursive: true });
-	}
-
-	fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-}
-
-function getHoursSinceLastDream(state: DreamState): number | null {
-	if (!state.lastDream) return null;
-
-	const lastDreamDate = new Date(state.lastDream);
-	const now = new Date();
-	const diffMs = now.getTime() - lastDreamDate.getTime();
-	return diffMs / (1000 * 60 * 60);
-}
-
-function formatTimeSince(hours: number): string {
-	if (hours < 1) {
-		const minutes = Math.round(hours * 60);
-		return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-	}
-	if (hours < 24) {
-		const h = Math.round(hours);
-		return `${h} hour${h === 1 ? "" : "s"}`;
-	}
-	const days = Math.round(hours / 24);
-	return `${days} day${days === 1 ? "" : "s"}`;
-}
-
-function formatNextDream(state: DreamState): string {
-	if (!state.lastDream) return "No previous dream recorded";
-
-	const hoursSince = getHoursSinceLastDream(state);
-	if (hoursSince === null) return "Unknown";
-
-	const hoursUntilNext = state.intervalHours - hoursSince;
-
-	if (hoursUntilNext <= 0) {
-		return "Now (overdue)";
-	}
-
-	return `In ${formatTimeSince(hoursUntilNext)}`;
-}
-
-// ── Dream Status Card Renderer ───────────────────────────────────────
-
-function renderDreamStatusCard(
-	message: any,
-	_options: any,
-	theme: any,
-) {
-	const state = message.details?.state as DreamState;
+function renderDreamStatusCard(message: any, _options: any, theme: any) {
+	const state = message.details?.state ?? DEFAULT_DREAM_STATE;
 	const hoursSince = message.details?.hoursSince as number | null;
 	const isStale = message.details?.isStale as boolean;
-
-	const statusColor = isStale ? "warning" : "success";
-	const statusIcon = isStale ? "💤" : "✨";
-
 	const lines: string[] = [];
 
-	// Header
-	lines.push(theme.fg("muted", `${statusIcon} Dream Status`));
+	lines.push(theme.fg("muted", "💤 Global Dream Status"));
 	lines.push("");
+	lines.push(theme.fg("dim", "Mode: ") + theme.fg("muted", state.lastScope || "global"));
+	lines.push(theme.fg("dim", "Root: ") + theme.fg("muted", state.globalRoot || getDreamRoot()));
 
-	// Last dream
 	if (state.lastDream) {
 		const lastDate = new Date(state.lastDream);
 		lines.push(
 			theme.fg("dim", "Last dream: ") +
 			theme.fg("muted", lastDate.toLocaleDateString()) +
 			theme.fg("dim", " at ") +
-			theme.fg("muted", lastDate.toLocaleTimeString())
+			theme.fg("muted", lastDate.toLocaleTimeString()),
 		);
-		lines.push(
-			theme.fg("dim", "Time since: ") +
-			theme.fg(statusColor as any, formatTimeSince(hoursSince!))
-		);
+		if (hoursSince !== null) {
+			lines.push(theme.fg("dim", "Time since: ") + theme.fg(isStale ? "warning" : "success", formatTimeSince(hoursSince)));
+		}
 	} else {
-		lines.push(theme.fg("dim", "No previous dream recorded"));
+		lines.push(theme.fg("dim", "No previous global dream recorded"));
 	}
 
-	// Interval
-	lines.push(
-		theme.fg("dim", "Interval: ") +
-		theme.fg("muted", `${state.intervalHours} hours`)
-	);
+	lines.push(theme.fg("dim", "Interval: ") + theme.fg("muted", `${state.intervalHours} hours`));
+	lines.push(theme.fg("dim", "Next dream: ") + theme.fg(isStale ? "warning" : "success", formatNextDream(state)));
 
-	// Next recommended
-	lines.push(
-		theme.fg("dim", "Next dream: ") +
-		theme.fg(statusColor as any, formatNextDream(state))
-	);
-
-	// Last summary if available
 	if (state.lastSummary) {
 		lines.push("");
-		lines.push(theme.fg("dim", "Last cycle:"));
+		lines.push(theme.fg("dim", "Last summary:"));
 		lines.push(
 			theme.fg("dim", "  ") +
-			theme.fg("muted", `${state.lastSummary.filesArchived} archived, `) +
-			theme.fg("muted", `${state.lastSummary.filesDeleted} deleted, `) +
-			theme.fg("muted", `${state.lastSummary.skillsCreated} skills`)
+			theme.fg("muted", `${state.lastSummary.workspacesScanned} workspaces, `) +
+			theme.fg("muted", `${state.lastSummary.sourcesConsolidated} consolidated, `) +
+			theme.fg("muted", `${state.lastSummary.durableMemoriesPromoted} promoted`),
 		);
 	}
 
-	// Suggestion if stale
 	if (isStale) {
 		lines.push("");
-		lines.push(theme.fg("warning", "Consider running /dream to consolidate context"));
+		lines.push(theme.fg("warning", "Global Pi memory is stale — run /dream to consolidate and improve Pi."));
 	}
 
 	return Box({
@@ -181,22 +67,15 @@ function renderDreamStatusCard(
 	});
 }
 
-// ── Dream Reminder Banner ────────────────────────────────────────────
-
-function renderDreamReminder(
-	message: any,
-	_options: any,
-	theme: any,
-) {
+function renderDreamReminder(message: any, _options: any, theme: any) {
 	const hoursSince = message.details?.hoursSince as number;
-
 	const content =
 		theme.fg("warning", "💤 ") +
-		theme.fg("muted", "Context may be stale - last dream was ") +
+		theme.fg("muted", "Global Pi memory may be stale — last dream was ") +
 		theme.fg("warning", formatTimeSince(hoursSince)) +
 		theme.fg("muted", " ago. Run ") +
 		theme.fg("info", "/dream") +
-		theme.fg("muted", " to consolidate.");
+		theme.fg("muted", " to consolidate and improve Pi.");
 
 	return Box({
 		borderStyle: "single",
@@ -206,26 +85,15 @@ function renderDreamReminder(
 	});
 }
 
-// ── Extension Entry Point ────────────────────────────────────────────
-
 export default function dreamScheduler(pi: ExtensionAPI) {
-	// Register custom message renderers
 	pi.registerMessageRenderer("dream-status", renderDreamStatusCard);
 	pi.registerMessageRenderer("dream-reminder", renderDreamReminder);
 
-	// ── Session Start Hook ───────────────────────────────────────
-	// Check if it's been too long since the last dream and show reminder
-
 	pi.on("session_start", () => {
 		const state = readDreamState();
-
 		if (!state.enabled) return;
-
 		const hoursSince = getHoursSinceLastDream(state);
-
-		// Only show reminder if we have a previous dream and it's stale
 		if (hoursSince !== null && hoursSince > state.intervalHours) {
-			// Show gentle reminder after a short delay (let other startup messages appear first)
 			setTimeout(() => {
 				pi.sendMessage({
 					customType: "dream-reminder",
@@ -237,16 +105,12 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 		}
 	});
 
-	// ── /dream-status Command ────────────────────────────────────
-	// Show current dream state and next recommended time
-
 	pi.registerCommand("dream-status", {
-		description: "Check when last /dream ran and next recommended time",
+		description: "Check global dream freshness and next recommended run",
 		handler: async () => {
 			const state = readDreamState();
 			const hoursSince = getHoursSinceLastDream(state);
 			const isStale = hoursSince !== null && hoursSince > state.intervalHours;
-
 			pi.sendMessage({
 				customType: "dream-status",
 				content: "",
@@ -256,35 +120,22 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 		},
 	});
 
-	// ── /dream-config Command ────────────────────────────────────
-	// Configure dream reminder interval
-
 	pi.registerCommand("dream-config", {
-		description: "Configure dream reminder interval (hours)",
+		description: "Configure global dream reminder interval (hours)",
 		handler: async (args: string) => {
 			const state = readDreamState();
-
 			const parts = args.trim().split(/\s+/);
 
 			if (parts[0] === "disable") {
 				state.enabled = false;
 				writeDreamState(state);
-				pi.sendMessage({
-					customType: "dream-config",
-					content: "Dream reminders disabled. Run `/dream-config enable` to re-enable.",
-					display: true,
-				});
+				pi.sendMessage({ customType: "dream-config", content: "Global dream reminders disabled.", display: true });
 				return;
 			}
-
 			if (parts[0] === "enable") {
 				state.enabled = true;
 				writeDreamState(state);
-				pi.sendMessage({
-					customType: "dream-config",
-					content: "Dream reminders enabled.",
-					display: true,
-				});
+				pi.sendMessage({ customType: "dream-config", content: "Global dream reminders enabled.", display: true });
 				return;
 			}
 
@@ -292,7 +143,7 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 			if (isNaN(hours) || hours < 1 || hours > 168) {
 				pi.sendMessage({
 					customType: "dream-config",
-					content: "Usage: `/dream-config <hours>` (1-168) or `/dream-config disable|enable`\n\nCurrent interval: " + state.intervalHours + " hours",
+					content: `Usage: /dream-config <hours> (1-168) or /dream-config disable|enable\n\nCurrent interval: ${state.intervalHours} hours`,
 					display: true,
 				});
 				return;
@@ -300,32 +151,25 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 
 			state.intervalHours = hours;
 			writeDreamState(state);
-
-			pi.sendMessage({
-				customType: "dream-config",
-				content: `Dream reminder interval set to ${hours} hours.`,
-				display: true,
-			});
+			pi.sendMessage({ customType: "dream-config", content: `Global dream reminder interval set to ${hours} hours.`, display: true });
 		},
 	});
 
-	// ── dream_status Tool ────────────────────────────────────────
-	// LLM-callable tool to check dream state
-
 	pi.registerTool({
 		name: "dream_status",
-		description: "Check the current dream state - when last dream ran, interval, and whether it's stale",
+		description: "Check global Pi dream state and freshness",
 		parameters: Type.Object({}),
 		handler: async () => {
 			const state = readDreamState();
 			const hoursSince = getHoursSinceLastDream(state);
 			const isStale = hoursSince !== null && hoursSince > state.intervalHours;
-
 			return {
 				lastDream: state.lastDream,
 				hoursSinceLastDream: hoursSince ? Math.round(hoursSince * 10) / 10 : null,
 				intervalHours: state.intervalHours,
 				enabled: state.enabled,
+				globalRoot: state.globalRoot,
+				lastScope: state.lastScope,
 				isStale,
 				nextDream: formatNextDream(state),
 				lastSummary: state.lastSummary || null,
@@ -333,35 +177,41 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 		},
 	});
 
-	// ── dream_record Tool ────────────────────────────────────────
-	// Called by dream-cleaner agent to record a completed dream
-
 	pi.registerTool({
 		name: "dream_record",
-		description: "Record a completed dream cycle (called by dream-cleaner agent)",
+		description: "Record a completed global-first dream cycle",
 		parameters: Type.Object({
-			filesArchived: Type.Number({ description: "Number of files archived" }),
-			filesDeleted: Type.Number({ description: "Number of files deleted" }),
-			skillsCreated: Type.Number({ description: "Number of skills created" }),
-			obsidianIngests: Type.Number({ description: "Number of Obsidian ingests" }),
+			workspacesScanned: Type.Number(),
+			sourcesConsolidated: Type.Number(),
+			durableMemoriesPromoted: Type.Number(),
+			supersededItems: Type.Number(),
+			recommendationsGenerated: Type.Number(),
+			scope: Type.Optional(Type.String()),
 		}),
-		handler: async (params: { filesArchived: number; filesDeleted: number; skillsCreated: number; obsidianIngests: number }) => {
+		handler: async (params: {
+			workspacesScanned: number;
+			sourcesConsolidated: number;
+			durableMemoriesPromoted: number;
+			supersededItems: number;
+			recommendationsGenerated: number;
+			scope?: string;
+		}) => {
 			const state = readDreamState();
-
 			state.lastDream = new Date().toISOString();
+			state.lastScope = params.scope === "workspace" ? "workspace" : "global";
 			state.lastSummary = {
-				filesArchived: params.filesArchived,
-				filesDeleted: params.filesDeleted,
-				skillsCreated: params.skillsCreated,
-				obsidianIngests: params.obsidianIngests,
+				workspacesScanned: params.workspacesScanned,
+				sourcesConsolidated: params.sourcesConsolidated,
+				durableMemoriesPromoted: params.durableMemoriesPromoted,
+				supersededItems: params.supersededItems,
+				recommendationsGenerated: params.recommendationsGenerated,
 			};
-
 			writeDreamState(state);
-
 			return {
 				recorded: true,
 				lastDream: state.lastDream,
 				nextDream: formatNextDream(state),
+				globalRoot: state.globalRoot,
 			};
 		},
 	});

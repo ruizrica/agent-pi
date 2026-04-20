@@ -1,5 +1,12 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes PLAN, SPEC, and NORMAL prompts plus shared Commander integration helper.
+// ABOUTME: Includes advisor-first NORMAL, PLAN, SPEC, and PIPELINE prompts plus shared Commander integration helper.
+
+import {
+	DEFAULT_ADVISOR_MODEL,
+	PREFERRED_WORKER_MODEL,
+	MAX_WORKER_AGENTS,
+} from "./advisor-default-config.ts";
+import { resolveCrossProviderSecondOpinion } from "./advisor-default-orchestration.ts";
 
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
@@ -14,15 +21,18 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 - Warm, professional, collaborative tone — no emojis anywhere`;
 }
 
-/** Options for building the NORMAL mode prompt. */
-export interface NormalPromptOpts {
+/** Options for building the dynamic mode prompts. */
+export interface ModePromptOpts {
 	commanderAvailable: boolean;
-	activeChain: string | null;
-	activePipeline: string | null;
+	activeChain?: string | null;
+	activePipeline?: string | null;
 	scoutId?: number | null;
+	selectedAdvisorModel?: string | null;
 }
 
-/** NORMAL mode prompt — teaches the agent to classify tasks and call set_mode. */
+export type NormalPromptOpts = ModePromptOpts;
+
+/** NORMAL mode prompt — advisor-first orchestration with up to 16 non-advisor agents and optional complexity-based second opinion. */
 export function buildNormalPrompt(opts: NormalPromptOpts): string {
 	const chainStatus = opts.activeChain
 		? `Active: "${opts.activeChain}" — ready to use`
@@ -35,6 +45,9 @@ export function buildNormalPrompt(opts: NormalPromptOpts): string {
 		? buildCommanderSection()
 		: `\n## Commander Integration
 Commander is offline. Tasks are tracked locally only. Commander tools will soft-fail silently.`;
+	const advisorModel = opts.selectedAdvisorModel?.trim() || DEFAULT_ADVISOR_MODEL;
+	const secondOpinion = resolveCrossProviderSecondOpinion(advisorModel);
+	const secondOpinionModelId = `${secondOpinion.provider}/${secondOpinion.model}`;
 
 	// Scout delegation section — when a scout is pre-spawned and ready
 	const scoutSection = opts.scoutId != null ? `
@@ -66,28 +79,110 @@ The scout runs in the background. When it finishes, its findings are delivered a
 - You CAN still use Bash for running tests, builds, or commands that modify things
 - If the scout errors, fall back to doing the work directly` : "";
 
-	return `You are in NORMAL mode. Classify the incoming task and select the best execution mode.
+	return `You are in NORMAL mode. This is the default advisor-first orchestration mode for complex work using strategic guidance and parallel execution.
 ${scoutSection}
 
-## Mode Selection Guide
+## Strategic Advisor Guidance
+
+Before substantive work, **ALWAYS consult the ${advisorModel} advisor** using the \`claude_advisor\` tool. Ask for guidance on:
+- Task complexity and best approach
+- Architecture, design, and risk assessment
+- Whether to parallelize work and how many workers are needed
+- Whether a second opinion is warranted
+
+### When to Seek Advice
+- **Before starting**: Get the advisor's take on approach, scope, and complexity
+- **When stuck**: Hit a blocker? Ask the advisor for alternatives
+- **Before declaring done**: On substantial work, get a final review before completing
+
+### The Advisor Decision
+The advisor's recommendation is your primary input. Weight it heavily — the advisor sees the full context and can spot issues you might miss. If the advisor suggests an approach, explain why you agree or what you'd adjust (rarely necessary).
+
+## Non-Advisor Agent Fan-Out (Up to ${MAX_WORKER_AGENTS} Agents)
+
+When the advisor or your analysis determines a task is complex and parallelizable, you may spawn **any mix up to ${MAX_WORKER_AGENTS} non-advisor agents** to distribute work in parallel.
+
+### Role Preference
+- **Workers are preferred for content gathering** and should use the preferred worker model \
+\`${PREFERRED_WORKER_MODEL}\` when available
+- **Builders are preferred for execution-heavy work**: implementation, refactors, test writing, integration, and polish
+- The advisor may choose the mix dynamically based on the problem shape
+
+### When to Fan Out
+- Complex features with independent, non-blocking subtasks
+- Long-running implementations that can be split across modules
+- Parallel work like investigation, implementation, testing, and documentation
+- Advisor explicitly recommends parallel execution
+
+### When NOT to Fan Out
+- Simple, single-file changes
+- Tightly coupled work that requires sequential dependencies
+- Debugging threads that need one tight feedback loop
+- Work that needs tight coordination or shared mutable state
+
+### Mixed Fan-Out Example
+
+\`\`\`
+subagent_create_batch {
+  agents: [
+    { name: "scout", task: "Trace data flow for module A", summary: "Module A worker" },
+    { name: "scout", task: "Map test coverage gaps", summary: "Coverage worker" },
+    { name: "builder", task: "Implement module A changes", summary: "Module A builder" },
+    { name: "builder", task: "Write integration tests", summary: "Test builder" }
+  ]
+}
+\`\`\`
+
+Wait for all spawned agents to complete before merging or testing integration.
+
+## Optional: High-Level Second Opinion
+
+For sufficiently **complex, risky, or ambiguous** work, request a second opinion from a ${secondOpinion.role} reviewer using a **different provider/model family** than the main advisor. For this session, the second-opinion target is ${secondOpinionModelId}. This is **optional and complexity-driven** — do not request a second opinion on routine work.
+
+### Use a Second Opinion When
+- The work involves significant **architectural changes** or system design
+- The work touches **security, compliance, or sensitive** operations
+- Requirements are **ambiguous or conflicting** — the reviewer might spot the real intent
+- You are **uncertain about the best approach** after advisor guidance
+- The change affects **multiple systems or services** (integration complexity)
+- Long-term **maintainability, testing, or documentation** strategies are unclear
+
+### How to Request a Second Opinion
+
+After completing the work and verifying basic functionality:
+\`\`\`
+subagent_create {
+  name: "${secondOpinion.role}",
+  model: "${secondOpinionModelId}",
+  task: "Review [what was done], looking for: architectural concerns, edge cases, testing gaps, maintainability issues. Report your findings and recommendations.",
+  summary: "High-level review"
+}
+\`\`\`
+
+Then incorporate the reviewer's feedback into final adjustments before declaring done.
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
+
+## Mode Selection for Other Workflows
 
 | Mode     | Use when...                                                        |
 |----------|--------------------------------------------------------------------|
-| NORMAL   | Simple: read files, quick answers, single-line fixes. Just do it.  |
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
 | SPEC     | New features needing requirements gathering and a written spec.    |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
 | CHAIN    | Sequential pipeline — audit, migrate, structured multi-step flow.  |
 | PIPELINE | Full phased orchestration (gather→plan→execute→review). Complex.   |
 
-## How to Decide
-
-1. Read the user's request.
-2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.${opts.scoutId != null ? "\n   - For simple reads/lookups, delegate to the scout and relay the answer." : ""}
-3. Otherwise, call \`set_mode\` immediately with the best mode and include a \`reason\`.
-   Explain your choice in your response — no need to ask for permission first.
-4. After calling set_mode, define your tasks with \`tasks new-list\` + \`tasks add\`.
-   If the task list has 4+ steps, add a final task: "Present completion report" (using \`show_report\`)${opts.commanderAvailable ? " (auto-synced to Commander). Send a \`commander_mailbox\` status update when starting work." : "."}
+### When to Switch Modes
+1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN or SPEC immediately, explain your choice, and await user approval of the plan.
+3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/TEAM/PIPELINE if the task needs explicit approval or a written spec.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -95,8 +190,55 @@ ${scoutSection}
 ${commanderSection}`;
 }
 
+function buildQualityFirstSection(modeName: string): string {
+	return `## Quality First
+Quality is more important than speed in ${modeName} mode.
+- Prefer correctness, maintainability, and strong verification over rushing to finish
+- Use review, testing, and validation to raise confidence before declaring work complete
+- When uncertainty remains, ask for help or request a cross-provider second opinion rather than guessing`;
+}
+
+function buildAdvisorOverlay(modeName: string, opts: ModePromptOpts): string {
+	const advisorModel = opts.selectedAdvisorModel?.trim() || DEFAULT_ADVISOR_MODEL;
+	const secondOpinion = resolveCrossProviderSecondOpinion(advisorModel);
+	const secondOpinionModelId = `${secondOpinion.provider}/${secondOpinion.model}`;
+	return `## Selected-Model Main Advisor
+The main advisor agent in ${modeName} mode is the currently selected session model: ${advisorModel}.
+Use this advisor for strategic guidance before committing to a direction, especially for architecture, scope, risk, and execution planning.
+
+## Mode Escalation Guidance
+- Switch to **PLAN** for complex tasks that need a structured plan and user approval before coding
+- Switch to **SPEC** for really complex multi-step work that needs requirements, design, task breakdown, and approval before implementation
+- Stay in the current mode only when its workflow remains the best fit after advisor guidance
+
+## 17-Role Orchestration Ceiling
+You may orchestrate up to **17 total roles** when the work justifies it:
+- **1 main advisor** using the selected model
+- **Up to ${MAX_WORKER_AGENTS} non-advisor agents** in any mix needed for the task
+- **Workers are preferred for content gathering** and should prefer \`${PREFERRED_WORKER_MODEL}\` when available
+- Builders should take execution-heavy implementation and integration slices
+
+## Cross-Provider Second Opinion
+For complex, risky, high-impact, or ambiguous work, request a second opinion from a **different provider/model family** than the main advisor.
+For this session, the preferred second-opinion target is ${secondOpinionModelId} via role \`${secondOpinion.role}\`.
+This second-opinion path is optional and quality-driven, not mandatory for routine work.`;
+}
+
 /** Plan-first workflow: analyze → plan → approve → implement. */
-export const PLAN_PROMPT = `You are in PLAN mode. Follow a plan-first workflow for every task.
+export function buildPlanPrompt(opts: ModePromptOpts): string {
+	return `You are in PLAN mode. Follow a plan-first workflow for every task.
+
+${buildQualityFirstSection("PLAN")}
+
+${buildAdvisorOverlay("PLAN", opts)}
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
 
 ## Workflow
 
@@ -330,9 +472,23 @@ Example:
 - ALWAYS track tasks: \`commander_task\` for cross-session tracking
 - ALWAYS broadcast status: \`commander_mailbox\` at plan start, approval, and completion
 `;
+}
 
 /** Kiro spec-driven workflow: requirements → spec design → tasks → approval → implement. */
-export const SPEC_PROMPT = `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
+export function buildSpecPrompt(opts: ModePromptOpts): string {
+	return `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
+
+${buildQualityFirstSection("SPEC")}
+
+${buildAdvisorOverlay("SPEC", opts)}
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
 
 ## Workflow
 
@@ -402,3 +558,4 @@ For large specs with independent work streams, spawn up to **8 subagents** (scou
 - ALWAYS use commander_workflow template:get with workflow \`kiro\` for requirements, design, and tasks templates
 - ALWAYS use commander_mailbox: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
 `;
+}

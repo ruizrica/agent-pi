@@ -71,6 +71,16 @@ export function matchesKey(data: string, key: string): boolean {
 	return data === key;
 }
 
+export function fuzzyFilter<T>(items: T[], query: string, toText: (item: T) => string): T[] {
+	const q = query.toLowerCase().trim();
+	if (!q) return items;
+	return items.filter((item) => toText(item).toLowerCase().includes(q));
+}
+
+export function decodeKittyPrintable(_data: string): string | undefined {
+	return undefined;
+}
+
 export function truncateToWidth(
 	s: string,
 	w: number,

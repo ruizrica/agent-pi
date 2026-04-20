@@ -38,6 +38,7 @@ function loadArt(): string {
 
 export function showBanner(ctx: ExtensionContext) {
 	if (!ctx.hasUI) return;
+	if ((globalThis as any).__piSummaryModeActive) return;
 
 	const art = loadArt();
 	const split = art.split("\n");

@@ -27,8 +27,9 @@ export function generateSpecViewerHTML(opts: {
 	title: string;
 	port: number;
 	existingComments?: string; // JSON string of existing comments
+	roundTripEnabled?: boolean;
 }): string {
-	const { documents, title, port, existingComments } = opts;
+	const { documents, title, port, existingComments, roundTripEnabled = false } = opts;
 	// Escape </ sequences to prevent </script> in content from breaking the script block
 	const escapedDocs = JSON.stringify(documents).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
@@ -777,6 +778,54 @@ export function generateSpecViewerHTML(opts: {
   }
   .btn-ghost:hover { color: var(--text-muted); background: var(--surface2); }
 
+  /* ── Change Request Panel ────────────── */
+  .feedback-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px 12px;
+    display: none;
+  }
+  .feedback-panel.open {
+    display: block;
+  }
+  .feedback-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .feedback-panel-title {
+    color: var(--warning);
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .feedback-panel-subtitle {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .feedback-textarea {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    outline: none;
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .feedback-textarea:focus {
+    border-color: var(--warning);
+    box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.08);
+  }
+
   /* ── Toast ───────────────────────────── */
   .toast {
     position: fixed;
@@ -957,6 +1006,13 @@ export function generateSpecViewerHTML(opts: {
 
 <!-- Footer -->
 <div class="footer-wrapper">
+  <div class="feedback-panel">
+    <div class="feedback-panel-header">
+      <div class="feedback-panel-title">Send Back with Changes</div>
+      <div class="feedback-panel-subtitle">Describe broader revisions or summarize the next round.</div>
+    </div>
+    <textarea id="feedbackInput" class="feedback-textarea" placeholder="Describe the revisions you want here..."></textarea>
+  </div>
   <div class="footer">
     <button class="btn btn-ghost" onclick="copyToClipboard()" title="Copy current document markdown">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
@@ -975,7 +1031,7 @@ export function generateSpecViewerHTML(opts: {
     </button>
     <div class="spacer"></div>
     <button class="btn" onclick="decline()" id="btnDecline">Close</button>
-    <button class="btn btn-warning" onclick="requestChanges()" id="btnChanges">Request Changes</button>
+    <button class="btn btn-warning" onclick="toggleFeedbackPanel()" id="btnChanges">Needs Changes</button>
     <button class="btn btn-success" onclick="approve()" id="btnApprove">Approve Spec</button>
   </div>
 </div>
@@ -989,6 +1045,7 @@ export function generateSpecViewerHTML(opts: {
 (function() {
   // ── State ─────────────────────────────────────
   const PORT = ${port};
+  const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
   const documents = ${escapedDocs};
   let comments = ${escapedComments};
   let currentStep = 0;
@@ -998,6 +1055,10 @@ export function generateSpecViewerHTML(opts: {
   let originalMarkdown = {}; // docKey -> original markdown
   let scrollPositions = {};  // docKey -> scrollTop
   let commentPopupTarget = null; // { docKey, sectionId, sectionText, rect }
+  let feedback = '';
+  let feedbackPanelOpen = false;
+  let pollingTimer = null;
+  let lastKnownRevision = 0;
 
   // Init markdown state
   documents.forEach(function(doc) {
@@ -1566,15 +1627,116 @@ export function generateSpecViewerHTML(opts: {
   };
 
   // ── Actions ───────────────────────────────────
+  function syncFeedback() {
+    var input = document.getElementById('feedbackInput');
+    feedback = input ? input.value.trim() : '';
+  }
+
+  function renderWorkflowBanner(label, sub, tone) {
+    var existing = document.getElementById('workflowBanner');
+    if (existing) existing.remove();
+    var banner = document.createElement('div');
+    banner.className = 'approved-banner';
+    banner.id = 'workflowBanner';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    var color = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var borderColor = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var bgColor = tone === 'warning' ? 'rgba(240, 180, 41, 0.08)' : 'var(--surface)';
+    var icon = tone === 'warning' ? '&#8635;' : '&#10003;';
+    banner.style.borderColor = borderColor;
+    banner.style.borderLeftColor = borderColor;
+    banner.style.background = bgColor;
+    banner.innerHTML = '<div class="approved-icon" style="background:' + color + ';">' + icon + '</div>' +
+      '<div class="approved-content"><div class="approved-text" style="color:' + color + ';">' + label + '</div>' +
+      '<div class="approved-sub">' + sub + '</div></div>' +
+      '<div class="approved-actions">' +
+      '<button class="icon-btn" onclick="copyToClipboard()" title="Copy to clipboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+      '<button class="icon-btn" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></button>' +
+      '</div>';
+    var header = document.querySelector('.header');
+    header.parentNode.insertBefore(banner, header.nextSibling);
+  }
+
+  window.toggleFeedbackPanel = function() {
+    if (!ROUND_TRIP_ENABLED) {
+      requestChanges();
+      return;
+    }
+    if (feedbackPanelOpen) {
+      requestChanges();
+      return;
+    }
+    feedbackPanelOpen = true;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.add('open');
+    if (btn) btn.textContent = 'Send Back with Changes';
+    var input = document.getElementById('feedbackInput');
+    if (input) input.focus();
+  };
+
+  function applyUpdatedSpec(state) {
+    if (!state || !state.payload || !Array.isArray(state.payload.documents)) return;
+    state.payload.documents.forEach(function(updatedDoc) {
+      var existing = documents.find(function(doc) { return doc.key === updatedDoc.key; });
+      if (existing) {
+        existing.markdown = updatedDoc.markdown;
+        docMarkdown[existing.key] = updatedDoc.markdown;
+        originalMarkdown[existing.key] = updatedDoc.markdown;
+        modified[existing.key] = false;
+      }
+    });
+    if (typeof state.revision === 'number') lastKnownRevision = state.revision;
+    renderCurrentStep();
+    updateGlobalModifiedState();
+    if (currentView === 'raw') {
+      setView('rendered');
+    }
+    var summary = Array.isArray(state.changeSummary) && state.changeSummary.length > 0
+      ? 'Updated changes: ' + state.changeSummary.join(' • ')
+      : 'The spec was updated with your previous changes.';
+    renderWorkflowBanner('Spec Updated', summary, 'success');
+    document.body.classList.remove('approved-state');
+    var badge = document.querySelector('.header .badge');
+    if (badge) {
+      badge.textContent = 'SPEC';
+      badge.style.color = 'var(--accent)';
+      badge.style.borderColor = 'var(--accent)';
+    }
+    feedbackPanelOpen = false;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.remove('open');
+    if (btn) btn.textContent = 'Needs Changes';
+  }
+
+  function startRoundTripPolling() {
+    if (!ROUND_TRIP_ENABLED) return;
+    if (pollingTimer) clearInterval(pollingTimer);
+    pollingTimer = setInterval(function() {
+      fetch('http://127.0.0.1:' + PORT + '/updated-content')
+        .then(function(r) { return r.json(); })
+        .then(function(state) {
+          if (state && state.status === 'updated' && state.revision !== lastKnownRevision) {
+            applyUpdatedSpec(state);
+          }
+        })
+        .catch(function() {});
+    }, 1500);
+  }
+
   window.approve = function() {
     syncCurrentDoc();
+    syncFeedback();
     sendResult('approved');
   };
 
   window.requestChanges = function() {
     syncCurrentDoc();
-    if (comments.length === 0) {
-      showToast('Add comments before requesting changes');
+    syncFeedback();
+    if (!feedback && comments.length === 0) {
+      showToast('Add change details or comments before requesting changes');
       return;
     }
     sendResult('changes_requested');
@@ -1582,6 +1744,7 @@ export function generateSpecViewerHTML(opts: {
 
   window.decline = function() {
     syncCurrentDoc();
+    syncFeedback();
     sendResult('declined');
   };
 
@@ -1641,10 +1804,12 @@ export function generateSpecViewerHTML(opts: {
       action: action,
       comments: comments,
       markdownChanges: markdownChanges,
-      modified: isAnyModified()
+      modified: isAnyModified(),
+      feedback: feedback
     };
 
-    fetch('http://127.0.0.1:' + PORT + '/result', {
+    var endpoint = (ROUND_TRIP_ENABLED && action === 'changes_requested') ? '/feedback' : '/result';
+    fetch('http://127.0.0.1:' + PORT + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -1683,15 +1848,23 @@ export function generateSpecViewerHTML(opts: {
           setView('rendered');
         }
       } else if (action === 'changes_requested') {
-        // Show full-screen overlay for changes requested
-        var overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10000;';
-        var msg = document.createElement('div');
-        msg.style.cssText = 'text-align:center;font-family:var(--font,monospace);';
-        msg.innerHTML = '<p style="color:var(--warning);font-size:24px;margin-bottom:8px;">Changes Requested</p>' +
-          '<p style="color:#888;font-size:14px;">Returning to terminal&#8230;</p>';
-        overlay.appendChild(msg);
-        document.body.appendChild(overlay);
+        renderWorkflowBanner('Changes Sent Back', 'Your feedback was sent to the agent. Waiting for the updated spec...', 'warning');
+        document.body.classList.add('approved-state');
+        var badge = document.querySelector('.header .badge');
+        if (badge) {
+          badge.textContent = 'WAITING';
+          badge.style.color = 'var(--warning)';
+          badge.style.borderColor = 'var(--warning)';
+        }
+        feedbackPanelOpen = false;
+        var panel = document.querySelector('.feedback-panel');
+        var btn = document.getElementById('btnChanges');
+        if (panel) panel.classList.remove('open');
+        if (btn) btn.textContent = 'Needs Changes';
+        if (currentView === 'raw') {
+          setView('rendered');
+        }
+        startRoundTripPolling();
       } else {
         // Closed/declined — show simple close message
         document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-muted);font-family:var(--font);">' +

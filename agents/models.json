@@ -3,6 +3,15 @@
     "provider": "anthropic",
     "model": "claude-haiku-4-5-20251001"
   },
+  "providers": {
+    "openai-codex": {
+      "modelOverrides": {
+        "gpt-5.4": {
+          "contextWindow": 1000000
+        }
+      }
+    }
+  },
   "agents": {
     "scout": {
       "provider": "x-ai",

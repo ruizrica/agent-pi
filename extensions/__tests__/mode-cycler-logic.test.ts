@@ -2,7 +2,7 @@
 // ABOUTME: Validates cycle order, wrapping, and label formatting.
 
 import { describe, it, expect } from "vitest";
-import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi } from "../lib/mode-cycler-logic.ts";
+import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
 	it("has exactly 6 entries in correct order", () => {
@@ -99,6 +99,27 @@ describe("modeColor", () => {
 
 	it("returns accent for CHAIN", () => {
 		expect(modeColor("CHAIN")).toBe("accent");
+	});
+});
+
+describe("modeDisplayName", () => {
+	it("appends + CLAUDE when overlay is active", () => {
+		expect(modeDisplayName("PLAN", { claude: true })).toBe("PLAN + CLAUDE");
+		expect(modeDisplayName("NORMAL", { claude: true })).toBe("NORMAL");
+	});
+});
+
+describe("modeLabel overlay", () => {
+	it("uses overlay-aware labels for active modes", () => {
+		expect(modeLabel("PLAN", { claude: true })).toBe("[PLAN + CLAUDE]");
+		expect(modeLabel("NORMAL", { claude: true })).toBe("");
+	});
+});
+
+describe("modeBgAnsi overlay", () => {
+	it("uses dark orange for active modes when Claude overlay is enabled", () => {
+		expect(modeBgAnsi("PLAN", { claude: true })).toBe("\x1b[48;2;180;90;0m");
+		expect(modeBgAnsi("NORMAL", { claude: true })).toBe("");
 	});
 });
 

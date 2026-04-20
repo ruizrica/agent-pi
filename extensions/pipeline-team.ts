@@ -35,7 +35,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { outputLine, outputBox, type BarColor } from "./lib/output-box.ts";
 import { renderVerticalTimeline, renderCollapsedTimeline, statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
-import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
+import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
 
@@ -266,7 +266,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		const phase = phaseStates[currentPhaseIndex];
 		if (phase) {
-			widgetCtx.ui.setStatus("pipeline-team", phase.def.name.toUpperCase());
+			if (!(globalThis as any).__piSummaryModeActive) widgetCtx.ui.setStatus("pipeline-team", phase.def.name.toUpperCase());
 		}
 	}
 
@@ -286,6 +286,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		updateStatus();
 
+		if ((globalThis as any).__piSummaryModeActive) return;
 		widgetCtx.ui.setWidget("pipeline-team", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -376,9 +377,56 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolvePromise) => {
+			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}) };
+			if (shouldUseClaudeCliForAgent(agentDef.name, model, !!(globalThis as any).__piClaudeOverlay)) {
+				let toolkitFinalOutput = "";
+				spawnToolkitWorker(agentDef, {
+					task,
+					sessionFile: agentSessionFile,
+					cwd: ctx.cwd,
+					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { agentState.proc = proc; },
+					onStdoutLine: (line: string) => {
+						try {
+							const event = JSON.parse(line);
+							if (event.type === "message_update") {
+								const delta = event.assistantMessageEvent;
+								if (delta?.type === "text_delta") {
+									textChunks.push(delta.delta || "");
+									const full = textChunks.join("");
+									const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+									agentState.lastWork = last;
+									updateWidget();
+								}
+							}
+						} catch {}
+					},
+					onStderr: () => {},
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					agentState.proc = null;
+					clearInterval(agentState.timer);
+					agentState.elapsed = Date.now() - startTime;
+					const finalOutput = toolkitFinalOutput || textChunks.join("");
+					agentState.output = finalOutput;
+					agentState.status = exitCode === 0 ? "done" : "error";
+					agentState.lastWork = finalOutput.split("\n").filter((l: string) => l.trim()).pop() || "";
+					updateWidget();
+
+					ctx.ui.notify(
+						`${displayName(agentState.role)} #${agentState.index + 1} ${agentState.status} in ${Math.round(agentState.elapsed / 1000)}s`,
+						agentState.status === "done" ? "success" : "error",
+					);
+
+					resolvePromise({ output: finalOutput, exitCode: exitCode ?? 1, elapsed: agentState.elapsed });
+				});
+				return;
+			}
+
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 				cwd: ctx.cwd,
 			});
 

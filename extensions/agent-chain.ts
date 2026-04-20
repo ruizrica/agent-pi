@@ -36,7 +36,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { outputLine } from "./lib/output-box.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
-import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
+import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parseChainYaml, type ChainStep, type ChainDef } from "./lib/parse-chain-yaml.ts";
 import { discoverModules, formatModuleGroups, formatSelectedModulesForChain, groupModulesByType, type DiscoveredModule, type ModuleManifest } from "./lib/module-discovery.ts";
@@ -258,6 +258,7 @@ export default function (pi: ExtensionAPI) {
 		// Only show widget when pipeline is actually running (at least one non-pending step)
 		const hasActiveStep = stepStates.some(s => s.status !== "pending");
 		if (!hasActiveStep) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		widgetCtx.ui.setWidget("agent-chain", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -334,9 +335,51 @@ export default function (pi: ExtensionAPI) {
 		const state = stepStates[stepIndex];
 
 		return new Promise((resolve) => {
+			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}) };
+			if (shouldUseClaudeCliForAgent(agentDef.name, model, !!(globalThis as any).__piClaudeOverlay)) {
+				let toolkitFinalOutput = "";
+				spawnToolkitWorker(agentDef, {
+					task,
+					sessionFile: agentSessionFile,
+					cwd: ctx.cwd,
+					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { currentChainProc = proc; },
+					onStdoutLine: (line: string) => {
+						try {
+							const event = JSON.parse(line);
+							if (event.type === "message_update") {
+								const delta = event.assistantMessageEvent;
+								if (delta?.type === "text_delta") {
+									textChunks.push(delta.delta || "");
+									const full = textChunks.join("");
+									const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+									state.lastWork = last;
+									updateWidget();
+								}
+							}
+						} catch {}
+					},
+					onStderr: () => {},
+				}).then(({ exitCode, output }) => {
+					currentChainProc = null;
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					clearInterval(timer);
+					const elapsed = Date.now() - startTime;
+					state.elapsed = elapsed;
+					const finalOutput = toolkitFinalOutput || textChunks.join("");
+					state.lastWork = finalOutput.split("\n").filter((l: string) => l.trim()).pop() || "";
+					if (exitCode === 0) {
+						agentSessions.set(agentKey, agentSessionFile);
+					}
+					resolve({ output: finalOutput, exitCode: exitCode ?? 1, elapsed });
+				});
+				return;
+			}
+
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 				cwd: ctx.cwd,
 			});
 
@@ -605,7 +648,7 @@ export default function (pi: ExtensionAPI) {
 			const idx = options.indexOf(choice);
 			activateChain(chains[idx]);
 			const flow = chains[idx].steps.map(s => displayName(s.agent)).join(" → ");
-			ctx.ui.setStatus("agent-chain", `Chain: ${chains[idx].name} (${chains[idx].steps.length} steps)`);
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("agent-chain", `Chain: ${chains[idx].name} (${chains[idx].steps.length} steps)`);
 			ctx.ui.notify(
 				`Chain: ${chains[idx].name}\n${chains[idx].description}\n${flow}`,
 				"info",
@@ -1513,7 +1556,7 @@ ${agentCatalog}
 
 		// run_chain is registered as a tool — available alongside all default tools
 
-		_ctx.ui.setStatus("agent-chain", `Chain: ${activeChain!.name} (${activeChain!.steps.length} steps)`);
+		if (!(globalThis as any).__piSummaryModeActive) _ctx.ui.setStatus("agent-chain", `Chain: ${activeChain!.name} (${activeChain!.steps.length} steps)`);
 		// Footer: use footer.ts only — do not overwrite
 
 		// Register nav provider for F-key navigation

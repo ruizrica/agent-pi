@@ -1,0 +1,27 @@
+{
+  "id": "69db01ca-5e63-4513-a0a2-b57cebb66e03",
+  "surfaceId": "7319cf11-2ca6-40dc-bf1a-205c5d7cc072",
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "content": "Feature: Mcp Client\n  Module with 3 exported items\n\n  Background:\n    Given the application is running\n\n  Scenario: Object construction\n    When I send a request to object construction\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Method invocation\n    When I send a request to method invocation\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: State mutation\n    When I send a request to state mutation\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Error handling\n    When I send a request to error handling\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n",
+  "status": "approved",
+  "version": 1,
+  "createdAt": 1776066719310,
+  "updatedAt": 1776066747185,
+  "versions": [],
+  "validationErrors": [],
+  "validationWarnings": [
+    "Scenario \"Object construction\" has no Given steps — add preconditions",
+    "Scenario \"Method invocation\" has no Given steps — add preconditions",
+    "Scenario \"State mutation\" has no Given steps — add preconditions",
+    "Scenario \"Error handling\" has no Given steps — add preconditions",
+    "Multiple Scenarios found but no Scenario Outlines — consider parameterizing similar tests"
+  ],
+  "validationStats": {
+    "featureCount": 1,
+    "scenarioCount": 4,
+    "scenarioOutlineCount": 0,
+    "stepCount": 13,
+    "backgroundCount": 1,
+    "hasExamples": false
+  }
+}

@@ -48,10 +48,11 @@ Pi discovers all extensions, themes, and skills automatically.
 
 1. **Type a task** — Pi operates in plan-first mode. It will ask you to define tasks before using tools.
 2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN)
-3. **Ctrl+X** — Cycle themes
-4. **`/agents-team`** — Switch between agent teams
-5. **`/chain`** — Switch between chain workflows
-6. **`/tex`** — Open Text Tools in the browser
+3. **`/claude`** — Toggle the CLAUDE overlay for the active mode. Active modes render as `MODE + CLAUDE`, use a dark-orange banner, and route Claude-family execution paths through the Claude CLI runtime.
+4. **Ctrl+X** — Cycle themes
+5. **`/agents-team`** — Switch between agent teams
+6. **`/chain`** — Switch between chain workflows
+7. **`/tex`** — Open Text Tools in the browser
 
 ## Cloud Code Plugin / Skill
 
@@ -138,6 +139,7 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 | **agent-nav** | F1-F4 navigation shared across agent widgets |
 | **theme-cycler** | Ctrl+X to cycle through installed themes |
 | **escape-cancel** | Double-ESC cancels all running operations |
+| **summary-mode** | `/toggle-summary` toggles a main-session work summary view |
 
 ### Task Management
 
@@ -151,9 +153,9 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 
 | Extension | Description |
 |-----------|-------------|
-| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN |
+| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a Claude CLI overlay for the active mode |
 
-Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems.
+Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cross-mode overlay that changes the banner to dark orange, displays the active mode as `MODE + CLAUDE`, and routes Claude-family worker/advisor execution through the Claude CLI path.
 
 ### Multi-Agent Orchestration
 
@@ -170,7 +172,7 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 
 | Extension | Description |
 |-----------|-------------|
-| **security-guard** | Pre-tool-hook: blocks `rm -rf`, `sudo`, credential theft, prompt injection |
+| **security-guard** | Pre-tool-hook: blocks dangerous commands, credential theft, and prompt injection |
 | **secure** | `/secure` — full AI security sweep + protection installer for any project |
 | **message-integrity-guard** | Prevents session-bricking from orphaned tool_result messages |
 
@@ -204,6 +206,7 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **tool-search** | Meta-tool — discover and inspect tools at runtime |
 | **tool-caller** | Meta-tool — invoke any tool programmatically (dynamic composition) |
 | **lean-tools** | Toggle lean mode — agent uses `tool_search` + `call_tool` instead of all tools |
+| **openrouter-routing** | Sync OpenRouter models, preview provider variants, and pin provider/quantization routes |
 
 ### Session & Context
 
@@ -217,12 +220,68 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 
 | Mode | Trigger | Behavior |
 |------|---------|----------|
-| **NORMAL** | Default | Standard coding assistant |
-| **PLAN** | Shift+Tab | Plan-first workflow — analyze → plan → approve → implement → report |
-| **SPEC** | Shift+Tab | Spec-driven — shape → requirements → tasks → implement |
+| **NORMAL** | Default | Advisor-first orchestration — consult the currently selected model as the main advisor agent, prefer `grok-4.1-fast`, let the advisor choose any mix up to 16 non-advisor agents, and optionally request `red-team` / `gpt-5.4` second opinions for high-impact tasks |
+| **PLAN** | Shift+Tab | Quality-first plan workflow — selected model acts as main advisor, supports up to 16 non-advisor agents, and uses cross-provider second opinions for complex/high-risk work |
+| **SPEC** | Shift+Tab | Quality-first spec workflow — selected model acts as main advisor, supports up to 16 non-advisor agents, and uses cross-provider second opinions for really complex multi-step work |
 | **TEAM** | Shift+Tab | Dispatcher mode — primary delegates, specialists execute |
 | **CHAIN** | Shift+Tab | Sequential pipeline — step outputs chain into next step |
 | **PIPELINE** | Shift+Tab | 5-phase hybrid with parallel dispatch |
+
+### CLAUDE Overlay
+
+Use `/claude` to toggle a provider-specific overlay on top of the current operational mode.
+
+- Active modes display as `MODE + CLAUDE`
+- The mode banner changes to dark orange
+- Existing role names stay the same
+- Claude-family execution paths use the Claude CLI integration while the overlay is active
+- Non-Claude models continue to use their normal execution paths
+
+### NORMAL / PLAN / SPEC — Quality-First Advisor Orchestration
+
+NORMAL, PLAN, and SPEC now share a common **quality-first advisor → non-advisor fan-out → optional cross-provider second-opinion** strategy, while preserving their mode-specific workflows.
+
+### NORMAL Mode — Advisor-First Orchestration
+
+The NORMAL mode is the default operating strategy. It uses a **strategic advisor → non-advisor fan-out → optional second-opinion** pattern:
+
+1. **Strategic Advisor** — Before substantive work, the currently selected session model acts as the main advisor agent and reviews task context, approach, scope, and complexity assessment.
+2. **Preferred Worker Model** — The `grok-4.1-fast` model is the preferred worker path for fast, capable execution and content gathering. If unavailable, it gracefully falls back to `claude-haiku-4-5`.
+3. **Mixed Fan-Out** — For complex, parallelizable tasks, the advisor may choose **any mix up to 16 non-advisor agents**. Workers are preferred for content gathering; builders handle execution-heavy implementation.
+4. **Optional Second Opinion** — For complex, risky, or high-impact work, request a second opinion from the `red-team` reviewer (gpt-5.4). This is **not mandatory** — complexity and risk determine whether to ask.
+
+**When to skip the advisor:**
+- Simple tasks (single-file fix, quick answer, straightforward read)
+
+**When to use the advisor:**
+- Multi-step tasks with architecture or design decisions
+- Risky operations (deletions, migrations, system-wide changes)
+- Ambiguous requirements where approach uncertainty exists
+
+**When to fan out agents:**
+- Complex, parallelizable work with independent sub-tasks
+- Features spanning multiple modules or services
+- Long-running implementations that can be split
+- Investigations where workers can gather context while builders implement
+
+**When to request a second opinion:**
+- Significant architectural changes
+- Security or compliance work
+- Ambiguous or conflicting requirements
+- High-impact changes affecting many users or critical paths
+
+### PLAN and SPEC Modes
+
+PLAN and SPEC now use the same selected-model advisor behavior as NORMAL:
+- the **currently selected session model** acts as the main advisor
+- they can orchestrate **1 advisor + up to 16 non-advisor agents** when quality and complexity justify the fanout
+- **workers are preferred for content gathering**, while builders handle execution-heavy slices
+- second-opinion or red-team review should come from a **different provider/model family** than the main advisor
+- both modes now explicitly prioritize **quality over speed**
+
+Mode escalation remains important:
+- use **PLAN** for complex tasks that need a structured plan and user approval before coding
+- use **SPEC** for really complex multi-step work that needs requirements, design, task breakdown, and approval before implementation
 
 ## Multi-Agent Orchestration
 
@@ -308,41 +367,3 @@ The security system operates at three layers:
 3. **`before_agent_start` hook** — System prompt hardening reminds the agent of security rules
 
 The `/secure` command runs a comprehensive AI security sweep on any project and can install portable protections.
-
-## Themes
-
-11 themes included. Cycle with **Ctrl+X**:
-
-Catppuccin Mocha · Cyberpunk · Dracula · Everforest · Gruvbox · Midnight Ocean · Nord · Ocean Breeze · Rose Pine · Synthwave · Tokyo Night
-
-## Text Tools
-
-A lightweight, zero-dependency text manipulation app bundled in `tex/`. Open it with `/tex` or directly at `tex/index.html`.
-
-- **15 stackable operations** — trim, dedupe, sort, case transforms, regex replace, and more
-- **Before/after diff view** — see exactly what changed
-- **No backend, no build step** — single HTML page, works offline
-- **Dark theme** — matches the terminal aesthetic
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| Extensions not loading | `pi install git:github.com/ruizrica/agent-pi` — reinstall the package |
-| No themes available | Same as above — themes are auto-discovered from the package |
-| Shift+Tab not working | Ensure mode-cycler extension loaded — check `pi config` |
-| No chains/pipelines | Agent configs at `agents/` are loaded automatically by extensions |
-
-## Built on Pi
-
-This project is a configuration and extension layer for [Pi Coding Agent](https://github.com/badlogic/pi-mono) by Mario Zechner ([@badlogic](https://github.com/badlogic)). Pi provides the core runtime, TUI framework, LLM integration, and extension API.
-
----
-
-By [Ricardo Ruiz](https://ruizrica.io)
-
-Inspired by the work of [IndyDevDan](https://www.youtube.com/@indydevdan) — check out his [excellent video on Pi](https://youtu.be/f8cfH5XX-XU?si=RcZoSAKeASaU-lPM) that helped shape this project.
-
-## License
-
-[MIT](LICENSE)

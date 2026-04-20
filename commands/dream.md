@@ -1,123 +1,123 @@
 ---
 name: dream
-description: "Context consolidation and memory compaction — clean up stale files, extract insights, create skills"
-argument-hint: "[--dry-run] [--deep]"
+description: "Global-first Pi memory consolidation and nightly self-improvement"
+argument-hint: "[--global] [--workspace <path>] [--dry-run] [--deep]"
 allowed-tools: '["run_chain", "read", "write", "bash", "obsidian_memory", "tasks", "show_report"]'
 context: inline
 ---
 
-# /dream — Context Consolidation Cycle
+# /dream — Global Pi Memory Consolidation
 
-You are initiating a **dream cycle** — a multi-agent workflow that consolidates memory, extracts insights, and cleans up stale context.
+You are initiating Pi's **dream cycle** — a global-first memory consolidation and nightly self-improvement workflow.
 
-## What /dream Does
+## What `/dream` Does Now
 
-1. **Scans** all context locations (`.context/`, `.kiro/specs/`, `skills/`, Obsidian vault)
-2. **Analyzes** each artifact — categorizes as keep, consolidate, archive, or delete
-3. **Extracts** insights from stale artifacts — creates skills, ingests to Obsidian
-4. **Verifies** the cleanup plan — multi-agent verification ensures nothing important is missed
-5. **Cleans** — archives old files, removes stale content, resets session state
-6. **Reports** — summary of what was learned, created, and removed
+1. **Scans memory sources** across Pi's global memory system, the current workspace, project context artifacts, skills, and Obsidian
+2. **Classifies memory** into raw evidence, durable memory, superseded memory, archival material, and active workspace context
+3. **Consolidates learnings** into durable summaries that Pi can reuse across projects
+4. **Verifies retention safety** so valuable information is not lost during compaction or superseding
+5. **Records nightly recommendations** for how Pi should improve itself
+6. **Produces outputs Commander can consume through Pi** without moving dream logic into Commander
 
 ## Arguments
 
-- `--dry-run` — Preview what would be cleaned without making changes
-- `--deep` — Include full Obsidian health check and orphan resolution
+- `--global` — Force a global-first dream pass (default)
+- `--workspace <path>` — Include a specific workspace as a source during the dream pass
+- `--dry-run` — Preview classification and consolidation actions without writing outputs
+- `--deep` — Include deeper review of Obsidian and cross-workspace memory patterns
+
+## Core Model
+
+`/dream` is **not primarily a cleanup command anymore**.
+
+It is a **memory system command** built around:
+- **Raw evidence** — reports, notes, session traces, transient project artifacts
+- **Workspace memory** — current project-specific context
+- **Durable Pi memory** — reusable learnings and long-lived summaries
+- **Superseded memory** — older items retained for traceability but no longer primary
+- **Self-improvement recommendations** — what Pi should change or strengthen next
+
+Deletion is no longer the main outcome. Prefer:
+1. consolidate
+2. supersede
+3. archive
+4. delete only when clearly safe and low-value
 
 ## Execution
 
-$ARGUMENTS
-
-First, check if this is a dry run or has special flags:
-
-```
 Arguments: $ARGUMENTS
-Dry run mode: [parse if --dry-run is present]
-Deep mode: [parse if --deep is present]
-```
 
-### If --dry-run
+First determine:
+- Scope mode: global-first unless a narrower workspace scan is explicitly requested
+- Dry-run mode: whether writes should be avoided
+- Deep mode: whether broader cross-memory synthesis should be performed
 
-Run only the scanner agent to produce the manifest, then display what would happen:
+### If `--dry-run`
 
-1. Use `run_chain` with the dream chain but instruct scanner-only behavior
-2. Display the categorized artifacts
-3. Show what would be archived, deleted, and created
-4. Do NOT execute any cleanup
+Run the dream chain in preview mode and produce:
+- source inventory
+- durable memory candidates
+- supersede/archive candidates
+- self-improvement recommendations
+- global state changes that would be written
+
+Do **not** execute destructive or persistent changes.
 
 ### Normal Execution
 
 Activate the dream chain:
 
+```text
+run_chain { task: "Execute global-first dream consolidation cycle for Pi. $ARGUMENTS" }
 ```
-run_chain { task: "Execute dream consolidation cycle. $ARGUMENTS" }
-```
 
-The chain will run sequentially:
-1. **dream-scanner** → inventories all artifacts, produces JSON manifest
-2. **dream-compiler** → extracts insights, creates skills, ingests to Obsidian
-3. **dream-verifier** → verifies nothing important is missed
-4. **dream-cleaner** → executes cleanup, produces final report
+The chain runs sequentially:
+1. **dream-scanner** → inventory global/workspace memory sources and classify them
+2. **dream-compiler** → promote durable memory, create structured summaries, write global outputs
+3. **dream-verifier** → verify nothing important is lost or incorrectly superseded
+4. **dream-cleaner** → finalize state, archive/supersede low-priority items, emit final dream report
 
-### Post-Dream
+## Post-Dream
 
-After the chain completes:
+After completion:
+1. Read the global dream state from `~/.pi/dream/dream-state.json`
+2. Summarize:
+   - workspaces scanned
+   - sources consolidated
+   - durable memories promoted
+   - items superseded or archived
+   - recommendations generated
+3. Show the final report if useful
 
-1. Read `.context/dream-state.json` to confirm the dream was recorded
-2. Display a summary to the user:
-   - Files scanned, archived, deleted
-   - Skills created
-   - Obsidian content added
-   - Space reclaimed
-   - Next recommended dream time
+## Global State Tracking
 
-3. Optionally show completion report via `show_report`
-
-## Dream State Tracking
-
-The dream cycle maintains state in `.context/dream-state.json`:
+Dream state is global-first and stored under Pi's home data, not only the current workspace:
 
 ```json
 {
   "lastDream": "2025-01-15T10:15:00Z",
   "intervalHours": 24,
   "enabled": true,
+  "globalRoot": "~/.pi/dream",
+  "lastScope": "global",
   "lastSummary": {
-    "filesArchived": 7,
-    "filesDeleted": 5,
-    "skillsCreated": 2,
-    "obsidianIngests": 5
+    "workspacesScanned": 3,
+    "sourcesConsolidated": 18,
+    "durableMemoriesPromoted": 6,
+    "supersededItems": 5,
+    "recommendationsGenerated": 4
   }
 }
 ```
 
-This allows scheduling reminders when it's been too long since the last dream.
-
 ## Safety Notes
 
-- The verifier agent independently checks all delete operations
-- Files are archived (not deleted) when there's any doubt
-- Nothing outside `.context/` is ever deleted
-- Obsidian content is additive — wiki articles are created, not removed
-- The dream report shows exactly what changed
-
-## Example Output
-
-```
-🌙 Dream Cycle Complete
-
-Summary:
-├── Files scanned: 25
-├── Files archived: 7 → .context/archive/2025-01-15/
-├── Files deleted: 5
-├── Skills created: 2
-│   ├── viewer-factory-pattern
-│   └── config-validation-pattern
-├── Obsidian ingests: 5
-├── Wiki articles: 1
-└── Space reclaimed: 45 KB
-
-Next dream recommended: Tomorrow at 10:15 AM
-
-Run /dream --dry-run anytime to preview what would be cleaned.
-```
+- Dream logic lives in Agent Pi, not Commander
+- Commander may consume outputs, but does not own the dream implementation
+- Prefer superseding and archiving over deletion
+- Preserve traceability for important memory transitions
+- The dream report should clearly separate:
+  - what was observed
+  - what was promoted to durable memory
+  - what was superseded
+  - what Pi should improve next

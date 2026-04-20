@@ -11,6 +11,12 @@ import {
 	type AgentModelsConfig,
 } from "../lib/agent-defs.ts";
 import { resolveToolkitWorkerModel, TOOLKIT_WORKER_MODEL } from "../lib/toolkit-cli.ts";
+import {
+	selectWorkerModel,
+	PREFERRED_WORKER_MODEL,
+	FALLBACK_WORKER_MODEL,
+	type WorkerModelSelection,
+} from "../lib/advisor-default-model-selection.ts";
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -211,5 +217,88 @@ describe("loadAgentModelsConfig", () => {
 		expect(config.default.provider).toBe("anthropic");
 		expect(config.default.model).toBe("claude-haiku-4-5-20251001");
 		expect(Object.keys(config.agents)).toHaveLength(0);
+	});
+});
+
+// ── Worker Model Selection (Phase 3) ─────────────────────────────────────────
+
+describe("selectWorkerModel — grok-4.1-fast preference with fallback", () => {
+	it("returns a WorkerModelSelection object", () => {
+		const result = selectWorkerModel();
+		expect(result).toHaveProperty("model");
+		expect(result).toHaveProperty("fallbackUsed");
+		expect(result).toHaveProperty("message");
+	});
+
+	it("prefers x-ai/grok-4.1-fast when no availability check", () => {
+		const result = selectWorkerModel();
+		expect(result.model).toBe(PREFERRED_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(false);
+		expect(result.message).toContain(PREFERRED_WORKER_MODEL);
+	});
+
+	it("uses preferred model when available in Set", () => {
+		const available = new Set([PREFERRED_WORKER_MODEL, "anthropic/claude-sonnet-4-20250514"]);
+		const result = selectWorkerModel(available);
+		expect(result.model).toBe(PREFERRED_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(false);
+	});
+
+	it("uses preferred model when available in array", () => {
+		const available = [PREFERRED_WORKER_MODEL, "anthropic/claude-sonnet-4-20250514"];
+		const result = selectWorkerModel(available);
+		expect(result.model).toBe(PREFERRED_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(false);
+	});
+
+	it("falls back to haiku when preferred is unavailable", () => {
+		const available = new Set(["anthropic/claude-sonnet-4-20250514", "anthropic/claude-opus-4-6"]);
+		const result = selectWorkerModel(available);
+		expect(result.model).toBe(FALLBACK_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(true);
+		expect(result.message).toContain("unavailable");
+		expect(result.message).toContain("fallback");
+	});
+
+	it("uses fallback when available set is empty", () => {
+		const available = new Set<string>();
+		const result = selectWorkerModel(available);
+		expect(result.model).toBe(FALLBACK_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(true);
+	});
+
+	it("uses fallback when available array is empty", () => {
+		const result = selectWorkerModel([]);
+		expect(result.model).toBe(FALLBACK_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(true);
+	});
+
+	it("accepts preferred override: true to force preferred", () => {
+		const available = new Set([
+			"anthropic/claude-sonnet-4-20250514", // deliberately exclude preferred
+		]);
+		const result = selectWorkerModel(available, true);
+		expect(result.model).toBe(PREFERRED_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(false);
+		expect(result.message).toContain("explicit override");
+	});
+
+	it("accepts preferred override: false to force fallback", () => {
+		const available = new Set([PREFERRED_WORKER_MODEL]);
+		const result = selectWorkerModel(available, false);
+		expect(result.model).toBe(FALLBACK_WORKER_MODEL);
+		expect(result.fallbackUsed).toBe(true);
+		expect(result.message).toContain("explicit override");
+	});
+
+	it("message includes model string when preferred available", () => {
+		const result = selectWorkerModel(new Set([PREFERRED_WORKER_MODEL]));
+		expect(result.message).toContain(PREFERRED_WORKER_MODEL);
+	});
+
+	it("message includes both preferred and fallback when fallback triggered", () => {
+		const result = selectWorkerModel(new Set(["other/model"]));
+		expect(result.message).toContain(FALLBACK_WORKER_MODEL);
+		expect(result.message).toContain(PREFERRED_WORKER_MODEL);
 	});
 });

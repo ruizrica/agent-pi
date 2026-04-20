@@ -1,0 +1,29 @@
+{
+  "id": "8d4fc6b2-b550-404b-9c21-1ba7e4cbba63",
+  "scenarioIds": [
+    "d4baf9a3-2ac4-4eff-a003-f64a25fee05c"
+  ],
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "status": "exported",
+  "content": "/**\n * Auto-generated Playwright API test file\n * Generated from Gherkin scenarios using gopher-agent2 methodology\n *\n * This file tests API endpoints via HTTP requests only.\n * No browser interaction. Uses Playwright's APIRequestContext.\n *\n * Environment variables required:\n *   API_BASE_URL - Base URL of the API server\n *\n * Assumptions:\n *   - Base URL assumes Cloudflare Workers running on localhost:8787\n *\n * Run: npx playwright test <this-file>\n */\n\nimport { test, expect } from '@playwright/test'\n\n  test.describe('Openrouter Routing Api', () => {\n    // endpoint for Openrouter Routing Api Background:\n\n    // Dynamic data stored across tests (Rule 8)\n    let createdIds: string[] = []\n\n    // Rule 3: Setup shared preconditions\n    // Rule 11: Auth via login endpoint in beforeAll\n    test.beforeAll(async ({ request }) => {\n    })\n\n    // Rule 9: Clean up test data\n    test.afterAll(async ({ request }) => {\n      for (const id of createdIds) {\n        await request.delete(`http://localhost:8787/api/openrouter-routing-api/${id}`, {\n        })\n      }\n    })\n\n    test('Successfully call openrouter routing api endpoint', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to successfully call openrouter routing api endpoint\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('openrouter routing api with invalid input returns error', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to openrouter routing api with invalid input returns error\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('openrouter routing api with missing auth returns 401', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to openrouter routing api with missing auth returns 401\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('openrouter routing api resource not found returns 404', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to openrouter routing api resource not found returns 404\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Reject request without authentication token', async ({ request }) => {\n      // Arrange — Preconditions\n      // Deliberately omitting auth token for this test\n      const noAuthHeaders = { /* no Authorization header */ }\n\n      // Act — API Call\n      const response = await request.get(`${process.env.API_BASE_URL}/api/resource`, {\n        // Deliberately no Authorization header\n      })\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(401)\n      const body = await response.json()\n      expect(body).toHaveProperty('error')\n      const errorBody = body\n      expect(JSON.stringify(errorBody).toLowerCase()).toContain('authentication required')\n    })\n  })\n",
+  "assumptions": [
+    "Base URL assumes Cloudflare Workers running on localhost:8787"
+  ],
+  "createdAt": 1776066755909,
+  "updatedAt": 1776066768746,
+  "validationErrors": [],
+  "validationWarnings": [],
+  "validationStats": {
+    "testCount": 5,
+    "describeCount": 1,
+    "hasBeforeAll": true,
+    "hasBeforeEach": false,
+    "hasAfterAll": true,
+    "hasAfterEach": false,
+    "hasAuthSetup": true,
+    "usesApiRequest": true,
+    "usesBrowser": false,
+    "assertionCount": 11
+  },
+  "exportPath": "/Users/ricardo/Workshop/GitHub/agent-pi/tests/bc5fa4e4-1302-4fe1-a6d8-3983207a7882.spec.ts"
+}

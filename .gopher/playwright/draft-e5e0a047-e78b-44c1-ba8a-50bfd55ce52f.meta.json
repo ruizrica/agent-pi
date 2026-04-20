@@ -1,0 +1,29 @@
+{
+  "id": "e5e0a047-e78b-44c1-ba8a-50bfd55ce52f",
+  "scenarioIds": [
+    "0c53d7f3-65c7-4323-9466-5c9a297e67aa"
+  ],
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "status": "exported",
+  "content": "/**\n * Auto-generated Playwright API test file\n * Generated from Gherkin scenarios using gopher-agent2 methodology\n *\n * This file tests API endpoints via HTTP requests only.\n * No browser interaction. Uses Playwright's APIRequestContext.\n *\n * Environment variables required:\n *   API_BASE_URL - Base URL of the API server\n *\n * Assumptions:\n *   - Base URL assumes Cloudflare Workers running on localhost:8787\n *\n * Run: npx playwright test <this-file>\n */\n\nimport { test, expect } from '@playwright/test'\n\n  test.describe('Dream State', () => {\n    // Module with 11 exported items Background:\n\n    // Dynamic data stored across tests (Rule 8)\n    let createdIds: string[] = []\n\n    // Rule 3: Setup shared preconditions\n    // Rule 11: Auth via login endpoint in beforeAll\n    test.beforeAll(async ({ request }) => {\n    })\n\n    // Rule 9: Clean up test data\n    test.afterAll(async ({ request }) => {\n      for (const id of createdIds) {\n        await request.delete(`http://localhost:8787/api/dream-state/${id}`, {\n        })\n      }\n    })\n\n    test('Function call with valid inputs', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to function call with valid inputs\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Function call with invalid inputs', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to function call with invalid inputs\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Return value validation', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to return value validation\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Side effects verification', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to side effects verification\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n  })\n",
+  "assumptions": [
+    "Base URL assumes Cloudflare Workers running on localhost:8787"
+  ],
+  "createdAt": 1776066755907,
+  "updatedAt": 1776066768752,
+  "validationErrors": [],
+  "validationWarnings": [],
+  "validationStats": {
+    "testCount": 4,
+    "describeCount": 1,
+    "hasBeforeAll": true,
+    "hasBeforeEach": false,
+    "hasAfterAll": true,
+    "hasAfterEach": false,
+    "hasAuthSetup": true,
+    "usesApiRequest": true,
+    "usesBrowser": false,
+    "assertionCount": 8
+  },
+  "exportPath": "/Users/ricardo/Workshop/GitHub/agent-pi/tests/4424dcf4-b17b-4927-af71-bd50dcdd9861.spec.ts"
+}

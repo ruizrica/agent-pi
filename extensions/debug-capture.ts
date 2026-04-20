@@ -213,6 +213,8 @@ echo -e "\${BG_BLUE}\${FG_WHITE} TEAM \${PAD}\${RST}"
 echo ""
 echo -e "\${BG_BLUE}\${FG_WHITE} CHAIN \${PAD}\${RST}"
 echo ""
+echo -e "\\033[48;2;180;90;0m\${FG_WHITE} PLAN + CLAUDE \${PAD}\${RST}"
+echo ""
 `;
 
 	const scriptPath = writeHelperScript(captureDir, absCaptureDir, `modes-${ts}`, script);

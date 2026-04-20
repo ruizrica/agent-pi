@@ -265,13 +265,16 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const refreshUI = (ctx: ExtensionContext) => {
+		const summaryOnly = !!(globalThis as any).__piSummaryModeActive;
 		const syncIndicator = (globalThis as any).__piCommanderGate?.state === "available" ? "(synced)" : "(local)";
-		if (tasks.length === 0) {
-			ctx.ui.setStatus(`Tasks: none ${syncIndicator}`, "tasks");
-		} else {
-			const remaining = tasks.filter((t) => t.status !== "done").length;
-			const label = listTitle ? listTitle : "Tasks";
-			ctx.ui.setStatus(`${label}: ${tasks.length} tasks (${remaining} remaining) ${syncIndicator}`, "tasks");
+		if (!summaryOnly) {
+			if (tasks.length === 0) {
+				ctx.ui.setStatus(`Tasks: none ${syncIndicator}`, "tasks");
+			} else {
+				const remaining = tasks.filter((t) => t.status !== "done").length;
+				const label = listTitle ? listTitle : "Tasks";
+				ctx.ui.setStatus(`${label}: ${tasks.length} tasks (${remaining} remaining) ${syncIndicator}`, "tasks");
+			}
 		}
 
 		refreshWidget(ctx);

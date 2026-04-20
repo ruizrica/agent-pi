@@ -8,6 +8,7 @@ import {
 	resolveToolkitWorkerModel,
 	TOOLKIT_WORKER_MODEL,
 	getToolkitWorkerArgs,
+	shouldUseClaudeCliForAgent,
 } from "../lib/toolkit-cli.ts";
 import { resolveAgentModelString, type AgentModelsConfig } from "../lib/agent-defs.ts";
 
@@ -50,6 +51,13 @@ describe("toolkit worker model resolution", () => {
 
 	it("preserves non-toolkit fallback models", () => {
 		expect(resolveToolkitWorkerModel("reviewer", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
+	});
+
+	it("changes execution routing rather than mutating resolved models", () => {
+		expect(resolveToolkitWorkerModel("reviewer", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", true)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("claude-worker", "anthropic/claude-haiku-4-5", false)).toBe(true);
 	});
 });
 

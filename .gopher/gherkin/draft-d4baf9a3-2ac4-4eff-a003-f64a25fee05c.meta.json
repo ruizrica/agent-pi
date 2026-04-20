@@ -1,0 +1,27 @@
+{
+  "id": "d4baf9a3-2ac4-4eff-a003-f64a25fee05c",
+  "surfaceId": "bc5fa4e4-1302-4fe1-a6d8-3983207a7882",
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "content": "Feature: Openrouter Routing Api\n  endpoint for Openrouter Routing Api\n\n  Background:\n    Given the application is running\n    And I have a valid bearer token\n\n  Scenario: Successfully call openrouter routing api endpoint\n    When I send a request to successfully call openrouter routing api endpoint\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: openrouter routing api with invalid input returns error\n    When I send a request to openrouter routing api with invalid input returns error\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: openrouter routing api with missing auth returns 401\n    When I send a request to openrouter routing api with missing auth returns 401\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: openrouter routing api resource not found returns 404\n    When I send a request to openrouter routing api resource not found returns 404\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Reject request without authentication token\n    Given I do not have an authentication token\n    When I send a request without the Authorization header\n    Then the response status should be 401\n    And the response body should contain \"error\"\n    And the error message should indicate \"unauthorized\" or \"authentication required\"\n\n",
+  "status": "approved",
+  "version": 1,
+  "createdAt": 1776066719324,
+  "updatedAt": 1776066747184,
+  "versions": [],
+  "validationErrors": [],
+  "validationWarnings": [
+    "Scenario \"Successfully call openrouter routing api endpoint\" has no Given steps — add preconditions",
+    "Scenario \"openrouter routing api with invalid input returns error\" has no Given steps — add preconditions",
+    "Scenario \"openrouter routing api with missing auth returns 401\" has no Given steps — add preconditions",
+    "Scenario \"openrouter routing api resource not found returns 404\" has no Given steps — add preconditions",
+    "Multiple Scenarios found but no Scenario Outlines — consider parameterizing similar tests"
+  ],
+  "validationStats": {
+    "featureCount": 1,
+    "scenarioCount": 5,
+    "scenarioOutlineCount": 0,
+    "stepCount": 19,
+    "backgroundCount": 1,
+    "hasExamples": false
+  }
+}

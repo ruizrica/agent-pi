@@ -27,6 +27,10 @@ export interface ViewerServerConfig {
 	routes?: ViewerRoute[];
 	/** Called when POST /result is received or server closes */
 	onResult?: (body: any) => void;
+	/** Optional round-trip state provider for live refresh viewers */
+	getRoundTripState?: () => ViewerRoundTripState;
+	/** Called when POST /feedback is received for live refresh viewers */
+	onFeedback?: (body: any) => void | Promise<void>;
 	/** Fallback handler for requests not matched by exact routes (e.g., prefix-based routing). Return true if handled. */
 	fallbackHandler?: (req: IncomingMessage, res: ServerResponse, url: URL) => boolean | Promise<boolean>;
 	/** Listen on 0.0.0.0 instead of 127.0.0.1 (for LAN-accessible servers like web-chat) */
@@ -37,6 +41,16 @@ export interface ViewerServerHandle {
 	port: number;
 	server: Server;
 	waitForResult: () => Promise<any>;
+	waitForFeedback: () => Promise<any>;
+}
+
+export interface ViewerRoundTripState {
+	status: "idle" | "feedback_submitted" | "updated" | "approved" | "declined";
+	feedback?: string;
+	revision?: number;
+	updatedAt?: string;
+	changeSummary?: string[];
+	payload?: any;
 }
 
 /**
@@ -60,6 +74,10 @@ export function createViewerServer(config: ViewerServerConfig): Promise<ViewerSe
 		let resultResolved = false;
 		const resultPromise = new Promise<any>((res) => {
 			resolveResult = res;
+		});
+		let resolveFeedback: (result: any) => void;
+		const feedbackPromise = new Promise<any>((res) => {
+			resolveFeedback = res;
 		});
 
 		// Build a map of custom routes for quick lookup
@@ -111,6 +129,34 @@ export function createViewerServer(config: ViewerServerConfig): Promise<ViewerSe
 					res.writeHead(404);
 					res.end();
 				}
+				return;
+			}
+
+			// POST /feedback → parse JSON and notify live round-trip viewers
+			if (method === "POST" && url.pathname === "/feedback" && config.onFeedback) {
+				let body = "";
+				req.on("data", (chunk) => {
+					body += chunk;
+				});
+				req.on("end", async () => {
+					try {
+						const data = body.trim() ? JSON.parse(body) : {};
+						await config.onFeedback?.(data);
+						resolveFeedback(data);
+						res.writeHead(200, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: true }));
+					} catch {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: "Invalid JSON" }));
+					}
+				});
+				return;
+			}
+
+			// GET /updated-content → return round-trip status for live refresh viewers
+			if (method === "GET" && url.pathname === "/updated-content" && config.getRoundTripState) {
+				res.writeHead(200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(config.getRoundTripState()));
 				return;
 			}
 
@@ -179,6 +225,7 @@ export function createViewerServer(config: ViewerServerConfig): Promise<ViewerSe
 				port: addr.port,
 				server,
 				waitForResult: () => resultPromise,
+				waitForFeedback: () => feedbackPromise,
 			});
 		});
 	});

@@ -36,7 +36,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
-import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
+import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
 import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
@@ -304,6 +304,7 @@ export default function (pi: ExtensionAPI) {
 	function registerAgentWidget(state: AgentState) {
 		if (!widgetCtx) return;
 		const key = `agent-${state.widgetId}`;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
 			const bgFn = (text: string): string => {
 				const bg = STATUS_BG[state.status] || STATUS_BG.running;
@@ -371,6 +372,7 @@ export default function (pi: ExtensionAPI) {
 		// Task list widget (above editor)
 		const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
 		if (taskList && taskList.tasks.length > 0) {
+			if ((globalThis as any).__piSummaryModeActive) return;
 			widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
 				const text = new Text("", 0, 0);
 
@@ -545,6 +547,9 @@ export default function (pi: ExtensionAPI) {
 			let toolkitFinalOutput = "";
 			// Build env — include Commander task ID when available
 			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+			if ((globalThis as any).__piClaudeOverlay) {
+				spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
+			}
 			if (commanderAvailable) {
 				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
 				if (currentTask?.commanderTaskId !== undefined) {
@@ -646,7 +651,7 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 				} catch {
-					if (isClaudeCliAgent(state.def.name) && isClaudeDisplayNoise(trimmed)) return;
+					if (shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay) && isClaudeDisplayNoise(trimmed)) return;
 					textChunks.push(trimmed + "\n");
 					state.textChunks.push(trimmed + "\n");
 					state.lastWork = trimmed;
@@ -659,7 +664,7 @@ export default function (pi: ExtensionAPI) {
 			};
 
 			let stderrBuf = "";
-			if (isToolkitCliAgent(state.def.name)) {
+			if (isToolkitCliAgent(state.def.name) || shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				spawnToolkitWorker(state.def, {
 					task,
 					sessionFile: agentSessionFile,
@@ -671,7 +676,7 @@ export default function (pi: ExtensionAPI) {
 					onStderr: (chunk: string) => { stderrBuf += chunk; },
 				}).then(({ exitCode, output }) => {
 					toolkitFinalOutput = output || toolkitFinalOutput;
-					if (isToolkitCliAgent(state.def.name) && toolkitFinalOutput.trim()) {
+					if ((isToolkitCliAgent(state.def.name) || shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay)) && toolkitFinalOutput.trim()) {
 						state.lastWork = toolkitFinalOutput.trim().split("\n").pop() || state.lastWork;
 						state.summary = state.lastWork;
 						state.summaryLines = state.summary ? [state.summary] : state.summaryLines;
@@ -837,7 +842,7 @@ export default function (pi: ExtensionAPI) {
 			const name = teamNames[idx];
 			activateTeam(name);
 			updateWidget();
-			ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
 			ctx.ui.notify(`Team: ${name} — ${Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ")}`, "info");
 		},
 	});
@@ -1344,7 +1349,7 @@ ${agentCatalog}${commanderSection}`,
 
 		// All tools remain visible — dispatcher can use any registered tool directly
 
-		_ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
+		if (!(globalThis as any).__piSummaryModeActive) _ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
 		updateWidget();
 
 		// ── Expose global hooks for escape-cancel integration ────────────

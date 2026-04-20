@@ -16,7 +16,7 @@ import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExpo
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
-import { showReport, isCommanderAvailable } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -34,6 +34,7 @@ interface SpecViewerResult {
 	comments: SpecComment[];
 	markdownChanges: Record<string, string>;
 	modified: boolean;
+	feedback?: string;
 }
 
 // ── MIME Types ────────────────────────────────────────────────────────
@@ -80,13 +81,64 @@ function startSpecViewerServer(
 	title: string,
 	existingComments: SpecComment[],
 ): Promise<ViewerServerHandle> {
+	let roundTripState = {
+		status: "idle",
+		feedback: "",
+		revision: 0,
+		changeSummary: [] as string[],
+		payload: {
+			documents: documents.map((doc) => ({ key: doc.key, markdown: doc.markdown })),
+		},
+	};
+	let lastKnownDocuments = documents.map((doc) => ({ key: doc.key, markdown: doc.markdown, filePath: doc.filePath, isVisuals: doc.isVisuals }));
+
 	return createViewerServer({
 		getHtml: (port) => generateSpecViewerHTML({
 			documents,
 			title,
 			port,
 			existingComments: JSON.stringify(existingComments),
+			roundTripEnabled: true,
 		}),
+		onFeedback: async (body) => {
+			roundTripState = {
+				status: "feedback_submitted",
+				feedback: body?.feedback || "",
+				revision: roundTripState.revision,
+				changeSummary: [],
+				payload: {
+					documents: lastKnownDocuments.map((doc) => ({ key: doc.key, markdown: doc.markdown })),
+				},
+			};
+		},
+		getRoundTripState: () => {
+			if (roundTripState.status === "feedback_submitted") {
+				try {
+					const refreshed = documents.map((doc) => {
+						if (doc.isVisuals) return { key: doc.key, markdown: doc.markdown };
+						const latest = readFileSync(resolve(folderPath, doc.filePath), "utf-8");
+						return { key: doc.key, markdown: latest };
+					});
+					const changed = refreshed.some((doc, index) => doc.markdown !== lastKnownDocuments[index]?.markdown);
+					if (changed) {
+						lastKnownDocuments = refreshed.map((doc, index) => ({
+							key: doc.key,
+							markdown: doc.markdown,
+							filePath: documents[index]?.filePath,
+							isVisuals: documents[index]?.isVisuals,
+						}));
+						roundTripState = {
+							status: "updated",
+							feedback: roundTripState.feedback,
+							revision: roundTripState.revision + 1,
+							changeSummary: ["Applied requested spec updates", "Refreshed viewer content"],
+							payload: { documents: refreshed },
+						};
+					}
+				} catch {}
+			}
+			return roundTripState;
+		},
 		routes: [
 			{
 				method: "GET",
@@ -180,6 +232,22 @@ function formatCommentsForAgent(comments: SpecComment[]): string {
 	return lines.join("\n").trim();
 }
 
+function formatRequestedChanges(commentSummary: string, feedback?: string): string {
+	const trimmedFeedback = (feedback || "").trim();
+	const sections: string[] = [];
+
+	if (trimmedFeedback) {
+		sections.push(`Requested changes:\n${trimmedFeedback}`);
+	}
+
+	if (commentSummary !== "(no comments)") {
+		sections.push(`Inline comments:\n${commentSummary}`);
+	}
+
+	if (sections.length === 0) return "(no change details provided)";
+	return sections.join("\n\n");
+}
+
 // ── Tool Parameters ──────────────────────────────────────────────────
 
 const ShowSpecParams = Type.Object({
@@ -260,9 +328,9 @@ export default function (pi: ExtensionAPI) {
 			} catch {}
 		}
 
-		// Try Commander first (multi-page spec viewer in native UI)
+		// Try Commander first (multi-page spec viewer in native UI), but only
+		// treat it as approved/declined after Commander reports a real user action.
 		if (isCommanderAvailable()) {
-			// Build multi-page content for Commander's SpecViewerModal
 			const content = JSON.stringify({
 				folderPath,
 				pages: documents.map((doc) => ({
@@ -272,27 +340,26 @@ export default function (pi: ExtensionAPI) {
 				})),
 			});
 
-			const result = await showReport({
+			const result = await openAndWaitInCommander({
 				content,
 				title: title || "Spec Viewer",
 				reportType: "spec",
 				mode: "approve",
 				format: "markdown",
-			}, ctx);
+			}, ctx, {
+				includeContent: true,
+			});
 
 			if (result.inCommander) {
-				// Commander is handling the display
-				// For now, return approved since Commander will handle it
-				// TODO: Implement proper wait for Commander result
-				ctx.ui.notify("Spec opened in Commander", "info");
 				return {
-					action: "approved",
+					action: result.action === "approved" ? "approved" : "declined",
 					comments: existingComments,
 					markdownChanges: {},
 					modified: false,
+					feedback: undefined,
 				};
 			}
-			// Fall through to browser if Commander failed
+			// Fall through to browser if Commander is unavailable, times out, or disconnects
 		}
 
 		// Start browser-based server
@@ -364,7 +431,13 @@ export default function (pi: ExtensionAPI) {
 				});
 			} catch {}
 
-			return result;
+			return {
+				action: result.action || "declined",
+				comments: result.comments || [],
+				markdownChanges: result.markdownChanges || {},
+				modified: result.modified || false,
+				feedback: result.feedback,
+			};
 		} finally {
 			cleanupServer();
 		}
@@ -440,6 +513,7 @@ export default function (pi: ExtensionAPI) {
 
 				if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
+					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
 					const modifiedNote = result.modified
 						? "\n\nNote: Some documents were also edited inline — check the updated files."
 						: "";
@@ -447,7 +521,7 @@ export default function (pi: ExtensionAPI) {
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested on the spec. Here are the comments:\n\n${commentSummary}${modifiedNote}`,
+							content: `Changes requested on the spec. Here are the requested updates:\n\n${requestedChanges}${modifiedNote}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -456,7 +530,7 @@ export default function (pi: ExtensionAPI) {
 					return {
 						content: [{
 							type: "text" as const,
-							text: `User requested changes to the spec. Comments:\n\n${commentSummary}${modifiedNote}${scaffoldedNote}`,
+							text: `User requested changes to the spec:\n\n${requestedChanges}${modifiedNote}${scaffoldedNote}`,
 						}],
 						details: {
 							action: "changes_requested" as const,
@@ -464,6 +538,7 @@ export default function (pi: ExtensionAPI) {
 							modified: result.modified,
 							folderPath: folder_path,
 							scaffoldedFiles: scaffoldResult.createdFiles,
+							feedback: result.feedback,
 						},
 					};
 				}
@@ -569,15 +644,16 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.notify("Spec approved — continuing...", "info");
 				} else if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
+					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested:\n\n${commentSummary}`,
+							content: `Changes requested:\n\n${requestedChanges}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
 					);
-					ctx.ui.notify("Changes requested — reviewing comments...", "info");
+					ctx.ui.notify("Changes requested — reviewing feedback...", "info");
 				} else if (result.modified) {
 					ctx.ui.notify("Spec was modified but no action taken.", "info");
 				}

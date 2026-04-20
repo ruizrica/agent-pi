@@ -773,7 +773,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		budgetCounters = { turn: 0, session: 0, bashTurn: 0 };
 		shownContextCardKeys.clear();
 
-		if (ctx?.ui?.setStatus) {
+		if (ctx?.ui?.setStatus && !(globalThis as any).__piSummaryModeActive) {
 			ctx.ui.setStatus("security", "🛡️ Security Guard");
 		}
 	});
@@ -905,6 +905,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	function updateStatusBar(ctx: any) {
 		if (!ctx?.ui?.setStatus) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 
 		const total = stats.blocked + stats.warned + stats.redacted;
 		if (total > 0) {

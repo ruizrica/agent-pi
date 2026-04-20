@@ -6,8 +6,8 @@ import { Type } from "@sinclair/typebox";
 import { Text } from "@mariozechner/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, type Mode } from "./lib/mode-cycler-logic.ts";
-import { PLAN_PROMPT, SPEC_PROMPT, buildNormalPrompt } from "./lib/mode-prompts.ts";
+import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
+import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
 
@@ -16,9 +16,14 @@ const MODE_FILE = "/tmp/pi-current-mode.txt";
 
 export default function (pi: ExtensionAPI) {
 	let currentMode: Mode = "NORMAL";
+	let currentOverlay: ModeOverlayState = { ...DEFAULT_MODE_OVERLAY };
 
 	function updateWidgets(mode: Mode, ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) {
+			ctx.ui.setWidget("mode-block", undefined);
+			return;
+		}
 
 		if (mode === "NORMAL") {
 			ctx.ui.setWidget("mode-block", undefined);
@@ -37,10 +42,10 @@ export default function (pi: ExtensionAPI) {
 			(_tui, _theme) => ({
 				invalidate() {},
 				render(width: number): string[] {
-					const bg = modeBgAnsi(mode);
-					const text = modeTextAnsi(mode);
+					const bg = modeBgAnsi(mode, currentOverlay);
+					const text = modeTextAnsi(mode, currentOverlay);
 					const reset = "\x1b[0m";
-					const label = ` ${mode} `;
+					const label = ` ${modeDisplayName(mode, currentOverlay)} `;
 					const pad = " ".repeat(Math.max(0, width - label.length));
 					return [bg + text + label + pad + reset];
 				},
@@ -62,15 +67,35 @@ export default function (pi: ExtensionAPI) {
 		updateWidgets(currentMode, ctx);
 	}
 
+	function syncOverlayGlobals() {
+		(globalThis as any).__piClaudeOverlay = currentOverlay.claude;
+		(globalThis as any).__piModeOverlay = { ...currentOverlay };
+	}
+
+	function writeModeFile(mode: Mode) {
+		try { writeFileSync(MODE_FILE, modeDisplayName(mode, currentOverlay), "utf-8"); } catch {}
+	}
+
+	function setClaudeOverlay(enabled: boolean, ctx: ExtensionContext) {
+		currentOverlay = { ...currentOverlay, claude: enabled };
+		syncOverlayGlobals();
+		writeModeFile(currentMode);
+		if (ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
+			ctx.ui.setStatus("mode", modeLabel(currentMode, currentOverlay));
+		}
+		updateWidgets(currentMode, ctx);
+	}
+
 	function setMode(mode: Mode, ctx: ExtensionContext) {
 		currentMode = mode;
 		(globalThis as any).__piCurrentMode = mode;
+		syncOverlayGlobals();
 
 		// Write to temp file for statusline
-		try { writeFileSync(MODE_FILE, mode, "utf-8"); } catch {}
+		writeModeFile(mode);
 
-		if (ctx.hasUI) {
-			ctx.ui.setStatus("mode", modeLabel(mode));
+		if (ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
+			ctx.ui.setStatus("mode", modeLabel(mode, currentOverlay));
 		}
 
 		// Publish refresh callback so other aboveEditor widgets can re-pin the mode bar
@@ -129,6 +154,30 @@ export default function (pi: ExtensionAPI) {
 
 	// ── /mode command ─────────────────────────────
 
+	pi.registerCommand("claude", {
+		description: "Toggle Claude overlay for the current operational mode",
+		handler: async (args, ctx) => {
+			const arg = args.trim().toLowerCase();
+			if (["on", "enable", "enabled"].includes(arg)) {
+				setClaudeOverlay(true, ctx);
+				ctx.ui.notify(`Claude overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
+				return;
+			}
+			if (["off", "disable", "disabled"].includes(arg)) {
+				setClaudeOverlay(false, ctx);
+				ctx.ui.notify("Claude overlay disabled");
+				return;
+			}
+			if (arg && arg !== "toggle") {
+				ctx.ui.notify("Usage: /claude [on|off|toggle]", "error");
+				return;
+			}
+			const next = !currentOverlay.claude;
+			setClaudeOverlay(next, ctx);
+			ctx.ui.notify(next ? `Claude overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Claude overlay disabled");
+		},
+	});
+
 	pi.registerCommand("mode", {
 		description: "Set mode: /mode or /mode <MODE>",
 		handler: async (args, ctx) => {
@@ -181,9 +230,10 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			setMode(upper as Mode, ctx);
+			const display = modeDisplayName(upper as Mode, currentOverlay);
 			const msg = reason
-				? `Mode set to ${upper}. Reason: ${reason}`
-				: `Mode set to ${upper}.`;
+				? `Mode set to ${display}. Reason: ${reason}`
+				: `Mode set to ${display}.`;
 
 			return {
 				content: [{ type: "text", text: msg }],
@@ -212,18 +262,21 @@ export default function (pi: ExtensionAPI) {
 	// ── System prompt injection per mode ─────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
+		const g = globalThis as any;
+		const scoutId = typeof g.__piScoutId === "number" ? g.__piScoutId : null;
+		const selectedAdvisorModel = (_ctx as any)?.model?.name || null;
+		const promptOpts = {
+			commanderAvailable: !!g.__piCommanderAvailable,
+			activeChain: g.__piActiveChain || null,
+			activePipeline: g.__piActivePipeline || null,
+			scoutId,
+			selectedAdvisorModel,
+		};
 		if (currentMode === "NORMAL") {
-			const g = globalThis as any;
-			const scoutId = typeof g.__piScoutId === "number" ? g.__piScoutId : null;
-			return { systemPrompt: buildNormalPrompt({
-				commanderAvailable: !!g.__piCommanderAvailable,
-				activeChain: g.__piActiveChain || null,
-				activePipeline: g.__piActivePipeline || null,
-				scoutId,
-			})};
+			return { systemPrompt: buildNormalPrompt(promptOpts) };
 		}
-		if (currentMode === "PLAN") return { systemPrompt: PLAN_PROMPT };
-		if (currentMode === "SPEC") return { systemPrompt: SPEC_PROMPT };
+		if (currentMode === "PLAN") return { systemPrompt: buildPlanPrompt(promptOpts) };
+		if (currentMode === "SPEC") return { systemPrompt: buildSpecPrompt(promptOpts) };
 		return {};
 	});
 
@@ -232,9 +285,11 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 		currentMode = "NORMAL";
+		currentOverlay = { ...DEFAULT_MODE_OVERLAY };
 		(globalThis as any).__piCurrentMode = "NORMAL";
+		syncOverlayGlobals();
 		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
-		try { writeFileSync(MODE_FILE, "NORMAL", "utf-8"); } catch {}
+		writeModeFile("NORMAL");
 		if (ctx.hasUI) {
 			ctx.ui.setStatus("mode", "");
 		}

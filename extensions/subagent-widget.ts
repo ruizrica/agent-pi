@@ -32,7 +32,7 @@ import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
-import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
+import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
 
@@ -151,6 +151,7 @@ export default function (pi: ExtensionAPI) {
 
 	function registerWidget(state: SubState) {
 		if (!widgetCtx) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const key = `sub-${state.id}`;
 		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
 			const bgFn = (text: string): string => {
@@ -205,7 +206,7 @@ export default function (pi: ExtensionAPI) {
 				invalidateWidget(state.id);
 			}
 		} catch {
-			if (isClaudeCliAgent(state.name) && isClaudeDisplayNoise(trimmed)) return;
+			if (shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay) && isClaudeDisplayNoise(trimmed)) return;
 			state.textChunks.push(trimmed + "\n");
 			invalidateWidget(state.id);
 		}
@@ -335,6 +336,9 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+		if ((globalThis as any).__piClaudeOverlay) {
+			spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
+		}
 		if (commanderAvail && cmdTaskId !== undefined) {
 			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
 		}
@@ -390,7 +394,7 @@ export default function (pi: ExtensionAPI) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
-						const finalText = (isToolkitCliAgent(state.name) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
+						const finalText = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
 						const summary = finalText.trim().split("\n").pop() || agentLabel;
 						if (state.status === "done") {
 							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch(() => {});
@@ -401,7 +405,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 
-				const result = (isToolkitCliAgent(state.name) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
+				const result = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
 
 				// Standby spawns (warmup) suppress notification and follow-up message
 				if (!state.standby) {
@@ -434,7 +438,7 @@ export default function (pi: ExtensionAPI) {
 				resolve();
 			};
 
-			if (isToolkitCliAgent(state.name)) {
+			if (isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				spawnToolkitWorker({
 					name: state.name,
 					tools,
@@ -454,7 +458,7 @@ export default function (pi: ExtensionAPI) {
 					},
 				}).then(({ exitCode, output }) => {
 					toolkitFinalOutput = output || toolkitFinalOutput;
-					if (isToolkitCliAgent(state.name) && toolkitFinalOutput.trim()) {
+					if ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, model, !!(globalThis as any).__piClaudeOverlay)) && toolkitFinalOutput.trim()) {
 						state.summary = toolkitFinalOutput.trim().split("\n").pop() || state.summary;
 					}
 					finish(exitCode);

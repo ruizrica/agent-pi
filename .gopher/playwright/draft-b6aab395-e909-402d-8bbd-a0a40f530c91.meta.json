@@ -1,0 +1,29 @@
+{
+  "id": "b6aab395-e909-402d-8bbd-a0a40f530c91",
+  "scenarioIds": [
+    "b294bdfb-e5fb-443e-b73f-2114ff5d0578"
+  ],
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "status": "exported",
+  "content": "/**\n * Auto-generated Playwright API test file\n * Generated from Gherkin scenarios using gopher-agent2 methodology\n *\n * This file tests API endpoints via HTTP requests only.\n * No browser interaction. Uses Playwright's APIRequestContext.\n *\n * Environment variables required:\n *   API_BASE_URL - Base URL of the API server\n *\n * Assumptions:\n *   - Base URL assumes Cloudflare Workers running on localhost:8787\n *\n * Run: npx playwright test <this-file>\n */\n\nimport { test, expect } from '@playwright/test'\n\n  test.describe('Vuln Scanner Engine.test', () => {\n    // Module with 2 exported items Background:\n\n    // Dynamic data stored across tests (Rule 8)\n    let createdIds: string[] = []\n\n    // Rule 3: Setup shared preconditions\n    // Rule 11: Auth via login endpoint in beforeAll\n    test.beforeAll(async ({ request }) => {\n    })\n\n    // Rule 9: Clean up test data\n    test.afterAll(async ({ request }) => {\n      for (const id of createdIds) {\n        await request.delete(`http://localhost:8787/api/vuln-scanner-engine-test/${id}`, {\n        })\n      }\n    })\n\n    test('Function call with valid inputs', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to function call with valid inputs\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Function call with invalid inputs', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to function call with invalid inputs\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Return value validation', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to return value validation\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Side effects verification', async ({ request }) => {\n\n      // Act — API Call\n      // When: I send a request to side effects verification\n      // TODO: Implement API call for this action\n      const response = await request.get(`${process.env.API_BASE_URL}/TODO`)\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(200)\n      const body = await response.json()\n      expect(body).toMatchObject({\n        // TODO: Define expected response shape\n      })\n    })\n\n    test('Reject request without authentication token', async ({ request }) => {\n      // Arrange — Preconditions\n      // Deliberately omitting auth token for this test\n      const noAuthHeaders = { /* no Authorization header */ }\n\n      // Act — API Call\n      const response = await request.get(`${process.env.API_BASE_URL}/api/resource`, {\n        // Deliberately no Authorization header\n      })\n\n      // Assert — Verify Response\n      expect(response.status()).toBe(401)\n      const body = await response.json()\n      expect(body).toHaveProperty('error')\n      const errorBody = body\n      expect(JSON.stringify(errorBody).toLowerCase()).toContain('authentication required')\n    })\n  })\n",
+  "assumptions": [
+    "Base URL assumes Cloudflare Workers running on localhost:8787"
+  ],
+  "createdAt": 1776066755922,
+  "updatedAt": 1776066768740,
+  "validationErrors": [],
+  "validationWarnings": [],
+  "validationStats": {
+    "testCount": 5,
+    "describeCount": 1,
+    "hasBeforeAll": true,
+    "hasBeforeEach": false,
+    "hasAfterAll": true,
+    "hasAfterEach": false,
+    "hasAuthSetup": true,
+    "usesApiRequest": true,
+    "usesBrowser": false,
+    "assertionCount": 11
+  },
+  "exportPath": "/Users/ricardo/Workshop/GitHub/agent-pi/tests/3d3c221b-4e71-497b-b456-12e8331e759a.spec.ts"
+}

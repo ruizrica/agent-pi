@@ -1,0 +1,27 @@
+{
+  "id": "3894a77c-221e-4e13-b817-b433ec9154b6",
+  "surfaceId": "60b9dcdb-6514-4c3a-9698-2c84b034ff0d",
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "content": "Feature: Doom Engine\n  Module with 2 exported items\n\n  Background:\n    Given the application is running\n\n  Scenario: Object construction\n    When I send a request to object construction\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Method invocation\n    When I send a request to method invocation\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: State mutation\n    When I send a request to state mutation\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Error handling\n    When I send a request to error handling\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n",
+  "status": "approved",
+  "version": 1,
+  "createdAt": 1776066719369,
+  "updatedAt": 1776066747181,
+  "versions": [],
+  "validationErrors": [],
+  "validationWarnings": [
+    "Scenario \"Object construction\" has no Given steps — add preconditions",
+    "Scenario \"Method invocation\" has no Given steps — add preconditions",
+    "Scenario \"State mutation\" has no Given steps — add preconditions",
+    "Scenario \"Error handling\" has no Given steps — add preconditions",
+    "Multiple Scenarios found but no Scenario Outlines — consider parameterizing similar tests"
+  ],
+  "validationStats": {
+    "featureCount": 1,
+    "scenarioCount": 4,
+    "scenarioOutlineCount": 0,
+    "stepCount": 13,
+    "backgroundCount": 1,
+    "hasExamples": false
+  }
+}

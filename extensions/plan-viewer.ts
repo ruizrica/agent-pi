@@ -23,11 +23,12 @@ import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib
 type ViewerPurpose = "plan" | "questions";
 
 interface ViewerResult {
-	action: "approved" | "declined" | "submitted";
+	action: "approved" | "changes_requested" | "declined" | "submitted";
 	markdown: string;
 	modified: boolean;
 	answers?: string;
 	answerMap?: Record<string, string>;
+	feedback?: string;
 }
 
 // ── HTTP Server for GUI Window ───────────────────────────────────────
@@ -36,7 +37,8 @@ async function startViewerServer(
 	markdown: string,
 	title: string,
 	purpose: ViewerPurpose,
-): Promise<{ port: number; server: Server; waitForResult: () => Promise<any> }> {
+	filePath?: string,
+): Promise<{ port: number; server: Server; waitForResult: () => Promise<any>; waitForFeedback: () => Promise<any> }> {
 	const routes = [
 		{
 			method: "POST" as const,
@@ -88,15 +90,52 @@ async function startViewerServer(
 		},
 	];
 
+	let roundTripState = {
+		status: "idle",
+		feedback: "",
+		revision: 0,
+		changeSummary: [] as string[],
+		payload: { markdown },
+	};
+	let lastKnownMarkdown = markdown;
+
 	const handle = await createViewerServer({
-		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port }),
+		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port, roundTripEnabled: purpose === "plan" }),
 		routes,
+		onFeedback: async (body) => {
+			roundTripState = {
+				status: "feedback_submitted",
+				feedback: body?.feedback || "",
+				revision: roundTripState.revision,
+				changeSummary: [],
+				payload: { markdown: lastKnownMarkdown },
+			};
+		},
+		getRoundTripState: () => {
+			if (purpose === "plan" && filePath && existsSync(filePath)) {
+				try {
+					const latestMarkdown = readFileSync(filePath, "utf-8");
+					if (roundTripState.status === "feedback_submitted" && latestMarkdown !== lastKnownMarkdown) {
+						lastKnownMarkdown = latestMarkdown;
+						roundTripState = {
+							status: "updated",
+							feedback: roundTripState.feedback,
+							revision: roundTripState.revision + 1,
+							changeSummary: ["Applied requested plan updates", "Refreshed viewer content"],
+							payload: { markdown: latestMarkdown },
+						};
+					}
+				} catch {}
+			}
+			return roundTripState;
+		},
 	});
 
 	return {
 		port: handle.port,
 		server: handle.server,
 		waitForResult: handle.waitForResult,
+		waitForFeedback: handle.waitForFeedback,
 	};
 }
 
@@ -202,7 +241,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start HTTP server
-		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose);
+		const { port, server, waitForResult, waitForFeedback } = await startViewerServer(markdown, title, purpose, filePath);
 		activeServer = server;
 
 		const url = `http://127.0.0.1:${port}`;
@@ -222,6 +261,21 @@ export default function (pi: ExtensionAPI) {
 		openBrowser(url);
 		notifyViewerOpen(ctx, activeSession);
 
+		if (purpose === "plan") {
+			waitForFeedback().then((feedbackPayload) => {
+				if (!feedbackPayload) return;
+				const feedbackText = (feedbackPayload.feedback || "").trim() || "(no change details provided)";
+				piRef.sendMessage(
+					{
+						customType: "plan-changes-requested",
+						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+			}).catch(() => {});
+		}
+
 		// Wait for user action in the browser (or abort)
 		try {
 			const abortPromise = signal
@@ -240,6 +294,7 @@ export default function (pi: ExtensionAPI) {
 				modified: rawResult?.modified || false,
 				answers: rawResult?.answers,
 				answerMap: rawResult?.answerMap,
+				feedback: rawResult?.feedback,
 			};
 
 			saveModifiedMarkdown(filePath, result);
@@ -374,6 +429,37 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
+			if (result.action === "changes_requested") {
+				const feedbackText = (result.feedback || "").trim() || "(no change details provided)";
+				const modifiedNote = result.modified
+					? "\n\nNote: The plan was also edited in the viewer — use the updated file contents."
+					: "";
+
+				piRef.sendMessage(
+					{
+						customType: "plan-changes-requested",
+						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}${modifiedNote}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+				ctx.ui.notify("Plan changes requested — reviewing feedback...", "info");
+
+				return {
+					content: [{
+						type: "text" as const,
+						text: `User requested changes to the plan:\n\n${feedbackText}${modifiedNote}\n\nThe latest plan has been saved to ${file_path}.`,
+					}],
+					details: {
+						action: "changes_requested" as const,
+						purpose: "plan",
+						modified: result.modified,
+						filePath: file_path,
+						feedback: feedbackText,
+					},
+				};
+			}
+
 			return {
 				content: [{
 					type: "text" as const,
@@ -429,6 +515,13 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 
+			if (details.action === "changes_requested") {
+				return new Text(
+					outputLine(theme, "warning", "Plan changes requested"),
+					0, 0,
+				);
+			}
+
 			return new Text(
 				outputLine(theme, "warning", "Plan viewer closed without approval"),
 				0, 0,
@@ -470,6 +563,17 @@ export default function (pi: ExtensionAPI) {
 					{ deliverAs: "followUp" as any, triggerTurn: true },
 				);
 				ctx.ui.notify("Plan approved — continuing...", "info");
+			} else if (result.action === "changes_requested") {
+				const feedbackText = (result.feedback || "").trim() || "(no change details provided)";
+				piRef.sendMessage(
+					{
+						customType: "plan-changes-requested",
+						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}${result.modified ? "\n\nNote: The plan was also edited in the viewer — use the updated file contents." : ""}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+				ctx.ui.notify("Plan changes requested — reviewing feedback...", "info");
 			} else if (result.modified) {
 				ctx.ui.notify("Plan was modified but not approved.", "info");
 			}

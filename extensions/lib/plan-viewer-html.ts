@@ -12,8 +12,9 @@ export function generatePlanViewerHTML(opts: {
 	title: string;
 	mode: "plan" | "questions";
 	port: number;
+	roundTripEnabled?: boolean;
 }): string {
-	const { markdown, title, mode, port } = opts;
+	const { markdown, title, mode, port, roundTripEnabled = false } = opts;
 	// Escape </ sequences to prevent </script> in content from breaking the script block
 	const escapedMarkdown = JSON.stringify(markdown).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
@@ -39,6 +40,7 @@ export function generatePlanViewerHTML(opts: {
     --success: #48d889;
     --success-bg: rgba(72, 216, 137, 0.08);
     --warning: #f0b429;
+    --warning-bg: rgba(240, 180, 41, 0.08);
     --error: #e85858;
     --answer-bg: rgba(78, 205, 196, 0.06);
     --cursor-bg: rgba(78, 205, 196, 0.06);
@@ -782,6 +784,14 @@ export function generatePlanViewerHTML(opts: {
   }
   .btn-success:hover { background: var(--success-bg); }
 
+  .btn-warning {
+    background: transparent;
+    color: var(--warning);
+    border-color: var(--warning);
+    font-weight: 600;
+  }
+  .btn-warning:hover { background: var(--warning-bg); }
+
   .btn-ghost {
     background: transparent;
     border-color: transparent;
@@ -824,6 +834,54 @@ export function generatePlanViewerHTML(opts: {
     background: var(--accent-dim);
     color: var(--accent);
     font-weight: 600;
+  }
+
+  /* ── Change Request Panel ────────────── */
+  .feedback-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px 12px;
+    display: none;
+  }
+  .feedback-panel.open {
+    display: block;
+  }
+  .feedback-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .feedback-panel-title {
+    color: var(--warning);
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .feedback-panel-subtitle {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .feedback-textarea {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    outline: none;
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .feedback-textarea:focus {
+    border-color: var(--warning);
+    box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.08);
   }
 
   /* ── Notification toast ──────────────── */
@@ -982,12 +1040,20 @@ export function generatePlanViewerHTML(opts: {
 
 <!-- Footer -->
 <div class="footer-wrapper">
+  <div class="feedback-panel">
+    <div class="feedback-panel-header">
+      <div class="feedback-panel-title">Send Back with Changes</div>
+      <div class="feedback-panel-subtitle">Describe what should change before approval.</div>
+    </div>
+    <textarea id="feedbackInput" class="feedback-textarea" placeholder="Describe the revisions you want here..."></textarea>
+  </div>
   <div class="footer">
     <button class="btn btn-ghost" onclick="copyToClipboard()" title="Copy markdown"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
     <button class="btn btn-ghost" onclick="saveToDesktop()" title="Save to desktop"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Save</button>
     <button class="btn btn-ghost" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Standalone</button>
     <div class="spacer"></div>
     <button class="btn" onclick="decline()" id="btnDecline">Close</button>
+    ${mode === "questions" ? "" : '<button class="btn btn-warning" onclick="toggleFeedbackPanel()" id="btnChanges">Needs Changes</button>'}
     <button class="btn btn-primary" onclick="approve()" id="btnApprove">
       ${mode === "questions" ? "Submit Answers" : "Approve Plan"}
     </button>
@@ -1005,12 +1071,17 @@ export function generatePlanViewerHTML(opts: {
   // ── State ─────────────────────────────────────
   const PORT = ${port};
   const MODE = ${JSON.stringify(mode).replace(/<\//g, '<\\/')};
+  const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
   let markdown = ${escapedMarkdown};
   let originalMarkdown = markdown;
   let modified = false;
   let currentView = 'rendered';
   let answers = {};  // questionId -> answer text
   let questionCount = 0;
+  let feedback = '';
+  let feedbackPanelOpen = false;
+  let pollingTimer = null;
+  let lastKnownRevision = 0;
 
   // ── Marked config ─────────────────────────────
   if (typeof marked !== 'undefined') {
@@ -1822,15 +1893,125 @@ export function generatePlanViewerHTML(opts: {
   }
 
   // ── Actions ───────────────────────────────────
+  function syncFeedback() {
+    var input = document.getElementById('feedbackInput');
+    feedback = input ? input.value.trim() : '';
+  }
+
+  function renderWorkflowBanner(label, sub, tone) {
+    var existing = document.getElementById('workflowBanner');
+    if (existing) existing.remove();
+    var banner = document.createElement('div');
+    banner.className = 'approved-banner';
+    banner.id = 'workflowBanner';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    var color = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var borderColor = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var bgColor = tone === 'warning' ? 'rgba(240, 180, 41, 0.08)' : 'var(--surface)';
+    var icon = tone === 'warning' ? '&#8635;' : '&#10003;';
+    banner.style.borderColor = borderColor;
+    banner.style.borderLeftColor = borderColor;
+    banner.style.background = bgColor;
+    banner.innerHTML = '<div class="approved-icon" style="background:' + color + ';">' + icon + '</div>' +
+      '<div class="approved-content"><div class="approved-text" style="color:' + color + ';">' + label + '</div>' +
+      '<div class="approved-sub">' + sub + '</div></div>' +
+      '<div class="approved-actions">' +
+      '<button class="icon-btn" onclick="copyToClipboard()" title="Copy to clipboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+      '</div>';
+    var header = document.querySelector('.header');
+    header.parentNode.insertBefore(banner, header.nextSibling);
+  }
+
+  window.toggleFeedbackPanel = function() {
+    if (!ROUND_TRIP_ENABLED) {
+      requestChanges();
+      return;
+    }
+    if (feedbackPanelOpen) {
+      requestChanges();
+      return;
+    }
+    feedbackPanelOpen = true;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.add('open');
+    if (btn) btn.textContent = 'Send Back with Changes';
+    var input = document.getElementById('feedbackInput');
+    if (input) input.focus();
+  };
+
+  function applyUpdatedPlan(state) {
+    if (!state || !state.payload || !state.payload.markdown) return;
+    markdown = state.payload.markdown;
+    originalMarkdown = markdown;
+    modified = false;
+    if (typeof state.revision === 'number') lastKnownRevision = state.revision;
+    render();
+    if (currentView === 'raw') {
+      setView('rendered');
+    }
+    var summary = Array.isArray(state.changeSummary) && state.changeSummary.length > 0
+      ? 'Updated changes: ' + state.changeSummary.join(' • ')
+      : 'The plan was updated with your previous changes.';
+    renderWorkflowBanner('Plan Updated', summary, 'success');
+    document.body.classList.remove('approved-state');
+    var header = document.querySelector('.header');
+    if (header) {
+      header.style.borderLeftColor = 'var(--accent)';
+    }
+    var badge = document.getElementById('modeBadge');
+    if (badge) {
+      badge.textContent = 'PLAN';
+      badge.style.color = 'var(--accent)';
+      badge.style.borderColor = 'var(--accent)';
+    }
+    feedbackPanelOpen = false;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.remove('open');
+    if (btn) btn.textContent = 'Needs Changes';
+  }
+
+  function startRoundTripPolling() {
+    if (!ROUND_TRIP_ENABLED) return;
+    if (pollingTimer) clearInterval(pollingTimer);
+    pollingTimer = setInterval(function() {
+      fetch('http://localhost:' + PORT + '/updated-content')
+        .then(function(r) { return r.json(); })
+        .then(function(state) {
+          if (state && state.status === 'updated' && state.revision !== lastKnownRevision) {
+            applyUpdatedPlan(state);
+          }
+        })
+        .catch(function() {});
+    }, 1500);
+  }
+
   window.approve = function() {
     // Sync from raw editor if in raw view
     if (currentView === 'raw') {
       markdown = document.getElementById('rawEditor').value;
     }
+    syncFeedback();
     sendResult('approved');
   };
 
+  window.requestChanges = function() {
+    if (MODE === 'questions') return;
+    if (currentView === 'raw') {
+      markdown = document.getElementById('rawEditor').value;
+    }
+    syncFeedback();
+    if (!feedback) {
+      showToast('Add change details before sending back');
+      return;
+    }
+    sendResult('changes_requested');
+  };
+
   window.decline = function() {
+    syncFeedback();
     sendResult('declined');
   };
 
@@ -1881,6 +2062,7 @@ export function generatePlanViewerHTML(opts: {
       action: action,
       markdown: markdown,
       modified: modified,
+      feedback: feedback,
     };
 
     if (MODE === 'questions') {
@@ -1905,7 +2087,8 @@ export function generatePlanViewerHTML(opts: {
       body.answerMap = answers;
     }
 
-    fetch('http://localhost:' + PORT + '/result', {
+    var endpoint = (ROUND_TRIP_ENABLED && action === 'changes_requested') ? '/feedback' : '/result';
+    fetch('http://localhost:' + PORT + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1942,6 +2125,28 @@ export function generatePlanViewerHTML(opts: {
         if (currentView === 'raw') {
           setView('rendered');
         }
+      } else if (action === 'changes_requested') {
+        renderWorkflowBanner('Changes Sent Back', 'Your feedback was sent to the agent. Waiting for the updated plan...', 'warning');
+        document.body.classList.add('approved-state');
+        var header = document.querySelector('.header');
+        if (header) {
+          header.style.borderLeftColor = 'var(--warning)';
+        }
+        var badge = document.getElementById('modeBadge');
+        if (badge) {
+          badge.textContent = 'WAITING';
+          badge.style.color = 'var(--warning)';
+          badge.style.borderColor = 'var(--warning)';
+        }
+        feedbackPanelOpen = false;
+        var panel = document.querySelector('.feedback-panel');
+        var btn = document.getElementById('btnChanges');
+        if (panel) panel.classList.remove('open');
+        if (btn) btn.textContent = 'Needs Changes';
+        if (currentView === 'raw') {
+          setView('rendered');
+        }
+        startRoundTripPolling();
       } else {
         // Closed/declined — show simple close message
         document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-muted);font-family:var(--font);">' +

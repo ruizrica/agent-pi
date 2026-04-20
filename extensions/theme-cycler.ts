@@ -30,12 +30,14 @@ export default function (pi: ExtensionAPI) {
 
 	function updateStatus(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const name = ctx.ui.theme.name;
 		ctx.ui.setStatus("theme", name);
 	}
 
 	function showSwatch(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 
 		if (swatchTimer) {
 			clearTimeout(swatchTimer);

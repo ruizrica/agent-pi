@@ -4,7 +4,7 @@
 import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { isClaudeCliAgent, toClaudeProfileName } from "./claude-config.ts";
+import { isClaudeCliAgent, toClaudeProfileName, type ClaudeProfileName } from "./claude-config.ts";
 import { spawnClaudeCli } from "./claude-cli.ts";
 import { buildClaudeContextPacket } from "./claude-context.ts";
 import { buildCursorCliArgs } from "./cursor-cli.ts";
@@ -92,6 +92,21 @@ export function isToolkitCliAgent(name: string | undefined | null): boolean {
 export function hideToolkitWidgetMetadata(name: string | undefined | null): boolean {
 	if (!name) return false;
 	return MINIMAL_WIDGET_TOOLKIT_WORKERS.has(normalizeToolkitAgentName(name));
+}
+
+export function isClaudeFamilyModel(model: string | undefined | null): boolean {
+	if (!model) return false;
+	return /(^|\/)claude[-\w.]+/i.test(model);
+}
+
+export function resolveClaudeProfileForAgent(agentName: string, model: string | undefined | null): ClaudeProfileName {
+	if (isClaudeCliAgent(agentName)) return toClaudeProfileName(agentName);
+	return /claude-opus/i.test(model || "") ? "claude-advisor" : "claude-worker";
+}
+
+export function shouldUseClaudeCliForAgent(agentName: string, model: string | undefined | null, claudeOverlayActive = false): boolean {
+	if (isClaudeCliAgent(agentName)) return true;
+	return claudeOverlayActive && isClaudeFamilyModel(model);
 }
 
 export function resolveToolkitWorkerModel(agentName: string, fallbackModel: string): string {
@@ -183,10 +198,10 @@ export function spawnToolkitWorker(
 	agentDef: ToolkitWorkerAgentDef,
 	options: ToolkitWorkerSpawnOptions,
 ): Promise<ToolkitWorkerResult> {
-	if (isClaudeCliAgent(agentDef.name)) {
+	if (shouldUseClaudeCliForAgent(agentDef.name, options.model, !!options.env?.PI_CLAUDE_OVERLAY_ACTIVE)) {
 		const hasContextPrefix = options.task.includes("## Working Context") || options.task.includes("Working directory:");
 		return spawnClaudeCli({
-			profile: toClaudeProfileName(agentDef.name),
+			profile: resolveClaudeProfileForAgent(agentDef.name, options.model),
 			task: options.task,
 			cwd: options.cwd,
 			env: options.env,

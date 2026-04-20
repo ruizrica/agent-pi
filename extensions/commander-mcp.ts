@@ -488,7 +488,7 @@ export default function (pi: ExtensionAPI) {
 			await client.callTool("commander_session", { operation: "list" }, 3000);
 			g.__piCommanderAvailable = true;
 			g.__piCommanderClient = client;
-			ctx.ui.setStatus("Commander: connected", "commander");
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: connected", "commander");
 
 			// Resolve gate — drain any ops queued while we were probing
 			const queued = resolveGate(gate, true);
@@ -505,7 +505,7 @@ export default function (pi: ExtensionAPI) {
 					if (!g.__piCommanderAvailable) {
 						g.__piCommanderAvailable = true;
 						g.__piCommanderClient = client;
-						ctx.ui.setStatus("Commander: connected", "commander");
+						if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: connected", "commander");
 						// Recovery — resolve gate if it was reset during offline
 						if (gate.state !== "available") {
 							const queued = resolveGate(gate, true);
@@ -515,7 +515,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				} catch {
 					g.__piCommanderAvailable = false;
-					ctx.ui.setStatus("Commander: offline", "commander");
+					if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: offline", "commander");
 					// Reset gate so ops queue again until recovery
 					if (gate.state === "available") {
 						resetGate(gate);
@@ -524,7 +524,7 @@ export default function (pi: ExtensionAPI) {
 			}, 60_000);
 		} catch {
 			g.__piCommanderAvailable = false;
-			ctx.ui.setStatus("Commander: offline", "commander");
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: offline", "commander");
 			resolveGate(gate, false);
 		}
 	}

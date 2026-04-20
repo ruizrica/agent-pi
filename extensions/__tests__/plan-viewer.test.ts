@@ -15,4 +15,10 @@ describe("plan-viewer implementation", () => {
 		expect(source).toContain("Promise.race([waitForResult(), abortPromise])");
 		expect(source).toContain('purpose === "questions"');
 	});
+
+	it("supports sending plans back with requested changes and feedback", () => {
+		expect(source).toContain('action: "approved" | "changes_requested" | "declined" | "submitted"');
+		expect(source).toContain('customType: "plan-changes-requested"');
+		expect(source).toContain('feedback: rawResult?.feedback');
+	});
 });

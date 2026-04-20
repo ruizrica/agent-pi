@@ -1,0 +1,26 @@
+{
+  "id": "2025a36a-1111-4391-baf4-a69dd8c97428",
+  "surfaceId": "cdb3a592-52b0-475c-bff8-de7d24973d34",
+  "workspaceId": "/Users/ricardo/Workshop/GitHub/agent-pi",
+  "content": "Feature: Obsidian Types\n  Module with 12 exported items\n\n  Background:\n    Given the application is running\n\n  Scenario: Type definition validation\n    When I send a request to type definition validation\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Default exports\n    When I send a request to default exports\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n  Scenario: Named exports\n    When I send a request to named exports\n    Then the response status should be 200\n    And the response body should match the expected schema\n\n",
+  "status": "approved",
+  "version": 1,
+  "createdAt": 1776066719371,
+  "updatedAt": 1776066747181,
+  "versions": [],
+  "validationErrors": [],
+  "validationWarnings": [
+    "Scenario \"Type definition validation\" has no Given steps — add preconditions",
+    "Scenario \"Default exports\" has no Given steps — add preconditions",
+    "Scenario \"Named exports\" has no Given steps — add preconditions",
+    "Multiple Scenarios found but no Scenario Outlines — consider parameterizing similar tests"
+  ],
+  "validationStats": {
+    "featureCount": 1,
+    "scenarioCount": 3,
+    "scenarioOutlineCount": 0,
+    "stepCount": 10,
+    "backgroundCount": 1,
+    "hasExamples": false
+  }
+}
