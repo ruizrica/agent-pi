@@ -567,6 +567,71 @@ function startChatServer(
 				return;
 			}
 
+			// ── Board Data (for inline board panel) ──────────────
+			if (req.method === "GET" && url.pathname === "/api/board-data") {
+				const g = globalThis as any;
+				const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string }[]; title?: string; remaining: number; total: number } | undefined;
+				const now = new Date().toISOString();
+				const statusMap: Record<string, string> = { idle: "pending", inprogress: "working", done: "completed" };
+				const tasks = (taskList?.tasks || []).map((t: any) => ({
+					task_id: t.id,
+					description: t.text,
+					status: statusMap[t.status] || t.status,
+					created_at: now,
+					updated_at: now,
+				}));
+				res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+				res.end(JSON.stringify({
+					tasks,
+					localMode: true,
+					localTitle: taskList?.title,
+					timestamp: now,
+				}));
+				return;
+			}
+
+			// ── Add Task (for Add to Board button) ───────────────
+			if (req.method === "POST" && url.pathname === "/add-task") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body || "{}");
+						const text = String(data.text || "").trim();
+						if (!text) {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: false, error: "Empty text" }));
+							return;
+						}
+						const g = globalThis as any;
+						const taskList = g.__piTaskList;
+						if (taskList && Array.isArray(taskList.tasks)) {
+							const maxId = taskList.tasks.reduce((max: number, t: any) => Math.max(max, t.id || 0), 0);
+							const newId = maxId + 1;
+							taskList.tasks.push({ id: newId, text, status: "idle" });
+							taskList.remaining = taskList.tasks.filter((t: any) => t.status !== "done").length;
+							taskList.total = taskList.tasks.length;
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, taskId: newId }));
+						} else {
+							// No task list exists yet — create one
+							g.__piTaskList = {
+								tasks: [{ id: 1, text, status: "idle" }],
+								title: "Board",
+								remaining: 1,
+								total: 1,
+							};
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, taskId: 1 }));
+						}
+					} catch (err: any) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: false, error: err?.message || "Invalid request" }));
+					}
+				});
+				return;
+			}
+
 			// ── Shutdown (explicit close from client) ────────────
 			if (req.method === "POST" && url.pathname === "/shutdown") {
 				res.writeHead(200, { "Content-Type": "application/json" });
