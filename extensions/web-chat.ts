@@ -306,9 +306,10 @@ class SessionBridge {
 	}
 
 	onMessageEnd(message: any): void {
-		// Skip user messages — only relay assistant responses to the phone.
-		// Without this, the user's own message gets echoed back as a "PI" message.
-		if (message?.role === "user") return;
+		// Skip user messages and tool results — only relay assistant responses to the phone.
+		// Without this, the user's own message gets echoed back as a "PI" message,
+		// and tool results get incorrectly displayed as assistant messages.
+		if (message?.role === "user" || message?.role === "toolResult") return;
 
 		// Extract the full text from the completed message
 		let fullText = "";
@@ -616,9 +617,14 @@ function startChatServer(
 				relay: true,
 			});
 
-			// Send existing history
+			// Send existing history (exclude tool results - they're internal, not chat messages)
 			for (const msg of bridge.getHistory()) {
-				sendWS(client, msg.role === "user" ? "user_message" : "assistant_message", msg);
+				if (msg.role === "user") {
+					sendWS(client, "user_message", msg);
+				} else if (msg.role === "assistant") {
+					sendWS(client, "assistant_message", msg);
+				}
+				// toolResult messages are intentionally not sent to the web chat
 			}
 
 			// Send existing terminal history
