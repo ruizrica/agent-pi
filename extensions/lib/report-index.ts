@@ -136,9 +136,9 @@ function getDb(): any | null {
 	if (!initSqlite()) return null;
 	if (!db) db = createDatabase();
 	if (!initialized) {
+		initialized = true;
 		migrateJsonIndexIfNeeded();
 		pruneExpiredReports();
-		initialized = true;
 	}
 	return db;
 }
