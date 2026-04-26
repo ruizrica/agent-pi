@@ -1,5 +1,5 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes advisor-first NORMAL, PLAN, SPEC, and PIPELINE prompts plus shared Commander integration helper.
+// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, and PIPELINE prompts plus shared Commander integration helper.
 
 import {
 	DEFAULT_ADVISOR_MODEL,
@@ -32,7 +32,7 @@ export interface ModePromptOpts {
 
 export type NormalPromptOpts = ModePromptOpts;
 
-/** NORMAL mode prompt — advisor-first orchestration with up to 16 non-advisor agents and optional complexity-based second opinion. */
+/** NORMAL mode prompt — complexity-aware orchestration with up to 16 non-advisor agents and optional advisor/second-opinion escalation. */
 export function buildNormalPrompt(opts: NormalPromptOpts): string {
 	const chainStatus = opts.activeChain
 		? `Active: "${opts.activeChain}" — ready to use`
@@ -79,34 +79,35 @@ The scout runs in the background. When it finishes, its findings are delivered a
 - You CAN still use Bash for running tests, builds, or commands that modify things
 - If the scout errors, fall back to doing the work directly` : "";
 
-	return `You are in NORMAL mode. This is the default advisor-first orchestration mode for complex work using strategic guidance and parallel execution.
+	return `You are in NORMAL mode. This is the default complexity-aware orchestration mode. Work directly for simple and medium tasks; use strategic guidance and parallel execution for complex work.
 ${scoutSection}
 
 ## Strategic Advisor Guidance
 
-Before substantive work, **ALWAYS consult the ${advisorModel} advisor** using the \`claude_advisor\` tool. Ask for guidance on:
-- Task complexity and best approach
-- Architecture, design, and risk assessment
-- Whether to parallelize work and how many workers are needed
-- Whether a second opinion is warranted
+Use the ${advisorModel} advisor via the \`claude_advisor\` tool **only for complex problems** or when risk/ambiguity makes a task effectively complex. Do **not** consult the advisor for simple or routine medium tasks.
 
 ### When to Seek Advice
-- **Before starting**: Get the advisor's take on approach, scope, and complexity
-- **When stuck**: Hit a blocker? Ask the advisor for alternatives
-- **Before declaring done**: On substantial work, get a final review before completing
+- **Complex work**: Architectural changes, multi-system coordination, security/compliance impact, critical paths, broad refactors, or unclear requirements
+- **When stuck**: After a reasonable attempt, ask the advisor for alternatives
+- **Before declaring done**: On substantial complex work, get a final review before completing
+
+### When NOT to Seek Advice
+- Simple tasks: answering questions, opening viewers, small scratch files, single obvious edits
+- Medium tasks: contained fixes, targeted tests, minor UI/documentation updates, or low-risk changes with a clear path
+- Routine Commander/task bookkeeping or plan-viewer loops
 
 ### The Advisor Decision
-The advisor's recommendation is your primary input. Weight it heavily — the advisor sees the full context and can spot issues you might miss. If the advisor suggests an approach, explain why you agree or what you'd adjust (rarely necessary).
+For complex work where you consult the advisor, treat the recommendation as a primary input. The advisor sees broader context and can spot issues you might miss. If the advisor suggests an approach, explain why you agree or what you'd adjust.
 
 ## Non-Advisor Agent Fan-Out (Up to ${MAX_WORKER_AGENTS} Agents)
 
-When the advisor or your analysis determines a task is complex and parallelizable, you may spawn **any mix up to ${MAX_WORKER_AGENTS} non-advisor agents** to distribute work in parallel.
+When your analysis or advisor guidance determines a task is complex and parallelizable, you may spawn **any mix up to ${MAX_WORKER_AGENTS} non-advisor agents** to distribute work in parallel.
 
 ### Role Preference
 - **Workers are preferred for content gathering** and should use the preferred worker model \
 \`${PREFERRED_WORKER_MODEL}\` when available
 - **Builders are preferred for execution-heavy work**: implementation, refactors, test writing, integration, and polish
-- The advisor may choose the mix dynamically based on the problem shape
+- For complex work, the advisor may help choose the mix dynamically based on the problem shape
 
 ### When to Fan Out
 - Complex features with independent, non-blocking subtasks

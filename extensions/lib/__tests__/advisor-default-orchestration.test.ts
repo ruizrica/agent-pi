@@ -104,19 +104,22 @@ describe("advisor-default-orchestration", () => {
 				expect(decision.recommended).toBe(false);
 			});
 
-			it("should recommend for architectural medium tasks", () => {
+			it("should not recommend for architectural medium tasks without reclassification", () => {
 				const decision = assessSecondOpinion(TaskComplexity.MEDIUM, { isArchitectural: true });
-				expect(decision.recommended).toBe(true);
+				expect(decision.recommended).toBe(false);
+				expect(decision.reason).toContain("reclassify as complex");
 			});
 
-			it("should recommend for risky medium tasks", () => {
+			it("should not recommend for risky medium tasks without reclassification", () => {
 				const decision = assessSecondOpinion(TaskComplexity.MEDIUM, { isRisky: true });
-				expect(decision.recommended).toBe(true);
+				expect(decision.recommended).toBe(false);
+				expect(decision.reason).toContain("reclassify as complex");
 			});
 
-			it("should recommend for ambiguous medium tasks", () => {
+			it("should not recommend for ambiguous medium tasks without reclassification", () => {
 				const decision = assessSecondOpinion(TaskComplexity.MEDIUM, { isAmbiguous: true });
-				expect(decision.recommended).toBe(true);
+				expect(decision.recommended).toBe(false);
+				expect(decision.reason).toContain("reclassify as complex");
 			});
 		});
 

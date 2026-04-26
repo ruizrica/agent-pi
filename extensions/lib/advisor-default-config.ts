@@ -1,5 +1,5 @@
-// ABOUTME: Centralized configuration for the advisor-first default NORMAL mode behavior.
-// ABOUTME: Defines the advisor model, preferred worker model, orchestration limits, and second-opinion policy.
+// ABOUTME: Centralized configuration for complexity-aware NORMAL mode behavior.
+// ABOUTME: Defines the complex-work advisor model, preferred worker model, orchestration limits, and second-opinion policy.
 
 export const DEFAULT_ADVISOR_MODEL = "claude-opus-4-6";
 export const DEFAULT_ADVISOR_PROVIDER = "anthropic";

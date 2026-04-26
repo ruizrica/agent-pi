@@ -48,6 +48,12 @@ import {
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { enqueueOrExecute } from "./lib/commander-ready.ts";
+import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
+import {
+	renderMissionComplete,
+	MISSION_COMPLETE_BG,
+	type MissionCompleteState,
+} from "./lib/mission-complete-render.ts";
 import { addRetry, isFullySynced } from "./lib/commander-tracker.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -76,7 +82,7 @@ const TasksParams = Type.Object({
 	action: StringEnum(["new-list", "add", "toggle", "remove", "update", "list", "clear"] as const),
 	text: Type.Optional(Type.String({ description: "Task text (for add/update), or list title (for new-list)" })),
 	texts: Type.Optional(Type.Array(Type.String(), { description: "Multiple task texts (for add). Use this to batch-add several tasks at once." })),
-	description: Type.Optional(Type.String({ description: "List description (for new-list)" })),
+	description: Type.Optional(Type.String({ description: "Rich 1-3 sentence work summary for the list (for new-list)" })),
 	id: Type.Optional(Type.Number({ description: "Task ID (for toggle/remove/update)" })),
 });
 
@@ -90,6 +96,7 @@ export interface CurrentTaskInfo { id: number; text: string; commanderTaskId?: n
 export interface TaskListInfo {
 	tasks: { id: number; text: string; status: TaskStatus }[];
 	title?: string;
+	description?: string;
 	remaining: number;
 	total: number;
 }
@@ -103,13 +110,15 @@ function currentActor(): string {
 	return process.env.PI_AGENT_NAME || process.env.PI_SUBAGENT_NAME || process.env.USER || "agent";
 }
 
-function publishCurrentTask(tasks: Task[], sync: SyncState) {
+function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, description?: string) {
 	const cur = tasks.find(t => t.status === "inprogress");
 	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: lookupMapping(sync, cur.id) } as CurrentTaskInfo : null;
 
 	const remaining = tasks.filter(t => t.status !== "done").length;
 	g.__piTaskList = {
 		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
+		title,
+		description,
 		remaining,
 		total: tasks.length,
 		__syncState: sync,
@@ -159,7 +168,7 @@ class TasksListComponent {
 		));
 
 		if (this.desc) {
-			lines.push(truncateToWidth(`  ${th.fg("muted", this.desc)}`, width));
+			lines.push(truncateToWidth(`  ${th.fg("accent", "Work Summary:")} ${th.fg("muted", this.desc)}`, width));
 		}
 		lines.push("");
 
@@ -261,7 +270,8 @@ export default function (pi: ExtensionAPI) {
 	// ── UI refresh ─────────────────────────────────────────────────────
 
 	const refreshWidget = (_ctx: ExtensionContext) => {
-		publishCurrentTask(tasks, syncState);
+		publishCurrentTask(tasks, syncState, listTitle, listDescription);
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
 	};
 
 	const refreshUI = (ctx: ExtensionContext) => {
@@ -278,9 +288,155 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		refreshWidget(ctx);
-		if (g.__piTaskList) g.__piTaskList.title = listTitle;
 		ctx.ui.setWidget("tasks-list", undefined);
+		if (missionCompleteVisible && (tasks.length === 0 || tasks.some((t) => t.status !== "done"))) {
+			dismissMissionComplete(ctx);
+		}
 	};
+
+	// ── Mission Complete widget ───────────────────────────────────────
+
+	let missionCompleteVisible = false;
+	g.__piMissionCompleteVisible = false;
+
+	function publishMissionCompleteVisibility(visible: boolean): void {
+		missionCompleteVisible = visible;
+		g.__piMissionCompleteVisible = visible;
+	}
+
+	function auditCommanderBoardForMissionComplete(): void {
+		if (isExternalSyncActive()) return;
+		const gate = g.__piCommanderGate;
+		const client = g.__piCommanderClient;
+		const tracker = g.__piCommanderTracker;
+
+		if (gate?.state !== "available" || !client || syncState.mappings.length === 0) {
+			if (tracker?.reconcileNow) tracker.reconcileNow();
+			return;
+		}
+
+		for (const task of tasks) {
+			if (task.status !== "done") continue;
+			const cid = lookupMapping(syncState, task.id);
+			if (cid === undefined) continue;
+			void client.callTool("commander_task", {
+				operation: "update",
+				task_id: cid,
+				status: localToCommander(task.status),
+			}).then(() => {
+				syncState = updateMappingStatus(syncState, task.id, "done");
+			}).catch(() => {
+				if (tracker?.reconcileNow) tracker.reconcileNow();
+			});
+		}
+	}
+
+	interface PreStopTaskAudit {
+		incomplete: Task[];
+		commanderAvailable: boolean;
+		commanderNeedsAttention: boolean;
+		commanderMessage: string;
+	}
+
+	function isCommanderAvailableForPreStopAudit(): boolean {
+		if (isExternalSyncActive()) return false;
+		return g.__piCommanderGate?.state === "available";
+	}
+
+	function getPreStopTaskAudit(): PreStopTaskAudit {
+		const incomplete = Array.isArray(tasks) ? tasks.filter((t) => t.status !== "done") : [];
+		const commanderAvailable = isCommanderAvailableForPreStopAudit();
+		const commanderNeedsAttention = commanderAvailable
+			&& syncState.mappings.length > 0
+			&& !isFullySynced(tasks, syncState.mappings);
+		const commanderMessage = commanderAvailable
+			? "Before stopping, verify/update the Commander board for this work so every related Commander task is completed or accurately reflects the remaining status."
+			: "";
+
+		return { incomplete, commanderAvailable, commanderNeedsAttention, commanderMessage };
+	}
+
+	function shouldGuardSelfCleanup(event: any): boolean {
+		if (event.toolName !== "commander_session") return false;
+		const operation = event.args?.operation ?? event.input?.operation ?? event.parameters?.operation;
+		return operation === "cleanup:self";
+	}
+
+	function showMissionComplete(ctx: ExtensionContext): void {
+		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
+
+		auditCommanderBoardForMissionComplete();
+
+		// Build state for the render
+		const stats = getSessionStats();
+		const completedTasks: { id: number; text: string; commanderId?: number }[] = tasks
+			.filter(t => t.status === "done")
+			.map(t => ({
+				id: t.id,
+				text: t.text,
+				commanderId: lookupMapping(syncState, t.id),
+			}));
+
+		const syncedCount = completedTasks.filter(t => t.commanderId !== undefined).length;
+
+		const mcState: MissionCompleteState = {
+			listTitle: listTitle || "Tasks",
+			summary: listDescription,
+			tasks: completedTasks,
+			stats: stats || undefined,
+			allSynced: syncedCount === completedTasks.length,
+			syncedCount,
+			completedAt: Date.now(),
+		};
+
+		const RESET_BG = "\x1b[49m";
+		const WHITE_BOLD = "\x1b[1;97m";
+		const RESET_ALL = "\x1b[0m";
+
+		// Mission Complete replaces the regular task section while visible.
+		ctx.ui.setWidget("agent-team", undefined);
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
+
+		ctx.ui.setWidget("mission-complete", (_tui: any, theme: any) => {
+			const { Box, Text: TuiText } = require("@mariozechner/pi-tui");
+			const bgFn = (text: string): string =>
+				`${MISSION_COMPLETE_BG}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
+			const box = new Box(1, 1, bgFn);
+			const content = new TuiText("", 0, 0);
+			box.addChild(content);
+
+			return {
+				render(width: number): string[] {
+					const result = renderMissionComplete(mcState, width, theme);
+					content.setText(result.lines.join("\n"));
+					return box.render(width);
+				},
+				invalidate() {
+					box.invalidate();
+				},
+			};
+		});
+
+		publishMissionCompleteVisibility(true);
+		ctx.ui.setWidget("agent-team", undefined);
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
+	}
+
+	function dismissMissionComplete(ctx: ExtensionContext): void {
+		publishMissionCompleteVisibility(false);
+		if (ctx.hasUI) ctx.ui.setWidget("mission-complete", undefined);
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
+	}
+
+	/** Check if all tasks are done and show the mission complete widget */
+	function checkMissionComplete(ctx: ExtensionContext): void {
+		if (tasks.length === 0) return;
+		const allDone = tasks.every(t => t.status === "done");
+		if (allDone) {
+			showMissionComplete(ctx);
+		}
+	}
 
 	// ── State reconstruction from session ──────────────────────────────
 
@@ -333,8 +489,21 @@ export default function (pi: ExtensionAPI) {
 		// Sub-agents manage their own task discipline — don't gate them
 		if (process.env.PI_SUBAGENT === "1") return { block: false };
 		if (event.toolName === "tasks") return { block: false };
-		// Communication, orchestration, dispatcher, and Commander MCP tools bypass the gate
+		// Communication, orchestration, dispatcher, and Commander MCP tools bypass the gate.
+		// Exception: self-cleanup is effectively a stop/stomper path, so remind the
+		// agent to finish local tasks and Commander board updates before stopping.
 		if (["dispatch_agent", "dispatch_agents", "ask_user", "run_chain", "advance_phase", "pipeline_status"].includes(event.toolName)) return { block: false };
+		if (shouldGuardSelfCleanup(event)) {
+			if (!Array.isArray(tasks) || tasks.length === 0) return { block: false };
+			const audit = getPreStopTaskAudit();
+			if (audit.incomplete.length > 0 || audit.commanderNeedsAttention) {
+				const commanderLine = audit.commanderAvailable ? ` ${audit.commanderMessage}` : "";
+				return {
+					block: true,
+					reason: `Before cleanup/self-stop, finish or update your local tasks with \`tasks toggle\`.${commanderLine}`,
+				};
+			}
+		}
 		if (event.toolName.startsWith("commander_")) return { block: false };
 
 		// Subagent management tools — meta-orchestration, never gated
@@ -391,8 +560,75 @@ export default function (pi: ExtensionAPI) {
 		if (process.env.PI_SUBAGENT === "1") return;
 
 		if (!Array.isArray(tasks)) return;
-		const incomplete = tasks.filter((t) => t.status !== "done");
-		if (incomplete.length === 0 || nudgedThisCycle) return;
+		const audit = getPreStopTaskAudit();
+		const incomplete = audit.incomplete;
+
+		// Local tasks are done but Commander may still be stale. Reconcile and keep
+		// the agent active long enough to verify/update the board before stopping.
+		if (tasks.length > 0 && incomplete.length === 0 && audit.commanderNeedsAttention) {
+			const tracker = g.__piCommanderTracker;
+			if (tracker?.reconcileNow) tracker.reconcileNow();
+			if (nudgedThisCycle) return;
+			nudgedThisCycle = true;
+			pi.sendMessage(
+				{
+					customType: "task-validation",
+					content: `All local tasks are marked done, but Commander board sync still needs verification. ${audit.commanderMessage}`,
+					display: true,
+				},
+				{ triggerTurn: true },
+			);
+			return;
+		}
+
+		// All tasks done — inject rich completion context for the agent
+		if (tasks.length > 0 && incomplete.length === 0) {
+			const stats = getSessionStats();
+			const taskSummary = tasks
+				.map((t) => {
+					const cmdId = lookupMapping(syncState, t.id);
+					return `  [x] #${t.id}: ${t.text}${cmdId ? ` (Commander #${cmdId})` : ""}`;
+				})
+				.join("\n");
+
+			const statsParts: string[] = [];
+			if (stats) {
+				statsParts.push(`Session time: ${formatElapsed(sessionElapsedMs(stats))}`);
+				if (stats.totalToolCalls > 0) {
+					statsParts.push(`Tool calls: ${stats.totalToolCalls}`);
+					const top = topTools(stats, 3);
+					if (top.length > 0) {
+						statsParts.push(`Top tools: ${top.map(t => `${t.name} (${t.count}x)`).join(", ")}`);
+					}
+				}
+			}
+
+			const summaryLine = listDescription ? `\n\nCompleted Summary: ${listDescription}` : "";
+			const statsLine = statsParts.length > 0 ? `\n\n${statsParts.join(" · ")}` : "";
+
+			// Check if there are git changes to suggest a completion report
+			let reportHint = "";
+			try {
+				const { execSync } = require("node:child_process");
+				const gitStatus = execSync("git status --porcelain", { cwd: process.cwd(), encoding: "utf-8" }).trim();
+				if (gitStatus) {
+					const fileCount = gitStatus.split("\n").filter(Boolean).length;
+					reportHint = `\n\n${fileCount} file(s) changed — consider calling \`show_report\` for a completion report with diffs.`;
+				}
+			} catch { /* not a git repo or git not available */ }
+
+			pi.sendMessage(
+				{
+					customType: "mission-complete",
+					content: `All ${tasks.length} tasks complete -- ${listTitle || "Tasks"}${summaryLine}\n\n${taskSummary}${statsLine}${reportHint}`,
+					display: false, // Hidden context for the agent — widget handles the visual
+				},
+			);
+			return;
+		}
+
+		// Incomplete tasks remain — nudge the agent
+		if (nudgedThisCycle || incomplete.length === 0) return;
 
 		nudgedThisCycle = true;
 
@@ -400,17 +636,21 @@ export default function (pi: ExtensionAPI) {
 			.map((t) => `  ${STATUS_ICON[t.status]} #${t.id} [${STATUS_LABEL[t.status]}]: ${t.text}`)
 			.join("\n");
 
+		const commanderLine = audit.commanderAvailable
+			? `\n\n${audit.commanderMessage}`
+			: "";
+
 		pi.sendMessage(
 			{
 				customType: "task-validation",
-				content: `You still have ${incomplete.length} incomplete task(s):\n\n${taskList}\n\nEither continue working on them or mark them done with \`tasks toggle\`. Don't stop until it's done!`,
+				content: `You still have ${incomplete.length} incomplete task(s):\n\n${taskList}\n\nEither continue working on them or mark them done with \`tasks toggle\`.${commanderLine}\n\nDon't stop until local tasks and any Commander board updates are complete!`,
 				display: true,
 			},
 			{ triggerTurn: true },
 		);
 	});
 
-	pi.on("input", async () => {
+	pi.on("input", async (_event, _ctx) => {
 		nudgedThisCycle = false;
 		return { action: "continue" as const };
 	});
@@ -424,7 +664,8 @@ export default function (pi: ExtensionAPI) {
 			"Manage your task list. You MUST add tasks before using any other tools. " +
 			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
-			"Use new-list to start a themed list with a title and description. " +
+			"Use new-list to start a themed list with a title and rich 1-3 sentence work summary in description, not just a short label. " +
+			"The work summary is shown when starting/listing tasks and as the completion summary when the mission is complete. " +
 			"IMPORTANT: If the user's new request does not fit the current list's theme, use clear to wipe the slate and new-list to start fresh.",
 		parameters: TasksParams,
 
@@ -452,6 +693,8 @@ export default function (pi: ExtensionAPI) {
 							};
 						}
 					}
+
+					dismissMissionComplete(ctx);
 
 					// Cancel any previously synced tasks before resetting
 					if (syncState.mappings.length > 0) {
@@ -505,7 +748,10 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
-					let msg = `New list: "${listTitle}"${listDescription ? ` — ${listDescription}` : ""}`;
+					let msg = `New list: "${listTitle}"`;
+					if (listDescription) {
+						msg += `\nWork Summary: ${listDescription}`;
+					}
 					if (initialTasks.length > 0) {
 						msg += `\nAdded ${initialTasks.length} tasks: ${initialTasks.map((t) => `#${t.id}`).join(", ")}`;
 					}
@@ -520,11 +766,13 @@ export default function (pi: ExtensionAPI) {
 
 				case "list": {
 					const header = listTitle ? `${listTitle}:` : "";
+					const summary = listDescription ? `Work Summary: ${listDescription}` : "";
+					const prefix = [header, summary].filter(Boolean).join("\n");
 					const result = {
 						content: [{
 							type: "text" as const,
 							text: tasks.length
-								? (header ? header + "\n" : "") +
+								? (prefix ? prefix + "\n" : "") +
 									tasks.map((t) => `[${STATUS_ICON[t.status]}] #${t.id} (${t.status}): ${t.text}`).join("\n")
 								: "No tasks defined yet.",
 						}],
@@ -728,6 +976,7 @@ export default function (pi: ExtensionAPI) {
 						details: makeDetails("toggle"),
 					};
 					refreshUI(ctx);
+					checkMissionComplete(ctx);
 					return result;
 				}
 
@@ -818,6 +1067,7 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
+					dismissMissionComplete(ctx);
 					const count = tasks.length;
 
 					// Sync: cancel all mapped Commander tasks (skip if external sync owns it)
@@ -882,7 +1132,7 @@ export default function (pi: ExtensionAPI) {
 				case "new-list": {
 					let msg = theme.fg("success", "New list ") + theme.fg("accent", `"${details.listTitle}"`);
 					if (details.listDescription) {
-						msg += theme.fg("dim", ` — ${details.listDescription}`);
+						msg += `\n${theme.fg("accent", "Work Summary:")} ${theme.fg("muted", details.listDescription)}`;
 					}
 					return new Text(outputLine(theme, "success", msg), 0, 0);
 				}
@@ -895,6 +1145,9 @@ export default function (pi: ExtensionAPI) {
 						listText += theme.fg("accent", details.listTitle) + theme.fg("dim", "  ");
 					}
 					listText += theme.fg("muted", `${taskList.length} task(s):`);
+					if (details.listDescription) {
+						listText += `\n${theme.fg("accent", "Work Summary:")} ${theme.fg("muted", details.listDescription)}`;
+					}
 					const display = expanded ? taskList : taskList.slice(0, 5);
 					for (const t of display) {
 						const icon = t.status === "done"

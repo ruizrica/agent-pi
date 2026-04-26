@@ -371,7 +371,11 @@ export default function (pi: ExtensionAPI) {
 
 		// Task list widget (above editor)
 		const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
-		if (taskList && taskList.tasks.length > 0) {
+		const allTasksComplete = !!taskList?.tasks?.length && taskList.tasks.every((task) => task.status === "done");
+		const missionCompleteVisible = !!(globalThis as any).__piMissionCompleteVisible && allTasksComplete;
+		if (missionCompleteVisible) {
+			widgetCtx.ui.setWidget("agent-team", undefined);
+		} else if (taskList && taskList.tasks.length > 0) {
 			if ((globalThis as any).__piSummaryModeActive) return;
 			widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
 				const text = new Text("", 0, 0);
@@ -388,7 +392,7 @@ export default function (pi: ExtensionAPI) {
 						const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
 						const taskLines = renderTaskList(
 							tl, taskListState, width, availableHeight,
-							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t) },
+							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t), bold: (t: string) => theme.bold(t) },
 						);
 						const taskBg = "\x1b[48;5;236m";
 						const taskReset = "\x1b[0m";
@@ -466,7 +470,15 @@ export default function (pi: ExtensionAPI) {
 		// Use agent's defined model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		const model = resolveToolkitWorkerModel(state.def.name, state.def.model || DEFAULT_SUBAGENT_MODEL);
+		let model = resolveToolkitWorkerModel(state.def.name, state.def.model || DEFAULT_SUBAGENT_MODEL);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		if ((globalThis as any).__piGemmaOverlay && state.def.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && state.def.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 		state.resolvedModel = model;
 
 		// Session file for this agent
@@ -482,18 +494,21 @@ export default function (pi: ExtensionAPI) {
 
 		// Resolve tools — append commander tools when Commander is available
 		const g = globalThis as any;
-		const commanderAvailable = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+		const commanderAvailableAtSpawn = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
 
 		// Commander lifecycle: gate-aware fire-and-forget helper
+		// Re-reads gate state each time so it reflects current availability, not spawn-time
 		function commanderSync(fn: (client: any) => Promise<void>): void {
 			const gate = g.__piCommanderGate;
 			if (!gate || gate.state !== "available" || !g.__piCommanderClient) return;
-			fn(g.__piCommanderClient).catch(() => {});
+			fn(g.__piCommanderClient).catch((err) => {
+				console.error(`[agent-team] commanderSync failed:`, err?.message || err);
+			});
 		}
 
 		// Hoist for use in pre-dispatch claim + post-dispatch reconciliation
 		const canonicalName = state.def.name;
-		const taskId = commanderAvailable ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
+		const taskId = commanderAvailableAtSpawn ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
 
 		let tools = state.def.tools;
 		// Commander tools are extension-registered (not built-in), so they must NOT
@@ -503,7 +518,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
-		if (commanderAvailable) {
+		if (commanderAvailableAtSpawn) {
 			// Gather peer names for inter-agent mailbox communication
 			const peerNames: string[] = [];
 			for (const [name] of agentStates) {
@@ -526,7 +541,7 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			...(commanderAvailable ? ["-e", commanderExtPath] : []),
+			...(commanderAvailableAtSpawn ? ["-e", commanderExtPath] : []),
 			"--model", model,
 			"--tools", tools,
 			"--thinking", "off",
@@ -550,7 +565,13 @@ export default function (pi: ExtensionAPI) {
 			if ((globalThis as any).__piClaudeOverlay) {
 				spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
 			}
-			if (commanderAvailable) {
+			if ((globalThis as any).__piGemmaOverlay) {
+				spawnEnv.PI_GEMMA_OVERLAY_ACTIVE = "1";
+			}
+			if ((globalThis as any).__piQwenOverlay) {
+				spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
+			}
+			if (commanderAvailableAtSpawn) {
 				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
 				if (currentTask?.commanderTaskId !== undefined) {
 					spawnEnv.PI_COMMANDER_TASK_ID = String(currentTask.commanderTaskId);
@@ -558,7 +579,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// Pre-dispatch: claim task in Commander before spawning
-			if (commanderAvailable && taskId !== undefined) {
+			if (commanderAvailableAtSpawn && taskId !== undefined) {
 				commanderSync((client) => preClaimTask(client, taskId, canonicalName));
 			}
 
@@ -590,7 +611,10 @@ export default function (pi: ExtensionAPI) {
 					if (state.status !== "running") removeAgentWidget(state);
 				}, 30_000);
 
-				if (commanderAvailable && taskId !== undefined) {
+				// Re-evaluate Commander availability at finish time (not spawn time)
+				// to handle transient connectivity issues during agent lifetime
+				const cmdAvailNow = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+				if (cmdAvailNow && taskId !== undefined) {
 					const summary = full.trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
 						commanderSync((client) => postCompleteTask(client, taskId, canonicalName, summary));
@@ -598,6 +622,8 @@ export default function (pi: ExtensionAPI) {
 						const errMsg = stderrBuf.trim() || summary || "Agent exited with error";
 						commanderSync((client) => postFailTask(client, taskId, errMsg));
 					}
+				} else if (taskId !== undefined && !cmdAvailNow) {
+					console.error(`[agent-team] Commander unavailable at finish for task ${taskId} (${canonicalName}) — task will remain stuck`);
 				}
 
 				ctx.ui.notify(
@@ -1310,6 +1336,26 @@ ${agentCatalog}${commanderSection}`,
 			widgetCtx.ui.setWidget("agent-team", undefined);
 		}
 		removeAllAgentWidgets();
+
+		// Reconciliation sweep: mark any Commander tasks from running agents as failed
+		// so they don't stay stuck in "working" on the kanban board forever
+		const g = globalThis as any;
+		const cmdClient = g.__piCommanderGate?.state === "available" && g.__piCommanderClient;
+		if (cmdClient) {
+			for (const [, state] of agentStates) {
+				// If the agent was running and had a Commander task, mark it failed
+				if (state.status === "running") {
+					const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
+					const cmdTaskId = currentTask?.commanderTaskId;
+					if (cmdTaskId !== undefined) {
+						postFailTask(cmdClient, cmdTaskId,
+							`Agent ${state.def.name} killed during session switch`)
+							.catch(() => {});
+					}
+				}
+			}
+		}
+
 		widgetCtx = _ctx;
 		for (const state of agentStates.values()) {
 			resetAgentState(state);
@@ -1350,6 +1396,7 @@ ${agentCatalog}${commanderSection}`,
 		// All tools remain visible — dispatcher can use any registered tool directly
 
 		if (!(globalThis as any).__piSummaryModeActive) _ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
+		(globalThis as any).__piRefreshAgentTeamWidget = () => updateWidget();
 		updateWidget();
 
 		// ── Expose global hooks for escape-cancel integration ────────────
@@ -1381,6 +1428,7 @@ ${agentCatalog}${commanderSection}`,
 		// Task list nav provider (first priority when tasks exist)
 		providers.push({
 			isActive: () => {
+				if ((globalThis as any).__piMissionCompleteVisible) return false;
 				const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
 				return !!(tl && tl.tasks.length > 0);
 			},

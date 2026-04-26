@@ -4,9 +4,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { buildAdvisorPrompt, normalizeAdvisorResponse } from "./lib/claude-advice-format.ts";
-import { spawnClaudeCli } from "./lib/claude-cli.ts";
-import { buildClaudeContextPacket } from "./lib/claude-context.ts";
+import { runAdvisor } from "./lib/claude-advisor-runner.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 const Params = Type.Object({
@@ -24,58 +22,9 @@ export default function (pi: ExtensionAPI) {
 		description: "Ask the Opus-backed Claude advisor to review shared context and return recommendations, risks, alternatives, and next actions.",
 		parameters: Params,
 		async execute(_toolCallId, args, _signal, onUpdate, ctx) {
-			const question = args.question.trim();
-			const role = args.agent_role?.trim();
-			const task = [args.task_context?.trim(), buildAdvisorPrompt(question, role)].filter(Boolean).join("\n\n");
-
-			// Include CLAUDE.md content for codex awareness when available (capped for size)
-			let claudeDoc: string | undefined;
-			try {
-				const fs = await import("fs");
-				const path = await import("path");
-				const claudePath = path.join(ctx.cwd, "CLAUDE.md");
-				if (fs.existsSync(claudePath)) {
-					claudeDoc = fs.readFileSync(claudePath, "utf-8");
-				}
-			} catch {}
-
-			const contextLines: string[] = [];
-			if (claudeDoc) {
-				contextLines.push("## Project Codex (CLAUDE.md)");
-				contextLines.push(claudeDoc.slice(0, 8000)); // cap to avoid huge packets
-			}
-
-			const contextPacket = buildClaudeContextPacket({
-				cwd: ctx.cwd,
-				task,
-				recentSummary: args.task_context,
-				fileHints: args.files,
-				conversationSummary: contextLines.length ? contextLines.join("\n\n") : undefined,
+			const { normalized, text } = await runAdvisor(args, ctx, (streamed) => {
+				onUpdate?.({ content: [{ type: "text", text: streamed.slice(-4000) }] } as any);
 			});
-
-			let streamed = "";
-			const result = await spawnClaudeCli({
-				profile: "claude-advisor",
-				task,
-				cwd: ctx.cwd,
-				model: args.model,
-				tools: "read,grep,find,ls,bash",
-				systemPrompt: "You are an advisor. Review the shared context and produce strategic guidance without taking over implementation.",
-				contextPacket,
-				onTextDelta: (delta) => {
-					streamed += delta;
-					onUpdate?.({ content: [{ type: "text", text: streamed.slice(-4000) }] } as any);
-				},
-			});
-
-			const normalized = normalizeAdvisorResponse(result.result || result.output || streamed);
-			const text = [
-				`Summary: ${normalized.summary}`,
-				`Recommended decision: ${normalized.recommendation}`,
-				normalized.risks.length ? `Risks:\n- ${normalized.risks.join("\n- ")}` : "",
-				normalized.alternatives.length ? `Alternatives:\n- ${normalized.alternatives.join("\n- ")}` : "",
-				normalized.nextActions.length ? `Next actions:\n- ${normalized.nextActions.join("\n- ")}` : "",
-			].filter(Boolean).join("\n\n");
 
 			return {
 				content: [{ type: "text", text }],

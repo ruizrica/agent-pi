@@ -152,7 +152,7 @@ describe("buildNormalPrompt — Phase 2: Advisor-first orchestration policy", ()
 	});
 });
 
-describe("buildNormalPrompt — Phase 4/5: Advisor-first strategy and second-opinion policy", () => {
+describe("buildNormalPrompt — Phase 4/5: Complexity-aware advisor strategy and second-opinion policy", () => {
 	it("falls back to the default advisor model when no selected model is provided", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result).toContain("claude-opus-4-6");
@@ -232,15 +232,16 @@ describe("buildNormalPrompt — Phase 4/5: Advisor-first strategy and second-opi
 		expect(result).toContain("When NOT to Fan Out");
 	});
 
-	it("explains that advisor recommendation is primary input", () => {
+	it("explains that advisor guidance is limited to complex work", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
-		expect(result.toLowerCase()).toContain("advisor's recommendation");
-		expect(result.toLowerCase()).toContain("primary input");
+		expect(result.toLowerCase()).toContain("only for complex problems");
+		expect(result.toLowerCase()).toContain("consult the advisor for simple or routine medium tasks");
 	});
 
-	it("references claude_advisor tool for strategic consultation", () => {
+	it("references claude_advisor tool for complex strategic consultation", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result).toContain("claude_advisor");
+		expect(result.toLowerCase()).toContain("when not to seek advice");
 	});
 
 	it("provides examples of second-opinion triggers: architecture, security, ambiguity, integration", () => {

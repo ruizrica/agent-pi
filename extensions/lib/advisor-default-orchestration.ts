@@ -1,4 +1,4 @@
-// ABOUTME: Orchestration policy and helper logic for advisor-first NORMAL mode.
+// ABOUTME: Orchestration policy and helper logic for complexity-aware NORMAL mode.
 // ABOUTME: Defines when to spawn worker agents, when to request second opinions, and fan-out caps.
 
 import {
@@ -33,7 +33,7 @@ export enum TaskComplexity {
 	/**
 	 * Medium task: multiple files, moderate scope, some coordination needed.
 	 * May spawn 2-4 workers if the task has parallelizable sub-tasks.
-	 * No second opinion unless high-risk or ambiguous.
+	 * No advisor or second opinion required by default; escalate only after reclassifying as complex.
 	 */
 	MEDIUM = "medium",
 
@@ -190,10 +190,10 @@ export function assessWorkerFanOut(complexity: TaskComplexity, isParallelizable:
  *
  * A second opinion is recommended when:
  * - Complexity is COMPLEX or higher
- * - The work involves architectural decisions
- * - The work is risky (deletes, overwrites, system-wide changes)
- * - The requirement is ambiguous and the approach uncertain
- * - The change affects a critical system or many users
+ * - The work is risky, ambiguous, architectural, or critical enough to be treated as complex
+ *
+ * Simple and medium tasks do not automatically trigger advisor or second-opinion review.
+ * If a medium task becomes risky/ambiguous enough to need review, classify it as COMPLEX first.
  */
 export function assessSecondOpinion(
 	complexity: TaskComplexity,
@@ -216,27 +216,20 @@ export function assessSecondOpinion(
 		};
 	}
 
-	// Medium: only if architectural, risky, or ambiguous
+	// Medium tasks do not require advisor or second-opinion review.
+	// If risk/ambiguity/architecture makes review necessary, the task should be classified as COMPLEX.
 	if (complexity === TaskComplexity.MEDIUM) {
-		const needsReview = opts.isArchitectural || opts.isRisky || opts.isAmbiguous;
-		if (needsReview) {
-			return {
-				recommended: true,
-				reason: `Medium complexity ${opts.isArchitectural ? "architectural" : opts.isRisky ? "risky" : "ambiguous"} work — consider a second opinion`,
-				role: SECOND_OPINION_ROLE,
-				complexityThreshold: TaskComplexity.MEDIUM,
-			};
-		} else {
-			return {
-				recommended: false,
-				reason: "Medium complexity straightforward work — no second opinion needed",
-				role: SECOND_OPINION_ROLE,
-				complexityThreshold: TaskComplexity.MEDIUM,
-			};
-		}
+		return {
+			recommended: false,
+			reason: opts.isArchitectural || opts.isRisky || opts.isAmbiguous || opts.affectsCriticalPath
+				? "Medium task with escalation signals — reclassify as complex before requesting a second opinion"
+				: "Medium complexity work — no second opinion needed",
+			role: SECOND_OPINION_ROLE,
+			complexityThreshold: TaskComplexity.MEDIUM,
+		};
 	}
 
-	// Complex and above: recommend unless it's simple enough to be self-contained
+	// Complex and above: recommend review
 	return {
 		recommended: true,
 		reason: `${complexity} task — request ${SECOND_OPINION_ROLE} or ${SECOND_OPINION_FALLBACK_ROLE} review`,
@@ -300,7 +293,7 @@ export function resolveCrossProviderSecondOpinion(selectedPrimaryModel?: string 
  */
 export function getAdvisorDescription(selectedAdvisorModel?: string | null): string {
 	const advisorModel = selectedAdvisorModel?.trim() || DEFAULT_ADVISOR_MODEL;
-	return `Strategic advisor using ${advisorModel}: reviews context, decides on worker fan-out, and validates final outcomes`;
+	return `Complex-work advisor using ${advisorModel}: reviews high-risk context, helps decide worker fan-out, and validates final outcomes for substantial work`;
 }
 
 /**

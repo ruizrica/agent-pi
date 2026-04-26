@@ -25,6 +25,11 @@ const mockDeps: RenderDeps = {
 	fg: (_color, text) => text,
 };
 
+const boldDeps: RenderDeps = {
+	...mockDeps,
+	bold: (text) => `<b>${text}</b>`,
+};
+
 // ── stripLeadingNumber ──────────────────────────────────────────────
 
 describe("stripLeadingNumber", () => {
@@ -294,11 +299,48 @@ describe("renderTaskList", () => {
 		expect(result.length).toBe(5);
 	});
 
-	it("shows done/total in header", () => {
-		const tasks = makeTasks(5);
+	it("shows only the title and done/total in a bold header", () => {
+		const tasks = { ...makeTasks(5), title: "Repeated Sample Task List Completion Test" };
 		// makeTasks(5): 1 done out of 5 → "1/5"
-		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, mockDeps);
-		expect(result[0]).toContain("1/5");
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, boldDeps);
+		expect(result[0]).toContain("<b>");
+		expect(result[0]).toContain("Repeated Sample Task List Completion Test 1/5");
+		expect(result[0]).not.toContain("MISSION");
+	});
+
+	it("shows a wrapped work summary block when a list description exists", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "Update the security page with clearer messaging, safer defaults, and verification coverage.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
+		expect(result[1]).toContain("Mission Brief:");
+		expect(result[2]).toContain("Update the security page");
+		const firstTaskIndex = result.findIndex((line) => line.includes("Task 1 description"));
+		expect(firstTaskIndex).toBeGreaterThan(2);
+		expect(result[firstTaskIndex - 1]).toBe("");
+	});
+
+	it("wraps long summary lines to terminal width", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "This is a deliberately long work summary that should wrap to the terminal width before task rows are rendered.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 42, 20, mockDeps);
+		expect(result[1]).toContain("Mission Brief:");
+		expect(result[2].length).toBeLessThanOrEqual(42);
+		expect(result.slice(1, 5).join("\n")).not.toContain("…");
+	});
+
+	it("still renders task rows when a long mission brief has tiny available height", () => {
+		const tasks = {
+			...makeTasks(2),
+			description: "This mission brief is intentionally very long and should not consume the whole active task widget when the terminal only leaves a few rows available for rendering.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 50, 5, mockDeps);
+		const joined = result.join("\n");
+		expect(result.length).toBeGreaterThan(0);
+		expect(joined).toContain("Task 1 description");
 	});
 
 	it("shows selection marker on selected task", () => {
