@@ -115,7 +115,7 @@ When your analysis or advisor guidance determines a task is complex and parallel
 - Parallel work like investigation, implementation, testing, and documentation
 - Advisor explicitly recommends parallel execution
 
-**Parent-Child PDE Chaining:** When decomposing a sub-task that originated from a prior PDE decomposition, pass the parent's UUID via the `parent` parameter: `pde_decompose({ prompt: "...", parent: "<parent-pde-uuid>" })`. This nests the child decomposition inside the parent's `.pde/` folder, creating a traceable tree of intent → sub-intent → execution. Sub-agents dispatched from a PLAN should always receive the parent PDE UUID so their decompositions chain properly.
+**Parent-Child PDE Chaining:** When decomposing a sub-task that originated from a prior PDE decomposition, pass the parent's UUID via the `parent` parameter: `pde_decompose({ prompt: "...", parent: "<parent-pde-uuid>" })`. This nests the child decomposition inside the parent's `.pde/` folder, creating a traceable tree of intent -> sub-intent -> execution. Sub-agents dispatched from a PLAN should always receive the parent PDE UUID so their decompositions chain properly.
 
 ### When NOT to Fan Out
 - Simple, single-file changes
