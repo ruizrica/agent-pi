@@ -74,20 +74,14 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				let usageStr = "–";
 				if (usage?.percent != null) {
 					const pct = `${Math.round(usage.percent)}%`;
-					if (contextWindow > 0) {
-						usageStr = `${pct} / ${formatTokens(contextWindow)}`;
-					} else {
-						usageStr = pct;
-					}
+					usageStr = contextWindow > 0 ? `${pct} / ${formatTokens(contextWindow)}` : pct;
 				}
 
-				const dir = shortDir(ctx.cwd);
 				const thinking = thinkingIndicator(pi.getThinkingLevel?.(), theme);
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
-				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", dir);
+				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr);
 
-				// Agent time from shared session stats
 				const stats = getSessionStats();
 				let agentTimeStr = "";
 				if (stats) {
