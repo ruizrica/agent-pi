@@ -17,6 +17,7 @@ import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { basename, dirname } from "node:path";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { shouldWarnForCompaction, getProactiveCompactionPhase } from "./lib/context-gate.ts";
+import { getSessionStats, formatElapsed } from "./lib/session-stats.ts";
 
 /** Turn a model name like "Claude 4 Opus" into "opus 4" */
 function shortModelName(name: string | undefined): string {
@@ -85,7 +86,17 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
 				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", dir);
-				const rightContent = thinking + ` `;
+
+				// Agent time from shared session stats
+				const stats = getSessionStats();
+				let agentTimeStr = "";
+				if (stats) {
+					const elapsedMs = Date.now() - stats.startedAt;
+					const elapsed = formatElapsed(elapsedMs);
+					const timeColor = elapsedMs > 30 * 60_000 ? "warning" : elapsedMs > 5 * 60_000 ? "accent" : "dim";
+					agentTimeStr = theme.fg(timeColor, elapsed);
+				}
+				const rightContent = (agentTimeStr ? agentTimeStr + sep : "") + thinking + ` `;
 
 				const leftWidth = visibleWidth(leftContent);
 				const rightWidth = visibleWidth(rightContent);

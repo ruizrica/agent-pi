@@ -14,6 +14,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSecurityReportHTML, type SecurityReportData, type SecurityReportFinding } from "./lib/security-report-html.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
 import { saveScanSnapshot, loadHistoryForReport } from "./lib/security-history.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 
@@ -173,6 +174,70 @@ export default function (pi: ExtensionAPI) {
 				saveScanSnapshot(report);
 			} catch {}
 
+			// Try Commander first (read-only view)
+			if (isCommanderAvailable()) {
+				const findingsList = report.findings
+					.map((f) => `- **[${f.severity}]** ${f.title}${f.detail ? ` — ${f.detail}` : ""}`)
+					.join("\n");
+				const mitigationsList = report.mitigations.map((m) => `- ${m}`).join("\n");
+				const markdownContent = [
+					`# ${report.title}`,
+					"",
+					`**Scope:** ${report.scope}`,
+					"",
+					"## Summary",
+					"",
+					report.summary,
+					"",
+					report.findings.length > 0 ? `## Findings (${report.findings.length})\n\n${findingsList}` : "",
+					"",
+					report.mitigations.length > 0 ? `## Mitigations\n\n${mitigationsList}` : "",
+					"",
+					report.intelligence ? `## Threat Intelligence\n\n${report.intelligence}` : "",
+					"",
+					report.inspection ? `## Passive Inspection\n\n${report.inspection}` : "",
+					"",
+					report.scan ? `## Scan Analysis\n\n${report.scan}` : "",
+				].filter(Boolean).join("\n");
+
+				const commanderResult = await openAndWaitInCommander(
+					{
+						content: markdownContent,
+						title: report.title,
+						reportType: "security",
+						mode: "view",
+						format: "markdown",
+					},
+					ctx,
+				);
+
+				if (commanderResult.inCommander) {
+					try {
+						upsertPersistedReport({
+							category: "security",
+							title: report.title,
+							summary: report.summary,
+							content: report.summary,
+							sourcePath: join(ctx.cwd || process.cwd(), ".context", "network-security-chain-design.md"),
+							viewerPath: join(ctx.cwd || process.cwd(), ".context", "network-security-chain-design.md"),
+							viewerLabel: report.title,
+							tags: ["security", "report", "network"],
+							metadata: {
+								scope: report.scope,
+								findings: report.findings.length,
+								mitigations: report.mitigations.length,
+							},
+						});
+					} catch {}
+
+					return {
+						content: [{ type: "text" as const, text: "Security analysis report viewed in Commander." }],
+						details: { findings: report.findings.length, mitigations: report.mitigations.length },
+					};
+				}
+				// Fall through to browser if Commander unavailable or failed
+			}
+
 			cleanup();
 			const { port, server, waitForClose } = await startServer(report);
 			activeServer = server;
@@ -195,7 +260,7 @@ export default function (pi: ExtensionAPI) {
 				await waitForClose();
 				try {
 					upsertPersistedReport({
-						category: "completion",
+						category: "security",
 						title: report.title,
 						summary: report.summary,
 						content: report.summary,

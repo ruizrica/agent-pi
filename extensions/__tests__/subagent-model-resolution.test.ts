@@ -106,12 +106,17 @@ describe("subagent model resolution (end-to-end)", () => {
 
 	/**
 	 * Mirrors the resolution logic from subagent-widget.ts spawnAgent().
-	 * Priority: 1) caller override, 2) agent def model, 3) config model, 4) default
+	 * Priority: 1) local overlay override, 2) caller override, 3) agent def model, 4) config model, 5) default
 	 */
 	function resolveModel(
 		callerModel: string | undefined,
 		agentName: string,
+		overlay: "gemma" | "qwen" | undefined = undefined,
 	): string {
+		const normalized = agentName.toLowerCase();
+		const localEligible = normalized === "builder" || normalized === "worker" || normalized === "claude-worker" || normalized.startsWith("builder");
+		if (overlay === "gemma" && localEligible) return "lmstudio/google/gemma-4-26b-a4b";
+		if (overlay === "qwen" && localEligible) return "lmstudio/qwen/qwen3.6-27b";
 		const agentDef = resolveAgentByName(agentName, knownAgents);
 		const configModel = resolveAgentModelString(agentName, config);
 		return resolveToolkitWorkerModel(
@@ -134,6 +139,14 @@ describe("subagent model resolution (end-to-end)", () => {
 	describe("BUILDER agent", () => {
 		it("uses mercury/mercury-2 from models.json", () => {
 			expect(resolveModel(undefined, "BUILDER")).toBe("mercury/mercury-2");
+		});
+
+		it("reroutes to local Gemma when Gemma overlay is active", () => {
+			expect(resolveModel(undefined, "BUILDER", "gemma")).toBe("lmstudio/google/gemma-4-26b-a4b");
+		});
+
+		it("reroutes to local Qwen when Qwen overlay is active", () => {
+			expect(resolveModel(undefined, "BUILDER", "qwen")).toBe("lmstudio/qwen/qwen3.6-27b");
 		});
 	});
 
@@ -160,6 +173,18 @@ describe("subagent model resolution (end-to-end)", () => {
 		it("preserve Claude profile models", () => {
 			expect(resolveModel(undefined, "CLAUDE-WORKER")).toBe("anthropic/claude-haiku-4-5");
 			expect(resolveModel(undefined, "CLAUDE-ADVISOR")).toBe("anthropic/claude-opus-4-6");
+		});
+	});
+
+	describe("worker eligibility", () => {
+		it("reroutes dynamic builder variants under local overlays", () => {
+			expect(resolveModel(undefined, "builder-kimi-k2-5", "gemma")).toBe("lmstudio/google/gemma-4-26b-a4b");
+			expect(resolveModel(undefined, "builder-kimi-k2-5", "qwen")).toBe("lmstudio/qwen/qwen3.6-27b");
+		});
+
+		it("does not reroute non-eligible roles", () => {
+			expect(resolveModel(undefined, "SCOUT", "gemma")).toBe("x-ai/grok-4.1-fast");
+			expect(resolveModel(undefined, "REVIEWER", "qwen")).toBe("anthropic/claude-opus-4-6");
 		});
 	});
 

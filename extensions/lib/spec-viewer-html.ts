@@ -2,6 +2,7 @@
 // ABOUTME: Multi-page wizard with step navigation, inline comments, markdown editing, visuals gallery, approve/request-changes.
 
 import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
 
 export interface SpecDocument {
 	/** Unique key (e.g. "spec", "requirements", "tasks", "visuals") */
@@ -65,6 +66,8 @@ export function generateSpecViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
   body {
     background: var(--bg);

@@ -1,6 +1,8 @@
 // ABOUTME: HTML renderer for the Security Analysis Report viewer using the Mako/Plan Viewer design system.
 // ABOUTME: Presents summary, findings, mitigations, and source data with consistent Pi viewer styling and dismiss support.
 
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+
 export interface SecurityReportFinding {
   title: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
@@ -365,6 +367,8 @@ export function generateSecurityReportHTML(report: SecurityReportData, port?: nu
     --mono: "SF Mono", "Fira Code", "JetBrains Mono", Consolas, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
   body {
     background: var(--bg); color: var(--text); font-family: var(--font);

@@ -1,6 +1,8 @@
 // ABOUTME: Self-contained HTML template for a lightweight local file viewer/editor.
 // ABOUTME: Features syntax highlighting, markdown rendering, hamburger editor menu, line numbers, and edit/save flow.
 
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+
 export function generateFileViewerHTML(opts: {
 	title: string;
 	filePath: string;
@@ -19,7 +21,11 @@ export function generateFileViewerHTML(opts: {
 	const escapedEditable = esc(opts.editable);
 	const escapedLanguage = esc(opts.language || "");
 	const isMarkdown = (opts.language || "").toLowerCase() === "markdown" || /\.(md|mdx|markdown)$/i.test(opts.filePath);
+	const isHtml = (opts.language || "").toLowerCase() === "html" || /\.(html|htm)$/i.test(opts.filePath);
+	const isRenderable = isMarkdown || isHtml;
 	const escapedIsMarkdown = esc(isMarkdown);
+	const escapedIsHtml = esc(isHtml);
+	const escapedIsRenderable = esc(isRenderable);
 	const lineCount = Math.max(1, opts.content.endsWith("\n") ? opts.content.split("\n").length - 1 : opts.content.split("\n").length);
 	const initialGutterHtml = Array.from({ length: lineCount }, (_, i) => `<span>${i + 1}</span>`).join("");
 
@@ -53,6 +59,7 @@ export function generateFileViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+${VIEWER_SCROLLBAR_STYLES}
   html, body { height: 100%; }
   body {
     background: var(--bg);
@@ -127,9 +134,10 @@ export function generateFileViewerHTML(opts: {
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--mono);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
     opacity: 0.9;
     flex: 1 1 auto;
     min-width: 0;
@@ -287,7 +295,8 @@ export function generateFileViewerHTML(opts: {
     gap: 16px;
     flex: 1;
     min-width: 0;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
   .meta-right {
     display: flex;
@@ -310,14 +319,16 @@ export function generateFileViewerHTML(opts: {
     text-overflow: ellipsis;
   }
   #metaPath {
-    flex: 1;
+    flex: 0 0 auto;
     min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
   }
   .meta {
     display: none;
   }
 
-  .markdown-toggle {
+  .render-toggle {
     margin: 0;
     padding: 0;
     background: transparent;
@@ -329,8 +340,8 @@ export function generateFileViewerHTML(opts: {
     gap: 8px;
     flex-shrink: 0;
   }
-  .markdown-toggle.visible { display: flex; }
-  .markdown-toggle .toggle-label {
+  .render-toggle.visible { display: flex; }
+  .render-toggle .toggle-label {
     display: none;
   }
   .view-toggle {
@@ -422,7 +433,7 @@ export function generateFileViewerHTML(opts: {
   }
   .hljs { background: transparent !important; }
 
-  .markdown-rendered-wrap {
+  .rendered-wrap {
     flex: 1;
     min-height: 0;
     overflow: auto;
@@ -430,7 +441,20 @@ export function generateFileViewerHTML(opts: {
     padding: 20px 24px 40px;
     background: var(--bg);
   }
-  .markdown-rendered-wrap.visible { display: block; }
+  .rendered-wrap.visible { display: block; }
+  .html-rendered-wrap {
+    padding: 0;
+    background: #fff;
+  }
+  .html-rendered-frame {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    border: 0;
+    background: #fff;
+    color-scheme: light;
+    display: block;
+  }
 
   .markdown-body h1, .markdown-body h2, .markdown-body h3,
   .markdown-body h4, .markdown-body h5, .markdown-body h6 {
@@ -676,11 +700,11 @@ export function generateFileViewerHTML(opts: {
       <span id="metaSize" class="meta-item"></span>
     </div>
     <div class="meta-right">
-      <div id="markdownToggle" class="markdown-toggle">
-        <span class="toggle-label">Markdown view</span>
+      <div id="renderToggle" class="render-toggle">
+        <span class="toggle-label">View</span>
         <div class="view-toggle">
           <button id="btnRendered" class="active" type="button">Rendered</button>
-          <button id="btnRaw" type="button">Markdown</button>
+          <button id="btnRaw" type="button">Source</button>
         </div>
       </div>
       <div class="copy-done-group">
@@ -714,8 +738,12 @@ export function generateFileViewerHTML(opts: {
       </div>
     </div>
 
-    <div id="markdownRenderedWrap" class="markdown-rendered-wrap">
+    <div id="markdownRenderedWrap" class="rendered-wrap markdown-rendered-wrap">
       <div id="markdownRendered" class="markdown-body"></div>
+    </div>
+
+    <div id="htmlRenderedWrap" class="rendered-wrap html-rendered-wrap">
+      <iframe id="htmlRenderedFrame" class="html-rendered-frame" sandbox="allow-forms allow-popups allow-popups-to-escape-sandbox" title="Rendered HTML preview"></iframe>
     </div>
 
     <div id="editorWrap" class="editor-wrap">
@@ -747,12 +775,14 @@ export function generateFileViewerHTML(opts: {
   var EDITABLE = ${escapedEditable};
   var LANGUAGE = ${escapedLanguage};
   var IS_MARKDOWN = ${escapedIsMarkdown};
+  var IS_HTML = ${escapedIsHtml};
+  var IS_RENDERABLE = ${escapedIsRenderable};
 
   var currentContent = ORIGINAL;
   var savedContent = ORIGINAL;
   var modified = false;
   var mode = 'view';
-  var markdownView = IS_MARKDOWN ? 'rendered' : 'raw';
+  var renderView = IS_RENDERABLE ? 'rendered' : 'raw';
   var isDone = false;
 
   var titleText = document.getElementById('titleText');
@@ -766,9 +796,11 @@ export function generateFileViewerHTML(opts: {
   var notice = document.getElementById('notice');
   var doneBanner = document.getElementById('doneBanner');
   var viewerWrap = document.getElementById('viewerWrap');
-  var markdownToggle = document.getElementById('markdownToggle');
+  var renderToggle = document.getElementById('renderToggle');
   var markdownRenderedWrap = document.getElementById('markdownRenderedWrap');
   var markdownRendered = document.getElementById('markdownRendered');
+  var htmlRenderedWrap = document.getElementById('htmlRenderedWrap');
+  var htmlRenderedFrame = document.getElementById('htmlRenderedFrame');
   var btnRendered = document.getElementById('btnRendered');
   var btnRaw = document.getElementById('btnRaw');
 
@@ -904,6 +936,29 @@ export function generateFileViewerHTML(opts: {
     }
   }
 
+  function renderHtml() {
+    if (!IS_HTML) return;
+    var scrollbarCss = '<style data-file-viewer-scrollbar>' +
+      ':root{--file-viewer-bg:#1a1d23;--file-viewer-thumb:#2e343e;--file-viewer-thumb-hover:#555d6e;}' +
+      'html,body{scrollbar-width:thin;scrollbar-color:var(--file-viewer-thumb) var(--file-viewer-bg);}' +
+      '::-webkit-scrollbar{width:8px;height:8px;}' +
+      '::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:var(--file-viewer-bg);}' +
+      '::-webkit-scrollbar-thumb{background:var(--file-viewer-thumb);border-radius:999px;border:2px solid var(--file-viewer-bg);}' +
+      '::-webkit-scrollbar-thumb:hover{background:var(--file-viewer-thumb-hover);}' +
+      '</style>';
+    if (/^\\s*<!doctype\\s+html/i.test(currentContent) || /^\\s*<html[\\s>]/i.test(currentContent)) {
+      if (/<\\/head>/i.test(currentContent)) {
+        htmlRenderedFrame.srcdoc = currentContent.replace(/<\\/head>/i, scrollbarCss + '</head>');
+      } else if (/<head[\\s>][\\s\\S]*?>/i.test(currentContent)) {
+        htmlRenderedFrame.srcdoc = currentContent.replace(/<head([\\s>][\\s\\S]*?)>/i, '<head$1>' + scrollbarCss);
+      } else {
+        htmlRenderedFrame.srcdoc = currentContent.replace(/<html([\\s>][\\s\\S]*?)>/i, '<html$1><head>' + scrollbarCss + '</head>');
+      }
+    } else {
+      htmlRenderedFrame.srcdoc = '<!doctype html><html><head>' + scrollbarCss + '</head><body>' + currentContent + '</body></html>';
+    }
+  }
+
   function syncEditorScroll() {
     editorLines.style.transform = 'translateY(-' + editor.scrollTop + 'px)';
   }
@@ -916,14 +971,14 @@ export function generateFileViewerHTML(opts: {
 
   function refreshMeta() {
     var lineCount = getLineCount(currentContent);
-    metaPath.textContent = truncateMiddle(FILE_PATH, 48);
+    metaPath.textContent = FILE_PATH;
     metaLines.textContent = lineCount + ' lines' + (LINE_RANGE ? ' (range ' + LINE_RANGE + ')' : '');
     var modeLabel;
     if (isDone) {
       modeLabel = 'done';
     } else if (mode === 'edit') {
       modeLabel = EDITABLE ? 'edit' : 'read-only';
-    } else if (IS_MARKDOWN && markdownView === 'rendered') {
+    } else if (IS_RENDERABLE && renderView === 'rendered') {
       modeLabel = '';
     } else {
       modeLabel = EDITABLE ? 'read' : 'read-only';
@@ -933,7 +988,7 @@ export function generateFileViewerHTML(opts: {
     metaMode.style.display = 'none';
     metaSize.style.display = 'none';
 
-    subtitleText.textContent = modeLabel;
+    subtitleText.textContent = FILE_PATH;
   }
 
   function refreshUI() {
@@ -948,15 +1003,18 @@ export function generateFileViewerHTML(opts: {
     }
 
     var isEdit = mode === 'edit' && EDITABLE && !isDone;
-    var showRendered = IS_MARKDOWN && !isEdit && markdownView === 'rendered';
-    var showCode = !isEdit && (!IS_MARKDOWN || markdownView === 'raw');
+    var showMarkdownRendered = IS_MARKDOWN && !isEdit && renderView === 'rendered';
+    var showHtmlRendered = IS_HTML && !isEdit && renderView === 'rendered';
+    var showCode = !isEdit && (!IS_RENDERABLE || renderView === 'raw');
 
-    markdownToggle.classList.toggle('visible', IS_MARKDOWN);
+    renderToggle.classList.toggle('visible', IS_RENDERABLE);
     viewerWrap.classList.toggle('hidden', !showCode);
-    markdownRenderedWrap.classList.toggle('visible', showRendered);
+    markdownRenderedWrap.classList.toggle('visible', showMarkdownRendered);
+    htmlRenderedWrap.classList.toggle('visible', showHtmlRendered);
     editorWrap.classList.toggle('visible', isEdit);
 
-    if (showRendered) renderMarkdown();
+    if (showMarkdownRendered) renderMarkdown();
+    if (showHtmlRendered) renderHtml();
     if (showCode) highlightCode();
 
     if (isEdit) {
@@ -965,8 +1023,8 @@ export function generateFileViewerHTML(opts: {
       syncEditorScroll();
     }
 
-    btnRendered.classList.toggle('active', markdownView === 'rendered');
-    btnRaw.classList.toggle('active', markdownView === 'raw');
+    btnRendered.classList.toggle('active', renderView === 'rendered');
+    btnRaw.classList.toggle('active', renderView === 'raw');
 
     if (isDone) {
       toggleBtn.textContent = 'Read Only';
@@ -1065,20 +1123,20 @@ export function generateFileViewerHTML(opts: {
   });
 
   btnRendered.addEventListener('click', function() {
-    if (!IS_MARKDOWN || isDone) return;
+    if (!IS_RENDERABLE || isDone) return;
     if (mode === 'edit') {
       currentContent = editor.value;
       modified = currentContent !== savedContent;
       mode = 'view';
       updateGutter(currentContent);
     }
-    markdownView = 'rendered';
+    renderView = 'rendered';
     refreshUI();
   });
 
   btnRaw.addEventListener('click', function() {
-    if (!IS_MARKDOWN || isDone) return;
-    markdownView = 'raw';
+    if (!IS_RENDERABLE || isDone) return;
+    renderView = 'raw';
     refreshUI();
   });
 
@@ -1086,7 +1144,7 @@ export function generateFileViewerHTML(opts: {
     if (!EDITABLE || isDone) return;
     if (mode === 'view') {
       mode = 'edit';
-      markdownView = 'raw';
+      renderView = 'raw';
       setNotice('Edit mode — changes are local until you Save', 'warning');
       refreshUI();
       setTimeout(function() { editor.focus(); }, 0);

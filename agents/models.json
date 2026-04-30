@@ -8,6 +8,9 @@
       "modelOverrides": {
         "gpt-5.4": {
           "contextWindow": 1000000
+        },
+        "gpt-5.5": {
+          "contextWindow": 1000000
         }
       }
     }
@@ -96,6 +99,10 @@
     "builder-gemini-3-1-flash-lite-preview": {
       "provider": "openrouter",
       "model": "google/gemini-3-1-flash-lite-preview"
+    },
+    "builder-gemma4": {
+      "provider": "ollama",
+      "model": "gemma4"
     },
     "test-scout": {
       "provider": "x-ai",

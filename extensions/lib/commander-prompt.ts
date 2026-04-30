@@ -17,20 +17,13 @@ export function buildCommanderPrompt(opts: CommanderPromptOptions): string {
 
 	let prompt = `\n\n## Commander Task Discipline
 You are agent "${agentName}".${hasTask ? ` Your Commander task ID is ${taskId}.` : ""}
-${hasTask ? `At START:
-- Claim: commander_task { operation: "claim", task_id: ${idStr}, agent_name: "${agentName}" }
-- Notify: commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "commander", body: "Starting task ${idStr}", message_type: "status", task_id: ${idStr} }
+${hasTask ? `Your parent process manages task lifecycle (claim/complete/fail) for task ${idStr} automatically.
+Do NOT call claim, complete, or fail on this task — your parent handles that when you finish.
 
 During WORK:
 - Log progress: commander_task { operation: "log", task_id: ${idStr}, message: "<progress>", level: "info" }
-- For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${agentName}" }
-
-On SUCCESS:
-- Notify: commander_mailbox { operation: "send", from_agent: "${agentName}", to_agent: "commander", body: "Task complete: <summary>", message_type: "status", task_id: ${idStr} }
-- Complete: commander_task { operation: "complete", task_id: ${idStr}, result: "<summary>" }
-
-On FAILURE:
-- Fail: commander_task { operation: "fail", task_id: ${idStr}, error_message: "<what went wrong>" }` : "No Commander task assigned. Commander tools are available if needed."}`;
+- Add comments: commander_task { operation: "comment:add", task_id: ${idStr}, body: "<update>", agent_name: "${agentName}" }
+- For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${agentName}" }` : "No Commander task assigned. Commander tools are available if needed."}`;
 
 	if (enableMailboxChat) {
 		const mailboxSystem = collaborationMode === "local" ? "local mailbox log" : "mailbox (commander_mailbox)";

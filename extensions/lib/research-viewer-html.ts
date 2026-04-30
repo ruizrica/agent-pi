@@ -2,6 +2,7 @@
 // ABOUTME: Card-based layout with search, status filters, detail view, and resume command copy.
 
 import type { ResearchSession, ResearchSessionSummary } from "./research-session.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
 
 function escapeHtml(str: string): string {
 	return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -49,6 +50,8 @@ export function generateResearchViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
   body {
     background: var(--bg);

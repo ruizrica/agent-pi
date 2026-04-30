@@ -16,12 +16,12 @@
 
 [Pi](https://github.com/badlogic/pi-mono) is a terminal-based AI coding agent by [@badlogic](https://github.com/badlogic). Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
 
-**agent** is a Pi package — **43 extensions, 11 themes, and 20+ skills** that transform Pi into something more:
+**agent** is a Pi package — **50+ extensions, 11 themes, and 26 skills** that transform Pi into something more:
 
 - **6 operational modes** — NORMAL, PLAN, SPEC, PIPELINE, TEAM, CHAIN
-- **Multi-agent orchestration** — dispatch teams, run sequential chains, or execute parallel pipelines
+- **Multi-agent orchestration** — dispatch teams, run sequential chains, execute parallel pipelines, or delegate to CLI worker roles
 - **Security hardened** — pre-tool-hook guard blocks destructive commands, detects prompt injection, prevents data exfiltration
-- **Browser-based viewers** — interactive plan review, completion reports with rollback, spec approval with inline comments
+- **Browser-based viewers** — interactive plan review, completion reports with rollback, spec approval with inline comments, mobile chat, and searchable reports
 - **11 themes** — Catppuccin, Dracula, Nord, Synthwave, Tokyo Night, and more
 
 Everything is configuration — no forks, no patches. Just extensions, agent definitions, and YAML.
@@ -53,6 +53,24 @@ Pi discovers all extensions, themes, and skills automatically.
 5. **`/agents-team`** — Switch between agent teams
 6. **`/chain`** — Switch between chain workflows
 7. **`/tex`** — Open Text Tools in the browser
+8. **`/pi`** — Use the unified entry point for plan/spec/team/chain/pipeline workflows
+9. **`/chat`** — Start the mobile-friendly web chat server for driving Pi from another device
+10. **`/sounds`** — Browse and assign sounds to Pi lifecycle events
+
+## Recent Changes
+
+Since the last release line, the package has grown in a few practical directions without changing the core idea: Pi stays Pi, and `agent` adds orchestration, safety, review surfaces, and workflow helpers around it.
+
+- **Cloud Code and Claude integration** — the Claude Code plugin scaffold, `pi-agent-orchestrator` skill, bridge CLI, `claude-worker`, and Opus-backed `claude-advisor` make Pi usable as a local orchestration backend from Claude workflows.
+- **More worker options** — `cursor-worker`, `codex-worker`, `droid-worker`, `gemini-worker`, and `opencode-worker` wrap popular coding CLIs in the same dispatch/subagent flow.
+- **Unified workflow entry points** — `/pi` gives one command for mode-aware orchestration, while advisor defaults now make NORMAL, PLAN, and SPEC share a quality-first strategy.
+- **Web chat improvements** — `/chat` supports a mobile-friendly remote control surface; recent updates added Copy/Add-to-Board actions and an inline board panel for quick triage.
+- **Sounds and feedback** — `/sounds` adds a browser sound picker with lifecycle hook assignments and local image-cache support.
+- **Memory and learning** — `dream-scheduler`, `memory-cycle`, `session-recap`, and `/learn` improve long-session continuity and can promote codebase snapshots into Obsidian-backed memory.
+- **Viewers and reports** — plan/spec/completion/security/test/research/report viewers received styling, persistence, Mermaid, scrollbar, approval, and standalone export hardening.
+- **Routing and local model support** — OpenRouter provider/variant routing was expanded and fixed, and local LM Studio overlays for Gemma/Qwen-style builder paths are being added.
+- **Security and diagnostics** — security reporting, safe local port analysis, passive network inspection, AgentMail/send-email, and prompt/tool-result hardening continue to expand the defensive surface.
+- **Commander and task lifecycle** — task syncing, Commander lifecycle handling, subagent watchdogs, completion reporting, and task widgets have been tightened with new tests.
 
 ## Cloud Code Plugin / Skill
 
@@ -119,9 +137,9 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 
 ```
 ├── package.json         Pi package manifest
-├── extensions/          43 TypeScript extensions + lib/
+├── extensions/          50+ TypeScript extensions + lib/
 ├── themes/              11 custom terminal themes
-├── skills/              20+ skill packs
+├── skills/              26 skill packs
 ├── agents/              Agent definitions + chain/pipeline/team YAML
 ├── commands/            Toolkit slash commands
 ├── prompts/             Prompt templates
@@ -154,6 +172,7 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 | Extension | Description |
 |-----------|-------------|
 | **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a Claude CLI overlay for the active mode |
+| **gemma-overlay / lmstudio-overlay** | Local model overlays for routing eligible builder-style work through LM Studio-hosted models |
 
 Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cross-mode overlay that changes the banner to dark orange, displays the active mode as `MODE + CLAUDE`, and routes Claude-family worker/advisor execution through the Claude CLI path.
 
@@ -164,8 +183,9 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **agent-team** | Dispatch-only orchestrator — primary agent delegates to specialists via `dispatch_agent` |
 | **agent-chain** | Sequential pipeline — each step's output feeds into the next via `$INPUT` |
 | **pipeline-team** | 5-phase hybrid — UNDERSTAND → GATHER → PLAN → EXECUTE → REVIEW |
-| **subagent-widget** | Background subagent management with live status widgets |
+| **subagent-widget** | Background subagent management with live status widgets, batch spawning, and watchdog cleanup |
 | **claude-advisor** | On-demand Opus advisor tool backed by Claude Code CLI |
+| **advisor-command** | Slash-command entry point for advisor-style strategy checks |
 | **toolkit-commands** | Dynamic slash commands from markdown files |
 
 ### Security
@@ -175,6 +195,8 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **security-guard** | Pre-tool-hook: blocks dangerous commands, credential theft, and prompt injection |
 | **secure** | `/secure` — full AI security sweep + protection installer for any project |
 | **message-integrity-guard** | Prevents session-bricking from orphaned tool_result messages |
+| **safe-port-scan / network-inspect** | Low-impact local network and port analysis tools for defensive checks |
+| **security-news / security-report** | Curated advisory lookup and browser security report output |
 
 ### Viewers & Reports
 
@@ -185,6 +207,9 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **spec-viewer** | Browser GUI — multi-page spec review with comments and visual gallery |
 | **file-viewer** | Browser GUI — syntax-highlighted file viewer with optional editing |
 | **reports-viewer** | Searchable `/reports` browser view for all persisted artifacts |
+| **research-viewer** | Browser view for saved research sessions |
+| **test-viewer** | Gherkin and Playwright test review surface with side-by-side editing |
+| **web-chat** | Mobile-friendly chat UI with tool/subagent visibility and board actions |
 
 <div align="center">
 <img src="docs/screenshots/plan-viewer.png" alt="Plan Viewer — structured plan approval with phases, context, and file action badges" width="720" />
@@ -207,6 +232,8 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **tool-caller** | Meta-tool — invoke any tool programmatically (dynamic composition) |
 | **lean-tools** | Toggle lean mode — agent uses `tool_search` + `call_tool` instead of all tools |
 | **openrouter-routing** | Sync OpenRouter models, preview provider variants, and pin provider/quantization routes |
+| **send-email** | AgentMail-backed report, briefing, and custom email sender |
+| **sounds** | Browser sound picker for lifecycle hooks, with image cache support |
 
 ### Session & Context
 
@@ -215,6 +242,9 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **memory-cycle** | Memory-aware compaction — saves/restores context across compaction |
 | **session-replay** | `/replay` — scrollable timeline of conversation history |
 | **system-select** | `/system` — switch system prompt by picking agent definitions |
+| **dream-scheduler** | Global-first memory consolidation and freshness tracking |
+| **learn** | Delta-aware codebase snapshots into Obsidian raw/wiki memory |
+| **session-recap** | Generate and persist structured session recaps |
 
 ## Operational Modes
 
@@ -326,6 +356,7 @@ Pi also exposes execution-oriented worker wrappers for installed third-party cod
 - **`droid-worker`** — wraps `droid exec`
 - **`gemini-worker`** — wraps Gemini CLI headless prompt mode
 - **`opencode-worker`** — wraps `opencode run`
+- **Local LM Studio overlays** — route eligible builder-style roles to local Gemma/Qwen models when configured
 
 These workers follow the same task-oriented pattern as `claude-worker`: they receive the Pi task prompt, run non-interactively in the current workspace, and stream their CLI output back into the Pi widget/follow-up flow.
 

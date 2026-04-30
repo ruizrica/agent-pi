@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Box, Text } from "@mariozechner/pi-tui";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { renderSessionSummary, type SessionSummaryState, type SummaryToolItem } from "./lib/summary-render.ts";
+import { publishSessionStats, type SessionStats } from "./lib/session-stats.ts";
 
 function setSummaryOnlyMode(active: boolean, ctx?: any) {
 	const g = globalThis as any;
@@ -120,7 +121,25 @@ export default function (pi: ExtensionAPI) {
 		overlayOpen: false,
 	};
 
+	/** Publish session stats to globalThis so footer, tasks, and widgets can read them */
+	function publishStats() {
+		const toolCounts: Record<string, number> = {};
+		for (const [name, count] of state.toolCounts) {
+			toolCounts[name] = count;
+		}
+		publishSessionStats({
+			startedAt: state.startedAt,
+			toolCounts,
+			totalToolCalls: [...state.toolCounts.values()].reduce((s, c) => s + c, 0),
+			recentFiles: [...state.recentFiles],
+			recentAgents: [...state.recentAgents],
+			status: state.status,
+			updatedAt: Date.now(),
+		});
+	}
+
 	function refresh() {
+		publishStats();
 		if (refreshTimer) clearTimeout(refreshTimer);
 		refreshTimer = setTimeout(() => {
 			invalidate?.();
@@ -201,6 +220,7 @@ export default function (pi: ExtensionAPI) {
 		state.recentUserInputs = [];
 		state.recentFiles = [];
 		state.overlayOpen = false;
+		publishStats();
 	});
 
 	pi.on("session_switch", async (_event, ctx) => {

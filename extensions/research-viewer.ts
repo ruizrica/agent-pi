@@ -10,6 +10,7 @@ import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateResearchViewerHTML } from "./lib/research-viewer-html.ts";
+import { isCommanderAvailable, openInCommander } from "./lib/commander-viewer.ts";
 import {
 	listResearchSessions,
 	loadResearchSession,
@@ -107,6 +108,38 @@ export default function (pi: ExtensionAPI) {
 
 	async function runViewer(ctx: ExtensionContext, title: string) {
 		cleanupServer();
+
+		// Try Commander first (read-only view)
+		if (isCommanderAvailable()) {
+			const sessions = listResearchSessions();
+			const sessionsSummary = sessions.length > 0
+				? sessions.slice(0, 20).map((s: ResearchSessionSummary) =>
+					`- **${s.goal || s.id}** — ${s.status || "unknown"} (${s.iterationCount ?? 0} iterations)`
+				).join("\n")
+				: "_No research sessions found._";
+			const markdownContent = [
+				`# ${title}`,
+				"",
+				`**${sessions.length} session(s)**`,
+				"",
+				sessionsSummary,
+			].join("\n");
+
+			const opened = await openInCommander(
+				{
+					content: markdownContent,
+					title,
+					reportType: "research",
+					mode: "view",
+					format: "markdown",
+				},
+				ctx,
+			);
+
+			if (opened) return;
+			// Fall through to browser if Commander unavailable or failed
+		}
+
 		const { port, server, waitForResult } = await startResearchServer(title);
 		activeServer = server;
 		const url = `http://127.0.0.1:${port}`;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { generateCompletionReportHTML, type ReportData } from "../lib/completion-report-html.ts";
 
 function makeReport(summary: string): ReportData {
@@ -19,6 +20,37 @@ function makeReport(summary: string): ReportData {
 		totalDeletions: 1,
 	};
 }
+
+describe("completion-report routing", () => {
+	const source = readFileSync(new URL("../completion-report.ts", import.meta.url), "utf8");
+
+	it("prefers the native Commander report experience when available", () => {
+		expect(source).toContain("Prefer Commander's native report experience when available");
+		expect(source).toContain("if (isCommanderAvailable())");
+		expect(source).not.toContain("preferCommanderReadOnly");
+		expect(source).not.toContain("PI_COMPLETION_REPORT_COMMANDER_READONLY");
+	});
+});
+
+describe("completion-report rollback controls", () => {
+	it("renders per-file and global rollback controls with visible styling", () => {
+		const html = generateCompletionReportHTML({
+			report: makeReport("Completed work"),
+			port: 3000,
+		});
+
+		expect(html).toContain('id="rollbackAllBtn"');
+		expect(html).toContain('class="rollback-btn');
+		expect(html).toContain('rollbackFile(');
+		expect(html).toContain('function updateRollbackAllBtn()');
+		expect(html).toContain('.file-actions {');
+		expect(html).toContain('min-width: 104px;');
+		expect(html).toContain('.rollback-btn {');
+		expect(html).toContain('min-width: 86px;');
+		expect(html).toContain('#rollbackAllBtn {');
+		expect(html).toContain('body.done-state .rollback-btn { display: none; }');
+	});
+});
 
 describe("completion-report Mermaid rendering", () => {
 	it("schedules repeated Mermaid rendering attempts for summary and task content", () => {

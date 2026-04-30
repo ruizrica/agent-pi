@@ -15,6 +15,9 @@ node_modules/
 .context/
 bun.lock
 extensions/coverage/
+extensions/.pi/
+extensions/__tests__/.pi/
+extensions/node_modules/
 extensions/web-test-worker/.env
 extensions/web-test-worker/node_modules/
 autoresearch-results.tsv

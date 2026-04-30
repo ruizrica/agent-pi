@@ -2,6 +2,7 @@
 // ABOUTME: Renders markdown with marked.js, supports checkboxes, inline editing, reorder, approve/decline.
 
 import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
 
 /**
  * Generate the full HTML page for the plan viewer window.
@@ -49,6 +50,8 @@ export function generatePlanViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
 
   html { height: 100%; }
 
@@ -2087,7 +2090,7 @@ export function generatePlanViewerHTML(opts: {
       body.answerMap = answers;
     }
 
-    var endpoint = (ROUND_TRIP_ENABLED && action === 'changes_requested') ? '/feedback' : '/result';
+    var endpoint = '/result';
     fetch('http://localhost:' + PORT + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2126,7 +2129,7 @@ export function generatePlanViewerHTML(opts: {
           setView('rendered');
         }
       } else if (action === 'changes_requested') {
-        renderWorkflowBanner('Changes Sent Back', 'Your feedback was sent to the agent. Waiting for the updated plan...', 'warning');
+        renderWorkflowBanner('Changes Sent Back', 'Your feedback was sent to the agent. Pi will revise the plan and may open a new viewer.', 'warning');
         document.body.classList.add('approved-state');
         var header = document.querySelector('.header');
         if (header) {

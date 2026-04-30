@@ -12,11 +12,13 @@ import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import { openAndWaitInCommander } from "./lib/commander-viewer.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
+import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node:fs";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { getPlanTargetMode } from "./lib/plan-complexity.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -145,6 +147,7 @@ const ShowPlanParams = Type.Object({
 	file_path: Type.String({ description: "Path to the markdown plan file (e.g. .context/todo.md)" }),
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
 	mode: Type.Optional(Type.String({ description: "Viewer mode: 'plan' (default) for plan review/approval, or 'questions' for follow-up questions with inline answers" })),
+	force_browser: Type.Optional(Type.Boolean({ description: "Bypass Commander and open the local browser viewer directly. Useful for testing browser fallback and Needs Changes feedback." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -198,6 +201,19 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function triggerApprovalModeSwitch(planText: string, ctx: ExtensionContext) {
+		try {
+			const { mode: targetMode, reason } = getPlanTargetMode(planText);
+			const setModeCallback = (globalThis as any).__piSetModeForApproval;
+			if (typeof setModeCallback === "function") {
+				setModeCallback(targetMode, ctx);
+				ctx.ui.notify(`Mode switched to ${targetMode} on plan approval. ${reason}`, "info");
+			}
+		} catch {
+			// Never fail the tool because of an auto-mode switch.
+		}
+	}
+
 	// ── Core viewer logic (shared by tool + command) ─────────────────
 
 	async function runViewer(
@@ -207,13 +223,14 @@ export default function (pi: ExtensionAPI) {
 		title: string,
 		purpose: ViewerPurpose,
 		signal?: AbortSignal,
+		options: { forceBrowser?: boolean } = {},
 	): Promise<ViewerResult> {
 		// Clean up any previous server
 		cleanupServer();
 
 		// Try Commander first for plan mode, but only treat it as approved once
 		// Commander reports a real user action. Otherwise fall back to browser.
-		if (purpose === "plan") {
+		if (purpose === "plan" && !options.forceBrowser) {
 			const commanderResult = await openAndWaitInCommander(
 				{
 					content: markdown,
@@ -241,7 +258,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start HTTP server
-		const { port, server, waitForResult, waitForFeedback } = await startViewerServer(markdown, title, purpose, filePath);
+		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose, filePath);
 		activeServer = server;
 
 		const url = `http://127.0.0.1:${port}`;
@@ -261,22 +278,10 @@ export default function (pi: ExtensionAPI) {
 		openBrowser(url);
 		notifyViewerOpen(ctx, activeSession);
 
-		if (purpose === "plan") {
-			waitForFeedback().then((feedbackPayload) => {
-				if (!feedbackPayload) return;
-				const feedbackText = (feedbackPayload.feedback || "").trim() || "(no change details provided)";
-				piRef.sendMessage(
-					{
-						customType: "plan-changes-requested",
-						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}`,
-						display: true,
-					},
-					{ deliverAs: "followUp" as any, triggerTurn: true },
-				);
-			}).catch(() => {});
-		}
+		// Wait for user action in the browser (or abort). Changes-requested is
+		// returned through the same /result path as approve/decline so the active
+		// show_plan call always unblocks and can revise the plan.
 
-		// Wait for user action in the browser (or abort)
 		try {
 			const abortPromise = signal
 				? new Promise<ViewerResult>((_, reject) => {
@@ -321,14 +326,16 @@ export default function (pi: ExtensionAPI) {
 			"questions. User can navigate questions, type answers inline, and submit. " +
 			"Questions are auto-detected (lines ending with '?' or containing 'Default:'). " +
 			"Returns formatted answers.\n\n" +
-			"The markdown file IS the UI — update it to change what the user sees.",
+			"The markdown file IS the UI — update it to change what the user sees. " +
+			"Set force_browser=true to bypass Commander and test the local browser feedback flow.",
 		parameters: ShowPlanParams,
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const { file_path, title, mode: modeStr } = params as {
+			const { file_path, title, mode: modeStr, force_browser: forceBrowser } = params as {
 				file_path: string;
 				title?: string;
 				mode?: string;
+				force_browser?: boolean;
 			};
 
 			const purpose: ViewerPurpose = modeStr === "questions" ? "questions" : "plan";
@@ -348,7 +355,7 @@ export default function (pi: ExtensionAPI) {
 			// Open viewer and wait for result
 			let result: ViewerResult;
 			try {
-				result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal);
+				result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal, { forceBrowser: !!forceBrowser });
 			} catch (err: any) {
 				// Handle user cancellation / abort gracefully
 				if (err?.message === "Aborted" || signal?.aborted) {
@@ -406,15 +413,13 @@ export default function (pi: ExtensionAPI) {
 					? " (plan was edited by user — use the updated version)"
 					: "";
 
-				piRef.sendMessage(
-					{
-						customType: "plan-approved",
-						content: `Plan approved! Proceed with implementation.${modifiedNote}`,
-						display: true,
-					},
-					{ deliverAs: "followUp" as any, triggerTurn: true },
-				);
+				// Auto-switch mode only for complete/multi-phase plans.
+				// Simple plans remain in PLAN mode.
+				triggerApprovalModeSwitch(result.markdown || markdown, ctx);
 
+				// In tool mode, the returned tool result is the continuation signal.
+				// Do not also enqueue a follow-up turn, or it can surface later as a
+				// stale redundant [plan-approved] message after implementation finishes.
 				return {
 					content: [{
 						type: "text" as const,
@@ -554,10 +559,30 @@ export default function (pi: ExtensionAPI) {
 			const result = await runViewer(ctx, markdown, filePath, displayTitle, "plan");
 
 			if (result.action === "approved") {
+				try {
+					const planText = result.markdown || markdown;
+					const { mode: targetMode } = getPlanTargetMode(planText);
+
+					// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
+					if (targetMode) {
+						const setModeTool = (piRef as any)?.tools?.get?.("set_mode");
+						if (setModeTool?.execute) {
+							await setModeTool.execute("plan-approval-auto", { mode: targetMode, reason: "Auto-switched on plan approval" }, ctx);
+						} else if ((piRef as any)?.callTool) {
+							await (piRef as any).callTool("set_mode", { mode: targetMode, reason: "Auto-switched on plan approval" }, ctx);
+						}
+					}
+				} catch {
+					// Never fail the /plan command because of an auto-mode switch.
+				}
+
+				const { mode: targetMode } = getPlanTargetMode(result.markdown || markdown);
+				const modeNote = targetMode ? ` Mode switched to ${targetMode}.` : "";
+
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with implementation.${result.modified ? " (plan was edited)" : ""}`,
+						content: `Plan approved! Proceed with implementation.${result.modified ? " (plan was edited)" : ""}${modeNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },

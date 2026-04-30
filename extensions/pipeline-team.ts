@@ -350,7 +350,15 @@ export default function (pi: ExtensionAPI) {
 		// Use agent's defined model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		const model = resolveToolkitWorkerModel(agentDef.name, agentDef.model || DEFAULT_SUBAGENT_MODEL);
+		let model = resolveToolkitWorkerModel(agentDef.name, agentDef.model || DEFAULT_SUBAGENT_MODEL);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		if ((globalThis as any).__piGemmaOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 
 		const agentKey = `pipeline-${agentDef.name.toLowerCase().replace(/\s+/g, "-")}-${agentState.index}`;
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);
@@ -377,7 +385,7 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolvePromise) => {
-			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}) };
+			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piGemmaOverlay ? { PI_GEMMA_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piQwenOverlay ? { PI_QWEN_OVERLAY_ACTIVE: "1" } : {}) };
 			if (shouldUseClaudeCliForAgent(agentDef.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				let toolkitFinalOutput = "";
 				spawnToolkitWorker(agentDef, {

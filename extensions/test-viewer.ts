@@ -16,6 +16,7 @@ import { generateTestViewerHTML, type TestFeature } from "./lib/test-viewer-html
 import { saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -311,6 +312,77 @@ export default function (pi: ExtensionAPI) {
 		signal?: AbortSignal,
 	): Promise<TestViewerResult> {
 		cleanupServer();
+
+		// Try Commander first (approve mode — tests can be approved to write to disk)
+		if (isCommanderAvailable()) {
+			const featuresSummary = features.map((f) => [
+				`## ${f.name}`,
+				"",
+				"### Gherkin",
+				"```gherkin",
+				f.gherkin,
+				"```",
+				"",
+				"### Playwright",
+				"```typescript",
+				f.playwrightCode,
+				"```",
+			].join("\n")).join("\n\n---\n\n");
+			const markdownContent = `# ${title}\n\n${features.length} feature(s)\n\n${featuresSummary}`;
+
+			const commanderResult = await openAndWaitInCommander(
+				{
+					content: markdownContent,
+					title: title || "Generated Tests",
+					reportType: "test",
+					mode: "approve",
+					format: "markdown",
+				},
+				ctx,
+				{ signal, includeContent: true },
+			);
+
+			if (commanderResult.inCommander) {
+				// Write files on approve
+				if (commanderResult.action === "approved") {
+					const dir = outputDir ? resolve(outputDir) : process.cwd();
+					if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+					for (const feature of features) {
+						const baseName = feature.filePath
+							? basename(feature.filePath, extname(feature.filePath))
+							: feature.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+						try {
+							writeFileSync(join(dir, baseName + '.feature'), feature.gherkin, 'utf-8');
+							writeFileSync(join(dir, baseName + '.spec.ts'), feature.playwrightCode, 'utf-8');
+						} catch {}
+					}
+				}
+
+				try {
+					upsertPersistedReport({
+						category: "tests",
+						title,
+						summary: `${features.length} feature(s) — ${commanderResult.action}`,
+						sourcePath: outputDir || process.cwd(),
+						viewerPath: outputDir || process.cwd(),
+						viewerLabel: title,
+						tags: ["tests", "gherkin", "playwright"],
+						metadata: {
+							action: commanderResult.action,
+							modified: false,
+							featureCount: features.length,
+						},
+					});
+				} catch {}
+
+				return {
+					action: commanderResult.action === "approved" ? "approved" : "declined",
+					features,
+					modified: false,
+				};
+			}
+			// Fall through to browser if Commander unavailable or failed
+		}
 
 		const { port, server, waitForResult } = await startTestViewerServer(features, title);
 		activeServer = server;

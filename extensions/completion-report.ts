@@ -17,6 +17,7 @@ import { generateCompletionReportHTML, type ReportData, type ChangedFile } from 
 import { createCompletionReportStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -456,6 +457,74 @@ export default function (pi: ExtensionAPI) {
 				return {
 					content: [{ type: "text" as const, text: "No file changes detected. Nothing to report." }],
 				};
+			}
+
+			// Prefer Commander's native report experience when available. Rollback
+			// controls are handled by Commander for native reports; the local browser
+			// viewer remains the fallback when Commander is unavailable.
+			if (isCommanderAvailable()) {
+				const filesSummary = report.files
+					.map((f) => `- \`${f.path}\` (${f.status}) — +${f.additions} / -${f.deletions}`)
+					.join("\n");
+				const markdownContent = [
+					`# ${title}`,
+					"",
+					summary ? `${summary}\n` : "",
+					`**Base ref:** \`${report.baseRef}\` · **${report.files.length} files** · **+${report.totalAdditions} / -${report.totalDeletions}**`,
+					"",
+					"## Changed Files",
+					"",
+					filesSummary,
+					"",
+					report.taskMarkdown ? `## Tasks\n\n${report.taskMarkdown}` : "",
+				].filter(Boolean).join("\n");
+
+				const commanderResult = await openAndWaitInCommander(
+					{
+						content: markdownContent,
+						title: title || "Completion Report",
+						reportType: "completion",
+						mode: "view",
+						format: "markdown",
+					},
+					ctx,
+					{ signal: _signal },
+				);
+
+				if (commanderResult.inCommander) {
+					try {
+						upsertPersistedReport({
+							category: "completion",
+							title,
+							summary,
+							content: report.taskMarkdown || summary,
+							sourcePath: join(cwd, ".context", "todo.md"),
+							viewerPath: join(cwd, ".context", "todo.md"),
+							viewerLabel: title,
+							tags: ["completion", "git", "diff"],
+							metadata: {
+								baseRef: report.baseRef,
+								fileCount: report.files.length,
+								totalAdditions: report.totalAdditions,
+								totalDeletions: report.totalDeletions,
+								action: "done",
+								rolledBackFiles: [],
+							},
+						});
+					} catch {}
+
+					return {
+						content: [{ type: "text" as const, text: "Report viewed in Commander. No files were rolled back." }],
+						details: {
+							action: "done",
+							rolledBackFiles: [],
+							totalFiles: report.files.length,
+							totalAdditions: report.totalAdditions,
+							totalDeletions: report.totalDeletions,
+						},
+					};
+				}
+				// Fall through to browser if Commander unavailable or failed
 			}
 
 			// Clean up any previous server

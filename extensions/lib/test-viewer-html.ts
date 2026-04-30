@@ -2,6 +2,8 @@
 // ABOUTME: Renders Gherkin .feature files with syntax highlighting, Playwright code with JS highlighting,
 // ABOUTME: tabbed navigation between features, split-panel layout, inline editing, and approve/decline flow.
 
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+
 export interface TestFeature {
 	name: string;
 	gherkin: string;
@@ -63,6 +65,8 @@ export function generateTestViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
 
   body {

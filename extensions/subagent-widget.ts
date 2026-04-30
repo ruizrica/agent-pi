@@ -94,6 +94,18 @@ function resolveTimeout(name: string, explicitTimeout?: number): number {
 	return ROLE_TIMEOUT_MS[name.toUpperCase()] || DEFAULT_TIMEOUT_MS;
 }
 
+/** Roles eligible for local overlay rerouting (implementation workers only). */
+const LOCAL_OVERLAY_ELIGIBLE_ROLES = new Set(["builder", "worker", "claude-worker"]);
+
+/** Check if an agent role should be rerouted to a local model when a local overlay is active. */
+function isGemmaEligibleRole(name: string): boolean {
+	const lower = name.toLowerCase();
+	if (LOCAL_OVERLAY_ELIGIBLE_ROLES.has(lower)) return true;
+	// Dynamic builder variants like builder-kimi-k2-5, builder-gemma4, etc.
+	if (lower.startsWith("builder")) return true;
+	return false;
+}
+
 interface SubState {
 	id: number;
 	status: "running" | "done" | "error";
@@ -280,10 +292,19 @@ export default function (pi: ExtensionAPI) {
 		// 4) models.json default entry
 		const agentDef = resolveAgentByName(state.name, knownAgents, modelsConfig || undefined);
 		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
-		const model = resolveToolkitWorkerModel(
+		let model = resolveToolkitWorkerModel(
 			state.name,
 			state.model || agentDef?.model || configModel || DEFAULT_SUBAGENT_MODEL,
 		);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4.
+		// Only builders are rerouted — scouts, reviewers, planners keep their models.
+		if ((globalThis as any).__piGemmaOverlay && isGemmaEligibleRole(state.name)) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && isGemmaEligibleRole(state.name)) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 		state.model = model;
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
@@ -293,8 +314,8 @@ export default function (pi: ExtensionAPI) {
 		const memoryCycleExtPath = path.join(extDir, "memory-cycle.ts");
 		const claudeAdvisorExtPath = path.join(extDir, "claude-advisor.ts");
 
-		// Commander integration
-		const commanderAvail = isCommanderAvailable();
+		// Commander integration — capture task ID but check availability fresh at each use point
+		const commanderAvailAtSpawn = isCommanderAvailable();
 		const cmdTaskId = state.commanderTaskId;
 
 		// Tools: use agent definition tools if available, else default set
@@ -305,7 +326,7 @@ export default function (pi: ExtensionAPI) {
 			"-e", memoryCycleExtPath,
 			"-e", claudeAdvisorExtPath,
 		];
-		if (commanderAvail) {
+		if (commanderAvailAtSpawn) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
 			// go in --tools (which only accepts built-in names and warns on unknowns).
 			// Loading the extension is sufficient — pi auto-activates all extension tools.
@@ -317,7 +338,7 @@ export default function (pi: ExtensionAPI) {
 		if (agentDef?.systemPrompt) {
 			systemPromptArgs.push("--append-system-prompt", agentDef.systemPrompt);
 		}
-		if (commanderAvail) {
+		if (commanderAvailAtSpawn) {
 			const cmdPrompt = buildCommanderPrompt({
 				agentName: `SA-${state.id}-${state.name}`,
 				taskId: cmdTaskId,
@@ -328,10 +349,12 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Pre-claim: parent claims Commander task on behalf of subagent
-		if (commanderAvail && cmdTaskId !== undefined) {
+		if (commanderAvailAtSpawn && cmdTaskId !== undefined) {
 			const client = getCommanderClient();
 			if (client) {
-				preClaimTask(client, cmdTaskId, `SA-${state.id}-${state.name}`).catch(() => {});
+				preClaimTask(client, cmdTaskId, `SA-${state.id}-${state.name}`).catch((err) => {
+					console.error(`[subagent] preClaimTask failed for task ${cmdTaskId}:`, err?.message || err);
+				});
 			}
 		}
 
@@ -339,7 +362,13 @@ export default function (pi: ExtensionAPI) {
 		if ((globalThis as any).__piClaudeOverlay) {
 			spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
 		}
-		if (commanderAvail && cmdTaskId !== undefined) {
+		if ((globalThis as any).__piGemmaOverlay) {
+			spawnEnv.PI_GEMMA_OVERLAY_ACTIVE = "1";
+		}
+		if ((globalThis as any).__piQwenOverlay) {
+			spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
+		}
+		if (commanderAvailAtSpawn && cmdTaskId !== undefined) {
 			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
 		}
 
@@ -390,19 +419,27 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				// Post-dispatch: reconcile Commander task to terminal state
-				if (commanderAvail && cmdTaskId !== undefined) {
+				// Re-evaluate Commander availability NOW (not at spawn time) to handle
+				// transient connectivity issues during agent lifetime
+				if (cmdTaskId !== undefined && isCommanderAvailable()) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
 						const finalText = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
 						const summary = finalText.trim().split("\n").pop() || agentLabel;
 						if (state.status === "done") {
-							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch(() => {});
+							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
+								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
+							});
 						} else {
 							const errMsg = summary || "Agent exited with error";
-							postFailTask(client, cmdTaskId, errMsg).catch(() => {});
+							postFailTask(client, cmdTaskId, errMsg).catch((err) => {
+								console.error(`[subagent] postFailTask failed for task ${cmdTaskId}:`, err?.message || err);
+							});
 						}
 					}
+				} else if (cmdTaskId !== undefined) {
+					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
 				}
 
 				const result = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
@@ -1065,6 +1102,20 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
 		await Promise.all(killPromises);
+
+		// Reconciliation sweep: mark any Commander tasks from killed agents as failed
+		// so they don't stay stuck in "working" on the kanban board forever
+		const client = getCommanderClient();
+		if (client && isCommanderAvailable()) {
+			for (const [id, state] of agents) {
+				if (state.commanderTaskId !== undefined && state.status !== "done") {
+					postFailTask(client, state.commanderTaskId,
+						`Agent SA-${id}-${state.name} killed during session switch`)
+						.catch(() => {});
+				}
+			}
+		}
+
 		agents.clear();
 		widgetBoxes.clear();
 		nextId = 1;

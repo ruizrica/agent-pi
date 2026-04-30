@@ -2,6 +2,7 @@
 // ABOUTME: Renders work summary, file diffs with syntax highlighting, and per-file rollback controls.
 
 import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
 
 /**
  * Data structure for a single changed file.
@@ -80,6 +81,8 @@ export function generateCompletionReportHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
 
   body {
@@ -592,27 +595,42 @@ export function generateCompletionReportHTML(opts: {
 
   .file-actions {
     display: flex;
-    gap: 4px;
-    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 104px;
+    margin-left: 8px;
   }
 
   .rollback-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 86px;
     font-size: 11px;
     font-family: var(--mono);
     color: var(--warning);
-    border: 1px solid var(--warning);
-    background: transparent;
-    padding: 3px 10px;
-    border-radius: 3px;
+    border: 1px solid rgba(240, 180, 41, 0.7);
+    background: rgba(240, 180, 41, 0.10);
+    padding: 5px 12px;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-weight: 600;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.08) inset;
   }
-  .rollback-btn:hover { background: var(--warning-bg); }
-  .rollback-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  .rollback-btn.done { color: var(--text-dim); border-color: var(--text-dim); }
+  .rollback-btn:hover {
+    background: rgba(240, 180, 41, 0.18);
+    border-color: var(--warning);
+    color: #ffd166;
+    transform: translateY(-1px);
+  }
+  .rollback-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .rollback-btn.done { color: var(--text-dim); border-color: var(--text-dim); background: transparent; box-shadow: none; }
 
   /* ── Diff View ───────────────────────── */
   .file-diff {
@@ -806,6 +824,18 @@ export function generateCompletionReportHTML(opts: {
   }
   .btn-warning:hover { background: var(--warning-bg); }
   .btn-warning:disabled { opacity: 0.3; cursor: not-allowed; }
+  #rollbackAllBtn {
+    color: var(--warning);
+    border-color: rgba(240, 180, 41, 0.75);
+    background: rgba(240, 180, 41, 0.10);
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.08) inset;
+  }
+  #rollbackAllBtn:hover:not(:disabled) {
+    background: rgba(240, 180, 41, 0.18);
+    border-color: var(--warning);
+    color: #ffd166;
+  }
 
   .btn-success {
     background: transparent;

@@ -112,6 +112,8 @@ export default function (pi: ExtensionAPI) {
 
 	// --- Shortcuts ---
 
+	// Ctrl+X is intentionally owned by this extension. install.sh unbinds the
+	// picker-scoped app.models.clearAll default to avoid a startup diagnostic.
 	pi.registerShortcut("ctrl+x", {
 		description: "Cycle theme forward",
 		handler: async (ctx) => {

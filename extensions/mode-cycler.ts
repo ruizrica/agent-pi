@@ -7,6 +7,7 @@ import { Text } from "@mariozechner/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
+import { checkGemmaHealth, checkQwenHealth } from "./gemma-overlay.ts";
 import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
@@ -69,6 +70,8 @@ export default function (pi: ExtensionAPI) {
 
 	function syncOverlayGlobals() {
 		(globalThis as any).__piClaudeOverlay = currentOverlay.claude;
+		(globalThis as any).__piGemmaOverlay = currentOverlay.gemma;
+		(globalThis as any).__piQwenOverlay = currentOverlay.qwen;
 		(globalThis as any).__piModeOverlay = { ...currentOverlay };
 	}
 
@@ -77,7 +80,33 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function setClaudeOverlay(enabled: boolean, ctx: ExtensionContext) {
-		currentOverlay = { ...currentOverlay, claude: enabled };
+		// Mutual exclusion: disable local overlays when enabling Claude
+		if (enabled) currentOverlay = { ...currentOverlay, claude: true, gemma: false, qwen: false };
+		else currentOverlay = { ...currentOverlay, claude: false };
+		syncOverlayGlobals();
+		writeModeFile(currentMode);
+		if (ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
+			ctx.ui.setStatus("mode", modeLabel(currentMode, currentOverlay));
+		}
+		updateWidgets(currentMode, ctx);
+	}
+
+	function setGemmaOverlay(enabled: boolean, ctx: ExtensionContext) {
+		// Mutual exclusion: disable Claude and Qwen when enabling Gemma
+		if (enabled) currentOverlay = { ...currentOverlay, gemma: true, claude: false, qwen: false };
+		else currentOverlay = { ...currentOverlay, gemma: false };
+		syncOverlayGlobals();
+		writeModeFile(currentMode);
+		if (ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
+			ctx.ui.setStatus("mode", modeLabel(currentMode, currentOverlay));
+		}
+		updateWidgets(currentMode, ctx);
+	}
+
+	function setQwenOverlay(enabled: boolean, ctx: ExtensionContext) {
+		// Mutual exclusion: disable Claude and Gemma when enabling Qwen
+		if (enabled) currentOverlay = { ...currentOverlay, qwen: true, claude: false, gemma: false };
+		else currentOverlay = { ...currentOverlay, qwen: false };
 		syncOverlayGlobals();
 		writeModeFile(currentMode);
 		if (ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
@@ -175,6 +204,66 @@ export default function (pi: ExtensionAPI) {
 			const next = !currentOverlay.claude;
 			setClaudeOverlay(next, ctx);
 			ctx.ui.notify(next ? `Claude overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Claude overlay disabled");
+		},
+	});
+
+	pi.registerCommand("gemma", {
+		description: "Toggle Gemma overlay — route builders to local LM Studio Gemma 4",
+		handler: async (args, ctx) => {
+			const arg = args.trim().toLowerCase();
+			if (["on", "enable", "enabled"].includes(arg)) {
+				const ok = await checkGemmaHealth(ctx);
+				if (!ok) return;
+				setGemmaOverlay(true, ctx);
+				ctx.ui.notify(`Gemma overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
+				return;
+			}
+			if (["off", "disable", "disabled"].includes(arg)) {
+				setGemmaOverlay(false, ctx);
+				ctx.ui.notify("Gemma overlay disabled");
+				return;
+			}
+			if (arg && arg !== "toggle") {
+				ctx.ui.notify("Usage: /gemma [on|off|toggle]", "error");
+				return;
+			}
+			const next = !currentOverlay.gemma;
+			if (next) {
+				const ok = await checkGemmaHealth(ctx);
+				if (!ok) return;
+			}
+			setGemmaOverlay(next, ctx);
+			ctx.ui.notify(next ? `Gemma overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Gemma overlay disabled");
+		},
+	});
+
+	pi.registerCommand("qwen", {
+		description: "Toggle Qwen overlay — route builders to local LM Studio Qwen 3.6",
+		handler: async (args, ctx) => {
+			const arg = args.trim().toLowerCase();
+			if (["on", "enable", "enabled"].includes(arg)) {
+				const ok = await checkQwenHealth(ctx);
+				if (!ok) return;
+				setQwenOverlay(true, ctx);
+				ctx.ui.notify(`Qwen overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
+				return;
+			}
+			if (["off", "disable", "disabled"].includes(arg)) {
+				setQwenOverlay(false, ctx);
+				ctx.ui.notify("Qwen overlay disabled");
+				return;
+			}
+			if (arg && arg !== "toggle") {
+				ctx.ui.notify("Usage: /qwen [on|off|toggle]", "error");
+				return;
+			}
+			const next = !currentOverlay.qwen;
+			if (next) {
+				const ok = await checkQwenHealth(ctx);
+				if (!ok) return;
+			}
+			setQwenOverlay(next, ctx);
+			ctx.ui.notify(next ? `Qwen overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Qwen overlay disabled");
 		},
 	});
 
@@ -280,6 +369,24 @@ export default function (pi: ExtensionAPI) {
 		return {};
 	});
 
+	// ── Mode switching callback for approval-triggered transitions ──
+
+	/**
+	 * Set mode immediately after plan approval.
+	 * Used by plan-viewer.ts to trigger auto mode switching.
+	 * Exposed as global function so other extensions can invoke it.
+	 */
+	function setModeForApproval(mode: Mode, ctx: ExtensionContext): void {
+		setMode(mode, ctx);
+	}
+
+	(globalThis as any).__piSetModeForApproval = (mode: string, ctx: ExtensionContext) => {
+		const upper = mode.toUpperCase();
+		if (MODES.includes(upper as Mode)) {
+			setModeForApproval(upper as Mode, ctx);
+		}
+	};
+
 	// ── Session init ──────────────────────────────
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -289,6 +396,12 @@ export default function (pi: ExtensionAPI) {
 		(globalThis as any).__piCurrentMode = "NORMAL";
 		syncOverlayGlobals();
 		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
+		(globalThis as any).__piSetModeForApproval = (mode: string, ctxArg: ExtensionContext) => {
+			const upper = mode.toUpperCase();
+			if (MODES.includes(upper as Mode)) {
+				setModeForApproval(upper as Mode, ctxArg);
+			}
+		};
 		writeModeFile("NORMAL");
 		if (ctx.hasUI) {
 			ctx.ui.setStatus("mode", "");

@@ -104,22 +104,40 @@ describe("modeColor", () => {
 
 describe("modeDisplayName", () => {
 	it("appends + CLAUDE when overlay is active", () => {
-		expect(modeDisplayName("PLAN", { claude: true })).toBe("PLAN + CLAUDE");
-		expect(modeDisplayName("NORMAL", { claude: true })).toBe("NORMAL");
+		expect(modeDisplayName("PLAN", { claude: true, gemma: false, qwen: false })).toBe("PLAN + CLAUDE");
+		expect(modeDisplayName("NORMAL", { claude: true, gemma: false, qwen: false })).toBe("NORMAL");
+	});
+
+	it("appends + GEMMA when overlay is active", () => {
+		expect(modeDisplayName("PLAN", { claude: false, gemma: true, qwen: false })).toBe("PLAN + GEMMA");
+	});
+
+	it("appends + QWEN when overlay is active", () => {
+		expect(modeDisplayName("PLAN", { claude: false, gemma: false, qwen: true })).toBe("PLAN + QWEN");
 	});
 });
 
 describe("modeLabel overlay", () => {
 	it("uses overlay-aware labels for active modes", () => {
-		expect(modeLabel("PLAN", { claude: true })).toBe("[PLAN + CLAUDE]");
-		expect(modeLabel("NORMAL", { claude: true })).toBe("");
+		expect(modeLabel("PLAN", { claude: true, gemma: false, qwen: false })).toBe("[PLAN + CLAUDE]");
+		expect(modeLabel("PLAN", { claude: false, gemma: true, qwen: false })).toBe("[PLAN + GEMMA]");
+		expect(modeLabel("PLAN", { claude: false, gemma: false, qwen: true })).toBe("[PLAN + QWEN]");
+		expect(modeLabel("NORMAL", { claude: true, gemma: false, qwen: false })).toBe("");
 	});
 });
 
 describe("modeBgAnsi overlay", () => {
 	it("uses dark orange for active modes when Claude overlay is enabled", () => {
-		expect(modeBgAnsi("PLAN", { claude: true })).toBe("\x1b[48;2;180;90;0m");
-		expect(modeBgAnsi("NORMAL", { claude: true })).toBe("");
+		expect(modeBgAnsi("PLAN", { claude: true, gemma: false, qwen: false })).toBe("\x1b[48;2;180;90;0m");
+		expect(modeBgAnsi("NORMAL", { claude: true, gemma: false, qwen: false })).toBe("");
+	});
+
+	it("uses green for active modes when Gemma overlay is enabled", () => {
+		expect(modeBgAnsi("PLAN", { claude: false, gemma: true, qwen: false })).toBe("\x1b[48;2;20;140;80m");
+	});
+
+	it("uses purple for active modes when Qwen overlay is enabled", () => {
+		expect(modeBgAnsi("PLAN", { claude: false, gemma: false, qwen: true })).toBe("\x1b[48;2;102;51;153m");
 	});
 });
 

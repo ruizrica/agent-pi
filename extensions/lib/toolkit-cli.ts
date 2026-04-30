@@ -104,8 +104,16 @@ export function resolveClaudeProfileForAgent(agentName: string, model: string | 
 	return /claude-opus/i.test(model || "") ? "claude-advisor" : "claude-worker";
 }
 
+/** Check if a model string points to the local Ollama provider (Gemma overlay). */
+export function isOllamaModel(model: string | undefined | null): boolean {
+	if (!model) return false;
+	return model.startsWith("ollama/");
+}
+
 export function shouldUseClaudeCliForAgent(agentName: string, model: string | undefined | null, claudeOverlayActive = false): boolean {
 	if (isClaudeCliAgent(agentName)) return true;
+	// Ollama models should use standard Pi CLI, not Claude CLI
+	if (isOllamaModel(model)) return false;
 	return claudeOverlayActive && isClaudeFamilyModel(model);
 }
 
