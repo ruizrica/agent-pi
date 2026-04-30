@@ -87,9 +87,10 @@ export function mapComplexityToMode(complexity: PlanComplexity): PlannedMode {
 }
 
 /**
- * All-in-one: classify complexity and return target mode (or null for no switch).
+ * All-in-one: classify complexity and return target mode.
+ * Simple → NORMAL, Complete → PIPELINE.
  */
-export function getPlanTargetMode(markdown: string): { mode: PlannedMode | null; complexity: PlanComplexity; reason: string } {
+export function getPlanTargetMode(markdown: string): { mode: PlannedMode; complexity: PlanComplexity; reason: string } {
 	const result = classifyPlanComplexity(markdown);
 	return {
 		mode: mapComplexityToMode(result.complexity),

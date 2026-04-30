@@ -204,10 +204,13 @@ export default function (pi: ExtensionAPI) {
 	function triggerApprovalModeSwitch(planText: string, ctx: ExtensionContext) {
 		try {
 			const { mode: targetMode, reason } = getPlanTargetMode(planText);
-			const setModeCallback = (globalThis as any).__piSetModeForApproval;
-			if (typeof setModeCallback === "function") {
-				setModeCallback(targetMode, ctx);
-				ctx.ui.notify(`Mode switched to ${targetMode} on plan approval. ${reason}`, "info");
+			// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
+			if (targetMode) {
+				const setModeCallback = (globalThis as any).__piSetModeForApproval;
+				if (typeof setModeCallback === "function") {
+					setModeCallback(targetMode, ctx);
+					ctx.ui.notify(`Mode switched to ${targetMode} on plan approval. ${reason}`, "info");
+				}
 			}
 		} catch {
 			// Never fail the tool because of an auto-mode switch.
