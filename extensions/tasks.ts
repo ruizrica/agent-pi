@@ -78,6 +78,11 @@ interface TasksDetails {
 	syncState?: SyncState;
 }
 
+interface CompletionPresentation {
+	variant: "final" | "interim";
+	nextStep?: string;
+}
+
 const TasksParams = Type.Object({
 	action: StringEnum(["new-list", "add", "toggle", "remove", "update", "list", "clear"] as const),
 	text: Type.Optional(Type.String({ description: "Task text (for add/update), or list title (for new-list)" })),
@@ -362,6 +367,18 @@ export default function (pi: ExtensionAPI) {
 		return operation === "cleanup:self";
 	}
 
+	function inferCompletionPresentation(): CompletionPresentation {
+		const title = (listTitle || "").toLowerCase();
+		const summary = (listDescription || "").toLowerCase();
+		const combined = `${title}\n${summary}`;
+		const isInterim = ["investigation", "handoff", "approval", "plan", "next step", "up next"].some((token) => combined.includes(token));
+		if (!isInterim) return { variant: "final" };
+		return {
+			variant: "interim",
+			nextStep: "Review the findings/plan and continue with the next approved implementation step.",
+		};
+	}
+
 	function showMissionComplete(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
 		if ((globalThis as any).__piSummaryModeActive) return;
@@ -379,10 +396,13 @@ export default function (pi: ExtensionAPI) {
 			}));
 
 		const syncedCount = completedTasks.filter(t => t.commanderId !== undefined).length;
+		const completion = inferCompletionPresentation();
 
 		const mcState: MissionCompleteState = {
 			listTitle: listTitle || "Tasks",
 			summary: listDescription,
+			variant: completion.variant,
+			nextStep: completion.nextStep,
 			tasks: completedTasks,
 			stats: stats || undefined,
 			allSynced: syncedCount === completedTasks.length,
@@ -603,7 +623,11 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
+			const completion = inferCompletionPresentation();
 			const summaryLine = listDescription ? `\n\nCompleted Summary: ${listDescription}` : "";
+			const nextStepLine = completion.variant === "interim" && completion.nextStep
+				? `\n\nUP NEXT: ${completion.nextStep}`
+				: "";
 			const statsLine = statsParts.length > 0 ? `\n\n${statsParts.join(" · ")}` : "";
 
 			// Check if there are git changes to suggest a completion report
@@ -617,10 +641,14 @@ export default function (pi: ExtensionAPI) {
 				}
 			} catch { /* not a git repo or git not available */ }
 
+			const completionPrefix = completion.variant === "interim"
+				? `Task complete -- ${listTitle || "Tasks"}`
+				: `All ${tasks.length} tasks complete -- ${listTitle || "Tasks"}`;
+
 			pi.sendMessage(
 				{
 					customType: "mission-complete",
-					content: `All ${tasks.length} tasks complete -- ${listTitle || "Tasks"}${summaryLine}\n\n${taskSummary}${statsLine}${reportHint}`,
+					content: `${completionPrefix}${summaryLine}\n\n${taskSummary}${nextStepLine}${statsLine}${reportHint}`,
 					display: false, // Hidden context for the agent — widget handles the visual
 				},
 			);

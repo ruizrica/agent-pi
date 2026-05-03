@@ -24,6 +24,10 @@ export interface MissionCompleteState {
 	listTitle: string;
 	/** Rich work summary captured when the task list was started */
 	summary?: string;
+	/** Whether this is a true final completion or an interim handoff */
+	variant?: "final" | "interim";
+	/** Optional next-step guidance for interim handoffs */
+	nextStep?: string;
 	/** All completed tasks */
 	tasks: MissionCompleteTask[];
 	/** Session stats snapshot (may be undefined if summary-mode not loaded) */
@@ -83,11 +87,22 @@ export function renderMissionComplete(
 
 	// ── Header ──────────────────────────────────────────────────
 	const title = state.listTitle || "Tasks";
+	const variant = state.variant || "final";
+	const headerText = variant === "interim" ? "✓ TASK COMPLETE" : "✓ MISSION COMPLETE";
 	lines.push(
-		theme.bold(theme.fg("success", "✓ MISSION COMPLETE")) +
+		theme.bold(theme.fg("success", headerText)) +
 		theme.fg("dim", " — ") +
 		theme.fg("accent", title),
 	);
+
+	if (variant === "interim" && state.nextStep) {
+		const wrappedNext = wrapWords(state.nextStep, Math.max(20, contentWidth - 4));
+		lines.push(`  ${theme.fg("accent", "UP NEXT:")}`);
+		for (const line of wrappedNext) {
+			lines.push(`    ${theme.fg("muted", line)}`);
+		}
+		lines.push("");
+	}
 
 	if (state.summary) {
 		const label = "Completed Summary:";

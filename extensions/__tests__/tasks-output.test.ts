@@ -77,6 +77,14 @@ describe("mission complete lifecycle", () => {
 		expect(tasksSource).toContain('theme.fg("accent", "Work Summary:")');
 		expect(tasksSource).toContain("summary: listDescription");
 	});
+
+	it("supports interim completion messaging for investigation-style handoffs", () => {
+		expect(tasksSource).toContain("function inferCompletionPresentation()");
+		expect(tasksSource).toContain("variant: \"interim\"");
+		expect(tasksSource).toContain("UP NEXT: ${completion.nextStep}");
+		expect(tasksSource).toContain("Task complete -- ${listTitle || \"Tasks\"}");
+		expect(tasksSource).toContain("Review the findings/plan and continue with the next approved implementation step.");
+	});
 });
 
 describe("tasks output formatting", () => {

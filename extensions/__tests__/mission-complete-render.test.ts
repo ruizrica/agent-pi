@@ -21,11 +21,31 @@ describe("renderMissionComplete", () => {
 		}, 100, theme);
 
 		const joined = result.lines.join("\n");
+		expect(joined).toContain("MISSION COMPLETE");
 		expect(joined).toContain("Completed Summary:");
 		expect(joined).toContain("Update the security page");
 		expect(joined).toContain("Revise copy");
 		expect(joined).toContain("#1");
 		expect(joined).toContain("CMD #123");
+	});
+
+	it("renders an interim completion header with up-next guidance", () => {
+		const result = renderMissionComplete({
+			listTitle: "Investigate blank rendered plan/spec viewer",
+			summary: "Diagnose the rendered-mode failure and prepare a remediation handoff.",
+			variant: "interim",
+			nextStep: "Review the findings/plan and continue with the next approved implementation step.",
+			tasks: [{ id: 1, text: "Document root cause" }],
+			allSynced: true,
+			syncedCount: 0,
+			completedAt: Date.now(),
+		}, 100, theme);
+
+		const joined = result.lines.join("\n");
+		expect(joined).toContain("TASK COMPLETE");
+		expect(joined).toContain("UP NEXT:");
+		expect(joined).toContain("Review the findings/plan");
+		expect(joined).not.toContain("MISSION COMPLETE");
 	});
 
 	it("omits the completed summary line when no summary is supplied", () => {
