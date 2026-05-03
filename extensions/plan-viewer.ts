@@ -19,6 +19,7 @@ import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-s
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { getPlanTargetMode } from "./lib/plan-complexity.ts";
+import { getProjectContext } from "./lib/project-context.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ async function startViewerServer(
 	markdown: string,
 	title: string,
 	purpose: ViewerPurpose,
+	projectContext: ReturnType<typeof getProjectContext>,
 	filePath?: string,
 ): Promise<{ port: number; server: Server; waitForResult: () => Promise<any>; waitForFeedback: () => Promise<any> }> {
 	const routes = [
@@ -102,7 +104,7 @@ async function startViewerServer(
 	let lastKnownMarkdown = markdown;
 
 	const handle = await createViewerServer({
-		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port, roundTripEnabled: purpose === "plan" }),
+		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port, roundTripEnabled: purpose === "plan", projectContext }),
 		routes,
 		onFeedback: async (body) => {
 			roundTripState = {
@@ -261,7 +263,8 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start HTTP server
-		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose, filePath);
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose, projectContext, filePath);
 		activeServer = server;
 
 		const url = `http://127.0.0.1:${port}`;
@@ -420,9 +423,17 @@ export default function (pi: ExtensionAPI) {
 				// Simple plans remain in PLAN mode.
 				triggerApprovalModeSwitch(result.markdown || markdown, ctx);
 
-				// In tool mode, the returned tool result is the continuation signal.
-				// Do not also enqueue a follow-up turn, or it can surface later as a
-				// stale redundant [plan-approved] message after implementation finishes.
+				// Enqueue an approval follow-up so viewer-driven approval reliably
+				// triggers the next turn and execution continues after the UI closes.
+				piRef.sendMessage(
+					{
+						customType: "plan-approved",
+						content: `Plan approved! Proceed with implementation.${modifiedNote}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+
 				return {
 					content: [{
 						type: "text" as const,

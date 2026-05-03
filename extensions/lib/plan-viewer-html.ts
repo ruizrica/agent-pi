@@ -8,17 +8,21 @@ import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
  * Generate the full HTML page for the plan viewer window.
  * This is a single self-contained page with all CSS/JS inlined.
  */
+import type { ProjectContext } from "./project-context.ts";
+
 export function generatePlanViewerHTML(opts: {
 	markdown: string;
 	title: string;
 	mode: "plan" | "questions";
 	port: number;
 	roundTripEnabled?: boolean;
+	projectContext?: ProjectContext;
 }): string {
-	const { markdown, title, mode, port, roundTripEnabled = false } = opts;
+	const { markdown, title, mode, port, roundTripEnabled = false, projectContext } = opts;
 	// Escape </ sequences to prevent </script> in content from breaking the script block
 	const escapedMarkdown = JSON.stringify(markdown).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
+	const escapedProjectContext = JSON.stringify(projectContext ?? null).replace(/<\//g, '<\\/');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -102,11 +106,24 @@ ${VIEWER_SCROLLBAR_STYLES}
     font-family: var(--mono);
   }
   .header .badge.questions { color: var(--success); border-color: var(--success); }
+  .header .title-wrap {
+    flex: 1;
+    min-width: 0;
+  }
   .header .title {
     font-size: 15px;
     font-weight: 600;
     color: var(--text);
-    flex: 1;
+    display: block;
+  }
+  .project-context-inline {
+    margin: 12px 0 18px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .project-context-line {
+    margin: 2px 0;
+    word-break: break-word;
   }
   .header .progress {
     font-size: 12px;
@@ -1017,7 +1034,9 @@ ${VIEWER_SCROLLBAR_STYLES}
   <span class="badge ${mode === "questions" ? "questions" : ""}" id="modeBadge">
     ${mode === "questions" ? "QUESTIONS" : "PLAN"}
   </span>
-  <span class="title" id="titleText">${title}</span>
+  <div class="title-wrap">
+    <span class="title" id="titleText">${title}</span>
+  </div>
   <span class="progress" id="progressText"></span>
   <span class="modified-badge" id="modifiedBadge">modified</span>
   <img src="/logo.png" alt="agent" class="header-logo">
@@ -1075,6 +1094,7 @@ ${VIEWER_SCROLLBAR_STYLES}
   const PORT = ${port};
   const MODE = ${JSON.stringify(mode).replace(/<\//g, '<\\/')};
   const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
+  const projectContext = ${escapedProjectContext};
   let markdown = ${escapedMarkdown};
   let originalMarkdown = markdown;
   let modified = false;
@@ -1172,6 +1192,17 @@ ${VIEWER_SCROLLBAR_STYLES}
           '</li>';
       }
     );
+
+    if (typeof projectContext !== 'undefined' && projectContext && html.includes('<h2>Context</h2>')) {
+      var metadataHtml = '<div class="project-context-inline" id="projectContext">' +
+        '<div class="project-context-line"><strong>Project:</strong> ' + escapeHtml(projectContext.projectName) + '</div>' +
+        '<div class="project-context-line"><strong>Path:</strong> ' + escapeHtml(projectContext.fullPath) + '</div>' +
+        '<div class="project-context-line"><strong>UUID:</strong> ' + escapeHtml(projectContext.uuid) + '</div>' +
+        '<div class="project-context-line"><strong>Revision:</strong> ' + escapeHtml(String(projectContext.revision)) + '</div>' +
+        '<div class="project-context-line">' + escapeHtml(projectContext.timestamp) + '</div>' +
+      '</div>';
+      html = html.replace('<h2>Context</h2>', metadataHtml + '<h2>Context</h2>');
+    }
 
     container.innerHTML = html;
     enhanceStructuredPlan(container);
