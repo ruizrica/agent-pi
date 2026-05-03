@@ -15,6 +15,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCleanupViewerHTML } from "./lib/cleanup-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { runClaudeRuntime } from "./lib/claude-runtime.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ async function readDeletionLog(): Promise<Record<string, unknown>[]> {
 	} catch { return []; }
 }
 
-// ── AI Analysis (Agent SDK with OAuth) ───────────────────────────────
+// ── AI Analysis (Claude Code CLI runtime) ───────────────────────────
 
 async function streamAIAnalysis(
 	summary: Record<string, unknown>,
@@ -223,28 +224,28 @@ Respond with:
 
 Keep it concise and practical. No emojis. Use plain text formatting with dashes for lists.`;
 
+	let bufferedText = "";
 	try {
-		const { query } = await import("@anthropic-ai/claude-agent-sdk");
-		const stream = query({
+		const result = await runClaudeRuntime({
+			profile: "claude-advisor",
 			prompt,
-			options: {
-				tools: [],
-				maxTurns: 1,
-				systemPrompt: "You are a concise disk cleanup advisor. Provide practical, safety-conscious recommendations for file deletion. Be direct and clear. No emojis. Use elegant, minimal formatting.",
+			tools: "read,grep,find,ls,bash",
+			systemPrompt: "You are a concise disk cleanup advisor. Provide practical, safety-conscious recommendations for file deletion. Be direct and clear. No emojis. Use elegant, minimal formatting.",
+			onTextDelta: (delta) => {
+				if (!delta) return;
+				bufferedText += delta;
+				res.write(`data: ${JSON.stringify({ text: delta })}\n\n`);
+			},
+			onStderr: (chunk) => {
+				if (!chunk?.trim()) return;
+				res.write(`data: ${JSON.stringify({ status: chunk.trim() })}\n\n`);
 			},
 		});
 
-		for await (const message of stream) {
-			if ((message as any).type === "assistant") {
-				for (const block of (message as any).message.content) {
-					if (block.type === "text") {
-						res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
-					}
-				}
-			} else if ((message as any).type === "result") {
-				res.write(`data: ${JSON.stringify({ done: true, result: (message as any).result })}\n\n`);
-			}
+		if (!bufferedText && result.result) {
+			res.write(`data: ${JSON.stringify({ text: result.result })}\n\n`);
 		}
+		res.write(`data: ${JSON.stringify({ done: true, result: result.result })}\n\n`);
 	} catch (err: any) {
 		res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
 	}
@@ -515,7 +516,7 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Open a disk cleanup viewer in the browser. " +
 			"Scans for temporary files, compiled artifacts, and archives. " +
-			"Includes AI-powered analysis via Claude Agent SDK. " +
+			"Includes AI-powered analysis via the local Claude Code CLI runtime. " +
 			"User can select and delete files with confirmation.",
 		parameters: ShowCleanupParams,
 

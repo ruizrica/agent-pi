@@ -53,6 +53,8 @@ describe("shared viewer scrollbar styles", () => {
 		expect(planHtml).toContain("<strong>Revision:</strong>");
 		expect(planHtml).toContain("projectContext.timestamp");
 		expect(planHtml).not.toContain("<strong>Directory:</strong>");
+		expect(specHtml).toContain("const projectContext = ");
+		expect(specHtml).toContain("typeof projectContext !== 'undefined' && projectContext");
 		expect(specHtml).toContain("project-context-inline");
 		expect(specHtml).toContain("<strong>Project:</strong>");
 		expect(specHtml).toContain("<strong>UUID:</strong>");

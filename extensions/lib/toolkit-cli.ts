@@ -114,6 +114,7 @@ export function shouldUseClaudeCliForAgent(agentName: string, model: string | un
 	if (isClaudeCliAgent(agentName)) return true;
 	// Ollama models should use standard Pi CLI, not Claude CLI
 	if (isOllamaModel(model)) return false;
+	if (isClaudeFamilyModel(model)) return true;
 	return claudeOverlayActive && isClaudeFamilyModel(model);
 }
 

@@ -17,9 +17,10 @@ describe("claude overlay routing", () => {
 		expect(shouldUseClaudeCliForAgent("claude-advisor", "anthropic/claude-opus-4-6", false)).toBe(true);
 	});
 
-	it("routes generic Claude-family agents through Claude CLI only when overlay is active", () => {
+	it("routes generic Claude-family agents through Claude CLI regardless of overlay", () => {
 		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", true)).toBe(true);
-		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("builder", "anthropic/claude-haiku-4-5", false)).toBe(true);
 		expect(shouldUseClaudeCliForAgent("builder", "openai/gpt-5.4", true)).toBe(false);
 	});
 

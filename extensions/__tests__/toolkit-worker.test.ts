@@ -9,6 +9,7 @@ import {
 	TOOLKIT_WORKER_MODEL,
 	getToolkitWorkerArgs,
 	shouldUseClaudeCliForAgent,
+	isClaudeFamilyModel,
 } from "../lib/toolkit-cli.ts";
 import { resolveAgentModelString, type AgentModelsConfig } from "../lib/agent-defs.ts";
 
@@ -56,8 +57,15 @@ describe("toolkit worker model resolution", () => {
 	it("changes execution routing rather than mutating resolved models", () => {
 		expect(resolveToolkitWorkerModel("reviewer", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
 		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", true)).toBe(true);
-		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(true);
 		expect(shouldUseClaudeCliForAgent("claude-worker", "anthropic/claude-haiku-4-5", false)).toBe(true);
+	});
+
+	it("routes any Claude-family model through Claude CLI even without overlay", () => {
+		expect(isClaudeFamilyModel("anthropic/claude-opus-4-6")).toBe(true);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("builder", "anthropic/claude-haiku-4-5", false)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("builder", "openai/gpt-5.4", false)).toBe(false);
 	});
 });
 

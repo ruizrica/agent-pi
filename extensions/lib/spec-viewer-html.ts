@@ -37,6 +37,7 @@ export function generateSpecViewerHTML(opts: {
 	const escapedDocs = JSON.stringify(documents).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
 	const escapedComments = existingComments ? existingComments.replace(/<\//g, '<\\/') : "[]";
+	const escapedProjectContext = JSON.stringify(projectContext ?? null).replace(/<\//g, '<\\/');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -1067,6 +1068,7 @@ ${VIEWER_SCROLLBAR_STYLES}
   const PORT = ${port};
   const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
   const documents = ${escapedDocs};
+  const projectContext = ${escapedProjectContext};
   let comments = ${escapedComments};
   let currentStep = 0;
   let currentView = 'rendered';
@@ -1402,7 +1404,7 @@ ${VIEWER_SCROLLBAR_STYLES}
     // Pre-process: escape "N." in checkbox items to prevent nested ordered lists
     md = md.replace(/^(\\s*- \\[[ xX]\\] )(\\d+)\\./gm, '$1$2\\\\.');
     var html = marked.parse(md);
-    if (projectContext && html.includes('<h2>Context</h2>')) {
+    if (typeof projectContext !== 'undefined' && projectContext && html.includes('<h2>Context</h2>')) {
       var metadataHtml = '<div class="project-context-inline" id="projectContext">' +
         '<div class="project-context-line"><strong>Project:</strong> ' + escapeHtml(projectContext.projectName) + '</div>' +
         '<div class="project-context-line"><strong>Path:</strong> ' + escapeHtml(projectContext.fullPath) + '</div>' +
