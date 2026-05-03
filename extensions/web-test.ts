@@ -515,7 +515,7 @@ export default function (pi: ExtensionAPI) {
 				const msg = result.screenshots?.length
 					? `${action} complete (${Math.round(result.elapsed / 1000)}s). ${result.screenshots.length} file(s) saved.`
 					: `${action} complete (${Math.round(result.elapsed / 1000)}s).`;
-				ctx.ui.notify(msg, "success");
+				ctx.ui.notify(msg, "info");
 			} else {
 				ctx.ui.notify(`${action} failed: ${result.error}`, "error");
 			}
