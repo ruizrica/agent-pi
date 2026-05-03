@@ -1,6 +1,6 @@
 ---
 name: pi
-description: "Unified entry point to Pi operational modes. Invoke as /pi <mode> <task>. Modes: plan, spec, team, pipeline, chain. Triggers on /pi or when user says 'switch to plan mode', 'use spec mode', 'start a pipeline'."
+description: "Unified entry point to Pi operational modes. Invoke as /pi <mode> <task>. Modes: plan, investigate, spec, team, pipeline, chain. Triggers on /pi or when user says 'switch to plan mode', 'investigate this bug', 'use spec mode', 'start a pipeline'."
 allowed-tools: [set_mode]
 ---
 
@@ -24,6 +24,7 @@ Read the first word of the user's arguments and call `set_mode` with the matchin
 | Subcommand | Action | Workflow |
 |------------|--------|----------|
 | `plan` | `set_mode { mode: "PLAN", reason: "/pi plan" }` | Scout gather context -> write structured plan -> user approves via show_plan -> implement in phases |
+| `investigate` | `set_mode { mode: "INVESTIGATE", reason: "/pi investigate" }` | Clarify the problem -> gather context with scouts -> synthesize findings/hypotheses -> present remediation for approval -> hand off to PIPELINE |
 | `spec` | `set_mode { mode: "SPEC", reason: "/pi spec" }` | Initialize spec folder -> shape requirements with clarifying questions -> write design doc -> create tasks -> present via show_spec -> implement |
 | `team` | `set_mode { mode: "TEAM", reason: "/pi team" }` | Primary agent dispatches to specialist agents (scout, builder, reviewer, etc.) running in parallel |
 | `chain` | `set_mode { mode: "CHAIN", reason: "/pi chain" }` | Sequential pipeline: each step's output becomes $INPUT for the next step |
@@ -37,7 +38,7 @@ Before calling `set_mode`, check whether the mode requires prior setup:
 - **TEAM**: Requires an active team. If no team is loaded, tell the user to run `/agents-team` first to select a team (e.g., "full", "plan-build", "quality").
 - **CHAIN**: Requires an active chain. If no chain is active, tell the user to run `/chain` first to select a chain (e.g., "plan-build-review", "investigate-fix", "audit").
 - **PIPELINE**: Requires an active pipeline config. If no pipeline is active, tell the user to run `/pipeline` first to select a pipeline.
-- **PLAN**, **SPEC**, **NORMAL**: No prerequisites — activate immediately.
+- **PLAN**, **INVESTIGATE**, **SPEC**, **NORMAL**: No prerequisites — activate immediately.
 
 ## After Activation
 
@@ -57,6 +58,7 @@ Usage: /pi <mode> <task>
 
 Modes:
   plan      Plan-first workflow with approval gates
+  investigate Structured bug/problem investigation with scout-led diagnosis
   spec      Kiro spec-driven development (requirements -> design -> tasks)
   team      Multi-agent parallel dispatch to specialists
   chain     Sequential agent pipeline (output feeds next step)
@@ -65,6 +67,7 @@ Modes:
 
 Examples:
   /pi plan implement user authentication
+  /pi investigate debug why the approval viewer hangs after submit
   /pi spec design a notification system
   /pi team build the dashboard components
   /pi chain run a security audit

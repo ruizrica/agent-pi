@@ -85,6 +85,28 @@ describe("generateFileViewerHTML", () => {
 		expect(html).toContain('id="copyBtn" class="icon-btn secondary-muted"');
 	});
 
+	it("renders review controls in approval mode", () => {
+		const html = generateFileViewerHTML({
+			title: "review.ts",
+			filePath: "/tmp/review.ts",
+			content: "export const hi = 1;",
+			port: 3210,
+			editable: true,
+			language: "typescript",
+			mode: "approve",
+		});
+
+		expect(html).toContain('id="reviewActions"');
+		expect(html).toContain('id="approveBtn"');
+		expect(html).toContain('id="rejectBtn"');
+		expect(html).toContain('id="cancelBtn"');
+		expect(html).toContain("var VIEWER_MODE = \"approve\";");
+		expect(html).toContain("reviewActions.classList.toggle('visible', VIEWER_MODE === 'approve')");
+		expect(html).toContain("submitResult('approved')");
+		expect(html).toContain("submitResult('rejected')");
+		expect(html).toContain("submitResult('cancelled')");
+	});
+
 	it("escapes embedded script terminators in content", () => {
 		const html = generateFileViewerHTML({
 			title: "README.md",

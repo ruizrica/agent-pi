@@ -11,6 +11,7 @@ export function generateFileViewerHTML(opts: {
 	lineRange?: string;
 	editable: boolean;
 	language?: string;
+	mode?: "view" | "approve";
 }): string {
 	// Escape </ sequences to prevent </script> in file content from breaking the script block
 	const esc = (v: unknown) => JSON.stringify(v).replace(/<\//g, '<\\/');
@@ -20,6 +21,7 @@ export function generateFileViewerHTML(opts: {
 	const escapedLineRange = esc(opts.lineRange || "");
 	const escapedEditable = esc(opts.editable);
 	const escapedLanguage = esc(opts.language || "");
+	const escapedMode = esc(opts.mode || "view");
 	const isMarkdown = (opts.language || "").toLowerCase() === "markdown" || /\.(md|mdx|markdown)$/i.test(opts.filePath);
 	const isHtml = (opts.language || "").toLowerCase() === "html" || /\.(html|htm)$/i.test(opts.filePath);
 	const isRenderable = isMarkdown || isHtml;
@@ -620,6 +622,28 @@ ${VIEWER_SCROLLBAR_STYLES}
   }
   .done-banner.visible { display: flex; }
   .done-banner .done-text { flex: 1; }
+  .review-actions {
+    display: none;
+    gap: 8px;
+    align-items: center;
+  }
+  .review-actions.visible { display: inline-flex; }
+  .review-actions .btn-reject {
+    color: var(--warning);
+    border-color: rgba(240, 180, 41, 0.45);
+    background: rgba(240, 180, 41, 0.08);
+  }
+  .review-actions .btn-cancel {
+    color: var(--text-muted);
+  }
+  body.final-state .footer-disabled,
+  body.final-state .toolbar button,
+  body.final-state .view-toggle button,
+  body.final-state .menu-wrap,
+  body.final-state .editor-textarea {
+    pointer-events: none;
+    opacity: 0.65;
+  }
 </style>
 </head>
 <body>
@@ -717,6 +741,11 @@ ${VIEWER_SCROLLBAR_STYLES}
         <button id="doneBtn" class="secondary-muted" title="Done" aria-label="Done">
           <span class="done-label">Done</span>
         </button>
+        <div id="reviewActions" class="review-actions">
+          <button id="approveBtn" class="success" title="Approve" aria-label="Approve">Approve</button>
+          <button id="rejectBtn" class="btn-reject" title="Reject" aria-label="Reject">Reject</button>
+          <button id="cancelBtn" class="btn-cancel" title="Cancel" aria-label="Cancel">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
@@ -774,6 +803,7 @@ ${VIEWER_SCROLLBAR_STYLES}
   var LINE_RANGE = ${escapedLineRange};
   var EDITABLE = ${escapedEditable};
   var LANGUAGE = ${escapedLanguage};
+  var VIEWER_MODE = ${escapedMode};
   var IS_MARKDOWN = ${escapedIsMarkdown};
   var IS_HTML = ${escapedIsHtml};
   var IS_RENDERABLE = ${escapedIsRenderable};
@@ -784,6 +814,7 @@ ${VIEWER_SCROLLBAR_STYLES}
   var mode = 'view';
   var renderView = IS_RENDERABLE ? 'rendered' : 'raw';
   var isDone = false;
+  var finalAction = null;
 
   var titleText = document.getElementById('titleText');
   var subtitleText = document.getElementById('subtitleText');
@@ -820,6 +851,10 @@ ${VIEWER_SCROLLBAR_STYLES}
   var menuToggleLabel = document.getElementById('menuToggleLabel');
   var menuSaveBtn = document.getElementById('menuSaveBtn');
   var menuDoneBtn = document.getElementById('menuDoneBtn');
+  var reviewActions = document.getElementById('reviewActions');
+  var approveBtn = document.getElementById('approveBtn');
+  var rejectBtn = document.getElementById('rejectBtn');
+  var cancelBtn = document.getElementById('cancelBtn');
 
   var EXT_MAP = {
     js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -1026,6 +1061,9 @@ ${VIEWER_SCROLLBAR_STYLES}
     btnRendered.classList.toggle('active', renderView === 'rendered');
     btnRaw.classList.toggle('active', renderView === 'raw');
 
+    reviewActions.classList.toggle('visible', VIEWER_MODE === 'approve');
+    doneBtn.style.display = VIEWER_MODE === 'approve' ? 'none' : '';
+
     if (isDone) {
       toggleBtn.textContent = 'Read Only';
       toggleBtn.disabled = true;
@@ -1036,6 +1074,9 @@ ${VIEWER_SCROLLBAR_STYLES}
       menuSaveBtn.disabled = true;
       menuDoneBtn.disabled = true;
       menuToggleLabel.textContent = 'Read Only';
+      if (approveBtn) approveBtn.disabled = true;
+      if (rejectBtn) rejectBtn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
     } else {
       var toggleLabel = isEdit ? 'Preview' : (EDITABLE ? 'Edit' : 'Read Only');
       toggleBtn.textContent = toggleLabel;
@@ -1046,6 +1087,9 @@ ${VIEWER_SCROLLBAR_STYLES}
       menuSaveBtn.disabled = !EDITABLE || !modified;
       menuDoneBtn.disabled = false;
       menuToggleLabel.textContent = toggleLabel;
+      if (approveBtn) approveBtn.disabled = false;
+      if (rejectBtn) rejectBtn.disabled = false;
+      if (cancelBtn) cancelBtn.disabled = false;
     }
 
     saveHint.textContent = '';
@@ -1232,17 +1276,29 @@ ${VIEWER_SCROLLBAR_STYLES}
     }
   });
 
-  doneBtn.addEventListener('click', function() {
+  function submitResult(action) {
     closeMenu();
+    var content = mode === 'edit' ? editor.value : currentContent;
     fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modified: modified, content: mode === 'edit' ? editor.value : currentContent })
+      body: JSON.stringify({ action: action, modified: modified, content: content })
     }).then(function(resp) { return resp.json(); })
     .then(function(data) {
       if (!data.ok) throw new Error(data.error || 'Failed to finish');
       isDone = true;
+      finalAction = action;
       modified = false;
+      document.body.classList.add('final-state');
+      if (action === 'approved') {
+        doneBanner.querySelector('.done-text').textContent = 'Approved — returned to CLI. This page is now read-only.';
+      } else if (action === 'rejected') {
+        doneBanner.querySelector('.done-text').textContent = 'Rejected — returned to CLI. This page is now read-only.';
+      } else if (action === 'cancelled') {
+        doneBanner.querySelector('.done-text').textContent = 'Cancelled — returned to CLI. This page is now read-only.';
+      } else {
+        doneBanner.querySelector('.done-text').textContent = 'Done — returned to CLI. This page is now read-only.';
+      }
       doneBtn.classList.add('active');
       doneBanner.classList.add('visible');
       setNotice('', '');
@@ -1250,7 +1306,15 @@ ${VIEWER_SCROLLBAR_STYLES}
     }).catch(function(err) {
       setNotice(err && err.message ? err.message : 'Failed to finish', 'error');
     });
+  }
+
+  doneBtn.addEventListener('click', function() {
+    submitResult('done');
   });
+
+  if (approveBtn) approveBtn.addEventListener('click', function() { submitResult('approved'); });
+  if (rejectBtn) rejectBtn.addEventListener('click', function() { submitResult('rejected'); });
+  if (cancelBtn) cancelBtn.addEventListener('click', function() { submitResult('cancelled'); });
 
   editor.value = ORIGINAL;
   generateLineNums(currentContent, editorLines);

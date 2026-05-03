@@ -1,5 +1,5 @@
-// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/PIPELINE/TEAM/CHAIN) via Shift+Tab.
-// ABOUTME: Gates which extension's before_agent_start fires and injects PLAN/SPEC prompts.
+// ABOUTME: Cycles operational modes (NORMAL/PLAN/INVESTIGATE/SPEC/PIPELINE/TEAM/CHAIN) via Shift+Tab.
+// ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/INVESTIGATE/SPEC prompts.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -8,7 +8,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
 import { checkGemmaHealth, checkQwenHealth } from "./gemma-overlay.ts";
-import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt } from "./lib/mode-prompts.ts";
+import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
 
@@ -301,9 +301,9 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "set_mode",
 		label: "Set Mode",
-		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, SPEC, TEAM, CHAIN, or PIPELINE based on task classification.",
+		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, INVESTIGATE, SPEC, TEAM, CHAIN, or PIPELINE based on task classification.",
 		parameters: Type.Object({
-			mode: Type.String({ description: "Target mode: NORMAL, PLAN, SPEC, PIPELINE, TEAM, or CHAIN" }),
+			mode: Type.String({ description: "Target mode: NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, or CHAIN" }),
 			reason: Type.Optional(Type.String({ description: "Why this mode was chosen" })),
 		}),
 
@@ -365,6 +365,7 @@ export default function (pi: ExtensionAPI) {
 			return { systemPrompt: buildNormalPrompt(promptOpts) };
 		}
 		if (currentMode === "PLAN") return { systemPrompt: buildPlanPrompt(promptOpts) };
+		if (currentMode === "INVESTIGATE") return { systemPrompt: buildInvestigatePrompt(promptOpts) };
 		if (currentMode === "SPEC") return { systemPrompt: buildSpecPrompt(promptOpts) };
 		return {};
 	});

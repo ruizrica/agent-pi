@@ -44,4 +44,12 @@ describe("buildPlanPrompt", () => {
 		const result = buildPlanPrompt({ commanderAvailable: false, selectedAdvisorModel: "gpt-4.5" });
 		expect(result).toContain("anthropic/claude-opus-4-6");
 	});
+
+	it("requires richer subtask-level specificity for approved plans", () => {
+		const result = buildPlanPrompt({ commanderAvailable: false });
+		expect(result).toContain("Subtask-level specificity");
+		expect(result).toContain("likely symbols/functions/modules");
+		expect(result).toContain("approximate line ranges");
+		expect(result).toContain("Rich handoff for refinement");
+	});
 });

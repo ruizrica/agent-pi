@@ -17,6 +17,7 @@ import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
 import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { getProjectContext } from "./lib/project-context.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ function startSpecViewerServer(
 	folderPath: string,
 	documents: SpecDocument[],
 	title: string,
+	projectContext: ReturnType<typeof getProjectContext>,
 	existingComments: SpecComment[],
 ): Promise<ViewerServerHandle> {
 	let roundTripState = {
@@ -99,6 +101,7 @@ function startSpecViewerServer(
 			port,
 			existingComments: JSON.stringify(existingComments),
 			roundTripEnabled: true,
+			projectContext,
 		}),
 		onFeedback: async (body) => {
 			roundTripState = {
@@ -248,6 +251,11 @@ function formatRequestedChanges(commentSummary: string, feedback?: string): stri
 	return sections.join("\n\n");
 }
 
+function buildSpecRevisionGuidance(commentSummary: string, feedback?: string): string {
+	const requestedChanges = formatRequestedChanges(commentSummary, feedback);
+	return `Revise the spec based on the requested changes below. Preserve approved sections that were not challenged, update the affected documents, and reopen the spec review flow once the revisions are applied.\n\n${requestedChanges}`;
+}
+
 // ── Tool Parameters ──────────────────────────────────────────────────
 
 const ShowSpecParams = Type.Object({
@@ -363,10 +371,12 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start browser-based server
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
 		const handle = await startSpecViewerServer(
 			folderPath,
 			documents,
 			title,
+			projectContext,
 			existingComments,
 		);
 		activeServer = handle.server;
@@ -514,6 +524,7 @@ export default function (pi: ExtensionAPI) {
 				if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
 					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
+					const revisionGuidance = buildSpecRevisionGuidance(commentSummary, result.feedback);
 					const modifiedNote = result.modified
 						? "\n\nNote: Some documents were also edited inline — check the updated files."
 						: "";
@@ -521,7 +532,7 @@ export default function (pi: ExtensionAPI) {
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested on the spec. Here are the requested updates:\n\n${requestedChanges}${modifiedNote}`,
+							content: `Changes requested on the spec. Here are the requested updates:\n\n${requestedChanges}${modifiedNote}\n\n${revisionGuidance}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -645,10 +656,11 @@ export default function (pi: ExtensionAPI) {
 				} else if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
 					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
+					const revisionGuidance = buildSpecRevisionGuidance(commentSummary, result.feedback);
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested:\n\n${requestedChanges}`,
+							content: `Changes requested:\n\n${requestedChanges}\n\n${revisionGuidance}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },

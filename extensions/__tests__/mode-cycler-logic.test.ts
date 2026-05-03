@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 6 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
+	it("has exactly 7 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
 	});
 });
 
@@ -15,8 +15,12 @@ describe("nextMode", () => {
 		expect(nextMode("NORMAL")).toBe("PLAN");
 	});
 
-	it("cycles PLAN → SPEC", () => {
-		expect(nextMode("PLAN")).toBe("SPEC");
+	it("cycles PLAN → INVESTIGATE", () => {
+		expect(nextMode("PLAN")).toBe("INVESTIGATE");
+	});
+
+	it("cycles INVESTIGATE → SPEC", () => {
+		expect(nextMode("INVESTIGATE")).toBe("SPEC");
 	});
 
 	it("cycles SPEC → PIPELINE", () => {
@@ -41,6 +45,14 @@ describe("prevMode", () => {
 		expect(prevMode("PLAN")).toBe("NORMAL");
 	});
 
+	it("cycles INVESTIGATE → PLAN", () => {
+		expect(prevMode("INVESTIGATE")).toBe("PLAN");
+	});
+
+	it("cycles SPEC → INVESTIGATE", () => {
+		expect(prevMode("SPEC")).toBe("INVESTIGATE");
+	});
+
 	it("wraps NORMAL → CHAIN", () => {
 		expect(prevMode("NORMAL")).toBe("CHAIN");
 	});
@@ -57,6 +69,10 @@ describe("modeLabel", () => {
 
 	it("returns [PLAN] for PLAN", () => {
 		expect(modeLabel("PLAN")).toBe("[PLAN]");
+	});
+
+	it("returns [INVESTIGATE] for INVESTIGATE", () => {
+		expect(modeLabel("INVESTIGATE")).toBe("[INVESTIGATE]");
 	});
 
 	it("returns [SPEC] for SPEC", () => {
@@ -83,6 +99,10 @@ describe("modeColor", () => {
 
 	it("returns accent for PLAN", () => {
 		expect(modeColor("PLAN")).toBe("accent");
+	});
+
+	it("returns accent for INVESTIGATE", () => {
+		expect(modeColor("INVESTIGATE")).toBe("accent");
 	});
 
 	it("returns accent for SPEC", () => {
@@ -148,6 +168,10 @@ describe("modeTextAnsi", () => {
 
 	it("returns bold white for PLAN (dark bg)", () => {
 		expect(modeTextAnsi("PLAN")).toBe("\x1b[1;97m");
+	});
+
+	it("returns bold white for INVESTIGATE (blue bg)", () => {
+		expect(modeTextAnsi("INVESTIGATE")).toBe("\x1b[1;97m");
 	});
 
 	it("returns bold white for SPEC (blue bg)", () => {

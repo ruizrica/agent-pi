@@ -22,4 +22,25 @@ describe("file-viewer implementation", () => {
 	it("passes language metadata into generateFileViewerHTML", () => {
 		expect(source).toContain("language: opts.language");
 	});
+
+	it("supports an approval mode in the tool schema and description", () => {
+		expect(source).toContain('mode: Type.Optional(Type.String({ description: "Viewer mode: \'view\' (default) for simple viewing, or \'approve\' for approve/reject/cancel review flow" }))');
+		expect(source).toContain("approval mode with approve/reject/cancel actions");
+	});
+
+	it("returns explicit approval actions instead of only done", () => {
+		expect(source).toContain('action: "done" | "approved" | "rejected" | "cancelled"');
+		expect(source).toContain('data?.action === "approved" || data?.action === "rejected" || data?.action === "cancelled"');
+	});
+
+	it("emits a follow-up message when a file is approved", () => {
+		expect(source).toContain('customType: "file-approved"');
+		expect(source).toContain('content: `File approved!${result.modified ? " (file was edited)" : ""}`');
+	});
+
+	it("returns structured details with the final action", () => {
+		expect(source).toContain("details: {");
+		expect(source).toContain("action: result.action");
+		expect(source).toContain("filePath: p.file_path");
+	});
 });

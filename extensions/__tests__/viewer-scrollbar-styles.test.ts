@@ -35,8 +35,10 @@ describe("shared viewer scrollbar styles", () => {
 	});
 
 	it("renders the shared scrollbar CSS in representative generated report/viewer HTML", () => {
-		const planHtml = generatePlanViewerHTML({ markdown: "# Plan", title: "Plan", mode: "plan", port: 3000 });
-		const specHtml = generateSpecViewerHTML({ title: "Spec", documents: [], port: 3000 });
+		const projectContext = { projectName: "agent-pi", workingDirectoryName: "agent-pi", fullPath: "/Users/ricardo/Workshop/GitHub/agent-pi", uuid: "123e4567-e89b-12d3-a456-426614174000", revision: 2, timestamp: "4:05pm @ 05/02/2026" };
+		const markdownWithContext = "# Plan\n\n---\n\n## Context\n\nBody";
+		const planHtml = generatePlanViewerHTML({ markdown: markdownWithContext, title: "Plan", mode: "plan", port: 3000, projectContext });
+		const specHtml = generateSpecViewerHTML({ title: "Spec", documents: [{ key: "requirements", label: "Requirements", markdown: markdownWithContext, filePath: "requirements.md" }], port: 3000, projectContext });
 		const reportHtml = generateCompletionReportHTML({ report: makeReport(), port: 3000 });
 
 		for (const html of [planHtml, specHtml, reportHtml]) {
@@ -44,6 +46,18 @@ describe("shared viewer scrollbar styles", () => {
 			expect(html).toContain("background: var(--bg);");
 			expect(html).toContain("scrollbar-color: var(--scrollbar-thumb, var(--border)) var(--bg);");
 		}
+		expect(planHtml).toContain("project-context-inline");
+		expect(planHtml).toContain("<strong>Project:</strong>");
+		expect(planHtml).toContain("<strong>Path:</strong>");
+		expect(planHtml).toContain("<strong>UUID:</strong>");
+		expect(planHtml).toContain("<strong>Revision:</strong>");
+		expect(planHtml).toContain("projectContext.timestamp");
+		expect(planHtml).not.toContain("<strong>Directory:</strong>");
+		expect(specHtml).toContain("project-context-inline");
+		expect(specHtml).toContain("<strong>Project:</strong>");
+		expect(specHtml).toContain("<strong>UUID:</strong>");
+		expect(specHtml).toContain("projectContext.timestamp");
+		expect(specHtml).not.toContain("<strong>Directory:</strong>");
 	});
 
 	it("injects the shared CSS into all targeted public and private viewer templates", () => {

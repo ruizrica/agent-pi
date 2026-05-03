@@ -1,7 +1,7 @@
-// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, PIPELINE, TEAM, CHAIN).
+// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN).
 // ABOUTME: No side effects — used by mode-cycler.ts extension and tested independently.
 
-export const MODES = ["NORMAL", "PLAN", "SPEC", "PIPELINE", "TEAM", "CHAIN"] as const;
+export const MODES = ["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN"] as const;
 export type Mode = typeof MODES[number];
 export type ModeOverlay = "CLAUDE" | "GEMMA" | "QWEN";
 
@@ -32,6 +32,7 @@ export function prevMode(current: Mode): Mode {
 const MODE_COLORS: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: "accent",
+	INVESTIGATE: "accent",
 	SPEC: "accent",
 	PIPELINE: "accent",
 	TEAM: "accent",
@@ -52,6 +53,7 @@ const QWEN_PURPLE_BG = "\x1b[48;2;102;51;153m"; // purple for local Qwen overlay
 const MODE_TEXT_ANSI: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: BOLD_WHITE,
+	INVESTIGATE: BOLD_WHITE,
 	SPEC: BOLD_WHITE,
 	PIPELINE: BOLD_WHITE,
 	TEAM: BOLD_WHITE,
@@ -69,6 +71,7 @@ const DODGER_BLUE_BG = "\x1b[48;2;30;144;255m"; // dodger blue rgb(30,144,255)
 const ANSI_BG: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: DODGER_BLUE_BG,
+	INVESTIGATE: DODGER_BLUE_BG,
 	SPEC: DODGER_BLUE_BG,
 	PIPELINE: DODGER_BLUE_BG,
 	TEAM: DODGER_BLUE_BG,

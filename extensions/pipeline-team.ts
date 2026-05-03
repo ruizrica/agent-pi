@@ -38,6 +38,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
+import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -157,14 +158,16 @@ function truncateContext(text: string): string {
 
 function resolveTemplate(
 	template: string,
-	vars: { task: string; context: string; plan: string; input: string; review: string },
+	vars: { task: string; context: string; plan: string; input: string; review: string; microtasks?: string; merge?: string },
 ): string {
 	return template
 		.replace(/\$TASK/g, vars.task)
 		.replace(/\$CONTEXT/g, truncateContext(vars.context))
 		.replace(/\$PLAN/g, vars.plan)
 		.replace(/\$INPUT/g, vars.input)
-		.replace(/\$REVIEW/g, vars.review);
+		.replace(/\$REVIEW/g, vars.review)
+		.replace(/\$MICROTASKS/g, vars.microtasks || "")
+		.replace(/\$MERGE/g, vars.merge || "");
 }
 
 // ── Extension ────────────────────────────────────
@@ -186,6 +189,9 @@ export default function (pi: ExtensionAPI) {
 	let planOutput = "";     // $PLAN — from phase 3
 	let reviewOutput = "";   // $REVIEW — from phase 5 (when looping)
 	let reviewLoopCount = 0;
+	let microTaskOutput = "";
+	let mergeOutput = "";
+	let worktreeAssignments: WorktreeAssignment[] = [];
 
 	// ── Load Config ──────────────────────────────
 
@@ -230,6 +236,9 @@ export default function (pi: ExtensionAPI) {
 		planOutput = "";
 		reviewOutput = "";
 		reviewLoopCount = 0;
+		microTaskOutput = "";
+		mergeOutput = "";
+		worktreeAssignments = [];
 
 		phaseStates = config.phases.map(p => ({
 			def: p,
@@ -794,6 +803,8 @@ export default function (pi: ExtensionAPI) {
 					plan: planOutput,
 					input: "",
 					review: reviewOutput,
+					microtasks: microTaskOutput,
+					merge: mergeOutput,
 				}),
 			}));
 
@@ -812,10 +823,24 @@ export default function (pi: ExtensionAPI) {
 				planOutput = mergedOutput;
 			}
 
+			if (phase.def.name.toLowerCase() === "refine") {
+				microTaskOutput = mergedOutput;
+				try {
+					const parsed = JSON.parse(mergedOutput) as PipelineMicroTask[];
+					worktreeAssignments = assignWorktrees(ctx.cwd, parsed);
+				} catch {
+					worktreeAssignments = [];
+				}
+			}
+
 			// Store review output if this is the review phase
 			if (phase.def.name.toLowerCase() === "review") {
 				reviewOutput = mergedOutput;
 				reviewLoopCount++;
+			}
+
+			if (phase.def.name.toLowerCase() === "merge") {
+				mergeOutput = mergedOutput;
 			}
 
 			const truncated = mergedOutput.length > 8000
@@ -1095,8 +1120,20 @@ export default function (pi: ExtensionAPI) {
 			? `\n## Implementation Plan\n${truncateContext(planOutput)}`
 			: "";
 
+		const microTaskSection = microTaskOutput
+			? `\n## Refined Micro-Tasks\n${truncateContext(microTaskOutput)}`
+			: "";
+
 		const reviewSection = reviewOutput
 			? `\n## Last Review (loop ${reviewLoopCount}/${activeConfig.review_max_loops})\n${truncateContext(reviewOutput)}`
+			: "";
+
+		const mergeSection = mergeOutput
+			? `\n## Merge Output\n${truncateContext(mergeOutput)}`
+			: "";
+
+		const worktreeSection = worktreeAssignments.length > 0
+			? `\n## Worktree Assignments\n${worktreeAssignments.map((w) => `- ${w.taskId}: ${w.branchName} → ${w.worktreePath}`).join("\n")}`
 			: "";
 
 		// Phase-specific instructions
@@ -1146,20 +1183,43 @@ You are in the PLAN phase. Dispatch a planner agent to create an implementation 
 Use \`dispatch_agents\` with a planner. The plan will be stored as $PLAN for later phases.
 Call \`advance_phase\` with the plan summary when done.`;
 
+		} else if (phase.def.name === "refine") {
+			phaseInstructions = `## Phase Instructions: REFINE
+You are in the REFINE phase. Do NOT plan again.
+Convert the already-approved plan into structured micro-tasks.
+Each micro-task must include: id, title, description, files, line_ranges, symbols, depends_on, parallel_group, verification.
+Return valid JSON so downstream execution can assign isolated worktrees safely.
+Use \`dispatch_agents\` with a planner, then call \`advance_phase\` when refinement is complete.`;
+
 		} else if (phase.def.name === "execute") {
 			phaseInstructions = `## Phase Instructions: EXECUTE
-You are in the EXECUTE phase. Dispatch builder agents to implement the plan.
+You are in the EXECUTE phase. Dispatch builder agents to implement the refined micro-tasks.
 You can dispatch multiple builders for independent tasks.
+If worktrees are enabled for this phase, each builder must be assigned its own isolated worktree path/branch and should stay within the specified files and line ranges.
 Use \`dispatch_agents\` then call \`advance_phase\` when implementation is complete.`;
 
 		} else if (phase.def.name === "review") {
 			phaseInstructions = `## Phase Instructions: REVIEW
 You are in the REVIEW phase (loop ${reviewLoopCount + 1}/${activeConfig.review_max_loops}).
-Dispatch a reviewer agent to audit the implementation.
+Dispatch a reviewer agent to audit the implementation against the approved plan and refined micro-tasks.
 After reviewing the output:
-- If the reviewer says APPROVED → call \`advance_phase\` to complete the pipeline
-- If issues found and loops remaining → use \`dispatch_agents\` to fix issues, then review again
+- If the reviewer says APPROVED → call \`advance_phase\` to proceed to merge or complete the pipeline
+- If issues found and loops remaining → advance to remediation or dispatch fixes, then review again
 - Max review loops: ${activeConfig.review_max_loops}`;
+
+		} else if (phase.def.name === "remediate") {
+			phaseInstructions = `## Phase Instructions: REMEDIATE
+You are in the REMEDIATE phase.
+Use a stronger reviewer/remediator path to address failed review findings before merge.
+Dispatch the remediator agent with the approved plan, refined micro-tasks, and review findings.
+Call \`advance_phase\` when remediation is complete.`;
+
+		} else if (phase.def.name === "merge") {
+			phaseInstructions = `## Phase Instructions: MERGE
+You are in the MERGE phase.
+Use the designated merge agent to integrate all completed worktree branches, resolve merge conflicts, and produce the final integrated result.
+Do not complete the pipeline until merge conflicts are resolved or explicitly surfaced as a failure.
+Call \`advance_phase\` when merge is complete.`;
 		}
 
 		const commanderAvailable = !!(globalThis as any).__piCommanderAvailable;
@@ -1200,7 +1260,7 @@ ${agentCatalog}
 
 ## Task
 ${taskSummary || "(Phase 1: Ask the user what they want to accomplish)"}
-${contextSummary}${planSection}${reviewSection}
+${contextSummary}${planSection}${microTaskSection}${worktreeSection}${reviewSection}${mergeSection}
 
 ## Tools
 - \`advance_phase\`: Move to next phase (required summary of what was done)

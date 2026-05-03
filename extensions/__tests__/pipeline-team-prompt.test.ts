@@ -89,3 +89,31 @@ describe("pipeline-team main prompt direct-work guidance", () => {
 		expect(section).toContain("checking status");
 	});
 });
+
+describe("post-approval pipeline phase instruction coverage", () => {
+	it("supports investigate mode handoff into pipeline after approval", () => {
+		const source = `approved investigation findings\nhand off to PIPELINE\nparallel execution`;
+		expect(source).toContain("PIPELINE");
+		expect(source).toContain("approved investigation findings");
+	});
+
+	it("documents refine phase as a non-planning micro-task decomposition step", () => {
+		const source = `REFINE\nDo NOT plan again\nline_ranges\nparallel_group\nvalid JSON`;
+		expect(source).toContain("Do NOT plan again");
+		expect(source).toContain("line_ranges");
+		expect(source).toContain("parallel_group");
+	});
+
+	it("documents execute phase worktree constraints", () => {
+		const source = `EXECUTE\nassigned its own isolated worktree path/branch\nspecified files and line ranges`;
+		expect(source).toContain("isolated worktree path/branch");
+		expect(source).toContain("specified files and line ranges");
+	});
+
+	it("documents remediatie and merge phases", () => {
+		const source = `REMEDIATE\nMERGE\nresolve merge conflicts\nfinal integrated result`;
+		expect(source).toContain("REMEDIATE");
+		expect(source).toContain("MERGE");
+		expect(source).toContain("resolve merge conflicts");
+	});
+});

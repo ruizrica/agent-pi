@@ -1,6 +1,6 @@
 # agent-pi
 
-> **Turn [Pi](https://github.com/badlogic/pi-mono) into a multi-agent orchestration platform** — 6 operational modes, 50+ extensions, 26 skills, 11 themes. Installs as a single Pi package. No forks, no patches.
+> **Turn [Pi](https://github.com/badlogic/pi-mono) into a multi-agent orchestration platform** — 7 operational modes, 50+ extensions, 26 skills, 11 themes. Installs as a single Pi package. No forks, no patches.
 
 `agent-pi` is a configuration layer over the excellent [Pi coding agent](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic). If Pi is the engine, `agent-pi` is the chassis: orchestration primitives (teams / chains / pipelines), human-review surfaces (browser viewers), security hooks, a remote-access chat UI, and a curated set of worker wrappers for popular coding CLIs.
 
@@ -42,12 +42,12 @@ Inside the TUI:
 | Keys / command | What happens |
 |---|---|
 | *(just type a task)* | Pi starts in plan-first mode; it will ask you to scope tasks before any tools unlock |
-| `Shift+Tab` | Cycle modes: `NORMAL → PLAN → SPEC → TEAM → CHAIN → PIPELINE` |
+| `Shift+Tab` | Cycle modes: `NORMAL → PLAN → INVESTIGATE → SPEC → TEAM → CHAIN → PIPELINE` |
 | `/claude`   | Toggle the CLAUDE overlay — banner turns dark orange; Claude-family roles route through the Claude Code CLI |
 | `Ctrl+X`    | Cycle themes |
 | `ESC ESC`   | Cancel all running subagents and operations |
 | `/chat`     | Start the web chat server (scan the QR to connect your phone) |
-| `/pi`       | Unified entry point — dispatches into `plan` / `spec` / `team` / `chain` / `pipeline` workflows |
+| `/pi`       | Unified entry point — dispatches into `plan` / `investigate` / `spec` / `team` / `chain` / `pipeline` workflows |
 | `/secure`   | Run an AI-driven security sweep on the current project |
 | `/replay`   | Scrollable timeline of the current conversation |
 

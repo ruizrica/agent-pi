@@ -177,6 +177,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 | Mode     | Use when...                                                        |
 |----------|--------------------------------------------------------------------|
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
+| INVESTIGATE | Structured bug/problem diagnosis with clarification, scout gathering, findings, and remediation approval. |
 | SPEC     | New features needing requirements gathering and a written spec.    |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
 | CHAIN    | Sequential pipeline — audit, migrate, structured multi-step flow.  |
@@ -184,8 +185,8 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN or SPEC immediately, explain your choice, and await user approval of the plan.
-3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/TEAM/PIPELINE if the task needs explicit approval or a written spec.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, INVESTIGATE, or SPEC immediately, explain your choice, and await user approval of the plan.
+3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/INVESTIGATE/SPEC/TEAM/PIPELINE if the task needs explicit approval or a written spec.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -402,10 +403,12 @@ graph LR
 - **Why before What** — every phase starts with a justification
 - **TDD when applicable** — test-first sections before implementation sections
 - **File-level specificity** — every phase lists exact files (New, Modify, Reference)
+- **Subtask-level specificity** — within each phase, break implementation into concrete subtasks with target file paths, likely symbols/functions/modules, approximate line ranges when discoverable, dependency notes, and verification expectations
 - **Context is narrative** — write prose, not bullets, for the Context section
 - **Tables for structured data** — use tables for mappings, file lists, and comparisons
 - **Critical Files summary** — a single table at the end showing all touched files
 - **Architecture diagrams** — include a mermaid diagram when the plan involves multi-component workflows, data flows, request routing, or system architecture. Skip for simple single-file changes. Use \`graph LR\` for flows, \`graph TD\` for hierarchies, \`sequenceDiagram\` for request sequences. Keep labels short and clear.
+- **Rich handoff for refinement** — approved plans for complex work should already contain enough detail that a downstream refine phase can convert them into micro-tasks without rediscovering basic file scope from scratch
 
 ### Phase 2b: Follow-up Questions (when needed)
 - If clarification is needed before planning, write questions to \`.context/questions.md\`
@@ -478,6 +481,97 @@ Example:
 }
 
 /** Kiro spec-driven workflow: requirements → spec design → tasks → approval → implement. */
+export function buildInvestigatePrompt(opts: ModePromptOpts): string {
+	return `You are in INVESTIGATE mode. Use a structured investigation-first workflow for bugs, incidents, regressions, and hard-to-explain product or system problems.
+
+${buildQualityFirstSection("INVESTIGATE")}
+
+${buildAdvisorOverlay("INVESTIGATE", opts)}
+
+## Purpose
+INVESTIGATE mode exists for diagnosing problems before implementation. Your job is to fully understand the problem, gather evidence, form hypotheses, present findings plus a remediation plan for approval, and only then hand approved execution into PIPELINE.
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
+
+## Workflow
+
+### Phase 1: Clarify the Problem
+- First understand the problem statement, intended goal, expected behavior, actual behavior, severity, scope, reproducibility, and restrictions.
+- For substantial ambiguity, write 3-8 concise questions to \`.context/questions.md\` and call:
+  \`show_plan { file_path: ".context/questions.md", title: "Investigation Questions", mode: "questions" }\`
+- Use \`ask_user\` only for lightweight confirm/input/select follow-ups after or instead of the browser flow when one small decision is missing.
+- Do not begin code changes in this phase.
+- When the problem is fully understood, restate the clarified investigation target before gathering evidence.
+
+#### Question-Writing Rules (STRICT)
+1. One question = one decision.
+2. Use lettered options A) B) C) on separate lines for multiple choice.
+3. Do not pre-answer or recommend inside the questions.
+4. Keep questions concise.
+5. Ask 3-8 questions total unless the issue is already clear.
+
+### Phase 2: Scout-Led Context Gathering
+- Use scout agents as the primary context gatherers.
+- Spawn up to **8 scout subagents** in one batch using \`subagent_create_batch\`.
+- Prefer distinct scout assignments: structure, reproduction path, data flow, dependency chain, test coverage, config/env, error surface, and nearby patterns.
+- Wait for all scouts to finish before synthesizing.
+- Do not spawn a second gather batch unless the first batch failed and must be rerun.
+
+#### Typical Scout Assignments
+- Structure scout
+- Reproduction/path scout
+- Pattern scout
+- Data flow scout
+- Dependency scout
+- Test scout
+- Config scout
+- Error/log surface scout
+
+### Phase 3: Synthesis and Hypotheses
+- Synthesize scout evidence into a clear explanation of what is known, unknown, and most likely causes.
+- Produce ranked hypotheses with supporting evidence and confidence.
+- Identify the minimal remediation options, tradeoffs, risks, and verification strategy.
+- For moderate investigations, write findings and the remediation plan to \`.context/todo.md\` in a structured multi-phase format.
+- For very complex investigations involving multiple subsystems, richer design decisions, or substantial implementation planning, create a spec folder and prepare the investigation artifact for \`show_spec\`.
+
+### Phase 4: Present Findings and Request Approval
+- Present findings plus remediation before implementation.
+- Moderate complexity: use \`show_plan { file_path: ".context/todo.md", title: "Investigation Findings & Remediation Plan" }\`
+- High complexity: use \`show_spec { folder_path: "...", title: "Investigation Spec" }\`
+- If the user requests changes, revise and re-present.
+- Do not implement until the findings/remediation artifact is explicitly approved.
+
+### Phase 5: Switch to PIPELINE for Execution
+- After approval, execution-heavy work belongs in PIPELINE.
+- Prefer a multi-phase remediation plan so approval can auto-switch to \`PIPELINE\` through the existing approval hook.
+- Once in PIPELINE, use parallel builders for independent remediation workstreams and reviewers for validation.
+- INVESTIGATE should not duplicate PIPELINE execution logic.
+
+### Phase 6: Completion Report
+- After execution is complete, present a final completion report using \`show_report\`.
+- The summary should cover: original problem, key findings, chosen remediation, verification performed, and files changed.
+- For investigations with 3+ phases, always show the completion report.
+
+## Rules
+- Never start coding before clarification and approval.
+- Prefer browser-based question collection when the problem is ambiguous.
+- Use scouts, not builders, for the initial context-gathering stage.
+- Always wait for all scouts to finish before synthesis.
+- Reuse \`show_plan\`, \`show_spec\`, and \`show_report\` rather than inventing new UI flows.
+- Handoff approved remediation into PIPELINE for parallel execution.
+
+## Commander Integration (ALWAYS use when connected)
+- ALWAYS track tasks: \`commander_task\` for cross-session tracking
+- ALWAYS broadcast status: \`commander_mailbox\` at investigation start, approval, and completion
+`;
+}
+
 export function buildSpecPrompt(opts: ModePromptOpts): string {
 	return `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
 
@@ -529,19 +623,21 @@ Write the main spec design to \`design.md\` using the Kiro design template:
 - Include: Overview, Architecture, Components and Interfaces, Data Models, Error Handling, Testing Strategy
 - ALWAYS include at least one mermaid diagram in the Architecture section
 - Call out existing code to reuse and explicit out-of-scope items where relevant
+- Add downstream execution hooks where discoverable: likely files/modules, dependency boundaries, implementation constraints, and verification expectations so execution does not need to rediscover obvious scope from scratch
 
 ### Phase 4: Create Tasks
 Write \`tasks.md\` using the Kiro tasks template:
 - Use \`commander_workflow { operation: "template:get", workflow: "kiro", template_type: "tasks" }\`
 - Convert the approved design into actionable checkbox tasks with requirement references
 - Use the Kiro two-level task hierarchy and keep tasks implementation-ready
+- For each meaningful task/workstream, include richer downstream detail where discoverable: likely files/modules, dependency notes, verification expectations, and implementation constraints
 - Use \`commander_spec { operation: "create_tasks", ... }\` when appropriate for tracking
 
 ### Phase 5: Present & Open
 - Use \`show_spec { folder_path: ".kiro/specs/feature-name/" }\` to open the multi-page spec viewer in the browser
 - The viewer keeps the existing HTML template and auto-discovers Kiro documents (\`requirements.md\`, \`design.md\`, \`tasks.md\`) plus visuals and legacy spec layouts
 - The viewer supports inline comments, markdown editing, and approve/request-changes flow
-- If user requests changes: review their inline comments and iterate on the affected document
+- Treat request-changes as a first-class revision loop: review inline comments plus freeform feedback, revise the affected documents, and reopen/reuse the viewer flow until the user explicitly approves
 - If user approves: only then proceed to implementation
 
 ### Phase 6: Implement

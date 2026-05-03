@@ -15,7 +15,7 @@ import { generateFileViewerHTML } from "./lib/file-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, closeActiveViewer, getActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 
 interface FileViewerResult {
-	action: "done";
+	action: "done" | "approved" | "rejected" | "cancelled";
 	modified: boolean;
 	content: string;
 }
@@ -98,6 +98,7 @@ async function startFileViewerServer(opts: {
 	editable: boolean;
 	lineRange?: string;
 	language?: string;
+	mode?: "view" | "approve";
 }): Promise<{ port: number; server: Server; waitForResult: () => Promise<FileViewerResult> }> {
 	let initialContent = "";
 	try {
@@ -172,13 +173,16 @@ async function startFileViewerServer(opts: {
 				lineRange: opts.lineRange,
 				editable: opts.editable,
 				language: opts.language,
+				mode: opts.mode || "view",
 			});
 			return html;
 		},
 		routes,
 		onResult: (data) => {
 			resolveResult!({
-				action: "done",
+				action: data?.action === "approved" || data?.action === "rejected" || data?.action === "cancelled"
+					? data.action
+					: "done",
 				modified: !!data.modified,
 				content: typeof data.content === "string" ? data.content : initialContent,
 			});
@@ -197,6 +201,7 @@ const ShowFileParams = Type.Object({
 	title: Type.Optional(Type.String({ description: "Optional title shown in the viewer header" })),
 	line_range: Type.Optional(Type.String({ description: "Optional line range like '45-60' or '45'" })),
 	editable: Type.Optional(Type.Boolean({ description: "Whether to allow editing and saving from the browser UI" })),
+	mode: Type.Optional(Type.String({ description: "Viewer mode: 'view' (default) for simple viewing, or 'approve' for approve/reject/cancel review flow" })),
 });
 
 export default function (pi: ExtensionAPI) {
@@ -215,7 +220,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	async function runViewer(ctx: ExtensionContext, params: { file_path: string; title?: string; line_range?: string; editable?: boolean; }) {
+	async function runViewer(ctx: ExtensionContext, params: { file_path: string; title?: string; line_range?: string; editable?: boolean; mode?: string; }) {
 		cleanupServer();
 
 		const filePath = resolve(params.file_path);
@@ -223,12 +228,14 @@ export default function (pi: ExtensionAPI) {
 		const title = params.title || basename(filePath);
 
 		const language = detectLanguage(filePath);
+		const viewerMode = params.mode === "approve" ? "approve" : "view";
 		const { port, server, waitForResult } = await startFileViewerServer({
 			filePath,
 			title,
 			editable,
 			lineRange: params.line_range,
 			language,
+			mode: viewerMode,
 		});
 		activeServer = server;
 		const url = `http://127.0.0.1:${port}`;
@@ -258,22 +265,46 @@ export default function (pi: ExtensionAPI) {
 		label: "Show File",
 		description:
 			"Open a lightweight local file viewer/editor in the browser without Commander. " +
-			"Supports read-only viewing by default, optional editing/saving, and simple line-range display.",
+			"Supports read-only viewing by default, optional editing/saving, simple line-range display, and an approval mode with approve/reject/cancel actions.",
 		parameters: ShowFileParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const p = params as { file_path: string; title?: string; line_range?: string; editable?: boolean };
+			const p = params as { file_path: string; title?: string; line_range?: string; editable?: boolean; mode?: string };
 			if (!existsSync(p.file_path)) {
 				throw new Error(`File not found: ${p.file_path}`);
 			}
 
 			const result = await runViewer(ctx, p);
+			if (result.action === "approved") {
+				pi.sendMessage(
+					{
+						customType: "file-approved",
+						content: `File approved!${result.modified ? " (file was edited)" : ""}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+			}
+
+			const text = result.action === "approved"
+				? `File approved by user.${result.modified ? " The file was edited in the viewer." : ""}`
+				: result.action === "rejected"
+					? `File rejected by user.${result.modified ? " The file was edited in the viewer." : ""}`
+					: result.action === "cancelled"
+						? `File review cancelled by user.${result.modified ? " The file was edited in the viewer." : ""}`
+						: result.modified
+							? `File viewer closed. Changes were made${p.editable ? " and may have been saved" : ""}.`
+							: "File viewer closed.";
+
 			return {
 				content: [{
 					type: "text",
-					text: result.modified
-						? `File viewer closed. Changes were made${p.editable ? " and may have been saved" : ""}.`
-						: "File viewer closed.",
+					text,
 				}],
+				details: {
+					action: result.action,
+					modified: result.modified,
+					filePath: p.file_path,
+				},
 			};
 		},
 	});

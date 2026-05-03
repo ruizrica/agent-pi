@@ -19,9 +19,21 @@ describe("spec-viewer Commander approval flow", () => {
 		expect(source).toContain("Fall through to browser if Commander is unavailable, times out, or disconnects");
 	});
 
+	it("passes project context into the browser spec viewer header", () => {
+		expect(source).toContain('import { getProjectContext } from "./lib/project-context.ts"');
+		expect(source).toContain("const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);");
+		expect(source).toContain("projectContext,");
+	});
+
 	it("supports freeform requested changes in addition to inline comments", () => {
 		expect(source).toContain("function formatRequestedChanges(commentSummary: string, feedback?: string)");
 		expect(source).toContain('content: `Changes requested on the spec. Here are the requested updates:');
 		expect(source).toContain('feedback: result.feedback');
+	});
+
+	it("builds explicit revision guidance for send-back-with-changes loops", () => {
+		expect(source).toContain("function buildSpecRevisionGuidance(commentSummary: string, feedback?: string)");
+		expect(source).toContain("Preserve approved sections that were not challenged");
+		expect(source).toContain("reopen the spec review flow");
 	});
 });

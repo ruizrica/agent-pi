@@ -40,6 +40,10 @@ describe("shouldBypassTaskGate", () => {
 		expect(shouldBypassTaskGate("ask_user")).toBe(true);
 	});
 
+	it("should bypass for 'show_plan' tool used by investigate questions and approval flows", () => {
+		expect(shouldBypassTaskGate("show_plan")).toBe(true);
+	});
+
 	it("should bypass for 'run_chain' tool (orchestration tool)", () => {
 		expect(shouldBypassTaskGate("run_chain")).toBe(true);
 	});

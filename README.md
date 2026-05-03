@@ -18,7 +18,7 @@
 
 **agent** is a Pi package — **50+ extensions, 11 themes, and 26 skills** that transform Pi into something more:
 
-- **6 operational modes** — NORMAL, PLAN, SPEC, PIPELINE, TEAM, CHAIN
+- **7 operational modes** — NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN
 - **Multi-agent orchestration** — dispatch teams, run sequential chains, execute parallel pipelines, or delegate to CLI worker roles
 - **Security hardened** — pre-tool-hook guard blocks destructive commands, detects prompt injection, prevents data exfiltration
 - **Browser-based viewers** — interactive plan review, completion reports with rollback, spec approval with inline comments, mobile chat, and searchable reports
@@ -47,13 +47,13 @@ Pi discovers all extensions, themes, and skills automatically.
 ### First Steps
 
 1. **Type a task** — Pi operates in plan-first mode. It will ask you to define tasks before using tools.
-2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN)
+2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → INVESTIGATE → SPEC → PIPELINE → TEAM → CHAIN)
 3. **`/claude`** — Toggle the CLAUDE overlay for the active mode. Active modes render as `MODE + CLAUDE`, use a dark-orange banner, and route Claude-family execution paths through the Claude CLI runtime.
 4. **Ctrl+X** — Cycle themes
 5. **`/agents-team`** — Switch between agent teams
 6. **`/chain`** — Switch between chain workflows
 7. **`/tex`** — Open Text Tools in the browser
-8. **`/pi`** — Use the unified entry point for plan/spec/team/chain/pipeline workflows
+8. **`/pi`** — Use the unified entry point for plan/investigate/spec/team/chain/pipeline workflows
 9. **`/chat`** — Start the mobile-friendly web chat server for driving Pi from another device
 10. **`/sounds`** — Browse and assign sounds to Pi lifecycle events
 
@@ -171,10 +171,10 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 
 | Extension | Description |
 |-----------|-------------|
-| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a Claude CLI overlay for the active mode |
+| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / INVESTIGATE / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a Claude CLI overlay for the active mode |
 | **gemma-overlay / lmstudio-overlay** | Local model overlays for routing eligible builder-style work through LM Studio-hosted models |
 
-Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cross-mode overlay that changes the banner to dark orange, displays the active mode as `MODE + CLAUDE`, and routes Claude-family worker/advisor execution through the Claude CLI path.
+Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. INVESTIGATE mode drives structured bug/problem diagnosis with scout-led context gathering and remediation approval. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cross-mode overlay that changes the banner to dark orange, displays the active mode as `MODE + CLAUDE`, and routes Claude-family worker/advisor execution through the Claude CLI path.
 
 ### Multi-Agent Orchestration
 

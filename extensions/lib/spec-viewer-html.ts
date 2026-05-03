@@ -3,6 +3,7 @@
 
 import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
 import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+import type { ProjectContext } from "./project-context.ts";
 
 export interface SpecDocument {
 	/** Unique key (e.g. "spec", "requirements", "tasks", "visuals") */
@@ -29,8 +30,9 @@ export function generateSpecViewerHTML(opts: {
 	port: number;
 	existingComments?: string; // JSON string of existing comments
 	roundTripEnabled?: boolean;
+	projectContext?: ProjectContext;
 }): string {
-	const { documents, title, port, existingComments, roundTripEnabled = false } = opts;
+	const { documents, title, port, existingComments, roundTripEnabled = false, projectContext } = opts;
 	// Escape </ sequences to prevent </script> in content from breaking the script block
 	const escapedDocs = JSON.stringify(documents).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
@@ -114,11 +116,24 @@ ${VIEWER_SCROLLBAR_STYLES}
     letter-spacing: 1px;
     font-family: var(--mono);
   }
+  .header .title-wrap {
+    flex: 1;
+    min-width: 0;
+  }
   .header .title {
     font-size: 15px;
     font-weight: 600;
     color: var(--text);
-    flex: 1;
+    display: block;
+  }
+  .project-context-inline {
+    margin: 12px 0 18px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .project-context-line {
+    margin: 2px 0;
+    word-break: break-word;
   }
   .header .comment-count {
     font-size: 12px;
@@ -960,7 +975,9 @@ ${VIEWER_SCROLLBAR_STYLES}
 <!-- Header -->
 <div class="header">
   <span class="badge">SPEC</span>
-  <span class="title" id="titleText">${title}</span>
+  <div class="title-wrap">
+    <span class="title" id="titleText">${title}</span>
+  </div>
   <span class="comment-count" id="commentCount"></span>
   <span class="modified-badge" id="modifiedBadge">modified</span>
   <img src="/logo.png" alt="agent" class="header-logo">
@@ -1385,6 +1402,16 @@ ${VIEWER_SCROLLBAR_STYLES}
     // Pre-process: escape "N." in checkbox items to prevent nested ordered lists
     md = md.replace(/^(\\s*- \\[[ xX]\\] )(\\d+)\\./gm, '$1$2\\\\.');
     var html = marked.parse(md);
+    if (projectContext && html.includes('<h2>Context</h2>')) {
+      var metadataHtml = '<div class="project-context-inline" id="projectContext">' +
+        '<div class="project-context-line"><strong>Project:</strong> ' + escapeHtml(projectContext.projectName) + '</div>' +
+        '<div class="project-context-line"><strong>Path:</strong> ' + escapeHtml(projectContext.fullPath) + '</div>' +
+        '<div class="project-context-line"><strong>UUID:</strong> ' + escapeHtml(projectContext.uuid) + '</div>' +
+        '<div class="project-context-line"><strong>Revision:</strong> ' + escapeHtml(String(projectContext.revision)) + '</div>' +
+        '<div class="project-context-line">' + escapeHtml(projectContext.timestamp) + '</div>' +
+      '</div>';
+      html = html.replace('<h2>Context</h2>', metadataHtml + '<h2>Context</h2>');
+    }
     renderedView.innerHTML = html;
     renderMermaidDiagrams(renderedView);
 

@@ -44,4 +44,12 @@ describe("buildSpecPrompt", () => {
 		const result = buildSpecPrompt({ commanderAvailable: false, selectedAdvisorModel: "gpt-4.5" });
 		expect(result).toContain("anthropic/claude-opus-4-6");
 	});
+
+	it("requires richer downstream execution hooks in design and tasks", () => {
+		const result = buildSpecPrompt({ commanderAvailable: false });
+		expect(result).toContain("downstream execution hooks");
+		expect(result).toContain("likely files/modules");
+		expect(result).toContain("verification expectations");
+		expect(result).toContain("request-changes as a first-class revision loop");
+	});
 });
