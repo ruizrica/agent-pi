@@ -11,7 +11,7 @@ import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateFileViewerHTML } from "./lib/file-viewer-html.ts";
+import { generateFileViewerHTML } from "./lib/viewers/file-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, closeActiveViewer, getActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 
 interface FileViewerResult {

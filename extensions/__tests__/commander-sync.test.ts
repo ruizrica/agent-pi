@@ -21,7 +21,7 @@ import {
 	updateMappingStatus,
 	type CommanderTaskMapping,
 	type SyncState,
-} from "../lib/commander-sync.ts";
+} from "../lib/commander/commander-sync.ts";
 
 describe("localToCommander", () => {
 	it("should map idle to pending", () => {

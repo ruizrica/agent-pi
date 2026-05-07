@@ -8,9 +8,9 @@ import {
   type ClaudeProfileName,
   isClaudeCliAgent,
   toClaudeProfileName,
-} from "./claude-config.ts";
-import { spawnClaudeCli } from "./claude-cli.ts";
-import { buildClaudeContextPacket } from "./claude-context.ts";
+} from "./claude/claude-config.ts";
+import { spawnClaudeCli } from "./claude/claude-cli.ts";
+import { buildClaudeContextPacket } from "./claude/claude-context.ts";
 import { normalizeDroidCliResult } from "./droid-cli.ts";
 import { normalizeAgentFinalOutput } from "./agent-output.ts";
 import { buildCursorCliArgs } from "./cursor-cli.ts";

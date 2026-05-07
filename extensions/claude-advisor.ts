@@ -4,7 +4,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { runAdvisor } from "./lib/claude-advisor-runner.ts";
+import { runAdvisor } from "./lib/claude/claude-advisor-runner.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 const Params = Type.Object({

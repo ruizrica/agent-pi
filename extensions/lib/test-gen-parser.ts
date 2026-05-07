@@ -1,7 +1,7 @@
 // ABOUTME: Parser for test generation chain output — extracts Gherkin and Playwright files from === FILE === delimiters.
 // ABOUTME: Pairs .feature and .spec.ts files by base name and converts to TestFeature format for the test viewer.
 
-import type { TestFeature } from "./test-viewer-html.ts";
+import type { TestFeature } from "./viewers/test-viewer-html.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 

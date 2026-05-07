@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateFileViewerHTML } from "../lib/file-viewer-html.ts";
+import { generateFileViewerHTML } from "../lib/viewers/file-viewer-html.ts";
 
 describe("generateFileViewerHTML", () => {
 	it("renders hamburger menu with editor actions", () => {

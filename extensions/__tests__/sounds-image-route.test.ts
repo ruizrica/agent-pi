@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { getSoundImageCacheDir } from "../lib/sounds-config.ts";
-import { createImageCacheKey, readCachedImageEntry } from "../lib/sounds-image-cache.ts";
+import { getSoundImageCacheDir } from "../lib/sounds/sounds-config.ts";
+import { createImageCacheKey, readCachedImageEntry } from "../lib/sounds/sounds-image-cache.ts";
 
 const pngBytes = Buffer.from("89504e470d0a1a0a", "hex");
 

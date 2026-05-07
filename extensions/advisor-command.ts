@@ -2,7 +2,7 @@
 // ABOUTME: Preserves claude_advisor behavior while keeping slash-command registration separate from the tool extension.
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { runAdvisor } from "./lib/claude-advisor-runner.ts";
+import { runAdvisor } from "./lib/claude/claude-advisor-runner.ts";
 
 type TaskStatus = "idle" | "inprogress" | "done";
 

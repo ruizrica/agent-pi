@@ -100,8 +100,8 @@ This is a simple plan.`;
 	});
 
 	describe("mapComplexityToMode", () => {
-		it("maps simple to NORMAL", () => {
-			expect(mapComplexityToMode("simple")).toBe("NORMAL");
+		it("maps simple to null (no post-approval mode switch)", () => {
+			expect(mapComplexityToMode("simple")).toBeNull();
 		});
 
 		it("maps complete to PIPELINE", () => {
@@ -110,12 +110,12 @@ This is a simple plan.`;
 	});
 
 	describe("getPlanTargetMode", () => {
-		it("returns NORMAL for simple plan", () => {
+		it("returns null mode for simple plan", () => {
 			const markdown = `# Plan
 ## Phase 1: Do it
 - Task`;
 			const result = getPlanTargetMode(markdown);
-			expect(result.mode).toBe("NORMAL");
+			expect(result.mode).toBeNull();
 			expect(result.complexity).toBe("simple");
 		});
 

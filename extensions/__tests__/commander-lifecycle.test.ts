@@ -2,7 +2,7 @@
 // ABOUTME: Validates correct Commander API calls, retry behavior, and return values.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { preClaimTask, postCompleteTask, postFailTask } from "../lib/commander-lifecycle.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "../lib/commander/commander-lifecycle.ts";
 
 interface MockClient {
 	callTool: ReturnType<typeof vi.fn>;

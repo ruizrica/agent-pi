@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, basename } from "node:path";
-import type { SpecDocument } from "./spec-viewer-html.ts";
+import type { SpecDocument } from "./viewers/spec-viewer-html.ts";
 
 function readMarkdownDocument(
 	folderPath: string,

@@ -12,11 +12,11 @@ import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateTestViewerHTML, type TestFeature } from "./lib/test-viewer-html.ts";
+import { generateTestViewerHTML, type TestFeature } from "./lib/viewers/test-viewer-html.ts";
 import { saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
-import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 

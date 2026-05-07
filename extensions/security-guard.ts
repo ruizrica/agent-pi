@@ -51,7 +51,7 @@ import {
 	type ClassifiedThreat,
 	type Severity,
 	type ToolBudget,
-} from "./lib/security-engine.ts";
+} from "./lib/security/security-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Audit Logger

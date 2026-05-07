@@ -14,12 +14,36 @@ export class Container {
 	}
 }
 
+export class Box {
+	constructor(
+		public _w: number,
+		public _h: number,
+		public _wrap: (text: string) => string,
+	) {}
+
+	private children: any[] = [];
+
+	addChild(child: any): void {
+		this.children.push(child);
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return this.children.flatMap((c) => (c.render ? c.render(width) : []));
+	}
+}
+
 export class Text {
 	constructor(
 		public content: string,
 		public indent: number,
-		public offset: number
+		public offset: number,
 	) {}
+
+	setText(text: string): void {
+		this.content = text;
+	}
 
 	render(width: number): string[] {
 		return [this.content];

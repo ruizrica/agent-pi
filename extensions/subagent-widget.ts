@@ -26,12 +26,13 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { renderSubagentWidget, parseSubName } from "./lib/subagent-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
-import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
-import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
-import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
+import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
-import { isClaudeCliAgent } from "./lib/claude-config.ts";
-import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
+import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
+import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
+import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
@@ -119,7 +120,7 @@ interface SubState {
 	summary?: string;      // pre-written summary shown in widget (no markdown)
 	proc?: any;            // active ChildProcess ref (for kill on /subrm)
 	commanderTaskId?: number;  // pre-assigned Commander task ID
-	autoRemove?: boolean;      // auto-remove widget ~30s after done (default: true)
+	autoRemove?: boolean;      // auto-remove widget ~2s after done (default: true)
 	model?: string;            // resolved model string for display
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
@@ -425,8 +426,14 @@ export default function (pi: ExtensionAPI) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
-						const finalText = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
-						const summary = finalText.trim().split("\n").pop() || agentLabel;
+						const normalizedOutput = normalizeAgentFinalOutput({
+							result: toolkitFinalOutput,
+							textChunks: state.textChunks,
+							exitCode: code ?? 1,
+							source: agentLabel,
+						});
+						const finalText = normalizedOutput.displayText;
+						const summary = normalizedOutput.summary || agentLabel;
 						if (state.status === "done") {
 							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
 								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
@@ -442,7 +449,12 @@ export default function (pi: ExtensionAPI) {
 					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
 				}
 
-				const result = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
+				const result = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks: state.textChunks,
+					exitCode: code ?? 1,
+					source: `SA${state.id} (${state.name})`,
+				}).displayText;
 
 				// Standby spawns (warmup) suppress notification and follow-up message
 				if (!state.standby) {
@@ -461,7 +473,7 @@ export default function (pi: ExtensionAPI) {
 					state.standby = false;
 				}
 
-				// Auto-remove widget after 30s (default behavior)
+				// Auto-remove widget after 2s (default behavior)
 				if (state.autoRemove !== false) {
 					setTimeout(() => {
 						if (agents.has(state.id) && state.status !== "running") {
@@ -469,7 +481,7 @@ export default function (pi: ExtensionAPI) {
 							widgetBoxes.delete(state.id);
 							agents.delete(state.id);
 						}
-					}, 30_000);
+					}, 2_000);
 				}
 
 				resolve();
@@ -564,7 +576,7 @@ export default function (pi: ExtensionAPI) {
 			summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
 			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
-			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~2s after done (default: true)" })),
 			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
@@ -610,7 +622,7 @@ export default function (pi: ExtensionAPI) {
 				model: Type.Optional(Type.String({ description: "Model override. Only set to override the agent definition's default model." })),
 			}), { description: "Array of agent definitions to spawn" }),
 			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
-			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~30s after done (default: true)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~2s after done (default: true)" })),
 			timeout: Type.Optional(Type.Number({ description: "Max runtime in ms for all agents in this batch. Defaults by role." })),
 			force: Type.Optional(Type.Boolean({ description: "Force spawn even if agents are already running (default: false)" })),
 		}),

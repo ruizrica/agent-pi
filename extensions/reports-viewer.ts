@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { type Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateReportsViewerHTML } from "./lib/reports-viewer-html.ts";
+import { generateReportsViewerHTML } from "./lib/viewers/reports-viewer-html.ts";
 import { loadReportIndex } from "./lib/report-index.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 

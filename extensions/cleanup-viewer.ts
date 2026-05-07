@@ -12,10 +12,18 @@ import os from "node:os";
 import type { Server, IncomingMessage, ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateCleanupViewerHTML } from "./lib/cleanup-viewer-html.ts";
+import { generateCleanupViewerHTML } from "./lib/viewers/cleanup-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
-import { runClaudeRuntime } from "./lib/claude-runtime.ts";
+import { runClaudeRuntime } from "./lib/claude/claude-runtime.ts";
+import {
+	CLEANUP_CATEGORIES as CATEGORIES,
+	categorizeEntry,
+	formatSize,
+	isProtected,
+	summarizeCleanupResults,
+	type ScanFile,
+} from "./lib/cleanup/cleanup-domain.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -26,85 +34,10 @@ interface CleanupResult {
 
 // ── Config ───────────────────────────────────────────────────────────
 
-const PROTECTED_DIRS = new Set([
-	"/System", "/Library", "/usr", "/bin", "/sbin",
-	"/private/var/protected", "/private/etc", "/etc", "/cores",
-]);
-
 const MAX_DEPTH = Infinity;
 const MAX_FILES = Infinity;
 
-const CATEGORIES: Record<string, {
-	label: string;
-	extensions?: Set<string>;
-	names?: Set<string>;
-	directories?: Set<string>;
-}> = {
-	temp: {
-		label: "Temporary Files",
-		extensions: new Set([".tmp", ".temp", ".swp", ".swo", ".bak", ".old", ".log"]),
-		names: new Set([".DS_Store", "Thumbs.db", "desktop.ini"]),
-	},
-	compiled: {
-		label: "Compiled / Build Artifacts",
-		extensions: new Set([".o", ".obj", ".pyc", ".pyo", ".class", ".dSYM"]),
-		directories: new Set([
-			"node_modules", "__pycache__", "dist", "build", ".next",
-			"target", ".cache", ".parcel-cache", ".turbo",
-		]),
-	},
-	archives: {
-		label: "Archives",
-		extensions: new Set([
-			".zip", ".tar", ".tar.gz", ".tgz", ".rar", ".7z",
-			".bz2", ".xz", ".gz", ".dmg", ".iso",
-		]),
-	},
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function formatSize(bytes: number): string {
-	if (bytes === 0) return "0 B";
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + units[i];
-}
-
-function isProtected(dirPath: string): boolean {
-	const resolved = path.resolve(dirPath);
-	for (const p of PROTECTED_DIRS) {
-		if (resolved === p || resolved.startsWith(p + "/")) return true;
-	}
-	return false;
-}
-
-function categorizeEntry(name: string, isDirectory: boolean): string | null {
-	if (isDirectory) {
-		if (CATEGORIES.compiled.directories?.has(name)) return "compiled";
-		return null;
-	}
-	const ext = path.extname(name).toLowerCase();
-	const baseName = path.basename(name);
-	const doubleExt = name.includes(".tar.") ? ".tar" + ext : ext;
-
-	if (CATEGORIES.temp.names?.has(baseName)) return "temp";
-	if (CATEGORIES.temp.extensions?.has(ext)) return "temp";
-	if (CATEGORIES.compiled.extensions?.has(ext)) return "compiled";
-	if (CATEGORIES.archives.extensions?.has(ext) || CATEGORIES.archives.extensions?.has(doubleExt)) return "archives";
-	return null;
-}
-
 // ── Scanner ──────────────────────────────────────────────────────────
-
-interface ScanFile {
-	path: string;
-	name: string;
-	size: number;
-	sizeFormatted: string;
-	modified: string;
-	isDirectory: boolean;
-}
 
 async function scanDirectory(rootDir: string, enabledCategories: string[]) {
 	const results: Record<string, ScanFile[]> = { temp: [], compiled: [], archives: [] };
@@ -309,21 +242,12 @@ function startCleanupServer(defaultDir: string): Promise<{
 								const results = await scanDirectory(dir, cats);
 								const elapsed = Date.now() - start;
 
-								const summary: Record<string, any> = {};
-								let totalFiles = 0;
-								let totalSize = 0;
-
-								for (const [cat, files] of Object.entries(results)) {
-									const catSize = files.reduce((s, f) => s + f.size, 0);
-									summary[cat] = { count: files.length, size: catSize, sizeFormatted: formatSize(catSize) };
-									totalFiles += files.length;
-									totalSize += catSize;
-								}
+								const { summary, totalFiles, totalSize, totalSizeFormatted } = summarizeCleanupResults(results);
 
 								res.writeHead(200, { "Content-Type": "application/json" });
 								res.end(JSON.stringify({
 									results, summary, totalFiles, totalSize,
-									totalSizeFormatted: formatSize(totalSize),
+									totalSizeFormatted,
 									scanTime: elapsed, directory: dir,
 								}));
 							} catch (err: any) {

@@ -8,7 +8,7 @@ import { Type } from "@sinclair/typebox";
 import { type Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateBoardViewerHTML } from "./lib/board-viewer-html.ts";
+import { generateBoardViewerHTML } from "./lib/viewers/board-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 

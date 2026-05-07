@@ -16,7 +16,7 @@ import {
 	PREFERRED_WORKER_MODEL,
 	FALLBACK_WORKER_MODEL,
 	type WorkerModelSelection,
-} from "../lib/advisor-default-model-selection.ts";
+} from "../lib/claude/advisor-default-model-selection.ts";
 
 // ── Test fixtures ────────────────────────────────────────────────────────────
 

@@ -16,8 +16,8 @@ function makeGlobalState() {
 }
 
 // Import the pure functions we're testing
-import { createTrackerState, addRetry, popRetries, computeReconcileActions } from "../lib/commander-tracker.ts";
-import { createReadyGate, resolveGate } from "../lib/commander-ready.ts";
+import { createTrackerState, addRetry, popRetries, computeReconcileActions } from "../lib/commander/commander-tracker.ts";
+import { createReadyGate, resolveGate } from "../lib/commander/commander-ready.ts";
 
 describe("commander-tracker extension behavior", () => {
 	let g: ReturnType<typeof makeGlobalState>;

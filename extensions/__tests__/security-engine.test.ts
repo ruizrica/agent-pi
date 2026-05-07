@@ -28,7 +28,7 @@ import {
 	type ThreatResult,
 	type ClassifiedThreat,
 	type ToolBudget,
-} from "../lib/security-engine.ts";
+} from "../lib/security/security-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test Policy (minimal but covers all categories)
@@ -993,9 +993,9 @@ describe("detectSystemPromptLeakage", () => {
 describe("bracket and markdown injection patterns (loaded policy)", () => {
 	let policy: SecurityPolicy;
 
-	// Use the real policy from YAML so we test the actual patterns
+	// Committed fixture keeps this suite deterministic (no dependency on ~/.pi).
 	beforeAll(() => {
-		const yamlPath = join(__dirname, "..", "..", "..", ".pi", "security-policy.yaml");
+		const yamlPath = join(__dirname, "fixtures", "security-policy-bracket.yaml");
 		const raw = readFileSync(yamlPath, "utf-8");
 		policy = parseSecurityYaml(raw);
 	});

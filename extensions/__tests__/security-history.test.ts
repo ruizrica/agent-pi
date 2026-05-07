@@ -10,8 +10,8 @@ import {
 	resetHistoryForTests,
 	countSeverities,
 	findingKey,
-} from "../lib/security-history.ts";
-import type { SecurityReportData, SecurityReportFinding } from "../lib/security-report-html.ts";
+} from "../lib/security/security-history.ts";
+import type { SecurityReportData, SecurityReportFinding } from "../lib/security/security-report-html.ts";
 
 function makeReport(overrides?: Partial<SecurityReportData>): SecurityReportData {
 	return {

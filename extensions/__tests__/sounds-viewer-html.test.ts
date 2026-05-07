@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateSoundsViewerHTML } from "../lib/sounds-viewer-html.ts";
+import { generateSoundsViewerHTML } from "../lib/sounds/sounds-viewer-html.ts";
 
 describe("sounds viewer html", () => {
 	it("renders cached image urls when provided", () => {

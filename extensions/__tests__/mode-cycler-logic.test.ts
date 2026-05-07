@@ -60,6 +60,7 @@ describe("prevMode", () => {
 	it("cycles CHAIN → TEAM", () => {
 		expect(prevMode("CHAIN")).toBe("TEAM");
 	});
+
 });
 
 describe("modeLabel", () => {
@@ -90,6 +91,7 @@ describe("modeLabel", () => {
 	it("returns [CHAIN] for CHAIN", () => {
 		expect(modeLabel("CHAIN")).toBe("[CHAIN]");
 	});
+
 });
 
 describe("modeColor", () => {
@@ -120,6 +122,7 @@ describe("modeColor", () => {
 	it("returns accent for CHAIN", () => {
 		expect(modeColor("CHAIN")).toBe("accent");
 	});
+
 });
 
 describe("modeDisplayName", () => {
@@ -127,6 +130,7 @@ describe("modeDisplayName", () => {
 		expect(modeDisplayName("PLAN", { claude: true, gemma: false, qwen: false })).toBe("PLAN + CLAUDE");
 		expect(modeDisplayName("NORMAL", { claude: true, gemma: false, qwen: false })).toBe("NORMAL");
 	});
+
 
 	it("appends + GEMMA when overlay is active", () => {
 		expect(modeDisplayName("PLAN", { claude: false, gemma: true, qwen: false })).toBe("PLAN + GEMMA");
@@ -189,4 +193,5 @@ describe("modeTextAnsi", () => {
 	it("returns bold white for CHAIN (blue bg)", () => {
 		expect(modeTextAnsi("CHAIN")).toBe("\x1b[1;97m");
 	});
+
 });

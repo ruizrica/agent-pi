@@ -38,11 +38,11 @@ import {
 	profileProject,
 	formatSweepReport,
 	type SweepResult,
-} from "./lib/vuln-scanner-engine.ts";
+} from "./lib/security/vuln-scanner-engine.ts";
 import {
 	installProtections,
 	formatInstallReport,
-} from "./lib/vuln-scanner-installer.ts";
+} from "./lib/security/vuln-scanner-installer.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // State

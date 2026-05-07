@@ -1,7 +1,7 @@
 // Test for claude-advice-format.ts
 
 import { describe, it, expect } from "vitest";
-import { buildAdvisorPrompt, normalizeAdvisorResponse } from "../lib/claude-advice-format";
+import { buildAdvisorPrompt, normalizeAdvisorResponse } from "../lib/claude/claude-advice-format";
 
 describe("buildAdvisorPrompt", () => {
 	it("should sanitize role parameter", () => {

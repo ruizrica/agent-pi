@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import securityReportExt from "../security-report";
-import { generateSecurityReportHTML, type SecurityReportData } from "../lib/security-report-html.ts";
+import { generateSecurityReportHTML, type SecurityReportData } from "../lib/security/security-report-html.ts";
 
 function createPiMock() {
   let tool: any;

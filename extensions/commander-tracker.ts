@@ -7,13 +7,13 @@ import {
 	popRetries,
 	computeReconcileActions,
 	type TrackerState,
-} from "./lib/commander-tracker.ts";
+} from "./lib/commander/commander-tracker.ts";
 import {
 	parseCommanderTaskId,
 	addMapping,
 	updateMappingStatus,
 	type SyncState,
-} from "./lib/commander-sync.ts";
+} from "./lib/commander/commander-sync.ts";
 
 export default function (pi: ExtensionAPI) {
 	const g = globalThis as any;

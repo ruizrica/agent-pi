@@ -16,7 +16,7 @@
 
 [Pi](https://github.com/badlogic/pi-mono) is a terminal-based AI coding agent by [@badlogic](https://github.com/badlogic). Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
 
-**agent** is a Pi package — **50+ extensions, 11 themes, and 26 skills** that transform Pi into something more:
+**agent** is a Pi package — **60 extensions, 11 themes, and 26 skills** that transform Pi into something more:
 
 - **7 operational modes** — NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN
 - **Multi-agent orchestration** — dispatch teams, run sequential chains, execute parallel pipelines, or delegate to CLI worker roles
@@ -57,20 +57,9 @@ Pi discovers all extensions, themes, and skills automatically.
 9. **`/chat`** — Start the mobile-friendly web chat server for driving Pi from another device
 10. **`/sounds`** — Browse and assign sounds to Pi lifecycle events
 
-## Recent Changes
+## Release notes
 
-Since the last release line, the package has grown in a few practical directions without changing the core idea: Pi stays Pi, and `agent` adds orchestration, safety, review surfaces, and workflow helpers around it.
-
-- **Cloud Code and Claude integration** — the Claude Code plugin scaffold, `pi-agent-orchestrator` skill, bridge CLI, `claude-worker`, and Opus-backed `claude-advisor` make Pi usable as a local orchestration backend from Claude workflows.
-- **More worker options** — `cursor-worker`, `codex-worker`, `droid-worker`, `gemini-worker`, and `opencode-worker` wrap popular coding CLIs in the same dispatch/subagent flow.
-- **Unified workflow entry points** — `/pi` gives one command for mode-aware orchestration, while advisor defaults now make NORMAL, PLAN, and SPEC share a quality-first strategy.
-- **Web chat improvements** — `/chat` supports a mobile-friendly remote control surface; recent updates added Copy/Add-to-Board actions and an inline board panel for quick triage.
-- **Sounds and feedback** — `/sounds` adds a browser sound picker with lifecycle hook assignments and local image-cache support.
-- **Memory and learning** — `dream-scheduler`, `memory-cycle`, `session-recap`, and `/learn` improve long-session continuity and can promote codebase snapshots into Obsidian-backed memory.
-- **Viewers and reports** — plan/spec/completion/security/test/research/report viewers received styling, persistence, Mermaid, scrollbar, approval, and standalone export hardening.
-- **Routing and local model support** — OpenRouter provider/variant routing was expanded and fixed, and local LM Studio overlays for Gemma/Qwen-style builder paths are being added.
-- **Security and diagnostics** — security reporting, safe local port analysis, passive network inspection, AgentMail/send-email, and prompt/tool-result hardening continue to expand the defensive surface.
-- **Commander and task lifecycle** — task syncing, Commander lifecycle handling, subagent watchdogs, completion reporting, and task widgets have been tightened with new tests.
+For detailed change history, use `git log` on this repository. The sections below describe the **current** install surface (Pi package layout, Cloud Code bridge, and orchestration features).
 
 ## Cloud Code Plugin / Skill
 
@@ -137,7 +126,7 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 
 ```
 ├── package.json         Pi package manifest
-├── extensions/          50+ TypeScript extensions + lib/
+├── extensions/          60 TypeScript extension adapters + lib/
 ├── themes/              11 custom terminal themes
 ├── skills/              26 skill packs
 ├── agents/              Agent definitions + chain/pipeline/team YAML
@@ -147,6 +136,34 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 ```
 
 ## Extensions
+
+### Architecture boundaries
+
+Agent-Pi is organized as a thin extension shell with testable feature modules under `extensions/lib/`. See [`docs/architecture/module-boundaries.md`](docs/architecture/module-boundaries.md) before adding new module-by-module functionality or moving business logic.
+
+### Pacifico backend (`pacifico` extension)
+
+The [`extensions/pacifico.ts`](extensions/pacifico.ts) extension calls your Pacifico Worker (`POST /api/infer`, job APIs) with `Authorization: Bearer …`. Use the **same** secret the Worker validates as `PACIFICO_API_KEY` (Wrangler secret in production, [`.dev.vars`](https://developers.cloudflare.com/workers/testing/local-development/#local-only-environment-variables) for `wrangler dev`). The Worker requires the secret to be **at least 32 characters** (shorter or empty disables bearer auth).
+
+**Recommended:** run **`/pacifico-api-key`** in Pi (same TUI flow as the model picker). It stores the bearer secret in **`settings.json`** next to `pacificoModel` — the same file path Pi already uses for Pacifico model persistence, so it works even when env files and `process.env` are unavailable.
+
+Alternatively, put `PACIFICO_API_KEY` in `process.env` or in `.pacifico.env` files (see [`extensions/.pacifico.env.example`](extensions/.pacifico.env.example)): **`<agent-pi-package-root>/.pacifico.env`** (sibling of `settings.json`), **`<cwd>/.pacifico.env`**, **`~/.config/pi/pacifico.env`**, **`~/.pacifico.env`**, **`extensions/.pacifico.env`**. You can also add a **`pacificoApiKey`** string field to `settings.json` by hand (do not commit that file if it contains secrets).
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PACIFICO_API_KEY` | Yes for `/pacifico` and `pacifico_infer` | Bearer token; `process.env`, `.pacifico.env` files, **`pacificoApiKey` in `settings.json`**, or **`/pacifico-api-key`** |
+| `HARNESS_API_KEY` | Alternate | Same bearer as Pacifico’s legacy env name; used if `PACIFICO_API_KEY` is unset |
+| `PACIFICO_BASE_URL` | No | Worker origin; defaults to `https://pacifico.ruizrica2.workers.dev`; set `http://localhost:8787` when pointing at local `wrangler dev` |
+
+Export in the environment that launches `pi` (shell profile, IDE terminal, or direnv), when you prefer not to use `.pacifico.env`:
+
+```bash
+export PACIFICO_API_KEY='your-key-matching-the-worker'
+# optional for local Worker:
+export PACIFICO_BASE_URL='http://localhost:8787'
+```
+
+From the Pacifico repo, upload the production secret (interactive Wrangler OAuth or `CLOUDFLARE_API_TOKEN` set): `printf '%s' "$KEY" | npx wrangler secret put PACIFICO_API_KEY`. See Pacifico `docs/hybrid-ai-harness.md`.
 
 ### Core UI
 
@@ -333,12 +350,19 @@ Pi can now integrate Claude Code CLI in two distinct ways:
 - **`claude-worker`** — an execution-oriented Claude subagent that behaves like a normal worker with live widget updates and a compact rolling console preview.
 - **`claude-advisor`** — an Opus-backed advisor that reviews shared task context on demand and returns recommendations, risks, alternatives, and next actions.
 
+Claude-family routing is **CLI-only**:
+
+- `claude-worker` and `claude-advisor` execute through the local `claude` subprocess.
+- Generic workers/advisors whose resolved model is `anthropic/claude-*` are routed through the same Claude CLI path instead of `pi --model anthropic/claude-*`.
+- The top-level Anthropic provider is overridden with a Claude CLI-backed stream handler so main-session Claude turns do not silently use the direct Anthropic SDK/API path.
+- If a Claude-family request cannot be sent through the CLI path, it fails closed instead of falling back to direct SDK/API.
+
 This follows an **executor + advisor** pattern:
 
-- the main Pi executor keeps the primary loop,
+- the main Pi executor can use the CLI-backed Anthropic provider for Claude-family model turns,
 - `claude-worker` can be dispatched like any other worker,
 - `claude-advisor` is called only when high-value advice is needed,
-- both receive the same shared context packet built from the working directory, active plan, task, and file hints.
+- all Claude CLI paths receive a shared context packet built from the working directory, active plan, task, and file hints.
 
 Example usage:
 

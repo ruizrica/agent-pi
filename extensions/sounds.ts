@@ -13,19 +13,19 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { openBrowser } from "./lib/viewer-server.ts";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateSoundsViewerHTML, type CatalogItem } from "./lib/sounds-viewer-html.ts";
+import { generateSoundsViewerHTML, type CatalogItem } from "./lib/sounds/sounds-viewer-html.ts";
 import {
 	loadConfig, saveConfig, getActiveAssignmentCount, getAssignedSoundNames,
 	type SoundsConfig, type HookName, ALL_HOOKS, HOOK_DISPLAY_NAMES,
-} from "./lib/sounds-config.ts";
+} from "./lib/sounds/sounds-config.ts";
 import {
 	ensureCachedImage,
 	readCachedImageEntry,
-} from "./lib/sounds-image-cache.ts";
+} from "./lib/sounds/sounds-image-cache.ts";
 import {
 	playInstalledSound, installSound, uninstallSound, isSoundInstalled,
 	installSoundFromUrl, cleanupAllPlayback,
-} from "./lib/sounds-player.ts";
+} from "./lib/sounds/sounds-player.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -557,8 +557,25 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Lifecycle Hook Sound Playback ────────────────────────────────
 
-	function playHookSound(hookName: HookName): void {
+	const CLAUDE_DUPLICATE_LIFECYCLE_HOOKS = new Set<HookName>([
+		"turn_start",
+		"turn_end",
+		"session_start",
+	]);
+
+	function isClaudeContext(ctx?: ExtensionContext): boolean {
+		const model = ctx?.model;
+		if (!model) return false;
+		return model.provider === "anthropic" && /(^|\/)claude[-\w.]+/i.test(model.id);
+	}
+
+	function shouldSuppressPiSoundForClaude(hookName: HookName, ctx?: ExtensionContext): boolean {
+		return CLAUDE_DUPLICATE_LIFECYCLE_HOOKS.has(hookName) && isClaudeContext(ctx);
+	}
+
+	function playHookSound(hookName: HookName, ctx?: ExtensionContext): void {
 		if (!currentConfig.enabled) return;
+		if (shouldSuppressPiSoundForClaude(hookName, ctx)) return;
 		const soundName = currentConfig.assignments[hookName];
 		if (!soundName) return;
 		if (!isSoundInstalled(soundName)) return;
@@ -566,32 +583,32 @@ export default function (pi: ExtensionAPI) {
 		playInstalledSound(soundName, currentConfig.volume).catch(() => {});
 	}
 
-	pi.on("agent_end", async () => {
-		playHookSound("agent_end");
+	pi.on("agent_end", async (_event, ctx) => {
+		playHookSound("agent_end", ctx);
 	});
 
-	pi.on("agent_start", async () => {
-		playHookSound("agent_start");
+	pi.on("agent_start", async (_event, ctx) => {
+		playHookSound("agent_start", ctx);
 	});
 
-	pi.on("tool_execution_start", async () => {
-		playHookSound("tool_execution_start");
+	pi.on("tool_execution_start", async (_event, ctx) => {
+		playHookSound("tool_execution_start", ctx);
 	});
 
-	pi.on("tool_execution_end", async () => {
-		playHookSound("tool_execution_end");
+	pi.on("tool_execution_end", async (_event, ctx) => {
+		playHookSound("tool_execution_end", ctx);
 	});
 
-	pi.on("turn_start", async () => {
-		playHookSound("turn_start");
+	pi.on("turn_start", async (_event, ctx) => {
+		playHookSound("turn_start", ctx);
 	});
 
-	pi.on("turn_end", async () => {
-		playHookSound("turn_end");
+	pi.on("turn_end", async (_event, ctx) => {
+		playHookSound("turn_end", ctx);
 	});
 
-	pi.on("session_compact", async () => {
-		playHookSound("session_compact");
+	pi.on("session_compact", async (_event, ctx) => {
+		playHookSound("session_compact", ctx);
 	});
 
 	// ── Session Lifecycle ────────────────────────────────────────────
@@ -601,8 +618,9 @@ export default function (pi: ExtensionAPI) {
 		currentConfig = loadConfig();
 		updateStatus(ctx);
 
-		// Play session start sound if assigned
-		playHookSound("session_start");
+		// Play session start sound if assigned. Suppress Pi's duplicate
+		// lifecycle sound for Claude models because Claude Code hooks handle it.
+		playHookSound("session_start", ctx);
 	});
 
 	pi.on("session_shutdown", async () => {

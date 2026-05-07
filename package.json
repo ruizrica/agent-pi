@@ -2,7 +2,7 @@
   "name": "agent-pi",
   "private": true,
   "version": "2.0.0",
-  "description": "Multi-agent orchestration suite for Pi — 7 modes, 43 extensions, 11 themes",
+  "description": "Multi-agent orchestration suite for Pi — 7 modes, 60 extensions, 11 themes",
   "keywords": [
     "pi-package"
   ],

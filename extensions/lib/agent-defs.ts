@@ -3,7 +3,7 @@
 
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join, resolve } from "path";
-import { isClaudeCliAgent } from "./claude-config.ts";
+import { isClaudeCliAgent } from "./claude/claude-config.ts";
 import { isToolkitCliAgent, normalizeToolkitAgentName, TOOLKIT_WORKER_MODEL } from "./toolkit-cli.ts";
 
 export interface AgentDef {

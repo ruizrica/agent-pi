@@ -11,12 +11,12 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { discoverSpecDocuments } from "./lib/spec-documents.ts";
 import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaffold.ts";
-import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
+import { generateSpecViewerHTML, type SpecDocument } from "./lib/viewers/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
-import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 import { getProjectContext } from "./lib/project-context.ts";
 
 // ── Types ────────────────────────────────────────────────────────────

@@ -1,0 +1,48 @@
+# Minimal policy for bracket / markdown injection tests (extensions/__tests__/security-engine.test.ts).
+# Committed so CI and fresh clones do not depend on ~/.pi security-policy.yaml.
+
+blocked_commands: []
+
+exfiltration_patterns: []
+
+protected_paths: []
+
+allowlist:
+  commands: []
+  paths: []
+
+settings:
+  enabled: true
+  audit_log_max_bytes: 1048576
+  strip_injections: true
+  verbose_blocks: true
+
+prompt_injection_patterns:
+  - pattern: "\\[SYSTEM\\][^\\n]{0,400}ignore\\s+all\\s+previous\\s+instructions"
+    description: System role tag with instruction override
+    severity: block
+    category: prompt_injection
+  - pattern: "\\[ADMIN\\][^\\n]{0,400}disregard\\s+safety"
+    description: Admin role tag with safety bypass
+    severity: block
+    category: prompt_injection
+  - pattern: "\\[INST\\][^\\n]{0,400}new\\s+instructions"
+    description: Instruction tag with new instructions injection
+    severity: block
+    category: prompt_injection
+  - pattern: "###\\s*SYSTEM\\s+PROMPT\\b"
+    description: Markdown system prompt override heading
+    severity: block
+    category: prompt_injection
+  - pattern: "###\\s*NEW\\s+PROMPT\\b"
+    description: Markdown new prompt injection heading
+    severity: block
+    category: prompt_injection
+  - pattern: "###\\s*SYSTEM\\s+INSTRUCTION\\b"
+    description: Markdown system instruction override
+    severity: block
+    category: prompt_injection
+  - pattern: "###\\s*ADMIN\\s+OVERRIDE\\b"
+    description: Markdown admin override heading
+    severity: block
+    category: prompt_injection

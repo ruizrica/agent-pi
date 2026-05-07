@@ -1,13 +1,20 @@
 all:
   - scout
+  - ranger
   - planner
   - builder
+  - paladin
   - reviewer
+  - warden
+  - knight
   - tester
+  - herald
+  - documenter
   - red-team
   - cursor-worker
   - codex-worker
   - gemini-worker
+  - copilot-agent
   - qwen-agent
   - opencode-worker
   - groq-agent
@@ -20,6 +27,7 @@ toolkit:
   - cursor-worker
   - codex-worker
   - gemini-worker
+  - copilot-agent
   - qwen-agent
   - opencode-worker
   - groq-agent
@@ -30,10 +38,16 @@ toolkit:
 
 full:
   - scout
+  - ranger
   - planner
   - builder
+  - paladin
   - reviewer
+  - warden
+  - knight
   - tester
+  - herald
+  - documenter
 
 plan-build:
   - planner
@@ -46,8 +60,19 @@ investigate:
 
 quality:
   - reviewer
+  - warden
+  - knight
   - tester
+  - herald
   - red-team
+
+code-review:
+  - scout
+  - ranger
+  - warden
+  - knight
+  - paladin
+  - herald
 
 refactor:
   - scout
@@ -55,6 +80,7 @@ refactor:
 
 docs:
   - scout
+  - documenter
   - reviewer
 
 team-b-builders:
