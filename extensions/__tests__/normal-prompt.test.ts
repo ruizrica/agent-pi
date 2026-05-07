@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import { buildNormalPrompt, buildCommanderSection } from "../lib/mode-prompts.ts";
-import { getAdvisorOrchestrationPolicy } from "../lib/advisor-default-config.ts";
+import { getAdvisorOrchestrationPolicy } from "../lib/claude/advisor-default-config.ts";
 
 describe("buildNormalPrompt", () => {
 	it("is a non-empty string", () => {

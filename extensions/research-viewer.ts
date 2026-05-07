@@ -9,7 +9,7 @@ import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateResearchViewerHTML } from "./lib/research-viewer-html.ts";
+import { generateResearchViewerHTML } from "./lib/viewers/research-viewer-html.ts";
 import { isCommanderAvailable, openInCommander } from "./lib/commander/commander-viewer.ts";
 import {
 	listResearchSessions,

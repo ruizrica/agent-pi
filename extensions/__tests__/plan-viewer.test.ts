@@ -39,7 +39,7 @@ describe("plan-viewer implementation", () => {
 	});
 
 	it("returns changes_requested through the main result path instead of a feedback side channel", () => {
-		const htmlSource = readFileSync(new URL("../lib/plan-viewer-html.ts", import.meta.url), "utf8");
+		const htmlSource = readFileSync(new URL("../lib/viewers/plan-viewer-html.ts", import.meta.url), "utf8");
 		expect(htmlSource).toContain("var endpoint = '/result';");
 		expect(htmlSource).not.toContain("action === 'changes_requested') ? '/feedback' : '/result'");
 		expect(source).toContain("show_plan call always unblocks");

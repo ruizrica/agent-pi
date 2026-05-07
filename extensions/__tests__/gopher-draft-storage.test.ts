@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { storeDrafts, type StoredDraft } from "../lib/gopher-draft-storage.ts";
-import type { TestFeature } from "../lib/test-viewer-html.ts";
+import type { TestFeature } from "../lib/viewers/test-viewer-html.ts";
 import { mkdirSync, readFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";

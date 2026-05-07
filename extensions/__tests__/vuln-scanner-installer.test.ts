@@ -9,8 +9,8 @@ import {
 	installProtections,
 	formatInstallReport,
 	type InstallResult,
-} from "../lib/vuln-scanner-installer.ts";
-import type { ProjectProfile } from "../lib/vuln-scanner-engine.ts";
+} from "../lib/security/vuln-scanner-installer.ts";
+import type { ProjectProfile } from "../lib/security/vuln-scanner-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test Helpers

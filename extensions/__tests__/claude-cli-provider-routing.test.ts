@@ -5,7 +5,7 @@ import {
 	DIRECT_CLAUDE_BLOCKED_MESSAGE,
 	buildClaudeProviderPrompt,
 	isDirectClaudeModel,
-} from "../lib/claude-provider-stream.ts";
+} from "../lib/claude/claude-provider-stream.ts";
 
 describe("Claude CLI provider routing guard", () => {
 	it("identifies Anthropic Claude-family models as direct-Claude guarded models", () => {

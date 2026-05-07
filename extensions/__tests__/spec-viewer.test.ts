@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../spec-viewer.ts", import.meta.url), "utf-8");
+const htmlSource = readFileSync(new URL("../lib/viewers/spec-viewer-html.ts", import.meta.url), "utf-8");
+const legacyHtmlSource = readFileSync(new URL("../lib/spec-viewer-html.ts", import.meta.url), "utf-8");
 
 describe("spec-viewer Commander approval flow", () => {
 	it("uses openAndWaitInCommander for Commander-backed spec review", () => {
@@ -35,5 +37,13 @@ describe("spec-viewer Commander approval flow", () => {
 		expect(source).toContain("function buildSpecRevisionGuidance(commentSummary: string, feedback?: string)");
 		expect(source).toContain("Preserve approved sections that were not challenged");
 		expect(source).toContain("reopen the spec review flow");
+	});
+
+	it("sends browser request-changes results through the final result endpoint", () => {
+		for (const html of [htmlSource, legacyHtmlSource]) {
+			expect(html).toContain("unblocks the active show_spec call");
+			expect(html).toContain("var endpoint = '/result';");
+			expect(html).not.toContain("action === 'changes_requested') ? '/feedback' : '/result'");
+		}
 	});
 });

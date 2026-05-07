@@ -33,7 +33,7 @@ describe("advisor-command extension", () => {
 
 	it("reuses the shared advisor runner instead of duplicating tool logic", () => {
 		const content = source();
-		expect(content).toContain('import { runAdvisor } from "./lib/claude-advisor-runner.ts"');
+		expect(content).toContain('import { runAdvisor } from "./lib/claude/claude-advisor-runner.ts"');
 		expect(content).toContain("runAdvisor({");
 	});
 });

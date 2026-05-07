@@ -1,8 +1,8 @@
 // ABOUTME: Tests Claude CLI arg building and tool mapping for worker/advisor profiles.
 
 import { describe, expect, it } from "vitest";
-import { buildClaudeCliArgs, dedupePreserveOrder, isClaudeDisplayNoise } from "../lib/claude-cli.ts";
-import { mapPiToolsToClaudeTools, resolveClaudeAllowedTools } from "../lib/claude-tool-mapping.ts";
+import { buildClaudeCliArgs, dedupePreserveOrder, isClaudeDisplayNoise } from "../lib/claude/claude-cli.ts";
+import { mapPiToolsToClaudeTools, resolveClaudeAllowedTools } from "../lib/claude/claude-tool-mapping.ts";
 
 describe("Claude tool mapping", () => {
 	it("maps Pi tools to Claude tool names", () => {

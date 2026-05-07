@@ -736,6 +736,3 @@ body { display: flex; flex-direction: column; }
   accent-color: var(--accent);
   cursor: pointer;
 }
-
-/* BMC widget — shrink the floating button */
-#bmc-wbtn { transform: scale(0.75); transform-origin: bottom right; }

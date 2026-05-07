@@ -12,10 +12,10 @@ import os from "node:os";
 import type { Server, IncomingMessage, ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateCleanupViewerHTML } from "./lib/cleanup-viewer-html.ts";
+import { generateCleanupViewerHTML } from "./lib/viewers/cleanup-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
-import { runClaudeRuntime } from "./lib/claude-runtime.ts";
+import { runClaudeRuntime } from "./lib/claude/claude-runtime.ts";
 import {
 	CLEANUP_CATEGORIES as CATEGORIES,
 	categorizeEntry,

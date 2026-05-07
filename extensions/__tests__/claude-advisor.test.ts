@@ -1,7 +1,7 @@
 // ABOUTME: Tests advisor prompt/response normalization helpers.
 
 import { describe, expect, it } from "vitest";
-import { buildAdvisorPrompt, normalizeAdvisorResponse } from "../lib/claude-advice-format.ts";
+import { buildAdvisorPrompt, normalizeAdvisorResponse } from "../lib/claude/claude-advice-format.ts";
 
 describe("buildAdvisorPrompt", () => {
 	it("includes the requested structure", () => {

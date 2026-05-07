@@ -18,6 +18,9 @@ These folders group related modules (imports use `extensions/lib/<area>/...`):
 
 - **`lib/commander/`** — Commander MCP client helpers (ready gate, lifecycle, sync, viewer routing, prompts).
 - **`lib/sounds/`** — Sound picker config, playback, image cache, and viewer HTML.
+- **`lib/viewers/`** — Shared HTML viewer payloads (plan, spec, file, test, research, reports, board, cleanup, and related viewer modules).
+- **`lib/security/`** — Security engine, vulnerability scanner, security report HTML, and history helpers.
+- **`lib/claude/`** — Claude CLI/config/context, advisor defaults, provider-stream guards, and advisor runner wiring.
 - **`lib/orchestration/`**, **`lib/cleanup/`** — Cross-agent and cleanup domain logic (existing layout).
 
 Prefer adding new shared logic under an existing area or a new `lib/<area>/` folder rather than growing the flat `lib/` root.

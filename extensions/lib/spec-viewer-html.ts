@@ -1840,7 +1840,10 @@ ${VIEWER_SCROLLBAR_STYLES}
       feedback: feedback
     };
 
-    var endpoint = (ROUND_TRIP_ENABLED && action === 'changes_requested') ? '/feedback' : '/result';
+    // Send changes_requested through /result, matching the plan viewer. This
+    // unblocks the active show_spec call so Pi can receive the feedback and
+    // revise the spec; /feedback is reserved for non-final live refresh loops.
+    var endpoint = '/result';
     fetch('http://127.0.0.1:' + PORT + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -5,8 +5,8 @@ import {
 	DEFAULT_ADVISOR_MODEL,
 	PREFERRED_WORKER_MODEL,
 	MAX_WORKER_AGENTS,
-} from "./advisor-default-config.ts";
-import { resolveCrossProviderSecondOpinion } from "./advisor-default-orchestration.ts";
+} from "./claude/advisor-default-config.ts";
+import { resolveCrossProviderSecondOpinion } from "./claude/advisor-default-orchestration.ts";
 
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {

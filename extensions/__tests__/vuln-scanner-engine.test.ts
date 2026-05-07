@@ -13,7 +13,7 @@ import {
 	walkProjectFiles,
 	type ProjectProfile,
 	type SecurityFinding,
-} from "../lib/vuln-scanner-engine.ts";
+} from "../lib/security/vuln-scanner-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test Helpers

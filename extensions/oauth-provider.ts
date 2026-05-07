@@ -34,7 +34,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { streamClaudeCliProvider } from "./lib/claude-provider-stream.ts";
+import { streamClaudeCliProvider } from "./lib/claude/claude-provider-stream.ts";
 
 // ── Constants ────────────────────────────────────────────────────────
 

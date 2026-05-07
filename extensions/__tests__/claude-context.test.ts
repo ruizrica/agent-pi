@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { buildClaudeContextPacket } from "../lib/claude-context.ts";
+import { buildClaudeContextPacket } from "../lib/claude/claude-context.ts";
 
 describe("buildClaudeContextPacket", () => {
 	it("includes cwd, plan title, and task", () => {

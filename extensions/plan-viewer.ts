@@ -14,7 +14,7 @@ import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node:fs";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
+import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";

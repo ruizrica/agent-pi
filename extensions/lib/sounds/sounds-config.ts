@@ -76,7 +76,8 @@ export interface SoundsConfig {
 
 // ── Paths ────────────────────────────────────────────────────────────
 
-const EXT_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
+/** `extensions/` root — this file lives under `lib/sounds/`. */
+const EXT_DIR = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const CONFIG_PATH = join(EXT_DIR, "sounds-config.json");
 export const SOUNDS_DIR = join(EXT_DIR, "sounds");
 export const SOUNDS_IMAGE_CACHE_DIR = join(EXT_DIR, "sounds-image-cache");

@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { readFileSync } from "fs";
 import { join } from "path";
-import type { TestFeature } from "./test-viewer-html.ts";
+import type { TestFeature } from "./viewers/test-viewer-html.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
