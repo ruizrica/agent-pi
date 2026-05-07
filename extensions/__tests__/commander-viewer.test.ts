@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openAndWaitInCommander } from "../lib/commander-viewer.ts";
+import { openAndWaitInCommander } from "../lib/commander/commander-viewer.ts";
 
 function toolResult(payload: any) {
 	return {

@@ -2,7 +2,7 @@
 // ABOUTME: Validates prompt construction with/without taskId, mailbox chat, and peer names.
 
 import { describe, it, expect } from "vitest";
-import { buildCommanderPrompt } from "../lib/commander-prompt.ts";
+import { buildCommanderPrompt } from "../lib/commander/commander-prompt.ts";
 
 describe("buildCommanderPrompt", () => {
 	it("includes agent name in output", () => {

@@ -16,7 +16,7 @@ import { generateTestViewerHTML, type TestFeature } from "./lib/test-viewer-html
 import { saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
-import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 

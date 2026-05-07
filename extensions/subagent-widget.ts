@@ -26,12 +26,13 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { renderSubagentWidget, parseSubName } from "./lib/subagent-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
-import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
-import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
-import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
+import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
+import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
@@ -425,8 +426,14 @@ export default function (pi: ExtensionAPI) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
-						const finalText = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
-						const summary = finalText.trim().split("\n").pop() || agentLabel;
+						const normalizedOutput = normalizeAgentFinalOutput({
+							result: toolkitFinalOutput,
+							textChunks: state.textChunks,
+							exitCode: code ?? 1,
+							source: agentLabel,
+						});
+						const finalText = normalizedOutput.displayText;
+						const summary = normalizedOutput.summary || agentLabel;
 						if (state.status === "done") {
 							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
 								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
@@ -442,7 +449,12 @@ export default function (pi: ExtensionAPI) {
 					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
 				}
 
-				const result = ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay)) ? toolkitFinalOutput : state.textChunks.join("")) || state.textChunks.join("");
+				const result = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks: state.textChunks,
+					exitCode: code ?? 1,
+					source: `SA${state.id} (${state.name})`,
+				}).displayText;
 
 				// Standby spawns (warmup) suppress notification and follow-up message
 				if (!state.standby) {

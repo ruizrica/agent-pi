@@ -1,12 +1,15 @@
 // ABOUTME: Smoke tests for the standalone /advisor command extension.
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import extension from "../advisor-command.ts";
 
+const extRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
 function source(): string {
-	return readFileSync(join(process.cwd(), "extensions/advisor-command.ts"), "utf-8");
+	return readFileSync(join(extRoot, "advisor-command.ts"), "utf-8");
 }
 
 describe("advisor-command extension", () => {

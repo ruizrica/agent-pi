@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { getSoundImageCacheDir } from "../lib/sounds-config.ts";
+import { getSoundImageCacheDir } from "../lib/sounds/sounds-config.ts";
 import {
 	createImageCacheKey,
 	ensureCachedImage,
 	readCachedImageEntry,
-} from "../lib/sounds-image-cache.ts";
+} from "../lib/sounds/sounds-image-cache.ts";
 
 const cacheDir = getSoundImageCacheDir();
 const pngBytes = Buffer.from("89504e470d0a1a0a", "hex");

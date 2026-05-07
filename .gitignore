@@ -19,6 +19,9 @@ extensions/.pi/
 extensions/__tests__/.pi/
 extensions/node_modules/
 extensions/web-test-worker/.env
+extensions/.pacifico.env
+.pacifico.env
+extensions/settings.json
 extensions/web-test-worker/node_modules/
 autoresearch-results.tsv
 
@@ -39,3 +42,8 @@ commands/private/
 # Mako Security
 .mako-security.yml
 .makoignore
+
+# Generated tooling / IDE drafts (not product source)
+.gopher/
+.kiro/
+tests/*.spec.ts

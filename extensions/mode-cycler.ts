@@ -14,6 +14,10 @@ import { showBanner, isBannerVisible } from "./agent-banner.ts";
 
 const MODE_FILE = "/tmp/pi-current-mode.txt";
 
+function claudeLinkPrompt(): string {
+	return `You are in CLAUDE LINK mode. Coordinate with Claude Code through the repo-local a2a bridge when available. Before responding, if ./bin/a2a exists, run ./bin/a2a --as pi peek to surface Claude messages. Use /claude link <subcmd> or ./bin/a2a --as pi <subcmd> for all bridge communication. Write only Pi-owned files (.a2a/pi.outbox.jsonl and .a2a/pi.state.json), never Claude-owned files. Default to queued async; use tail only when active pairing is explicitly desired.`;
+}
+
 
 export default function (pi: ExtensionAPI) {
 	let currentMode: Mode = "NORMAL";
@@ -301,9 +305,9 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "set_mode",
 		label: "Set Mode",
-		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, INVESTIGATE, SPEC, TEAM, CHAIN, or PIPELINE based on task classification.",
+		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, INVESTIGATE, SPEC, TEAM, CHAIN, PIPELINE, or CLAUDE_LINK based on task classification.",
 		parameters: Type.Object({
-			mode: Type.String({ description: "Target mode: NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, or CHAIN" }),
+			mode: Type.String({ description: "Target mode: NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN, or CLAUDE_LINK" }),
 			reason: Type.Optional(Type.String({ description: "Why this mode was chosen" })),
 		}),
 
@@ -367,6 +371,7 @@ export default function (pi: ExtensionAPI) {
 		if (currentMode === "PLAN") return { systemPrompt: buildPlanPrompt(promptOpts) };
 		if (currentMode === "INVESTIGATE") return { systemPrompt: buildInvestigatePrompt(promptOpts) };
 		if (currentMode === "SPEC") return { systemPrompt: buildSpecPrompt(promptOpts) };
+		if (currentMode === "CLAUDE_LINK") return { systemPrompt: claudeLinkPrompt() };
 		return {};
 	});
 

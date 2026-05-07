@@ -10,7 +10,7 @@ import {
 	isFullySynced,
 	type TrackerState,
 	type ReconcileAction,
-} from "../lib/commander-tracker.ts";
+} from "../lib/commander/commander-tracker.ts";
 
 describe("createTrackerState", () => {
 	it("starts with empty retry queue", () => {

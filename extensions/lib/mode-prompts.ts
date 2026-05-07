@@ -658,3 +658,16 @@ For large specs with independent work streams, spawn up to **8 subagents** (scou
 - ALWAYS use commander_mailbox: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
 `;
 }
+
+/** Default opts for static prompt snapshots (commander on, no active chain/pipeline). */
+const defaultPromptSnapshotOpts: ModePromptOpts = {
+	commanderAvailable: true,
+	activeChain: null,
+	activePipeline: null,
+	scoutId: null,
+	selectedAdvisorModel: null,
+};
+
+/** Stable string exports for tests and tooling that expect fixed PLAN/SPEC bodies. */
+export const PLAN_PROMPT = buildPlanPrompt(defaultPromptSnapshotOpts);
+export const SPEC_PROMPT = buildSpecPrompt(defaultPromptSnapshotOpts);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -72,5 +73,11 @@ describe("extension inventory guard", () => {
 		expect(sourceFiles.has("package.json")).toBe(false);
 		expect(rootEntries).toContain("lib");
 		expect(rootEntries).toContain("__tests__");
+	});
+
+	it("pins sorted root adapter fingerprint (update when adapters are intentionally added/removed)", () => {
+		const files = rootExtensionFiles();
+		const digest = createHash("sha256").update(files.join("\n")).digest("hex");
+		expect(digest).toBe("a876367f3fa9284ce0d29b234ac5936dbed6e778ad82a0ad984a80d3670d106c");
 	});
 });

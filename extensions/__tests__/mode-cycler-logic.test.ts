@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 7 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
+	it("has exactly 8 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN", "CLAUDE_LINK"]);
 	});
 });
 
@@ -35,8 +35,12 @@ describe("nextMode", () => {
 		expect(nextMode("TEAM")).toBe("CHAIN");
 	});
 
-	it("wraps CHAIN → NORMAL", () => {
-		expect(nextMode("CHAIN")).toBe("NORMAL");
+	it("cycles CHAIN → CLAUDE_LINK", () => {
+		expect(nextMode("CHAIN")).toBe("CLAUDE_LINK");
+	});
+
+	it("wraps CLAUDE_LINK → NORMAL", () => {
+		expect(nextMode("CLAUDE_LINK")).toBe("NORMAL");
 	});
 });
 
@@ -53,12 +57,16 @@ describe("prevMode", () => {
 		expect(prevMode("SPEC")).toBe("INVESTIGATE");
 	});
 
-	it("wraps NORMAL → CHAIN", () => {
-		expect(prevMode("NORMAL")).toBe("CHAIN");
+	it("wraps NORMAL → CLAUDE_LINK", () => {
+		expect(prevMode("NORMAL")).toBe("CLAUDE_LINK");
 	});
 
 	it("cycles CHAIN → TEAM", () => {
 		expect(prevMode("CHAIN")).toBe("TEAM");
+	});
+
+	it("cycles CLAUDE_LINK → CHAIN", () => {
+		expect(prevMode("CLAUDE_LINK")).toBe("CHAIN");
 	});
 });
 
@@ -90,6 +98,10 @@ describe("modeLabel", () => {
 	it("returns [CHAIN] for CHAIN", () => {
 		expect(modeLabel("CHAIN")).toBe("[CHAIN]");
 	});
+
+	it("returns [CLAUDE LINK] for CLAUDE_LINK", () => {
+		expect(modeLabel("CLAUDE_LINK")).toBe("[CLAUDE LINK]");
+	});
 });
 
 describe("modeColor", () => {
@@ -120,12 +132,20 @@ describe("modeColor", () => {
 	it("returns accent for CHAIN", () => {
 		expect(modeColor("CHAIN")).toBe("accent");
 	});
+
+	it("returns accent for CLAUDE_LINK", () => {
+		expect(modeColor("CLAUDE_LINK")).toBe("accent");
+	});
 });
 
 describe("modeDisplayName", () => {
 	it("appends + CLAUDE when overlay is active", () => {
 		expect(modeDisplayName("PLAN", { claude: true, gemma: false, qwen: false })).toBe("PLAN + CLAUDE");
 		expect(modeDisplayName("NORMAL", { claude: true, gemma: false, qwen: false })).toBe("NORMAL");
+	});
+
+	it("formats CLAUDE_LINK with a space", () => {
+		expect(modeDisplayName("CLAUDE_LINK")).toBe("CLAUDE LINK");
 	});
 
 	it("appends + GEMMA when overlay is active", () => {
@@ -188,5 +208,9 @@ describe("modeTextAnsi", () => {
 
 	it("returns bold white for CHAIN (blue bg)", () => {
 		expect(modeTextAnsi("CHAIN")).toBe("\x1b[1;97m");
+	});
+
+	it("returns bold white for CLAUDE_LINK", () => {
+		expect(modeTextAnsi("CLAUDE_LINK")).toBe("\x1b[1;97m");
 	});
 });

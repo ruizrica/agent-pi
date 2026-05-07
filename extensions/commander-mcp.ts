@@ -4,7 +4,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { McpClient } from "./lib/mcp-client.ts";
-import { createReadyGate, resolveGate, resetGate } from "./lib/commander-ready.ts";
+import { createReadyGate, resolveGate, resetGate } from "./lib/commander/commander-ready.ts";
 
 // ── Configuration ───────────────────────────────────────────────────
 
@@ -450,7 +450,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	// Register all 8 tools
+	// Register all Commander MCP tools (see TOOLS list)
 	for (const tool of TOOLS) {
 		pi.registerTool({
 			name: tool.name,

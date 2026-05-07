@@ -1,7 +1,7 @@
 // ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN).
 // ABOUTME: No side effects — used by mode-cycler.ts extension and tested independently.
 
-export const MODES = ["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN"] as const;
+export const MODES = ["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN", "CLAUDE_LINK"] as const;
 export type Mode = typeof MODES[number];
 export type ModeOverlay = "CLAUDE" | "GEMMA" | "QWEN";
 
@@ -37,6 +37,7 @@ const MODE_COLORS: Record<Mode, string> = {
 	PIPELINE: "accent",
 	TEAM: "accent",
 	CHAIN: "accent",
+	CLAUDE_LINK: "accent",
 };
 
 /** Theme color name for a mode. NORMAL returns empty string (no color). */
@@ -58,6 +59,7 @@ const MODE_TEXT_ANSI: Record<Mode, string> = {
 	PIPELINE: BOLD_WHITE,
 	TEAM: BOLD_WHITE,
 	CHAIN: BOLD_WHITE,
+	CLAUDE_LINK: BOLD_WHITE,
 };
 
 /** ANSI text color for the mode bar. Dark gray on light backgrounds, bold white on dark. */
@@ -76,6 +78,7 @@ const ANSI_BG: Record<Mode, string> = {
 	PIPELINE: DODGER_BLUE_BG,
 	TEAM: DODGER_BLUE_BG,
 	CHAIN: DODGER_BLUE_BG,
+	CLAUDE_LINK: DARK_ORANGE_BG,
 };
 
 /** ANSI background color for the mode bar. Dodger blue for all active modes. */
@@ -87,10 +90,11 @@ export function modeBgAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_
 }
 
 export function modeDisplayName(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
-	if (overlay.qwen && mode !== "NORMAL") return `${mode} + QWEN`;
-	if (overlay.gemma && mode !== "NORMAL") return `${mode} + GEMMA`;
-	if (overlay.claude && mode !== "NORMAL") return `${mode} + CLAUDE`;
-	return mode;
+	const base = mode === "CLAUDE_LINK" ? "CLAUDE LINK" : mode;
+	if (overlay.qwen && mode !== "NORMAL") return `${base} + QWEN`;
+	if (overlay.gemma && mode !== "NORMAL") return `${base} + GEMMA`;
+	if (overlay.claude && mode !== "NORMAL") return `${base} + CLAUDE`;
+	return base;
 }
 
 /** Status label for a mode. NORMAL returns empty string, others return "[MODE]". */

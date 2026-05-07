@@ -16,7 +16,7 @@ import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExpo
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
-import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 import { getProjectContext } from "./lib/project-context.ts";
 
 // ── Types ────────────────────────────────────────────────────────────

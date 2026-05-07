@@ -44,17 +44,17 @@ import {
 	applyGroupCreateResult,
 	updateMappingStatus,
 	type SyncState,
-} from "./lib/commander-sync.ts";
+} from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
-import { enqueueOrExecute } from "./lib/commander-ready.ts";
+import { enqueueOrExecute } from "./lib/commander/commander-ready.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import {
 	renderMissionComplete,
 	MISSION_COMPLETE_BG,
 	type MissionCompleteState,
 } from "./lib/mission-complete-render.ts";
-import { addRetry, isFullySynced } from "./lib/commander-tracker.ts";
+import { addRetry, isFullySynced } from "./lib/commander/commander-tracker.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 

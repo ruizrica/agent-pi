@@ -36,11 +36,12 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude-cli.ts";
+import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
-import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
-import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
+import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
 
@@ -593,17 +594,24 @@ export default function (pi: ExtensionAPI) {
 					state.sessionFile = agentSessionFile;
 				}
 
-				let full = (isToolkitCliAgent(state.def.name) ? toolkitFinalOutput : textChunks.join("")) || textChunks.join("");
+				let normalized = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks,
+					stderr: stderrBuf,
+					exitCode: code ?? 1,
+					source: displayName(state.def.name),
+				});
+				let full = normalized.displayText;
 				if ((code !== 0 && code !== null) && stderrBuf.trim()) {
 					if (isContextLossError(stderrBuf)) {
 						full = "Context overflow: agent session broke tool_use/tool_result pairing. Clear session and re-dispatch.";
 						state.sessionFile = null;
-					} else if (!(isToolkitCliAgent(state.def.name) && toolkitFinalOutput.trim())) {
+					} else if (!normalized.diagnostics.includes(stderrBuf.trim())) {
 						full = full.trim() ? `${full}\n\n--- stderr ---\n${stderrBuf.trim()}` : stderrBuf.trim();
 					}
 				}
 				state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
-				state.summary = state.lastWork;
+				state.summary = normalized.summary || state.lastWork;
 				state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-3);
 				invalidateAgentWidget(state);
 

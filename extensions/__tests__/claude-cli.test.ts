@@ -85,6 +85,8 @@ describe("buildClaudeCliArgs", () => {
 		const toolsValue = args[toolsIndex + 1];
 		const toolsList = toolsValue.split(",");
 
+		expect(args[args.length - 2]).toBe("--");
+		expect(args[args.length - 1]).toContain("Test dedup");
 		expect(toolsList).toEqual(["Read", "Bash", "Grep"]);
 		expect(toolsList.filter((t) => t === "Read")).toHaveLength(1);
 		expect(toolsList.filter((t) => t === "Bash")).toHaveLength(1);
@@ -98,6 +100,8 @@ describe("buildClaudeCliArgs", () => {
 
 		const modelIndex = args.indexOf("--model");
 		expect(modelIndex).toBe(-1);
+		expect(args[args.length - 2]).toBe("--");
+		expect(args[args.length - 1]).toContain("Test no model");
 	});
 
 	it("applies advisor profile tool filtering to mixed tool list", () => {
@@ -116,5 +120,17 @@ describe("buildClaudeCliArgs", () => {
 		expect(toolsValue).toContain("Read");
 		expect(toolsValue).toContain("Bash");
 		expect(toolsValue).toContain("Grep");
+	});
+
+	it("terminates variadic options before appending the prompt argument", () => {
+		const args = buildClaudeCliArgs({
+			profile: "claude-worker",
+			task: "Prompt must not be consumed by --add-dir",
+			cwd: "/tmp/project",
+		});
+
+		expect(args).toContain("--add-dir");
+		expect(args[args.length - 2]).toBe("--");
+		expect(args[args.length - 1]).toContain("Prompt must not be consumed by --add-dir");
 	});
 });

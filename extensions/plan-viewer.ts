@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
-import { openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node:fs";

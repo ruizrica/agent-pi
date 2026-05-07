@@ -34,6 +34,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { streamClaudeCliProvider } from "./lib/claude-provider-stream.ts";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -101,8 +102,10 @@ export default function oauthProvider(pi: ExtensionAPI): void {
 
 	// ── Register Provider Override ─────────────────────────────────
 
-	if (token) {
-		pi.registerProvider(PROVIDER_NAME, {
+	pi.registerProvider(PROVIDER_NAME, {
+		api: "anthropic-messages",
+		streamSimple: streamClaudeCliProvider,
+		...(token ? {
 			oauth: {
 				name: "Anthropic (OAuth Env Var)",
 
@@ -147,8 +150,8 @@ export default function oauthProvider(pi: ExtensionAPI): void {
 					return currentToken;
 				},
 			},
-		});
-	}
+		} : {}),
+	});
 
 	// ── /auth-status Command ───────────────────────────────────────
 

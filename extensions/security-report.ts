@@ -14,7 +14,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateSecurityReportHTML, type SecurityReportData, type SecurityReportFinding } from "./lib/security-report-html.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
-import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander-viewer.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 import { saveScanSnapshot, loadHistoryForReport } from "./lib/security-history.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 
