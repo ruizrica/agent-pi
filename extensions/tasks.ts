@@ -21,10 +21,10 @@
  * Usage: pi -e extensions/tasks.ts
  */
 
-import { StringEnum } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
-import { DynamicBorder } from "@mariozechner/pi-coding-agent";
-import { Container, matchesKey, Text, truncateToWidth } from "@mariozechner/pi-tui";
+import { StringEnum } from "@earendil-works/pi-ai";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import { Container, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { Type } from "@sinclair/typebox";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -419,7 +419,7 @@ export default function (pi: ExtensionAPI) {
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 		ctx.ui.setWidget("mission-complete", (_tui: any, theme: any) => {
-			const { Box, Text: TuiText } = require("@mariozechner/pi-tui");
+			const { Box, Text: TuiText } = require("@earendil-works/pi-tui");
 			const bgFn = (text: string): string =>
 				`${MISSION_COMPLETE_BG}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 			const box = new Box(1, 1, bgFn);
@@ -509,7 +509,7 @@ export default function (pi: ExtensionAPI) {
 		// Sub-agents manage their own task discipline — don't gate them
 		if (process.env.PI_SUBAGENT === "1") return { block: false };
 		if (event.toolName === "tasks") return { block: false };
-		// Communication, orchestration, dispatcher, and Commander MCP tools bypass the gate.
+		// Communication, orchestration, dispatcher, and Commander tools bypass the gate.
 		// Exception: self-cleanup is effectively a stop/stomper path, so remind the
 		// agent to finish local tasks and Commander board updates before stopping.
 		if (["dispatch_agent", "dispatch_agents", "ask_user", "run_chain", "advance_phase", "pipeline_status"].includes(event.toolName)) return { block: false };

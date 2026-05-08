@@ -1,9 +1,9 @@
-// ABOUTME: Tests for the Commander MCP bridge extension.
-// ABOUTME: Verifies tool registration, MCP client proxying, and error handling.
+// ABOUTME: Tests for the Commander CLI bridge extension.
+// ABOUTME: Verifies tool registration, CLI client proxying, and error handling.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Mock the MCP client ─────────────────────────────────────────────
+// ── Mock the Commander CLI client ───────────────────────────────────
 
 const { mockConnect, mockCallTool, mockDisconnect, mockIsConnected } = vi.hoisted(() => ({
 	mockConnect: vi.fn(),
@@ -12,14 +12,14 @@ const { mockConnect, mockCallTool, mockDisconnect, mockIsConnected } = vi.hoiste
 	mockIsConnected: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("../lib/mcp-client.ts", () => {
-	class MockMcpClient {
+vi.mock("../lib/commander/commander-cli-client.ts", () => {
+	class MockCommanderCliClient {
 		connect = mockConnect;
 		callTool = mockCallTool;
 		disconnect = mockDisconnect;
 		isConnected = mockIsConnected;
 	}
-	return { McpClient: MockMcpClient };
+	return { CommanderCliClient: MockCommanderCliClient };
 });
 
 // ── Mock ExtensionAPI ───────────────────────────────────────────────
@@ -89,7 +89,7 @@ describe("commander-mcp extension", () => {
 		expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
 	});
 
-	it("should proxy tool calls to MCP client", async () => {
+	it("should proxy tool calls to CLI client", async () => {
 		mockIsConnected.mockReturnValue(true);
 		mockCallTool.mockResolvedValue({
 			content: [{ type: "text", text: "result" }],
@@ -214,13 +214,11 @@ describe("commander-mcp extension", () => {
 			);
 		});
 
-		it("should set __piCommanderAvailable=false when probe call times out", async () => {
+		it("should set __piCommanderAvailable=false when CLI probe times out", async () => {
 			const g = globalThis as any;
 			delete g.__piCommanderAvailable;
 
-			mockConnect.mockResolvedValue(undefined);
-			mockIsConnected.mockReturnValue(true);
-			mockCallTool.mockRejectedValue(new Error("MCP tool call timeout"));
+			mockConnect.mockRejectedValue(new Error("cmd probe timeout"));
 
 			const ctx = createMockCtx();
 			const startHandler = pi._events["session_start"];

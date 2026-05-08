@@ -24,7 +24,7 @@
  * Usage: pi -e extensions/agent-chain.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
   Container,
@@ -35,11 +35,11 @@ import {
   Text,
   truncateToWidth,
   visibleWidth,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import {
   DynamicBorder,
   getMarkdownTheme as getPiMdTheme,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { spawn } from "child_process";
 import {
   existsSync,

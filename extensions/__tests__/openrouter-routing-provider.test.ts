@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
 	streamSimpleOpenAICompletions: vi.fn((_model: any, _context: any, options: any) => options),
 }));
 

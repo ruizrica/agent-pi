@@ -1,9 +1,9 @@
 // ABOUTME: Task Board Viewer — opens a GUI browser window showing a live Kanban board of agent work.
-// ABOUTME: Polls Commander MCP tools for tasks, agents, messages, and groups. Auto-refreshes every 3 seconds.
+// ABOUTME: Polls Commander CLI-backed tools for tasks, agents, messages, and groups. Auto-refreshes every 3 seconds.
 // ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { type Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
@@ -34,7 +34,7 @@ interface BoardData {
 // ── Commander Data Helpers ───────────────────────────────────────────
 
 /**
- * Call a Commander MCP tool via the global client set by commander-mcp.ts.
+ * Call a Commander CLI-backed tool via the global client set by commander-mcp.ts.
  * Returns the parsed result or null on failure.
  */
 async function callCommander(toolName: string, params: Record<string, unknown>): Promise<any> {
@@ -44,7 +44,7 @@ async function callCommander(toolName: string, params: Record<string, unknown>):
 
 	try {
 		const result = await client.callTool(toolName, params, 8000);
-		// MCP results come as { content: [{ type: "text", text: "..." }] }
+		// Commander client results come as { content: [{ type: "text", text: "..." }] }
 		if (result?.content?.[0]?.text) {
 			try {
 				return JSON.parse(result.content[0].text);
@@ -88,7 +88,7 @@ async function gatherBoardData(): Promise<BoardData> {
 	const g = globalThis as any;
 	const local = getLocalTasks();
 
-	// Try Commander if MCP client is available
+	// Try Commander if CLI client is available
 	const client = g.__piCommanderClient;
 	if (client) {
 		try {
@@ -101,9 +101,10 @@ async function gatherBoardData(): Promise<BoardData> {
 			]);
 
 			// If we got tasks back, Commander is connected
-			if (taskResult?.tasks) {
+			const commanderTasks = Array.isArray(taskResult) ? taskResult : taskResult?.tasks;
+			if (Array.isArray(commanderTasks)) {
 				return {
-					tasks: taskResult.tasks || [],
+					tasks: commanderTasks || [],
 					agents: agentResult?.agents || [],
 					messages: messageResult?.messages || [],
 					groups: groupResult?.groups || [],

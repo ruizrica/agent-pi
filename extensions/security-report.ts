@@ -2,8 +2,8 @@
 // ABOUTME: Renders structured defensive security assessments with findings, mitigations, and source sections.
 // ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { type Server } from "node:http";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";

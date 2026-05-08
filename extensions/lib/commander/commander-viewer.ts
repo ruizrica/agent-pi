@@ -1,7 +1,7 @@
 // ABOUTME: Helper module for routing reports to Commander instead of browser
 // ABOUTME: Detects Commander availability and calls the commander_viewer tool
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // Report types supported by the Commander viewer
 export type CommanderReportType = "plan" | "spec" | "completion" | "security" | "test" | "qa" | "research" | "generic";

@@ -2,8 +2,8 @@
 // ABOUTME: Provides /cleanup slash command and show_cleanup tool. AI analysis via Claude Agent SDK (OAuth).
 // ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import fs from "node:fs";
 import fsp from "node:fs/promises";

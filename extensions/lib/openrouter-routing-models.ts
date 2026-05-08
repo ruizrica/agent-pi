@@ -1,7 +1,7 @@
 // ABOUTME: Model normalization, ranking, and endpoint grouping for the OpenRouter routing extension.
 // ABOUTME: Converts OpenRouter metadata into Pi provider model configs and route variants.
 
-import { fuzzyFilter } from "@mariozechner/pi-tui";
+import { fuzzyFilter } from "@earendil-works/pi-tui";
 import { fetchModelEndpoints } from "./openrouter-routing-api.ts";
 import {
 	OPENROUTER_ENRICHED_MODEL_PREFIX,

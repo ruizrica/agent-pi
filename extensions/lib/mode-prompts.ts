@@ -11,8 +11,8 @@ import { resolveCrossProviderSecondOpinion } from "./claude/advisor-default-orch
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
 	return `\n## Commander Integration (REQUIRED)
-Commander is connected. ALWAYS use these tools for dashboard visibility:
-- \`commander_task\` — track tasks in the Commander dashboard (auto-synced from local tasks)
+Commander CLI is connected. ALWAYS use these CLI-backed tools for dashboard visibility:
+- \`commander_task\` — track tasks in Commander (auto-synced from local tasks)
 - \`commander_mailbox\` — ALWAYS send status updates at task start and completion
 
 ### Mailbox Protocol
@@ -44,7 +44,7 @@ export function buildNormalPrompt(opts: NormalPromptOpts): string {
 	const commanderSection = opts.commanderAvailable
 		? buildCommanderSection()
 		: `\n## Commander Integration
-Commander is offline. Tasks are tracked locally only. Commander tools will soft-fail silently.`;
+Commander CLI is offline/unavailable. Tasks are tracked locally only; continue using the local \`tasks\` tool as the fallback.`;
 	const advisorModel = opts.selectedAdvisorModel?.trim() || DEFAULT_ADVISOR_MODEL;
 	const secondOpinion = resolveCrossProviderSecondOpinion(advisorModel);
 	const secondOpinionModelId = `${secondOpinion.provider}/${secondOpinion.model}`;
@@ -475,8 +475,8 @@ Example:
 - Use \`subagent_cleanup {}\` to clear stale/zombie agents if needed
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS track tasks: \`commander_task\` for cross-session tracking
-- ALWAYS broadcast status: \`commander_mailbox\` at plan start, approval, and completion
+- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
+- ALWAYS broadcast status with \`commander_mailbox\` at plan start, approval, and completion when connected
 `;
 }
 
@@ -567,8 +567,8 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 - Handoff approved remediation into PIPELINE for parallel execution.
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS track tasks: \`commander_task\` for cross-session tracking
-- ALWAYS broadcast status: \`commander_mailbox\` at investigation start, approval, and completion
+- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
+- ALWAYS broadcast status with \`commander_mailbox\` at investigation start, approval, and completion when connected
 `;
 }
 
@@ -653,9 +653,9 @@ For large specs with independent work streams, spawn up to **8 subagents** (scou
 - Wait for all agents to complete before running integration tests
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS use commander_spec: create, shape, write, and create_tasks operations for tracking
-- ALWAYS use commander_workflow template:get with workflow \`kiro\` for requirements, design, and tasks templates
-- ALWAYS use commander_mailbox: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
+- ALWAYS use local spec documents first; when the Commander CLI-backed tools are connected, use commander_spec operations for cross-session tracking
+- ALWAYS use commander_workflow template:get with workflow \`kiro\` for requirements, design, and tasks templates when available
+- ALWAYS use commander_mailbox when connected: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
 `;
 }
 

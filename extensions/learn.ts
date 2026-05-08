@@ -3,7 +3,7 @@
 // ABOUTME: The /learn command itself is registered in agent-chain.ts; this module exports the Obsidian writing logic.
 
 import path from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import type { ObsidianToolParams } from "./lib/obsidian-types.ts";

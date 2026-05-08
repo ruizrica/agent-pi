@@ -19,7 +19,7 @@
  * and security-guard.ts.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // ============================================================================
 // Attribution Framing

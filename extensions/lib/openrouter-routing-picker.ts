@@ -1,8 +1,8 @@
 // ABOUTME: Interactive fuzzy model picker and ranking helpers for the OpenRouter routing extension.
 // ABOUTME: Provides a lightweight TUI overlay for selecting models to preview or enrich.
 
-import { visibleWidth, fuzzyFilter, matchesKey, decodeKittyPrintable } from "@mariozechner/pi-tui";
-import type { Component, Focusable } from "@mariozechner/pi-tui";
+import { visibleWidth, fuzzyFilter, matchesKey, decodeKittyPrintable } from "@earendil-works/pi-tui";
+import type { Component, Focusable } from "@earendil-works/pi-tui";
 import type { OpenRouterModel } from "./openrouter-routing-types.ts";
 
 const VIEWPORT_ROWS = 10;

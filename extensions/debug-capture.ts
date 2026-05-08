@@ -27,14 +27,14 @@
  * Usage: pi -e extensions/debug-capture.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { type AutocompleteItem } from "@mariozechner/pi-tui";
+import { type AutocompleteItem } from "@earendil-works/pi-tui";
 import { execSync, spawn } from "child_process";
 import { existsSync, mkdirSync, writeFileSync, readdirSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 
 // ── Constants ────────────────────────────────────
 

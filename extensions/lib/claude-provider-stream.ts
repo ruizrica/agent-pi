@@ -11,7 +11,7 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 	type TextContent,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { spawnClaudeCli } from "./claude-cli.ts";
 import { buildClaudeContextPacket } from "./claude-context.ts";
 import { isClaudeFamilyModel } from "./toolkit-cli.ts";

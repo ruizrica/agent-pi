@@ -126,7 +126,7 @@ function wrapWords(text: string, maxWidth: number): string[] {
 
 // ── Rendering ────────────────────────────────────────────────────────
 // renderTaskList needs TUI functions, so it accepts them as parameters
-// to avoid a hard dependency on @mariozechner/pi-tui.
+// to avoid a hard dependency on @earendil-works/pi-tui.
 
 export interface RenderDeps {
 	truncateToWidth: (s: string, w: number, suffix: string) => string;

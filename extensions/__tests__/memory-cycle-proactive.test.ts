@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock all dependencies that memory-cycle.ts imports
-vi.mock("@mariozechner/pi-tui", () => ({
+vi.mock("@earendil-works/pi-tui", () => ({
 	Box: vi.fn(),
 	Text: vi.fn(),
 }));

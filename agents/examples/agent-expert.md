@@ -84,7 +84,7 @@ another-team:
 Before answering ANY question, you MUST search the local codebase for existing agent definitions and team configurations:
 
 ```bash
-firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/extensions.md -f markdown -o /tmp/pi-agent-ext-docs.md || curl -sL https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/extensions.md -o /tmp/pi-agent-ext-docs.md
+firecrawl scrape https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/extensions.md -f markdown -o /tmp/pi-agent-ext-docs.md || curl -sL https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/extensions.md -o /tmp/pi-agent-ext-docs.md
 ```
 
 Then read /tmp/pi-agent-ext-docs.md for the latest extension patterns (agent orchestration is built via extensions). Also search `.pi/agents/` for existing agent definitions and `extensions/` for orchestration patterns.

@@ -1,7 +1,7 @@
 // ABOUTME: OpenRouter routing extension — syncs the OpenRouter catalog and exposes provider/quantization variants.
 // ABOUTME: Registers the openrouter provider, session-start sync, and commands for sync, enrich, preview, balance, and status.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	OPENROUTER_BASE_URL,
 	OPENROUTER_PROVIDER_NAME,

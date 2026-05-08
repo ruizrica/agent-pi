@@ -8,7 +8,7 @@ allowed-tools: ["Task", "mcp__commander__commander_task", "mcp__commander__comma
 
 **⚠️ CRITICAL RULE: NO AD-HOC TASKS — ALL tasks MUST be created inside a task group using `commander_task_group(operation="create")`. NEVER use `commander_task(operation="create")` for standalone tasks. Even single tasks must belong to a group for proper Initiative Progress UI tracking and wave management.**
 
-This command breaks down a plan into microtasks using a **planning agent architecture**, creates them in Commander MCP, and coordinates parallel agent execution. It can also consume approved INVESTIGATE remediation artifacts, as long as those findings already define the intended fix scope clearly enough for execution breakdown.
+This command breaks down a plan into microtasks using a **planning agent architecture**, creates them through the Commander CLI-backed tools, and coordinates parallel agent execution. It can also consume approved INVESTIGATE remediation artifacts, as long as those findings already define the intended fix scope clearly enough for execution breakdown.
 
 ## Planning Agent Architecture
 
@@ -127,7 +127,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(
@@ -191,7 +191,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(
@@ -252,7 +252,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(
@@ -313,7 +313,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(
@@ -375,7 +375,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(
@@ -542,7 +542,7 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
     mcp__commander__commander_log(

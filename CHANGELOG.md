@@ -85,7 +85,7 @@ The first public release of agent — a comprehensive extension suite that trans
 
 #### Task Management
 - **tasks** — Task discipline system gating tools until tasks are defined; three-state lifecycle (idle → inprogress → done) with live widget
-- **commander-mcp** — Bridge exposing Commander MCP tools as native Pi tools
+- **commander-mcp** — CLI-backed bridge exposing Commander tools as native Pi tools
 - **commander-tracker** — Reconciles local tasks with Commander and retries failed sync
 
 #### Operational Modes

@@ -8,7 +8,7 @@ import {
 	type Context,
 	type Model,
 	type SimpleStreamOptions,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { OPENROUTER_ENRICHED_MODEL_PREFIX, type OpenRouterRouteVariant } from "./openrouter-routing-types.ts";
 
 export function createStreamFactory(routes: ReadonlyMap<string, OpenRouterRouteVariant>) {

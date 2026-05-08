@@ -99,7 +99,7 @@ This is CRITICAL for building extensions that work on macOS:
 - When a reserved action is remapped away from a key, that key becomes available for extensions
 - The conflict check uses EFFECTIVE keybindings (after user remaps), not defaults
 
-### Key Helper (from @mariozechner/pi-tui)
+### Key Helper (from @earendil-works/pi-tui)
 - `Key.ctrl("x")` → `"ctrl+x"`
 - `Key.shift("tab")` → `"shift+tab"`
 - `Key.alt("left")` → `"alt+left"`
@@ -117,7 +117,7 @@ This is CRITICAL for building extensions that work on macOS:
 Before answering ANY question, you MUST fetch the latest Pi keybindings documentation:
 
 ```bash
-firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/keybindings.md -f markdown -o /tmp/pi-keybindings-docs.md || curl -sL https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/keybindings.md -o /tmp/pi-keybindings-docs.md
+firecrawl scrape https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/keybindings.md -f markdown -o /tmp/pi-keybindings-docs.md || curl -sL https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/keybindings.md -o /tmp/pi-keybindings-docs.md
 ```
 
 Then read /tmp/pi-keybindings-docs.md to have the freshest reference.

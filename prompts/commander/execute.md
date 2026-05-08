@@ -6,7 +6,7 @@ allowed-tools: ["Task", "SlashCommand", "mcp__commander__commander_task", "mcp__
 
 # Commander Execute - Intelligent Task Orchestration with Execution Guards
 
-This command executes **existing tasks** from Commander MCP using a **planning agent architecture** with sophisticated orchestration: dependency analysis, work type classification, commit checkpoints, and execution guards.
+This command executes **existing tasks** from Commander CLI-backed tools using a **planning agent architecture** with sophisticated orchestration: dependency analysis, work type classification, commit checkpoints, and execution guards.
 
 ## Planning Agent Architecture for Execution
 
@@ -864,7 +864,7 @@ Use the Task tool with:
 - subagent_type: "Code"
 - model: "mercury-2"
 - prompt: |
-    ## CRITICAL: Commander MCP Protocol - Claim-Loop Execution
+    ## CRITICAL: Commander CLI-backed Protocol - Claim-Loop Execution
 
     You are a **builder agent** executing tasks in a **claim-loop pattern**.
 

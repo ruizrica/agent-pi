@@ -1,8 +1,8 @@
 // ABOUTME: Toggleable main-session summary mode shown in place of normal output.
 // ABOUTME: Registers /toggle-summary and aggregates task/tool/activity state into a single terminal view.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { renderSessionSummary, type SessionSummaryState, type SummaryToolItem } from "./lib/summary-render.ts";
 import { publishSessionStats, type SessionStats } from "./lib/session-stats.ts";

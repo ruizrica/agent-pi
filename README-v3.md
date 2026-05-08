@@ -1,8 +1,8 @@
 # agent-pi
 
-> **Turn [Pi](https://github.com/badlogic/pi-mono) into a multi-agent orchestration platform** — 7 operational modes, 50+ extensions, 26 skills, 11 themes. Installs as a single Pi package. No forks, no patches.
+> **Turn [Pi](https://github.com/earendil-works/pi) into a multi-agent orchestration platform** — 7 operational modes, 50+ extensions, 26 skills, 11 themes. Installs as a single Pi package. No forks, no patches.
 
-`agent-pi` is a configuration layer over the excellent [Pi coding agent](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic). If Pi is the engine, `agent-pi` is the chassis: orchestration primitives (teams / chains / pipelines), human-review surfaces (browser viewers), security hooks, a remote-access chat UI, and a curated set of worker wrappers for popular coding CLIs.
+`agent-pi` is a configuration layer over the excellent [Pi coding agent](https://github.com/earendil-works/pi) by Earendil Works. If Pi is the engine, `agent-pi` is the chassis: orchestration primitives (teams / chains / pipelines), human-review surfaces (browser viewers), security hooks, a remote-access chat UI, and a curated set of worker wrappers for popular coding CLIs.
 
 ---
 
@@ -29,8 +29,8 @@ Everything is delivered as extensions, YAML, and markdown — nothing patches Pi
 
 ```bash
 # 1. Clone and install (also installs Pi if you don't have it)
-git clone https://github.com/ruizrica/agent-pi.git
-cd agent-pi
+git clone https://github.com/earendil-works/pi.git
+cd pi
 ./install.sh
 
 # 2. Launch
@@ -54,7 +54,7 @@ Inside the TUI:
 If you already have Pi installed, you can skip `install.sh`:
 
 ```bash
-pi install git:github.com/ruizrica/agent-pi
+pi install git:github.com/earendil-works/pi
 ```
 
 Pi auto-discovers every extension, skill, theme, and prompt from `package.json`.
@@ -97,7 +97,7 @@ Role-based kill timers stop zombie widgets from stacking up:
 
 - **`/pi` skill** — unified entry point to every operational mode, configurable write scope and agent count
 - **`/sounds`** — browser UI to browse and assign soundcn.xyz sounds to Pi lifecycle events (plus a local image cache)
-- **Board Viewer** — browser Kanban board polling Commander MCP; works local-first when Commander is offline
+- **Board Viewer** — browser Kanban board polling Commander CLI-backed tools; works local-first when Commander is offline
 - **Dream system** (`dream-scheduler`) — global-first memory consolidation with freshness tracking in `~/.pi/dream/`
 - **`/learn`** — delta-aware codebase snapshots written to Obsidian as `raw/` + `wiki/` artifacts
 - **Security extensions** — `vuln-scanner`, `security-news`, `security-report`, `safe-port-scan`, `network-inspect`
@@ -187,7 +187,7 @@ agent-pi/
 │
 ├── skills/                   26 skill packs (pi-agent-orchestrator, qa-automation, …)
 ├── commands/                 Toolkit slash commands (markdown-driven)
-├── prompts/                  Prompt templates (incl. Commander MCP)
+├── prompts/                  Prompt templates (incl. Commander CLI-backed workflows)
 ├── themes/                   11 theme JSONs
 ├── scripts/                  pi-agent-orchestrator.mjs bridge + utilities
 ├── tex/                      Standalone "Text Tools" browser app
@@ -214,8 +214,8 @@ Optional external CLIs — install whichever worker roles you want to use:
 
 | Situation | Command |
 |---|---|
-| Don't have Pi yet | `git clone https://github.com/ruizrica/agent-pi.git && cd agent-pi && ./install.sh` |
-| Already have Pi  | `pi install git:github.com/ruizrica/agent-pi` |
+| Don't have Pi yet | `git clone https://github.com/earendil-works/pi.git && cd pi && ./install.sh` |
+| Already have Pi  | `pi install git:github.com/earendil-works/pi` |
 
 ### Environment
 
@@ -331,7 +331,7 @@ Browse `extensions/*.ts` for the full list; grouped here for discoverability.
 
 **Modes & orchestration** — `mode-cycler`, `agent-team`, `agent-chain`, `pipeline-team`, `subagent-widget`, `claude-advisor`, `toolkit-commands`, `complex-problem-loop`
 
-**Tasks & coordination** — `tasks`, `commander-mcp`, `commander-tracker`, `board-viewer`, `user-question`
+**Tasks & coordination** — `tasks`, CLI-backed `commander-mcp`, `commander-tracker`, `board-viewer`, `user-question`
 
 **Security** — `security-guard`, `secure`, `message-integrity-guard`, `vuln-scanner`, `security-news`, `security-report`, `safe-port-scan`, `network-inspect`
 
@@ -355,9 +355,9 @@ Browse `extensions/*.ts` for the full list; grouped here for discoverability.
 
 ```json
 "peerDependencies": {
-  "@mariozechner/pi-agent-core":   "*",
-  "@mariozechner/pi-coding-agent": "*",
-  "@mariozechner/pi-tui":          "*",
+  "@earendil-works/pi-agent-core":   "*",
+  "@earendil-works/pi-coding-agent": "*",
+  "@earendil-works/pi-tui":          "*",
   "@sinclair/typebox":             "*"
 }
 ```
@@ -393,7 +393,7 @@ npm run security:scan   # mako security scan
 ## Contributing
 
 1. **Fork + clone** your copy of the repo.
-2. **Install Pi** — follow upstream [Pi](https://github.com/badlogic/pi-mono) instructions, or run `./install.sh` for a one-shot bootstrap.
+2. **Install Pi** — follow upstream [Pi](https://github.com/earendil-works/pi) instructions, or run `./install.sh` for a one-shot bootstrap.
 3. **Install dev deps** — `npm install` at the project root.
 4. **Run locally** — `pi` from the project root; the package's `pi` manifest auto-loads everything under `extensions/`, `skills/`, `themes/`, and `prompts/commander/`.
 5. **TDD first** — write a failing test in `extensions/__tests__/`, watch it fail, then implement. Run with `npx vitest`.
@@ -414,13 +414,13 @@ Issues, discussions, and feature ideas are welcome on GitHub.
 
 [MIT](./LICENSE) — Copyright © 2025 Ricardo Ruiz.
 
-The bundled `extensions/pi-doom/` is **GPL-2.0** (Mario Zechner). Pi itself is a separate project with its own license; see upstream [`pi-mono`](https://github.com/badlogic/pi-mono).
+The bundled `extensions/pi-doom/` is **GPL-2.0** (Mario Zechner). Pi itself is a separate project with its own license; see upstream [`pi`](https://github.com/earendil-works/pi).
 
 ---
 
 ## Pointers
 
-- Runtime this package extends — [Pi (`pi-mono`)](https://github.com/badlogic/pi-mono)
+- Runtime this package extends — [Pi](https://github.com/earendil-works/pi)
 - Release history — [CHANGELOG.md](./CHANGELOG.md)
 - Agent-facing repo rules — [CLAUDE.md](./CLAUDE.md)
 - Web Chat deep-dive — [docs/web-chat.md](./docs/web-chat.md)

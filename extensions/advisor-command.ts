@@ -1,7 +1,7 @@
 // ABOUTME: Registers /advisor for on-demand Claude advisor guidance from the current Pi session.
 // ABOUTME: Preserves claude_advisor behavior while keeping slash-command registration separate from the tool extension.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { runAdvisor } from "./lib/claude/claude-advisor-runner.ts";
 
 type TaskStatus = "idle" | "inprogress" | "done";
