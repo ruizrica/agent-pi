@@ -324,6 +324,7 @@ export default function (pi: ExtensionAPI) {
 						return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 					});
 
+					const taskList = (globalThis as any).__piTaskList;
 					const renderState = {
 						id: state.widgetId,
 						status: state.status as "running" | "done" | "error",
@@ -335,6 +336,7 @@ export default function (pi: ExtensionAPI) {
 						summary: state.summary,
 						summaryLines: state.summaryLines,
 						model: state.resolvedModel || state.def.model || undefined,
+						taskHotkeyHint: taskList?.tasks?.length > 0 ? "Ctrl+Alt+T tasks" : undefined,
 					};
 					const result = renderSubagentWidget(renderState, width, theme);
 					content.setText(result.lines.join("\n"));
@@ -617,7 +619,7 @@ export default function (pi: ExtensionAPI) {
 
 				setTimeout(() => {
 					if (state.status !== "running") removeAgentWidget(state);
-				}, 30_000);
+				}, 2_000);
 
 				// Re-evaluate Commander availability at finish time (not spawn time)
 				// to handle transient connectivity issues during agent lifetime
@@ -819,6 +821,7 @@ export default function (pi: ExtensionAPI) {
 					? "error"
 					: "done";
 
+			const taskList = (globalThis as any).__piTaskList;
 			const renderState = {
 				id: 0,
 				status,
@@ -829,6 +832,7 @@ export default function (pi: ExtensionAPI) {
 				turnCount: 1,
 				summary: `dispatching: ${agent.toLowerCase()}${model ? ` @ ${model}` : ""}`,
 				model: model || undefined,
+				taskHotkeyHint: taskList?.tasks?.length > 0 ? "Ctrl+Alt+T tasks" : undefined,
 			};
 
 			const rendered = renderSubagentWidget(renderState, options.width || 80, theme);

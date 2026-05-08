@@ -184,7 +184,11 @@ export default function (pi: ExtensionAPI) {
 						return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 					});
 
-					const result = renderSubagentWidget(state, width, theme);
+					const taskList = (globalThis as any).__piTaskList;
+					const result = renderSubagentWidget({
+						...state,
+						taskHotkeyHint: taskList?.tasks?.length > 0 ? "Ctrl+Alt+T tasks" : undefined,
+					}, width, theme);
 					content.setText(result.lines.join("\n"));
 					return box.render(width);
 				},
@@ -480,6 +484,7 @@ export default function (pi: ExtensionAPI) {
 							ctx.ui.setWidget(`sub-${state.id}`, undefined);
 							widgetBoxes.delete(state.id);
 							agents.delete(state.id);
+							(globalThis as any).__piRefreshAgentTeamWidget?.();
 						}
 					}, 2_000);
 				}
@@ -601,6 +606,7 @@ export default function (pi: ExtensionAPI) {
 			};
 			agents.set(id, state);
 			registerWidget(state);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			// Fire-and-forget
 			spawnAgent(state, args.task, ctx);
@@ -706,6 +712,7 @@ export default function (pi: ExtensionAPI) {
 				agents.set(state.id, state);
 				registerWidget(state);
 			}
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			for (const state of states) {
 				const peers = peerNames.filter(n => n !== `SA-${state.id}-${state.name}`);
@@ -747,6 +754,7 @@ export default function (pi: ExtensionAPI) {
 				registerWidget(state);
 			}
 			invalidateWidget(state.id);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			ctx.ui.notify(`Continuing SA${args.id} (${state.name}) Turn ${state.turnCount}…`, "info");
 			spawnAgent(state, args.prompt, ctx);
@@ -776,6 +784,7 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setWidget(`sub-${args.id}`, undefined);
 			widgetBoxes.delete(args.id);
 			agents.delete(args.id);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			return {
 				content: [{ type: "text", text: `SA${args.id} removed.` }],
@@ -1097,6 +1106,14 @@ export default function (pi: ExtensionAPI) {
 		(globalThis as any).__piHasRunningSubagents = (): boolean => {
 			for (const [, state] of agents) {
 				if (state.status === "running") return true;
+			}
+			return false;
+		};
+		(globalThis as any).__piHasVisibleSubagentWidgets = (): boolean => {
+			if (widgetBoxes.size > 0) return true;
+			const scoutId = (globalThis as any).__piScoutId;
+			for (const [, state] of agents) {
+				if (state.status === "running" && state.id !== scoutId) return true;
 			}
 			return false;
 		};

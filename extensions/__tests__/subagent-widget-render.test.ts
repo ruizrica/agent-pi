@@ -61,6 +61,22 @@ describe("renderSubagentWidget", () => {
 		expect(result.lines[1]).toContain("Code quality check passed");
 	});
 
+	it("mentions the task-list hotkey while running when provided", () => {
+		const state = makeState({ status: "running", summary: "Checking files", taskHotkeyHint: "Ctrl+Alt+T tasks" });
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[1]).toContain("Checking files");
+		expect(result.lines[1]).toContain("Ctrl+Alt+T tasks");
+	});
+
+	it("omits the task-list hotkey after completion", () => {
+		const state = makeState({ status: "done", summary: "Finished", taskHotkeyHint: "Ctrl+Alt+T tasks" });
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[1]).toContain("Finished");
+		expect(result.lines[1]).not.toContain("Ctrl+Alt+T tasks");
+	});
+
 	it("falls back to task preview on line 2 when no summary", () => {
 		const state = makeState({ summary: undefined });
 		const result = renderSubagentWidget(state, 80, theme);

@@ -26,6 +26,7 @@ export interface HeightMode {
 // ── Constants ────────────────────────────────────────────────────────
 
 export const MAX_VISIBLE_TASKS = 6;
+export const TASK_HOTKEY_HINT = "Ctrl+Alt+T tasks";
 export const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", done: "x" };
 
 // ── Scroll logic ─────────────────────────────────────────────────────

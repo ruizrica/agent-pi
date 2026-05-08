@@ -24,7 +24,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Container, Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { Type } from "@sinclair/typebox";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -138,8 +138,8 @@ class TasksListComponent {
 	private desc: string | undefined;
 	private theme: Theme;
 	private onClose: () => void;
-	private cachedWidth?: number;
-	private cachedLines?: string[];
+	private scrollOffset = 0;
+	private totalContentLines = 0;
 
 	constructor(tasks: Task[], title: string | undefined, desc: string | undefined, theme: Theme, onClose: () => void) {
 		this.tasks = tasks;
@@ -150,14 +150,28 @@ class TasksListComponent {
 	}
 
 	handleInput(data: string): void {
-		if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
+		const height = process.stdout.rows || 24;
+		const contentHeight = Math.max(1, height - 1);
+		const maxScroll = Math.max(0, this.totalContentLines - contentHeight);
+
+		if (matchesKey(data, Key.up)) {
+			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+		} else if (matchesKey(data, Key.down)) {
+			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
+		} else if (matchesKey(data, Key.pageUp)) {
+			this.scrollOffset = Math.max(0, this.scrollOffset - Math.max(1, contentHeight - 1));
+		} else if (matchesKey(data, Key.pageDown)) {
+			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + Math.max(1, contentHeight - 1));
+		} else if (matchesKey(data, Key.home)) {
+			this.scrollOffset = 0;
+		} else if (matchesKey(data, Key.end)) {
+			this.scrollOffset = maxScroll;
+		} else if (matchesKey(data, Key.escape) || matchesKey(data, "ctrl+c")) {
 			this.onClose();
 		}
 	}
 
-	render(width: number): string[] {
-		if (this.cachedLines && this.cachedWidth === width) return this.cachedLines;
-
+	private buildLines(width: number): string[] {
 		const lines: string[] = [];
 		const th = this.theme;
 
@@ -211,18 +225,27 @@ class TasksListComponent {
 		}
 
 		lines.push("");
-		lines.push(truncateToWidth(`  ${th.fg("dim", "Press Escape to close")}`, width));
-		lines.push("");
-
-		this.cachedWidth = width;
-		this.cachedLines = lines;
 		return lines;
 	}
 
-	invalidate(): void {
-		this.cachedWidth = undefined;
-		this.cachedLines = undefined;
+	render(width: number): string[] {
+		const allLines = this.buildLines(width);
+		this.totalContentLines = allLines.length;
+
+		const height = process.stdout.rows || 24;
+		const contentHeight = Math.max(1, height - 1);
+		const maxScroll = Math.max(0, allLines.length - contentHeight);
+		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+
+		const visible = allLines.slice(this.scrollOffset, this.scrollOffset + contentHeight);
+		const footerText = maxScroll > 0
+			? `↑/↓/PgUp/PgDn/Home/End Scroll (${this.scrollOffset + 1}-${Math.min(this.scrollOffset + contentHeight, allLines.length)}/${allLines.length}) · Esc Close`
+			: "Esc Close";
+		visible.push(truncateToWidth(`  ${this.theme.fg("dim", footerText)}`, width));
+		return visible;
 	}
+
+	invalidate(): void {}
 }
 
 // ── Extension entry point ──────────────────────────────────────────────
@@ -1230,19 +1253,31 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// ── /tasks command ────────────────────────────────────────────────
+	// ── /tasks command + Ctrl+Alt+T shortcut ───────────────────────────
+
+	async function showTasksOverlay(ctx: ExtensionContext, source: "command" | "shortcut" = "command"): Promise<void> {
+		if (!ctx.hasUI) {
+			ctx.ui.notify(source === "shortcut" ? "Ctrl+Alt+T tasks requires interactive mode" : "/tasks requires interactive mode", "error");
+			return;
+		}
+
+		await ctx.ui.custom<void>((_tui, theme, _kb, done) => {
+			return new TasksListComponent(tasks, listTitle, listDescription, theme, () => done());
+		}, {
+			overlay: true,
+			overlayOptions: { width: "100%" },
+		});
+	}
+
+	(globalThis as any).__piShowTasksOverlay = showTasksOverlay;
+
+	pi.registerShortcut("ctrl+alt+t", {
+		description: "Show task list",
+		handler: async (ctx) => showTasksOverlay(ctx, "shortcut"),
+	});
 
 	pi.registerCommand("tasks", {
-		description: "Show all Tasks tasks on the current branch",
-		handler: async (_args, ctx) => {
-			if (!ctx.hasUI) {
-				ctx.ui.notify("/tasks requires interactive mode", "error");
-				return;
-			}
-
-			await ctx.ui.custom<void>((_tui, theme, _kb, done) => {
-				return new TasksListComponent(tasks, listTitle, listDescription, theme, () => done());
-			});
-		},
+		description: "Show all Tasks tasks on the current branch (also Ctrl+Alt+T)",
+		handler: async (_args, ctx) => showTasksOverlay(ctx, "command"),
 	});
 }
