@@ -252,16 +252,15 @@ describe("renderTaskList", () => {
 		expect(result[0]).not.toContain("\u2500");
 	});
 
-	it("shows task ids and text in the output", () => {
+	it("hides task ids and text from the mission brief widget", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain(" 1 ");
-		expect(joined).toContain(" 2 ");
-		expect(joined).toContain(" 3 ");
-		expect(joined).toContain("Task 1 description");
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).not.toContain(" 1 ");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("strips leading number prefix from task text to avoid duplication with id", () => {
+	it("keeps task text hidden even when task text starts with a number", () => {
 		const info: TaskListInfo = {
 			tasks: [
 				{ id: 1, text: "1. Investigate git history", status: "idle" },
@@ -272,31 +271,31 @@ describe("renderTaskList", () => {
 		};
 		const result = renderTaskList(info, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		// Should NOT contain "1 1." — the id is shown once and the leading "1." is stripped from text
-		expect(joined).not.toMatch(/\b1 1\./);
-		expect(joined).toContain("1 Investigate git history");
+		expect(joined).not.toContain("Investigate git history");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("shows status icons (* for inprogress, x for done, - for idle)", () => {
+	it("hides status icons because details live in the hotkey overlay", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain("*");
-		expect(joined).toContain("x");
-		expect(joined).toContain("-");
+		expect(joined).not.toContain("*");
+		expect(joined).not.toContain("x");
+		expect(joined).not.toContain("-");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("uses one-line mode with enough height", () => {
+	it("uses mission-brief plus hotkey mode with enough height", () => {
 		const tasks = makeTasks(3);
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
-		// 1 line per task (3 tasks) + 1 chrome (header) = 4 lines
-		expect(result.length).toBe(4);
+		expect(result).toHaveLength(2);
+		expect(result[1]).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("uses one-line mode when height is constrained", () => {
+	it("uses mission-brief plus hotkey mode when height is constrained", () => {
 		const tasks = makeTasks(4);
-		// 4 tasks * 1 + 1 chrome = 5 lines
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 8, mockDeps);
-		expect(result.length).toBe(5);
+		expect(result).toHaveLength(2);
+		expect(result[1]).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
 	it("shows only the title and done/total in a bold header", () => {
@@ -314,17 +313,17 @@ describe("renderTaskList", () => {
 			description: "Update the security page with clearer messaging, safer defaults, and verification coverage.",
 		};
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
+		const joined = result.join("\n");
 		expect(result[1]).toContain("Mission Brief:");
 		expect(result[2]).toContain("Update the security page");
-		const firstTaskIndex = result.findIndex((line) => line.includes("Task 1 description"));
-		expect(firstTaskIndex).toBeGreaterThan(2);
-		expect(result[firstTaskIndex - 1]).toBe("");
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
 	it("wraps long summary lines to terminal width", () => {
 		const tasks = {
 			...makeTasks(3),
-			description: "This is a deliberately long work summary that should wrap to the terminal width before task rows are rendered.",
+			description: "This is a deliberately long work summary that should wrap to the terminal width before the task detail hotkey is rendered.",
 		};
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 42, 20, mockDeps);
 		expect(result[1]).toContain("Mission Brief:");
@@ -332,7 +331,7 @@ describe("renderTaskList", () => {
 		expect(result.slice(1, 5).join("\n")).not.toContain("…");
 	});
 
-	it("still renders task rows when a long mission brief has tiny available height", () => {
+	it("keeps task rows hidden when a long mission brief has tiny available height", () => {
 		const tasks = {
 			...makeTasks(2),
 			description: "This mission brief is intentionally very long and should not consume the whole active task widget when the terminal only leaves a few rows available for rendering.",
@@ -340,28 +339,30 @@ describe("renderTaskList", () => {
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 50, 5, mockDeps);
 		const joined = result.join("\n");
 		expect(result.length).toBeGreaterThan(0);
-		expect(joined).toContain("Task 1 description");
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("shows selection marker on selected task", () => {
+	it("does not show selection marker because task details live in the hotkey overlay", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: 1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain("\u2190sel");
+		expect(joined).not.toContain("\u2190sel");
+		expect(joined).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("limits visible tasks to MAX_VISIBLE_TASKS", () => {
+	it("does not render task rows in the mission brief widget", () => {
 		const tasks = makeTasks(10);
-		// 6 * 1 + 1 chrome = 7
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, mockDeps);
-		expect(result.length).toBe(7);
+		expect(result.join("\n")).not.toContain("Task 1 description");
+		expect(result.join("\n")).toContain("Task details: Ctrl+Alt+T tasks or /tasks");
 	});
 
-	it("shows scroll indicators in header when tasks overflow", () => {
+	it("omits scroll indicators because detailed task navigation lives in the hotkey overlay", () => {
 		const tasks = makeTasks(10);
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 2 }, 80, 30, mockDeps);
 		const header = result[0];
-		expect(header).toContain("\u25B22");
-		expect(header).toContain("\u25BC2");
+		expect(header).not.toContain("\u25B2");
+		expect(header).not.toContain("\u25BC");
 	});
 
 	it("hides widget when zero tasks", () => {

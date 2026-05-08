@@ -137,7 +137,7 @@ export interface RenderDeps {
 
 export function renderTaskList(
 	taskList: TaskListInfo,
-	state: TaskListState,
+	_state: TaskListState,
 	width: number,
 	availableHeight: number,
 	deps: RenderDeps,
@@ -152,22 +152,13 @@ export function renderTaskList(
 	const rawSummaryLines = taskList.description
 		? wrapWords(taskList.description, Math.max(20, width - 4))
 		: [];
-	const reservedTaskLines = Math.min(MAX_VISIBLE_TASKS, tasks.length, Math.max(1, Math.floor(availableHeight / 2)));
-	const maxSummaryLines = Math.max(0, availableHeight - 1 - reservedTaskLines - 2); // header + task rows + label/blank
+	const maxSummaryLines = Math.max(0, availableHeight - 3); // header + optional blank + hotkey hint
 	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
-	const summaryChrome = summaryLines.length > 0 ? summaryLines.length + 2 : 0; // label + wrapped lines + blank
-	const availableTaskLines = Math.max(1, availableHeight - 1 - summaryChrome);
-	const visibleCount = Math.min(MAX_VISIBLE_TASKS, tasks.length, availableTaskLines);
-
-	const { above, below } = scrollIndicators(state.scrollOffset, visibleCount, tasks.length);
 
 	// ── Header ────────────────────────────────────────────────────
 	const title = taskList.title || "Tasks";
 	const headerLabel = `  ${title} ${doneCount}/${taskList.total}`;
-	const scrollRight = [above, below].filter(Boolean).join(" ");
-	const headerLine = bold(fg("text", headerLabel))
-		+ (scrollRight ? " ".repeat(Math.max(1, width - headerLabel.length - scrollRight.length - 2)) + fg("muted", scrollRight) + "  " : "");
-	lines.push(trunc(headerLine, width, ""));
+	lines.push(trunc(bold(fg("text", headerLabel)), width, ""));
 
 	if (summaryLines.length > 0) {
 		lines.push(`  ${fg("accent", "Mission Brief:")}`);
@@ -177,39 +168,7 @@ export function renderTaskList(
 		lines.push("");
 	}
 
-	// ── Task lines ─────────────────────────────────────────────────
-	const visibleTasks = tasks.slice(state.scrollOffset, state.scrollOffset + visibleCount);
-
-	for (let i = 0; i < visibleTasks.length; i++) {
-		const task = visibleTasks[i];
-		const globalIndex = state.scrollOffset + i;
-		const isSelected = globalIndex === state.selectedIndex;
-
-		const iconStr = task.status === "inprogress"
-			? fg("accent", STATUS_ICON.inprogress)
-			: task.status === "done"
-				? fg("success", STATUS_ICON.done)
-				: fg("dim", STATUS_ICON.idle);
-
-		const textColor = task.status === "inprogress" ? "success"
-			: task.status === "done" ? "dim"
-				: "muted";
-
-		const selMark = isSelected ? fg("accent", " \u2190sel") : "";
-		const selMarkLen = isSelected ? 5 : 0;
-		const idStr = fg("accent", `${task.id}`);
-		const idLen = `${task.id}`.length;
-		const prefixVisLen = 2 + 1 + 1 + idLen + 1;
-		const maxTextLen = Math.max(12, width - prefixVisLen - selMarkLen);
-		const displayText = stripLeadingNumber(task.text);
-		const wrappedText = wrapWords(displayText, maxTextLen);
-		const taskLines = wrappedText.length > 0 ? wrappedText : [displayText];
-
-		lines.push(trunc(`  ${iconStr} ${idStr} ${fg(textColor, taskLines[0])}${selMark}`, width, ""));
-		for (const line of taskLines.slice(1)) {
-			lines.push(trunc(`      ${fg(textColor, line)}`, width, ""));
-		}
-	}
+	lines.push(trunc(`  ${fg("dim", `Task details: ${TASK_HOTKEY_HINT} or /tasks`)}`, width, ""));
 
 	return lines;
 }
