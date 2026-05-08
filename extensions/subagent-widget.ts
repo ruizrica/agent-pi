@@ -184,11 +184,7 @@ export default function (pi: ExtensionAPI) {
 						return `${bg}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
 					});
 
-					const taskList = (globalThis as any).__piTaskList;
-					const result = renderSubagentWidget({
-						...state,
-						taskHotkeyHint: taskList?.tasks?.length > 0 ? "Ctrl+Alt+T tasks" : undefined,
-					}, width, theme);
+					const result = renderSubagentWidget(state, width, theme);
 					content.setText(result.lines.join("\n"));
 					return box.render(width);
 				},
@@ -1106,14 +1102,6 @@ export default function (pi: ExtensionAPI) {
 		(globalThis as any).__piHasRunningSubagents = (): boolean => {
 			for (const [, state] of agents) {
 				if (state.status === "running") return true;
-			}
-			return false;
-		};
-		(globalThis as any).__piHasVisibleSubagentWidgets = (): boolean => {
-			if (widgetBoxes.size > 0) return true;
-			const scoutId = (globalThis as any).__piScoutId;
-			for (const [, state] of agents) {
-				if (state.status === "running" && state.id !== scoutId) return true;
 			}
 			return false;
 		};

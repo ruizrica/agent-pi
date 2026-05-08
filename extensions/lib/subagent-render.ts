@@ -13,7 +13,6 @@ export interface SubRenderState {
 	turnCount: number;
 	summary?: string;
 	model?: string;
-	taskHotkeyHint?: string; // concise hint for opening the full task list, e.g. "Ctrl+Alt+T tasks"
 	maxDurationMs?: number; // watchdog timeout for progress warning
 }
 
@@ -93,17 +92,11 @@ export function renderSubagentWidget(
 	);
 
 	// Line 2: summary (current activity) or task preview as fallback.
-	// When tasks exist, keep the hotkey visible in running widgets so users can
-	// open the full task list after the persistent task area is compacted.
-	const hint = state.status === "running" && state.taskHotkeyHint
-		? ` · ${state.taskHotkeyHint}`
-		: "";
 	const detail = state.summary || state.task;
-	const maxDetailLen = Math.max(8, 40 - hint.length);
-	const detailPreview = detail.length > maxDetailLen
-		? detail.slice(0, Math.max(0, maxDetailLen - 3)) + "..."
+	const detailPreview = detail.length > 40
+		? detail.slice(0, 37) + "..."
 		: detail;
-	lines.push(`  ${detailPreview}${hint}`);
+	lines.push(`  ${detailPreview}`);
 
 	return { lines, borderCount: 1 };
 }
