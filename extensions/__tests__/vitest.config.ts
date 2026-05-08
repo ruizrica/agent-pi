@@ -37,9 +37,9 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
-			"@mariozechner/pi-tui": resolve(mocksDir, "pi-tui.ts"),
-			"@mariozechner/pi-coding-agent": resolve(mocksDir, "pi-coding-agent.ts"),
-			"@mariozechner/pi-ai": resolve(mocksDir, "pi-ai.ts"),
+			"@earendil-works/pi-tui": resolve(mocksDir, "pi-tui.ts"),
+			"@earendil-works/pi-coding-agent": resolve(mocksDir, "pi-coding-agent.ts"),
+			"@earendil-works/pi-ai": resolve(mocksDir, "pi-ai.ts"),
 			"@sinclair/typebox": resolve(mocksDir, "typebox.ts"),
 		},
 	},

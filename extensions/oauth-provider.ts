@@ -31,7 +31,7 @@
  * Usage: Loaded via packages in agent/settings.json
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { streamClaudeCliProvider } from "./lib/claude/claude-provider-stream.ts";

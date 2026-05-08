@@ -1,12 +1,12 @@
 # agent-pi
 
-> A drop-in extension suite that transforms [Pi](https://github.com/badlogic/pi-mono) from a single-agent terminal coding assistant into a full multi-agent orchestration platform — 6 operational modes, 43 extensions, 11 themes, and 20+ skills, delivered entirely as configuration.
+> A drop-in extension suite that transforms [Pi](https://github.com/earendil-works/pi) from a single-agent terminal coding assistant into a full multi-agent orchestration platform — 6 operational modes, 43 extensions, 11 themes, and 20+ skills, delivered entirely as configuration.
 
 ---
 
 ## Why this project exists
 
-[Pi](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic) is an excellent terminal-based AI coding agent: tool-use, conversation memory, a fast TUI, and a clean extension API. Out of the box, however, it's a **single agent working alone**.
+[Pi](https://github.com/earendil-works/pi) by Earendil Works is an excellent terminal-based AI coding agent: tool-use, conversation memory, a fast TUI, and a clean extension API. Out of the box, however, it's a **single agent working alone**.
 
 Real engineering work rarely fits that shape. Planning wants structured review before code is written. Large refactors benefit from parallel exploration. Security-sensitive operations demand pre-flight guards. Spec-driven features need human approval gates.
 
@@ -93,7 +93,7 @@ agent-pi/
 │   ├── frontend-design/, qa-automation/, codebase-to-course/, …
 │
 ├── commands/                 Toolkit slash commands (markdown-driven)
-├── prompts/                  Prompt templates (incl. Commander MCP)
+├── prompts/                  Prompt templates (incl. Commander CLI-backed workflows)
 ├── themes/                   11 theme JSONs
 ├── scripts/                  pi-agent-orchestrator.mjs bridge + utilities
 ├── tex/                      Standalone "Text Tools" browser app
@@ -116,8 +116,8 @@ agent-pi/
 ### One-line install (recommended — handles everything)
 
 ```bash
-git clone https://github.com/ruizrica/agent-pi.git \
-  && cd agent-pi \
+git clone https://github.com/earendil-works/pi.git \
+  && cd pi \
   && ./install.sh
 ```
 
@@ -138,7 +138,7 @@ The installer bootstraps Pi itself if not present, then registers `agent-pi` as 
 ### Existing Pi install
 
 ```bash
-pi install git:github.com/ruizrica/agent-pi
+pi install git:github.com/earendil-works/pi
 ```
 
 Pi's package loader auto-discovers every extension, theme, skill, and prompt listed in `package.json`:
@@ -337,9 +337,9 @@ These hooks are Pi-native — they apply to every extension and every tool the a
 
 ```json
 "peerDependencies": {
-  "@mariozechner/pi-agent-core":   "*",
-  "@mariozechner/pi-coding-agent": "*",
-  "@mariozechner/pi-tui":          "*",
+  "@earendil-works/pi-agent-core":   "*",
+  "@earendil-works/pi-coding-agent": "*",
+  "@earendil-works/pi-tui":          "*",
   "@sinclair/typebox":             "*"
 }
 ```
@@ -391,7 +391,7 @@ npm run security:scan   # mako security scan
 Full details live in [CONTRIBUTING.md](./CONTRIBUTING.md). The high points:
 
 1. **Fork + clone** your copy of the repo.
-2. **Install Pi** — follow the upstream [Pi](https://github.com/badlogic/pi-mono) instructions.
+2. **Install Pi** — follow the upstream [Pi](https://github.com/earendil-works/pi) instructions.
 3. **Install deps** — `npm install` at the project root.
 4. **Run locally** — `pi` from the project root picks up `settings.json` and auto-loads all extensions.
 5. **Follow TDD** — write a failing test first (`extensions/__tests__/`), then the implementation.
@@ -406,13 +406,13 @@ Issue reports and feature ideas are welcome via GitHub Issues.
 
 [MIT](./LICENSE) — Copyright © 2025 Ricardo Ruiz.
 
-Pi itself (the underlying runtime) is a separate project by [@badlogic](https://github.com/badlogic); see its own license for terms.
+Pi itself (the underlying runtime) is a separate project by [Earendil Works; see its own license for terms.
 
 ---
 
 ## Related links
 
-- [Pi (`pi-mono`)](https://github.com/badlogic/pi-mono) — the runtime this package extends
+- [Pi](https://github.com/earendil-works/pi) — the runtime this package extends
 - [CHANGELOG](./CHANGELOG.md) — release notes
 - [CLAUDE.md](./CLAUDE.md) — agent-facing rules & policies for this repo
 - [docs/](./docs/) — screenshots and supplementary documentation

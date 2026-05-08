@@ -1,7 +1,7 @@
 // ABOUTME: Startup runtime patch for Pi interactive mode to support true summary-only rendering.
 // ABOUTME: Suppresses transcript/tool rendering while summary mode is active and restores chat on exit.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,10 +10,10 @@ const g = globalThis as any;
 
 async function resolveInteractiveModeCtor(): Promise<any> {
 	const candidates: string[] = [
-		fileURLToPath(new URL("../node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/interactive-mode.js", import.meta.url)),
-		join(process.cwd(), "node_modules", "@mariozechner", "pi-coding-agent", "dist", "modes", "interactive", "interactive-mode.js"),
-		"/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
-		"/usr/local/lib/node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+		fileURLToPath(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js", import.meta.url)),
+		join(process.cwd(), "node_modules", "@earendil-works", "pi-coding-agent", "dist", "modes", "interactive", "interactive-mode.js"),
+		"/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+		"/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
 	];
 	const errors: string[] = [];
 	for (const candidate of candidates) {

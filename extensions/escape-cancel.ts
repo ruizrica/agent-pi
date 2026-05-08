@@ -1,8 +1,8 @@
 // ABOUTME: Double-tap ESC cancels all running operations (agent stream, subagents, chains, pipelines).
 // ABOUTME: Listens for raw terminal ESC input and detects two presses within 400ms.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { matchesKey } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { matchesKey } from "@earendil-works/pi-tui";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 /** Time window (ms) for two ESC presses to be considered a double-tap. */

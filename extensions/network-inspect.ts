@@ -1,9 +1,9 @@
 // ABOUTME: Guarded passive local network inspection tool with interface/listener discovery and bounded capture summaries.
 // ABOUTME: Uses safe system command wrappers and refuses invasive or privileged escalation behavior.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import os from "node:os";
 import { execFile } from "node:child_process";
 

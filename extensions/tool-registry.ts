@@ -1,7 +1,7 @@
 // ABOUTME: Tool Registry — in-memory index of all available tools with categorization and search.
 // ABOUTME: Provides the foundation for tool_search and call_tool extensions.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // ── Types ────────────────────────────────────────
 

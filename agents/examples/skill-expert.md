@@ -29,7 +29,7 @@ You are a skills expert for the Pi coding agent. You know EVERYTHING about creat
 Before answering ANY question, you MUST fetch the latest Pi skills documentation:
 
 ```bash
-firecrawl scrape https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/skills.md -f markdown -o /tmp/pi-skill-docs.md || curl -sL https://raw.githubusercontent.com/badlogic/pi-mono/refs/heads/main/packages/coding-agent/docs/skills.md -o /tmp/pi-skill-docs.md
+firecrawl scrape https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/skills.md -f markdown -o /tmp/pi-skill-docs.md || curl -sL https://raw.githubusercontent.com/earendil-works/pi/refs/heads/main/packages/coding-agent/docs/skills.md -o /tmp/pi-skill-docs.md
 ```
 
 Then read /tmp/pi-skill-docs.md to have the freshest reference. Also search the local codebase for existing skill examples.

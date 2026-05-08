@@ -4,7 +4,7 @@
 
 <br/>
 
-**An extension suite that turns [Pi](https://github.com/badlogic/pi-mono) into a multi-agent orchestration platform**
+**An extension suite that turns [Pi](https://github.com/earendil-works/pi) into a multi-agent orchestration platform**
 
 [Install](#install) · [Extensions](#extensions) · [Modes](#operational-modes) · [Orchestration](#multi-agent-orchestration)
 
@@ -14,7 +14,7 @@
 
 ## What is this?
 
-[Pi](https://github.com/badlogic/pi-mono) is a terminal-based AI coding agent by [@badlogic](https://github.com/badlogic). Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
+[Pi](https://github.com/earendil-works/pi) is a terminal-based AI coding agent by Earendil Works. Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
 
 **agent** is a Pi package — **60 extensions, 11 themes, and 26 skills** that transform Pi into something more:
 
@@ -33,13 +33,13 @@ Everything is configuration — no forks, no patches. Just extensions, agent def
 Don't have Pi installed? No problem. The installer handles everything — installs Pi, registers the package, and configures settings in one go:
 
 ```bash
-git clone https://github.com/ruizrica/agent-pi.git && cd agent-pi && ./install.sh
+git clone https://github.com/earendil-works/pi.git && cd pi && ./install.sh
 ```
 
 ### Already have Pi?
 
 ```bash
-pi install git:github.com/ruizrica/agent-pi
+pi install git:github.com/earendil-works/pi
 ```
 
 Pi discovers all extensions, themes, and skills automatically.
@@ -181,7 +181,7 @@ From the Pacifico repo, upload the production secret (interactive Wrangler OAuth
 | Extension | Description |
 |-----------|-------------|
 | **tasks** | Task discipline — define tasks before tools unlock; idle → inprogress → done lifecycle |
-| **commander-mcp** | Bridge exposing Commander dashboard tools as native Pi tools |
+| **commander-mcp** | CLI-backed bridge exposing Commander dashboard tools as native Pi tools |
 | **commander-tracker** | Reconciles local tasks with Commander; retries failed sync |
 
 ### Operational Modes

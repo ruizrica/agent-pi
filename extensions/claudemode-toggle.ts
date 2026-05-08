@@ -1,7 +1,7 @@
 // ABOUTME: Toggle between Claude Code CLI and Direct API modes
 // ABOUTME: Provides a /claude-mode command to switch between Claude execution modes
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";

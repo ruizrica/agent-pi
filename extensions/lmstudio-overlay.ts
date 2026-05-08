@@ -1,7 +1,7 @@
 // ABOUTME: Registers LM Studio as a Pi provider and exposes health checks for local Gemma and Qwen overlays.
 // ABOUTME: Local implementation workers run through LM Studio's OpenAI-compatible API on port 1234.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 export const LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1";

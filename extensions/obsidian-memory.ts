@@ -1,9 +1,9 @@
 // ABOUTME: Obsidian Knowledge Base extension — Karpathy-style agent memory via Obsidian CLI.
 // ABOUTME: Provides ingest, search, read, write, compile, navigate, and health operations on an Obsidian vault.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import {
 	obsidianExec,
 	rawPath,

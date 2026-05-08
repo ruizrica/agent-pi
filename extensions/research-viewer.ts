@@ -2,8 +2,8 @@
 // ABOUTME: Opens a web viewer to browse, search, and resume saved research sessions.
 // ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import type { Server } from "node:http";

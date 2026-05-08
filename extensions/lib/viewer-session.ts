@@ -1,7 +1,7 @@
 // ABOUTME: Shared helpers for tracking and closing the currently active local browser viewer from the CLI.
 // ABOUTME: Lets multiple viewer extensions expose a consistent CLI close path without duplicating server bookkeeping.
 
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Server } from "node:http";
 
 export type ActiveViewerKind = "file" | "plan" | "questions" | "spec" | "report" | "sounds" | "qa" | "setup" | "board" | "chat" | "tests";

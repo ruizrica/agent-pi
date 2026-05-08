@@ -1,9 +1,9 @@
 // ABOUTME: Cycles operational modes (NORMAL/PLAN/INVESTIGATE/SPEC/PIPELINE/TEAM/CHAIN) via Shift+Tab.
 // ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/INVESTIGATE/SPEC prompts.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";

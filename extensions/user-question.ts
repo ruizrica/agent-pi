@@ -1,11 +1,11 @@
 // ABOUTME: User Question — Interactive UI tool for agent-to-user communication
 // ABOUTME: Three inline modes: select (pick from list), input (free text), confirm (yes/no)
 
-import { StringEnum } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	Text,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { outputLine } from "./lib/output-box.ts";
 import { buildAskUserDetails, type AskUserDetails } from "./lib/ask-user-details.ts";

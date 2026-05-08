@@ -1,9 +1,9 @@
 // ABOUTME: Global-first dream scheduler for Pi's memory consolidation system.
 // ABOUTME: Tracks dream freshness in ~/.pi/dream/dream-state.json and reminds users when global memory is stale.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Box, Text } from "@mariozechner/pi-tui";
+import { Box, Text } from "@earendil-works/pi-tui";
 import {
 	DEFAULT_DREAM_STATE,
 	formatNextDream,

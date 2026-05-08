@@ -148,14 +148,14 @@ if command -v pi &>/dev/null; then
     success "Pi CLI found at ${DIM}${PI_PATH}${NC}"
 else
     if [ "$DRY_RUN" -eq 1 ]; then
-        info "[dry-run] Pi CLI not found — would run: ${DIM}npm install -g @mariozechner/pi-coding-agent${NC}"
+        info "[dry-run] Pi CLI not found — would run: ${DIM}npm install -g @earendil-works/pi-coding-agent${NC}"
     else
         info "Pi CLI not found — installing globally..."
-        npm install -g @mariozechner/pi-coding-agent
+        npm install -g @earendil-works/pi-coding-agent
         if command -v pi &>/dev/null; then
             success "Pi CLI installed"
         else
-            fail "Failed to install Pi CLI. Try manually: npm install -g @mariozechner/pi-coding-agent"
+            fail "Failed to install Pi CLI. Try manually: npm install -g @earendil-works/pi-coding-agent"
             exit 1
         fi
     fi
@@ -348,7 +348,7 @@ else
 fi
 
 # Check core agent definitions
-CORE_AGENTS=("builder.md" "reviewer.md" "scout.md" "planner.md" "tester.md")
+CORE_AGENTS=("builders/builder.md" "team/reviewer.md" "team/scout.md" "team/planner.md" "tester/tester.md")
 MISSING_AGENTS=0
 for agent_file in "${CORE_AGENTS[@]}"; do
     if [ ! -f "$CONFIG_DIR/$agent_file" ]; then

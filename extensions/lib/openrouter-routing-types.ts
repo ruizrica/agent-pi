@@ -151,7 +151,7 @@ export const OPENROUTER_CACHE_TTL_MS = 30 * 60 * 1000;
 export const OPENROUTER_FETCH_TIMEOUT_MS = 15_000;
 export const OPENROUTER_ENRICHED_MODEL_PREFIX = "@or:";
 export const OPENROUTER_INFO_MESSAGE_TYPE = "openrouter-info";
-export const OPENROUTER_REFERER_HEADER = "https://github.com/ruizrica/agent-pi";
+export const OPENROUTER_REFERER_HEADER = "https://github.com/earendil-works/pi";
 export const OPENROUTER_APP_TITLE = "agent-pi-openrouter-routing";
 
 export const OPENROUTER_ENDPOINT_STATUS_LABELS: Record<number, string> = {

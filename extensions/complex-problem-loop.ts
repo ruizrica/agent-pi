@@ -1,7 +1,7 @@
 // ABOUTME: Complex problem loop session scaffolding for iterative hard-task workflows.
 // ABOUTME: Creates and updates lightweight .context state artifacts without duplicating planning or subagent systems.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

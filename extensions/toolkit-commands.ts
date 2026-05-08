@@ -12,7 +12,7 @@
  * Usage: loaded via packages in settings.json
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +61,7 @@ const TOOL_MAP: Record<string, string> = {
 	python: "bash",
 	terminal: "bash",
 	"claude-code-sdk": "read,grep,bash",
-	// Commander MCP tools (Claude Code → Pi name mapping)
+	// Legacy Commander MCP tool aliases (Claude Code → Pi name mapping)
 	"mcp__commander__commander_task": "commander_task",
 	"mcp__commander__commander_session": "commander_session",
 	"mcp__commander__commander_workflow": "commander_workflow",

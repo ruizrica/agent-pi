@@ -1,4 +1,4 @@
-// Mock implementation of @mariozechner/pi-tui for testing
+// Mock implementation of @earendil-works/pi-tui for testing
 
 export class Container {
 	private children: any[] = [];
