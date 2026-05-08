@@ -1,4 +1,4 @@
-// ABOUTME: Pure sync functions for mapping between local task states and Commander MCP states.
+// ABOUTME: Pure sync functions for mapping between local task states and Commander task states.
 // ABOUTME: No side effects — fully testable state mapping, ID parsing, and type definitions.
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -64,11 +64,11 @@ function extractJsonField(result: any, field: string): number | undefined {
 }
 
 export function parseCommanderTaskId(result: any): number | undefined {
-	return extractJsonField(result, "task_id");
+	return extractJsonField(result, "task_id") ?? extractJsonField(result, "id");
 }
 
 export function parseGroupId(result: any): number | undefined {
-	return extractJsonField(result, "group_id");
+	return extractJsonField(result, "group_id") ?? extractJsonField(result, "id");
 }
 
 // ── SyncState helpers ───────────────────────────────────────────────

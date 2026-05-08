@@ -1,7 +1,7 @@
 // ABOUTME: Extension that reconciles local tasks with Commander and retries failed sync ops.
-// ABOUTME: Activates when Commander becomes available; runs reconcile (15s) and heartbeat (30s) intervals.
+// ABOUTME: Activates when Commander CLI becomes available; runs reconcile (15s) and heartbeat (30s) intervals.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	createTrackerState,
 	popRetries,

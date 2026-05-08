@@ -1,5 +1,5 @@
 ---
-description: "Plan and execute a single task with full Commander MCP tracking - uses planning agents for context, then implements directly"
+description: "Plan and execute a single task with full Commander CLI-backed tracking - uses planning agents for context, then implements directly"
 argument-hint: "[task description - what to implement, fix, or build]"
 allowed-tools: ["Task", "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "mcp__commander__commander_task", "mcp__commander__commander_task_lifecycle", "mcp__commander__commander_comment", "mcp__commander__commander_log", "AskUserQuestion"]
 ---
