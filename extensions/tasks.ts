@@ -47,6 +47,7 @@ import {
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
+import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { enqueueOrExecute } from "./lib/commander/commander-ready.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import {
@@ -187,7 +188,7 @@ class TasksListComponent {
 		));
 
 		if (this.desc) {
-			lines.push(truncateToWidth(`  ${th.fg("accent", "Work Summary:")} ${th.fg("muted", this.desc)}`, width));
+			lines.push(...renderTaskModalWorkSummary(this.desc, width, th));
 		}
 		lines.push("");
 
