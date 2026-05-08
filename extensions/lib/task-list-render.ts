@@ -168,7 +168,7 @@ export function renderTaskList(
 		lines.push("");
 	}
 
-	lines.push(trunc(`  ${fg("dim", `Task details: ${TASK_HOTKEY_HINT} or /tasks`)}`, width, ""));
+	lines.push(trunc(`  ${fg("dim", "ctrl+alt+t or /tasks to view tasks")}`, width, ""));
 
 	return lines;
 }
