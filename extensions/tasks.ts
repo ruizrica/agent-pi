@@ -120,11 +120,17 @@ function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, desc
 	const cur = tasks.find(t => t.status === "inprogress");
 	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: lookupMapping(sync, cur.id) } as CurrentTaskInfo : null;
 
+	const fallbackSummary = description
+		|| (() => {
+			const best = tasks.find(t => t.status === "inprogress") || tasks.find(t => t.status !== "done");
+			return best ? stripLeadingNumber(best.text) : undefined;
+		})();
+
 	const remaining = tasks.filter(t => t.status !== "done").length;
 	g.__piTaskList = {
 		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
 		title,
-		description,
+		description: fallbackSummary,
 		remaining,
 		total: tasks.length,
 		__syncState: sync,
