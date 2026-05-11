@@ -647,14 +647,13 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// All tasks done — inject rich completion context for the agent
+		//
+		// We intentionally do NOT enumerate each completed task here. The full
+		// list (with IDs and Commander mappings) is already available via the
+		// Ctrl+Alt+T task overlay and via Commander itself, and re-injecting it
+		// as hidden context bloats long-running sessions for no benefit.
 		if (tasks.length > 0 && incomplete.length === 0) {
 			const stats = getSessionStats();
-			const taskSummary = tasks
-				.map((t) => {
-					const cmdId = lookupMapping(syncState, t.id);
-					return `  [x] #${t.id}: ${t.text}${cmdId ? ` (Commander #${cmdId})` : ""}`;
-				})
-				.join("\n");
 
 			const statsParts: string[] = [];
 			if (stats) {
@@ -693,7 +692,7 @@ export default function (pi: ExtensionAPI) {
 			pi.sendMessage(
 				{
 					customType: "mission-complete",
-					content: `${completionPrefix}${summaryLine}\n\n${taskSummary}${nextStepLine}${statsLine}${reportHint}`,
+					content: `${completionPrefix}${summaryLine}${nextStepLine}${statsLine}${reportHint}`,
 					display: false, // Hidden context for the agent — widget handles the visual
 				},
 			);

@@ -322,7 +322,7 @@ After agents report back, synthesize their findings — identify files that need
 
 #### Agent lifecycle management:
 - Scouts have a **10-minute timeout**, builders have a **30-minute timeout** — if an agent hangs, it will be automatically killed
-- Agents **auto-dismiss** their widgets 30 seconds after completing work
+- Agents **auto-dismiss** their widgets ~2 seconds after completing work
 - When you spawn a new batch, any leftover done/error agents are **auto-cleaned** first
 - You **cannot spawn a new batch** while agents from a previous batch are still running
 - If agents are stuck, use \`subagent_cleanup {}\` to kill stale agents and clear widgets

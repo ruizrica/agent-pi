@@ -126,6 +126,7 @@ interface SubState {
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
 	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
+	dismissTimer?: ReturnType<typeof setTimeout>;  // 2s auto-remove timer — cancelled on /subcont, /subrm, /subclear, cleanup, batch reuse
 }
 
 export default function (pi: ExtensionAPI) {
@@ -474,9 +475,15 @@ export default function (pi: ExtensionAPI) {
 					state.standby = false;
 				}
 
-				// Auto-remove widget after 2s (default behavior)
+				// Auto-remove widget ~2s after the agent reaches a terminal state.
+				// Tracked on state.dismissTimer so /subcont, /subrm, /subclear, and
+				// subagent_cleanup can cancel it cleanly if the agent gets reused.
 				if (state.autoRemove !== false) {
-					setTimeout(() => {
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+					}
+					state.dismissTimer = setTimeout(() => {
+						state.dismissTimer = undefined;
 						if (agents.has(state.id) && state.status !== "running") {
 							ctx.ui.setWidget(`sub-${state.id}`, undefined);
 							widgetBoxes.delete(state.id);
@@ -650,6 +657,10 @@ export default function (pi: ExtensionAPI) {
 			// ── Auto-cleanup: remove done/error agents before spawning new batch ──
 			for (const [id, a] of Array.from(agents.entries())) {
 				if (a.status === "done" || a.status === "error") {
+					if (a.dismissTimer) {
+						clearTimeout(a.dismissTimer);
+						a.dismissTimer = undefined;
+					}
 					if (widgetCtx) widgetCtx.ui.setWidget(`sub-${id}`, undefined);
 					widgetBoxes.delete(id);
 					agents.delete(id);
@@ -741,6 +752,13 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: `Error: SA${args.id} is still running.` }] };
 			}
 
+			// Cancel any pending 2s auto-dismiss timer — the agent is being reused
+			// for another turn, so the widget should stay visible.
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
+
 			state.status = "running";
 			state.task = args.prompt;
 			state.textChunks = [];
@@ -778,6 +796,10 @@ export default function (pi: ExtensionAPI) {
 
 			if (state.proc && state.status === "running") {
 				await killGracefully(state.proc);
+			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
 			}
 			ctx.ui.setWidget(`sub-${args.id}`, undefined);
 			widgetBoxes.delete(args.id);
@@ -827,6 +849,10 @@ export default function (pi: ExtensionAPI) {
 				if ((globalThis as any).__piScoutId === id) continue;
 
 				if (state.status === "done" || state.status === "error") {
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+						state.dismissTimer = undefined;
+					}
 					ctx.ui.setWidget(`sub-${id}`, undefined);
 					widgetBoxes.delete(id);
 					agents.delete(id);
@@ -834,6 +860,10 @@ export default function (pi: ExtensionAPI) {
 				} else if (state.status === "running" && maxAge > 0 && state.elapsed > maxAge) {
 					if (state.proc) {
 						killPromises.push(killGracefully(state.proc));
+					}
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+						state.dismissTimer = undefined;
 					}
 					state.status = "error";
 					state.textChunks.push(`\n[CLEANUP] Killed after ${Math.round(state.elapsed / 1000)}s (stale).`);
@@ -975,6 +1005,10 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(`SA${num} removed.`, "info");
 			}
 
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
 			ctx.ui.setWidget(`sub-${num}`, undefined);
 			widgetBoxes.delete(num);
 			agents.delete(num);
@@ -994,6 +1028,10 @@ export default function (pi: ExtensionAPI) {
 				if (state.proc && state.status === "running") {
 					killPromises.push(killGracefully(state.proc));
 					killed++;
+				}
+				if (state.dismissTimer) {
+					clearTimeout(state.dismissTimer);
+					state.dismissTimer = undefined;
 				}
 				ctx.ui.setWidget(`sub-${id}`, undefined);
 			}
@@ -1065,6 +1103,10 @@ export default function (pi: ExtensionAPI) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
 			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
 		await Promise.all(killPromises);
@@ -1117,6 +1159,10 @@ export default function (pi: ExtensionAPI) {
 		for (const [id, state] of Array.from(agents.entries())) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
+			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
 			}
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}

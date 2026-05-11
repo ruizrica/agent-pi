@@ -116,35 +116,11 @@ export function renderMissionComplete(
 		}
 	}
 
-	// ── Completed task list ─────────────────────────────────────
-	// Keep completed tasks visible in the mission-complete view so Commander IDs
-	// remain available after the completion summary.
-	const maxDisplay = Math.min(state.tasks.length, 8);
-	const displayTasks = state.tasks.slice(0, maxDisplay);
-
-	for (const task of displayTasks) {
-		const check = theme.fg("success", "✓");
-		const id = theme.fg("accent", `#${task.id}`);
-		const cmdId = task.commanderId
-			? theme.fg("dim", ` → CMD #${task.commanderId}`)
-			: "";
-
-		const prefixLen = 8 + String(task.id).length + (task.commanderId ? 10 + String(task.commanderId).length : 0);
-		const maxTextLen = Math.max(20, contentWidth - prefixLen);
-		const wrappedTask = wrapWords(task.text, maxTextLen);
-		const taskLines = wrappedTask.length > 0 ? wrappedTask : [task.text];
-		lines.push(`  ${check} ${id} ${theme.fg("muted", taskLines[0])}${cmdId}`);
-		for (const line of taskLines.slice(1)) {
-			lines.push(`      ${theme.fg("muted", line)}`);
-		}
-	}
-
-	if (state.tasks.length > maxDisplay) {
-		lines.push(`  ${theme.fg("dim", `... +${state.tasks.length - maxDisplay} more`)}`);
-	}
-	if (displayTasks.length > 0) {
-		lines.push("");
-	}
+	// ── No per-task enumeration ─────────────────────────────────
+	// The completed task list is intentionally NOT rendered here. The full list
+	// (with IDs and Commander mappings) is one keystroke away via the Ctrl+Alt+T
+	// task overlay and is also reflected on Commander. The mission-complete card
+	// stays focused on the work summary and the celebratory footer counts.
 
 	// ── Footer stats + tool hotspots ────────────────────────────
 	const completionParts: string[] = [

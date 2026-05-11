@@ -92,6 +92,27 @@ describe("mission complete lifecycle", () => {
 		expect(tasksSource).toContain("Task complete -- ${listTitle || \"Tasks\"}");
 		expect(tasksSource).toContain("Review the findings/plan and continue with the next approved implementation step.");
 	});
+
+	it("does not enumerate per-task rows in the mission-complete agent message", () => {
+		// The completion message used to ship a taskSummary block like
+		//   [x] #1: Foo (Commander #123)
+		// for every completed task. That information is already available via
+		// the Ctrl+Alt+T task overlay and Commander, so we no longer inline it
+		// into the hidden mission-complete context message.
+		expect(tasksSource).not.toContain("const taskSummary = tasks");
+		expect(tasksSource).not.toContain("[x] #${t.id}");
+		expect(tasksSource).not.toContain("${taskSummary}");
+
+		// The trimmed message must still keep its other context blocks.
+		const missionMsgStart = tasksSource.indexOf("// All tasks done — inject rich completion context");
+		const missionMsgEnd = tasksSource.indexOf("// Incomplete tasks remain — nudge the agent", missionMsgStart);
+		expect(missionMsgStart).toBeGreaterThan(-1);
+		expect(missionMsgEnd).toBeGreaterThan(missionMsgStart);
+		const missionMsgSection = tasksSource.slice(missionMsgStart, missionMsgEnd);
+		expect(missionMsgSection).toContain("completionPrefix");
+		expect(missionMsgSection).toContain("${summaryLine}");
+		expect(missionMsgSection).toContain("${reportHint}");
+	});
 });
 
 describe("tasks output formatting", () => {

@@ -106,9 +106,13 @@ describe("PLAN prompt lifecycle guidance", () => {
 		expect(PLAN_PROMPT).toContain("10-minute timeout");
 	});
 
-	it("mentions auto-dismiss behavior", async () => {
+	it("mentions auto-dismiss behavior with the ~2 second value", async () => {
 		const { PLAN_PROMPT } = await import("../lib/mode-prompts.ts");
 		expect(PLAN_PROMPT).toContain("auto-dismiss");
+		// Pin the actual timing so the prompt can't silently drift away from
+		// the runtime behavior in subagent-widget.ts (2 000 ms).
+		expect(PLAN_PROMPT).toMatch(/~?2 ?seconds?/);
+		expect(PLAN_PROMPT).not.toContain("30 seconds after completing work");
 	});
 
 	it("mentions subagent_cleanup tool", async () => {

@@ -10,7 +10,7 @@ const theme: MissionCompleteTheme = {
 };
 
 describe("renderMissionComplete", () => {
-	it("renders a completed summary followed by task rows with Commander numbers", () => {
+	it("renders the completed summary and footer count, but no per-task rows", () => {
 		const result = renderMissionComplete({
 			listTitle: "Security page update",
 			summary: "Update the security page with clearer copy, safer defaults, and verification coverage.",
@@ -24,9 +24,35 @@ describe("renderMissionComplete", () => {
 		expect(joined).toContain("MISSION COMPLETE");
 		expect(joined).toContain("Completed Summary:");
 		expect(joined).toContain("Update the security page");
-		expect(joined).toContain("Revise copy");
-		expect(joined).toContain("#1");
-		expect(joined).toContain("CMD #123");
+		// Per-task enumeration is intentionally suppressed — the full list lives
+		// in the Ctrl+Alt+T overlay and on Commander.
+		expect(joined).not.toContain("Revise copy");
+		expect(joined).not.toContain("#1");
+		expect(joined).not.toContain("CMD #123");
+		// Footer count and sync indicator remain.
+		expect(joined).toContain("1 task completed");
+		expect(joined).toContain("1 synced ✓");
+	});
+
+	it("does not enumerate individual tasks even when many tasks are present", () => {
+		const result = renderMissionComplete({
+			listTitle: "Big refactor",
+			summary: "Multi-phase refactor of the auth layer.",
+			tasks: Array.from({ length: 12 }, (_, i) => ({
+				id: i + 1,
+				text: `Step ${i + 1}: do the thing`,
+				commanderId: 1000 + i,
+			})),
+			allSynced: true,
+			syncedCount: 12,
+			completedAt: Date.now(),
+		}, 100, theme);
+
+		const joined = result.lines.join("\n");
+		expect(joined).not.toMatch(/Step \d+: do the thing/);
+		expect(joined).not.toContain("... +"); // no "... +N more" overflow line
+		expect(joined).not.toContain("CMD #1000");
+		expect(joined).toContain("12 tasks completed");
 	});
 
 	it("renders an interim completion header with up-next guidance", () => {
@@ -46,6 +72,8 @@ describe("renderMissionComplete", () => {
 		expect(joined).toContain("UP NEXT:");
 		expect(joined).toContain("Review the findings/plan");
 		expect(joined).not.toContain("MISSION COMPLETE");
+		// Per-task rows must not appear in the interim view either.
+		expect(joined).not.toContain("Document root cause");
 	});
 
 	it("omits the completed summary line when no summary is supplied", () => {
@@ -60,10 +88,10 @@ describe("renderMissionComplete", () => {
 		expect(result.lines.join("\n")).not.toContain("Completed Summary:");
 	});
 
-	it("word-wraps long completed summaries and leaves a blank line before task rows", () => {
+	it("word-wraps long completed summaries and leaves a blank line before the footer", () => {
 		const result = renderMissionComplete({
 			listTitle: "Tasks",
-			summary: "This is a deliberately long completion summary that should wrap across multiple lines before the completed task rows are shown in the terminal widget.",
+			summary: "This is a deliberately long completion summary that should wrap across multiple lines before the completion footer is shown in the terminal widget.",
 			tasks: [{ id: 1, text: "Finish work" }],
 			allSynced: true,
 			syncedCount: 0,
@@ -71,17 +99,18 @@ describe("renderMissionComplete", () => {
 		}, 60, theme);
 
 		const summaryIndex = result.lines.findIndex((line) => line.includes("Completed Summary:"));
-		const taskIndex = result.lines.findIndex((line) => line.includes("Finish work"));
+		const footerIndex = result.lines.findIndex((line) => line.includes("1 task completed"));
 		expect(summaryIndex).toBeGreaterThan(-1);
-		expect(taskIndex).toBeGreaterThan(summaryIndex + 1);
-		expect(result.lines[taskIndex - 1]).toBe("");
-		expect(result.lines.slice(summaryIndex, taskIndex).join("\n")).not.toContain("...");
-		for (const line of result.lines.slice(summaryIndex, taskIndex).filter(Boolean)) {
+		expect(footerIndex).toBeGreaterThan(summaryIndex + 1);
+		// The summary's trailing blank line should separate it from the footer.
+		expect(result.lines[footerIndex - 1]).toBe("");
+		expect(result.lines.slice(summaryIndex, footerIndex).join("\n")).not.toContain("...");
+		for (const line of result.lines.slice(summaryIndex, footerIndex).filter(Boolean)) {
 			expect(line.length).toBeLessThanOrEqual(60);
 		}
 	});
 
-	it("leaves a blank line after the final task before footer metadata", () => {
+	it("places the footer directly after the summary block with one blank line", () => {
 		const result = renderMissionComplete({
 			listTitle: "Tasks",
 			summary: "Finish the polish pass.",
@@ -94,11 +123,14 @@ describe("renderMissionComplete", () => {
 			completedAt: Date.now(),
 		}, 100, theme);
 
-		const lastTaskIndex = result.lines.findIndex((line) => line.includes("Execute"));
+		const summaryBodyIndex = result.lines.findIndex((line) => line.includes("Finish the polish pass."));
 		const completionLineIndex = result.lines.findIndex((line) => line.includes("2 tasks completed"));
-		expect(lastTaskIndex).toBeGreaterThan(-1);
-		expect(completionLineIndex).toBe(lastTaskIndex + 2);
-		expect(result.lines[lastTaskIndex + 1]).toBe("");
+		expect(summaryBodyIndex).toBeGreaterThan(-1);
+		expect(completionLineIndex).toBe(summaryBodyIndex + 2);
+		expect(result.lines[summaryBodyIndex + 1]).toBe("");
+		// No per-task row should appear between summary and footer.
+		expect(result.lines.slice(summaryBodyIndex, completionLineIndex).join("\n")).not.toContain("Setup");
+		expect(result.lines.slice(summaryBodyIndex, completionLineIndex).join("\n")).not.toContain("Execute");
 	});
 
 	it("splits duration/tool calls and top tools into separate footer lines", () => {
