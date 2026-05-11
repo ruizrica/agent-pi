@@ -150,29 +150,43 @@ function scenarioPi(prompt: string, captureDir: string, ts: string, opts: Captur
 	return lines.join("\n");
 }
 
+// IMPORTANT: this is a visual mock of the persistent `aboveEditor` task widget
+// rendered by extensions/lib/task-list-render.ts:renderTaskList. The real widget
+// (a) shows a `Mission Brief:` block when the list has a description,
+// (b) does NOT render inline task rows (those live in the Ctrl+Alt+T overlay),
+// (c) ends with the hotkey hint `ctrl+alt+t or /tasks to view tasks`.
+// Keep this mock in lockstep with renderTaskList. The behaviour is also pinned
+// by extensions/__tests__/task-list-widget.test.ts.
 function scenarioTasks(captureDir: string, ts: string, opts: CaptureOptions, absCaptureDir: string): string {
 	const lines = [tapeHeader(captureDir, ts, opts)];
 
 	// Write a helper script that renders the task list with proper ANSI colors
 	const script = `#!/bin/bash
-# Simulated Pi task list widget
+# Simulated Pi task list widget — must match renderTaskList output
 BG="\\033[48;5;236m"
 RST="\\033[0m"
 ACCENT="\\033[38;5;117m"
 BOLD="\\033[1m"
 MUTED="\\033[38;5;245m"
-SUCCESS="\\033[38;5;78m"
 DIM="\\033[38;5;243m"
+TEXT="\\033[38;5;253m"
+PAD="                                                          "
 
 echo ""
-echo -e "\${BG}                                                          \${RST}"
-echo -e "\${BG}  \${ACCENT}\${BOLD}Tasks 2/5\${RST}\${BG}                                         \${RST}"
-echo -e "\${BG}  \${MUTED}- \${ACCENT}1\${RST}\${BG} \${MUTED}Investigate VHS tool\${RST}\${BG}                       \${RST}"
-echo -e "\${BG}  \${SUCCESS}* \${ACCENT}2\${RST}\${BG} \${SUCCESS}Build debug-capture extension\${RST}\${BG}              \${RST}"
-echo -e "\${BG}  \${MUTED}- \${ACCENT}3\${RST}\${BG} \${MUTED}Write tests\${RST}\${BG}                                 \${RST}"
-echo -e "\${BG}  \${SUCCESS}x \${ACCENT}4\${RST}\${BG} \${DIM}Research VHS capabilities\${RST}\${BG}                  \${RST}"
-echo -e "\${BG}  \${SUCCESS}x \${ACCENT}5\${RST}\${BG} \${DIM}Design architecture\${RST}\${BG}                        \${RST}"
-echo -e "\${BG}                                                          \${RST}"
+# Empty padding row (matches agent-team.ts emptyPad)
+echo -e "\${BG}\${PAD}\${RST}"
+# Header: bold title + done/total
+echo -e "\${BG}  \${BOLD}\${TEXT}Tasks 2/5\${RST}\${BG}                                               \${RST}"
+# Mission Brief block
+echo -e "\${BG}  \${ACCENT}Mission Brief:\${RST}\${BG}                                          \${RST}"
+echo -e "\${BG}    \${MUTED}Investigate the VHS-based debug capture extension,\${RST}\${BG}     \${RST}"
+echo -e "\${BG}    \${MUTED}build the helper scripts, and verify the rendered\${RST}\${BG}      \${RST}"
+echo -e "\${BG}    \${MUTED}widget matches the live Pi UI.\${RST}\${BG}                          \${RST}"
+# Blank line then hotkey hint
+echo -e "\${BG}\${PAD}\${RST}"
+echo -e "\${BG}  \${DIM}ctrl+alt+t or /tasks to view tasks\${RST}\${BG}                      \${RST}"
+# Trailing empty padding row
+echo -e "\${BG}\${PAD}\${RST}"
 echo ""
 `;
 

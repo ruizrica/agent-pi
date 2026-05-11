@@ -373,4 +373,52 @@ describe("renderTaskList", () => {
 		);
 		expect(result.length).toBe(0);
 	});
+
+	// ── Chrome budget edge cases ────────────────────────────────────
+	// The Mission Brief block costs 4 chrome lines when shown:
+	// header + "Mission Brief:" label + blank + hotkey hint. The summary
+	// budget must fit summary content into `availableHeight - 4` lines.
+
+	it("hides mission brief gracefully when availableHeight=3 (no overflow)", () => {
+		const tasks = { ...makeTasks(3), description: "Some work summary that should be omitted when height is too tight." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 3, mockDeps);
+		const joined = result.join("\n");
+		expect(joined).not.toContain("Mission Brief:");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+		// Output must not exceed the budget.
+		expect(result.length).toBeLessThanOrEqual(3);
+	});
+
+	it("renders mission brief inside the budget when availableHeight=4 with a description", () => {
+		const tasks = { ...makeTasks(3), description: "Tight summary fits in one line." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 4, mockDeps);
+		const joined = result.join("\n");
+		// At availableHeight=4 the chrome budget allows the label but no summary lines.
+		// The block must either include the label without orphan formatting OR drop the brief
+		// entirely — the critical invariant is: never overflow the budget.
+		expect(result.length).toBeLessThanOrEqual(4);
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("renders mission brief with 1 summary line when availableHeight=5 with a description", () => {
+		const tasks = { ...makeTasks(3), description: "Short summary." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 5, mockDeps);
+		const joined = result.join("\n");
+		expect(joined).toContain("Mission Brief:");
+		expect(joined).toContain("Short summary.");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+		// Output must not exceed the budget.
+		expect(result.length).toBeLessThanOrEqual(5);
+	});
+
+	it("never overflows the budget for any availableHeight from 3 to 20 with a long description", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "This is a deliberately verbose work summary that should wrap onto many lines so we can stress the chrome budget across a range of widget heights.",
+		};
+		for (let h = 3; h <= 20; h++) {
+			const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 50, h, mockDeps);
+			expect(result.length, `availableHeight=${h} produced ${result.length} lines`).toBeLessThanOrEqual(h);
+		}
+	});
 });

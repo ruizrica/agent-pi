@@ -67,6 +67,69 @@ describe("CommanderCliClient", () => {
 		expect(JSON.parse(text(result)).task_id).toBe(42);
 	});
 
+	it("maps title, mission brief, labels, and parent on create", async () => {
+		mockExec({ id: 43, status: "pending" });
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		await client.callTool("commander_task", {
+			operation: "create",
+			description: "Mission body",
+			title: "Mission Title",
+			mission_brief: "Mission body",
+			labels: ["initiative-root"],
+			group_id: 12,
+			status: "pending",
+		});
+		expect(execFileMock).toHaveBeenCalledWith(
+			"cmd-test",
+			[
+				"task", "add", "Mission body", "--json", "--no-color",
+				"--status", "pending",
+				"--title", "Mission Title",
+				"--mission-brief", "Mission body",
+				"--labels", "initiative-root",
+				"--parent", "12",
+			],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it("uses initiative_summary as root mission brief during group:create", async () => {
+		let nextId = 100;
+		execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+			cb(null, JSON.stringify({ id: nextId++ }), "");
+		});
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		const result = await client.callTool("commander_task", {
+			operation: "group:create",
+			group_name: "Mission Title",
+			initiative_summary: "Mission body",
+			tasks: [{ description: "Child task" }],
+		});
+
+		expect(execFileMock).toHaveBeenNthCalledWith(
+			1,
+			"cmd-test",
+			[
+				"task", "add", "Mission body", "--json", "--no-color",
+				"--status", "pending",
+				"--title", "Mission Title",
+				"--mission-brief", "Mission body",
+				"--labels", "initiative-root",
+			],
+			expect.any(Object),
+			expect.any(Function),
+		);
+		expect(execFileMock).toHaveBeenNthCalledWith(
+			2,
+			"cmd-test",
+			["task", "add", "Child task", "--json", "--no-color", "--status", "pending", "--parent", "100"],
+			expect.any(Object),
+			expect.any(Function),
+		);
+		expect(JSON.parse(text(result))).toEqual({ group_id: 100, task_ids: [101], emulated: true });
+	});
+
 	it("maps claim to a working status update", async () => {
 		mockExec({ id: 9, updated: { status: "working" } });
 		const client = new CommanderCliClient({ bin: "cmd-test" });

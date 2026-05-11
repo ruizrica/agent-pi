@@ -54,17 +54,17 @@ describe("toolkit worker model resolution", () => {
 		expect(resolveToolkitWorkerModel("reviewer", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
 	});
 
-	it("changes execution routing rather than mutating resolved models", () => {
+	it("preserves resolved models while keeping Claude on direct API routing", () => {
 		expect(resolveToolkitWorkerModel("reviewer", "anthropic/claude-opus-4-6")).toBe("anthropic/claude-opus-4-6");
-		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", true)).toBe(true);
-		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(true);
-		expect(shouldUseClaudeCliForAgent("claude-worker", "anthropic/claude-haiku-4-5", false)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", true)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("claude-worker", "anthropic/claude-haiku-4-5", false)).toBe(false);
 	});
 
-	it("routes any Claude-family model through Claude CLI even without overlay", () => {
+	it("does not route Claude-family models through Claude CLI by default", () => {
 		expect(isClaudeFamilyModel("anthropic/claude-opus-4-6")).toBe(true);
-		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(true);
-		expect(shouldUseClaudeCliForAgent("builder", "anthropic/claude-haiku-4-5", false)).toBe(true);
+		expect(shouldUseClaudeCliForAgent("reviewer", "anthropic/claude-opus-4-6", false)).toBe(false);
+		expect(shouldUseClaudeCliForAgent("builder", "anthropic/claude-haiku-4-5", false)).toBe(false);
 		expect(shouldUseClaudeCliForAgent("builder", "openai/gpt-5.4", false)).toBe(false);
 	});
 });

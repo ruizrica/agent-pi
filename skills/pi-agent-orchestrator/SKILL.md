@@ -129,6 +129,29 @@ node scripts/pi-agent-orchestrator.mjs chain \
   --execute
 ```
 
+## Commander CLI Tracking (optional)
+
+For any non-trivial orchestration run, create task lineage in `cmd` so humans can inspect progress:
+
+```bash
+SESSION_ROOT=$(cmd task add "Orchestrate: <goal>" --type feature --priority high --json | jq -r '.id')
+cmd task comment "$SESSION_ROOT" "Started: orchestrator mode=$MODE, approved=$APPROVED" --type progress --agent orchestrator
+```
+
+Use this `SESSION_ROOT` as the parent for work items that this orchestrator run will trigger:
+
+```bash
+cmd task add "Run $MODE execution: <description>" --parent "$SESSION_ROOT" --type task --priority high --json
+cmd task update "$SESSION_ROOT" --status in-progress
+```
+
+Mark complete when the orchestrator command returns:
+
+```bash
+cmd task update "$SESSION_ROOT" --status done
+cmd task comment "$SESSION_ROOT" "Completed: <summary of outcomes>" --type progress --agent orchestrator
+```
+
 ## Output Expectations
 
 After each bridge command:

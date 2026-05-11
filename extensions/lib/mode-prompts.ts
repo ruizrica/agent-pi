@@ -7,6 +7,7 @@ import {
 	MAX_WORKER_AGENTS,
 } from "./claude/advisor-default-config.ts";
 import { resolveCrossProviderSecondOpinion } from "./claude/advisor-default-orchestration.ts";
+import { buildWardenTaskConfirmationSection } from "./warden-prompt-section.ts";
 
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
@@ -81,6 +82,14 @@ The scout runs in the background. When it finishes, its findings are delivered a
 
 	return `You are in NORMAL mode. This is the default complexity-aware orchestration mode. Work directly for simple and medium tasks; use strategic guidance and parallel execution for complex work.
 ${scoutSection}
+
+${buildWardenTaskConfirmationSection("NORMAL", {
+	sliceName: "complex direct-work slice",
+	guardrails: [
+		"Use WARDEN for non-trivial work; do not force ceremony for simple answers, quick reads, or one-off status checks.",
+		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, INVESTIGATE, SPEC, TEAM, CHAIN, or PIPELINE instead of improvising.",
+	],
+})}
 
 ## Strategic Advisor Guidance
 
@@ -235,6 +244,14 @@ export function buildPlanPrompt(opts: ModePromptOpts): string {
 ${buildQualityFirstSection("PLAN")}
 
 ${buildAdvisorOverlay("PLAN", opts)}
+
+${buildWardenTaskConfirmationSection("PLAN", {
+	sliceName: "approved plan or implementation phase",
+	guardrails: [
+		"WARDEN tracks planning and execution progress, but it never replaces mandatory `show_plan` approval before coding.",
+		"If discoveries invalidate the approved plan, pause the active WARDEN task and re-plan instead of continuing silently.",
+	],
+})}
 
 ## CLAUDE Overlay
 
@@ -480,16 +497,31 @@ Example:
 `;
 }
 
-/** Kiro spec-driven workflow: requirements → spec design → tasks → approval → implement. */
+/** Investigation-first loop workflow: clarify → diagnostic slices → reflect → approve remediation → hand off. */
 export function buildInvestigatePrompt(opts: ModePromptOpts): string {
-	return `You are in INVESTIGATE mode. Use a structured investigation-first workflow for bugs, incidents, regressions, and hard-to-explain product or system problems.
+	return `You are in INVESTIGATE mode. Use the complex problem loop style for bugs, incidents, regressions, and hard-to-explain product or system problems.
 
 ${buildQualityFirstSection("INVESTIGATE")}
 
 ${buildAdvisorOverlay("INVESTIGATE", opts)}
 
 ## Purpose
-INVESTIGATE mode exists for diagnosing problems before implementation. Your job is to fully understand the problem, gather evidence, form hypotheses, present findings plus a remediation plan for approval, and only then hand approved execution into PIPELINE.
+INVESTIGATE mode exists for diagnosing problems through deliberate loop iterations before implementation. Your job is to clarify the target, preserve investigation state, choose the next best information move, execute one focused diagnostic slice, reflect on the evidence, and either continue, ask a precise question, or present findings plus a remediation plan for approval. Only approved remediation should hand off into PIPELINE for execution.
+
+${buildWardenTaskConfirmationSection("INVESTIGATE", {
+	sliceName: "diagnostic slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm each diagnostic slice, findings write-up, and remediation-plan handoff.",
+		"Do not implement remediation just because a WARDEN task is active; remediation still requires approved findings or plan handoff.",
+	],
+})}
+
+## Loop-State Tools
+Use the existing complex problem loop tools for non-trivial investigations:
+- Start once the investigation target is clear: \`complex_problem_loop_start { goal, success_criteria, constraints, session_name }\`
+- Advance after each meaningful diagnostic slice, before asking a blocking question, and before presenting findings: \`complex_problem_loop_advance { last_slice, current_understanding, active_hypothesis, open_questions, risks, next_slice, session_name }\`
+- Let the tool manage state under \`.context/complex-problem-sessions/\`; do not invent a second investigation state format.
+- Keep the state concise and evidence-based. Important fields include \`Current Understanding\`, \`Active Hypothesis\`, \`Evidence\`, \`Open Questions\`, \`Risks\`, \`Last Slice\`, and \`Next Slice\`.
 
 ## CLAUDE Overlay
 
@@ -501,13 +533,14 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ## Workflow
 
-### Phase 1: Clarify the Problem
+### Phase 1: Clarify and Start Loop State
 - First understand the problem statement, intended goal, expected behavior, actual behavior, severity, scope, reproducibility, and restrictions.
+- Restate the clarified investigation target, success criteria, known constraints, facts, assumptions, and important unknowns.
 - For substantial ambiguity, write 3-8 concise questions to \`.context/questions.md\` and call:
   \`show_plan { file_path: ".context/questions.md", title: "Investigation Questions", mode: "questions" }\`
 - Use \`ask_user\` only for lightweight confirm/input/select follow-ups after or instead of the browser flow when one small decision is missing.
 - Do not begin code changes in this phase.
-- When the problem is fully understood, restate the clarified investigation target before gathering evidence.
+- Once the target is clear for a non-trivial investigation, call \`complex_problem_loop_start\` with the goal, observable success criteria, constraints, and a stable \`session_name\` when useful.
 
 #### Question-Writing Rules (STRICT)
 1. One question = one decision.
@@ -516,12 +549,20 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 4. Keep questions concise.
 5. Ask 3-8 questions total unless the issue is already clear.
 
-### Phase 2: Scout-Led Context Gathering
-- Use scout agents as the primary context gatherers.
-- Spawn up to **8 scout subagents** in one batch using \`subagent_create_batch\`.
+### Phase 2: Choose the Next Best Information Move
+- Before reading broadly or delegating, decide what information would most reduce uncertainty.
+- Prefer the smallest high-value diagnostic move: inspect an entry point, trace one flow, reproduce one symptom, compare one pattern, inspect one test boundary, or check one config surface.
+- Record the chosen move as the current \`Next Slice\` when the investigation is long-running or the next action is not obvious.
+- Do not gather context merely to gather context; every move should test or refine an \`Active Hypothesis\`.
+
+### Phase 3: Recon and Execute One Focused Investigation Slice
+- Execute one diagnostic slice at a time. A slice can be a reproduction attempt, a read-only trace, a scout batch, a log/error-surface review, a dependency/config check, or a targeted test inspection.
+- Use scout agents as the primary context gatherers when the problem spans multiple areas.
+- Spawn up to **8 scout subagents** in one batch using \`subagent_create_batch\` for moderate or large investigations.
 - Prefer distinct scout assignments: structure, reproduction path, data flow, dependency chain, test coverage, config/env, error surface, and nearby patterns.
 - Wait for all scouts to finish before synthesizing.
 - Do not spawn a second gather batch unless the first batch failed and must be rerun.
+- Do not implement remediation during investigation slices unless the user has already approved the remediation plan.
 
 #### Typical Scout Assignments
 - Structure scout
@@ -533,27 +574,35 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 - Config scout
 - Error/log surface scout
 
-### Phase 3: Synthesis and Hypotheses
-- Synthesize scout evidence into a clear explanation of what is known, unknown, and most likely causes.
-- Produce ranked hypotheses with supporting evidence and confidence.
-- Identify the minimal remediation options, tradeoffs, risks, and verification strategy.
-- For moderate investigations, write findings and the remediation plan to \`.context/todo.md\` in a structured multi-phase format.
-- For very complex investigations involving multiple subsystems, richer design decisions, or substantial implementation planning, create a spec folder and prepare the investigation artifact for \`show_spec\`.
+### Phase 4: Synthesize, Reflect, and Advance Loop State
+- Synthesize evidence into what is known, what is unknown, and which explanations remain plausible.
+- Produce ranked hypotheses with supporting evidence, confidence, risks, and tradeoffs.
+- Explicitly Reflect after each meaningful slice:
+  - What changed or was inspected?
+  - What did we learn?
+  - Did confidence increase or decrease?
+  - Is the Active Hypothesis still valid?
+  - What is the smallest useful Next Slice?
+- Call \`complex_problem_loop_advance\` with updated \`current_understanding\`, \`active_hypothesis\`, \`open_questions\`, \`risks\`, \`last_slice\`, and \`next_slice\` for non-trivial investigations.
 
-### Phase 4: Present Findings and Request Approval
-- Present findings plus remediation before implementation.
-- Moderate complexity: use \`show_plan { file_path: ".context/todo.md", title: "Investigation Findings & Remediation Plan" }\`
-- High complexity: use \`show_spec { folder_path: "...", title: "Investigation Spec" }\`
-- If the user requests changes, revise and re-present.
+### Phase 5: Continue or Handoff
+- After reflection, choose exactly one next action:
+  - **Continue** with the next diagnostic slice when it is clear and likely to reduce uncertainty.
+  - **Ask** a precise follow-up when a user decision or missing fact blocks confidence.
+  - **Present findings** when the root cause and remediation options are sufficiently understood.
+  - **Re-plan** when discoveries invalidate the current path.
+- For moderate investigations, write findings and the remediation plan to \`.context/todo.md\` in a structured multi-phase format and call:
+  \`show_plan { file_path: ".context/todo.md", title: "Investigation Findings & Remediation Plan" }\`
+- For very complex investigations involving multiple subsystems, richer design decisions, or substantial implementation planning, create a spec folder and call:
+  \`show_spec { folder_path: "...", title: "Investigation Spec" }\`
+- If the user requests changes, update the loop state, revise the findings/remediation artifact, and re-present.
 - Do not implement until the findings/remediation artifact is explicitly approved.
 
-### Phase 5: Switch to PIPELINE for Execution
+### Phase 6: Handoff Approved Remediation into PIPELINE and Report
 - After approval, execution-heavy work belongs in PIPELINE.
 - Prefer a multi-phase remediation plan so approval can auto-switch to \`PIPELINE\` through the existing approval hook.
 - Once in PIPELINE, use parallel builders for independent remediation workstreams and reviewers for validation.
 - INVESTIGATE should not duplicate PIPELINE execution logic.
-
-### Phase 6: Completion Report
 - After execution is complete, present a final completion report using \`show_report\`.
 - The summary should cover: original problem, key findings, chosen remediation, verification performed, and files changed.
 - For investigations with 3+ phases, always show the completion report.
@@ -561,8 +610,11 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 ## Rules
 - Never start coding before clarification and approval.
 - Prefer browser-based question collection when the problem is ambiguous.
+- Use the loop tools to preserve state for non-trivial investigations.
+- Choose one focused information move or diagnostic slice at a time.
 - Use scouts, not builders, for the initial context-gathering stage.
 - Always wait for all scouts to finish before synthesis.
+- Reflect and update loop state after meaningful diagnostic slices.
 - Reuse \`show_plan\`, \`show_spec\`, and \`show_report\` rather than inventing new UI flows.
 - Handoff approved remediation into PIPELINE for parallel execution.
 
@@ -578,6 +630,14 @@ export function buildSpecPrompt(opts: ModePromptOpts): string {
 ${buildQualityFirstSection("SPEC")}
 
 ${buildAdvisorOverlay("SPEC", opts)}
+
+${buildWardenTaskConfirmationSection("SPEC", {
+	sliceName: "requirements, design, tasks, or implementation slice",
+	guardrails: [
+		"Use WARDEN to track requirements.md, design.md, tasks.md, viewer feedback, and implementation slices.",
+		"Do not implement before the spec is approved in `show_spec`.",
+	],
+})}
 
 ## CLAUDE Overlay
 
@@ -668,6 +728,7 @@ const defaultPromptSnapshotOpts: ModePromptOpts = {
 	selectedAdvisorModel: null,
 };
 
-/** Stable string exports for tests and tooling that expect fixed PLAN/SPEC bodies. */
+/** Stable string exports for tests and tooling that expect fixed mode prompt bodies. */
 export const PLAN_PROMPT = buildPlanPrompt(defaultPromptSnapshotOpts);
+export const INVESTIGATE_PROMPT = buildInvestigatePrompt(defaultPromptSnapshotOpts);
 export const SPEC_PROMPT = buildSpecPrompt(defaultPromptSnapshotOpts);

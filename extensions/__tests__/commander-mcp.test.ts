@@ -167,6 +167,48 @@ describe("commander-mcp extension", () => {
 		}
 	});
 
+	it("commander_task description teaches agents to send mission_brief on root creates", () => {
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		expect(taskTool.description).toMatch(/mission_brief/i);
+		expect(taskTool.description.toLowerCase()).toContain("root");
+	});
+
+	it("commander_task schema exposes mission_brief as an optional field", () => {
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		const props = (taskTool.parameters as any).properties || {};
+		expect(props.mission_brief).toBeDefined();
+		expect(String(props.mission_brief.description || "").toLowerCase())
+			.toContain("mission");
+	});
+
+	it("forwards mission_brief through commander_task create to the CLI client", async () => {
+		mockIsConnected.mockReturnValue(true);
+		mockCallTool.mockResolvedValue({ content: [{ type: "text", text: "{\"id\":1}" }] });
+
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		await taskTool.execute(
+			"call-1",
+			{
+				operation: "create",
+				description: "OAuth migration",
+				mission_brief: "Migrate JWT to OAuth so we can support SSO.",
+				working_directory: "/project",
+			},
+			new AbortController().signal,
+			vi.fn(),
+			{},
+		);
+
+		expect(mockCallTool).toHaveBeenCalledWith(
+			"commander_task",
+			expect.objectContaining({
+				operation: "create",
+				mission_brief: "Migrate JWT to OAuth so we can support SSO.",
+			}),
+			undefined,
+		);
+	});
+
 	// The probe is fire-and-forget — flush microtasks to let it settle
 	const flush = () => new Promise(r => setTimeout(r, 0));
 

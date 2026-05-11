@@ -41,11 +41,15 @@ export const TOOLKIT_CLI_AGENTS = new Set([
   "droid-worker",
   "droid-agent",
   "crush-agent",
-  "claude-worker",
-  "claude-advisor",
 ]);
 
 export const TOOLKIT_WORKER_MODEL = "anthropic/claude-haiku-4-5-20251001";
+
+export type ClaudeExecutionMode = "direct-api";
+
+export function getClaudeExecutionMode(_env: NodeJS.ProcessEnv = process.env): ClaudeExecutionMode {
+  return "direct-api";
+}
 
 const MINIMAL_WIDGET_TOOLKIT_WORKERS = new Set([
   "cursor-worker",
@@ -128,11 +132,10 @@ export function shouldUseClaudeCliForAgent(
   model: string | undefined | null,
   claudeOverlayActive = false,
 ): boolean {
-  if (isClaudeCliAgent(agentName)) return true;
-  // Ollama models should use standard Pi CLI, not Claude CLI
-  if (isOllamaModel(model)) return false;
-  if (isClaudeFamilyModel(model)) return true;
-  return claudeOverlayActive && isClaudeFamilyModel(model);
+  void agentName;
+  void model;
+  void claudeOverlayActive;
+  return false;
 }
 
 export function resolveToolkitWorkerModel(

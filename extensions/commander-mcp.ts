@@ -17,9 +17,12 @@ const TOOLS: { name: string; label: string; description: string }[] = [
 OPERATIONS BY CATEGORY:
 
 TASK CRUD:
-- "create": Start new task (requires description, working_directory)
+- "create": Start new task (requires description, working_directory).
+  For ROOT initiatives (no group_id/parent), ALWAYS pass mission_brief — a 1-3
+  sentence "what & why" that the Commander dashboard shows as the mission card.
+  Children inherit from the parent — omit mission_brief for them.
 - "get": Get task details by task_id
-- "update": Modify task fields
+- "update": Modify task fields (pass mission_brief to refine the brief on a root task)
 - "list": Find tasks with filters (status, agent_id, working_directory)
 
 LIFECYCLE (state transitions):
@@ -46,7 +49,10 @@ TASK WORKFLOW:
 2. Claim task → status='working', validates working_directory
 3. Complete/Fail → status='completed' or 'failed'
 
-EXAMPLE - Create and claim a task:
+EXAMPLE - Create a root initiative with a mission brief:
+{ "operation": "create", "description": "OAuth migration", "mission_brief": "Migrate JWT to OAuth so we can support SSO and refresh tokens across the org.", "working_directory": "/project/src" }
+
+EXAMPLE - Create and claim a child task:
 { "operation": "create", "description": "Fix auth bug in login.ts", "working_directory": "/project/src" }
 { "operation": "claim", "task_id": 123, "agent_name": "claude" }
 
@@ -269,6 +275,9 @@ const TaskParams = Type.Object({
 	operation: Type.String({ description: "Operation to perform" }),
 	// CRUD
 	description: Type.Optional(Type.String({ description: "Task description (for create)" })),
+	mission_brief: Type.Optional(Type.String({ description: "Root-initiative mission brief — 1-3 sentence 'what & why' shown in the Commander dashboard. Required on root creates; omit for children." })),
+	title: Type.Optional(Type.String({ description: "Task title (for create/update)" })),
+	labels: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())], { description: "Comma-separated string or array of labels (for create)" })),
 	working_directory: Type.Optional(Type.String({ description: "Working directory path (for create, list)" })),
 	task_id: Type.Optional(Type.Number({ description: "Task ID (for get, update, claim, complete, fail)" })),
 	status: Type.Optional(Type.String({ description: "Task status: pending, working, completed, failed, cancelled (for update, list)" })),

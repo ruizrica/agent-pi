@@ -17,6 +17,7 @@ export interface SyncState {
 	groupId: number | undefined;
 	groupCreationInFlight: boolean;
 	mappings: CommanderTaskMapping[];
+	parentClosedAt?: number;
 }
 
 // ── State mapping ────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
 import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
+import { buildSubagentBatchBrief } from "./lib/commander/subagent-mission-brief.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
@@ -681,9 +682,10 @@ export default function (pi: ExtensionAPI) {
 			if (client && isCommanderAvailable()) {
 				const groupName = args.groupName || `subagent-batch-${Date.now()}`;
 				const taskTexts = defs.map((def: any) => def.task);
+				const missionBrief = buildSubagentBatchBrief(groupName, defs);
 				const payload = buildGroupCreatePayload(
 					groupName,
-					`Batch subagent group: ${groupName}`,
+					missionBrief,
 					taskTexts,
 					process.cwd(),
 				);

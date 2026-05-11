@@ -485,6 +485,21 @@ export default function (pi: ExtensionAPI) {
 		const allDone = tasks.every(t => t.status === "done");
 		if (allDone) {
 			showMissionComplete(ctx);
+
+			// Fire-and-forget: complete the parent initiative-root task on Commander.
+			// This is idempotent — if already closed or non-existent, the host ignores it.
+			// Guard against double-firing: only fire once per mission-complete event.
+			if (syncState.groupId !== undefined && !syncState.parentClosedAt) {
+				syncToCommander("mission-complete", async (client) => {
+					await client.callTool("commander_task", {
+						operation: "update",
+						task_id: syncState.groupId,
+						status: "completed",
+					});
+				});
+				// Mark that we've fired the parent-close update for this mission.
+				syncState = { ...syncState, parentClosedAt: Date.now() };
+			}
 		}
 	}
 
@@ -1145,7 +1160,7 @@ export default function (pi: ExtensionAPI) {
 					nextId = 1;
 					listTitle = undefined;
 					listDescription = undefined;
-					syncState = clearMappings(syncState);
+					syncState = { ...clearMappings(syncState), parentClosedAt: undefined };
 					saveSharedStateIfNeeded("clear", "Cleared the shared task list.");
 
 					const result = {

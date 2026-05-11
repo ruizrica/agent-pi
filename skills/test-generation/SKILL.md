@@ -4,7 +4,7 @@ description: >
   Thoughtful multi-phase test generation using agent chains. Discovers modules,
   plans test strategy, generates Gherkin and Playwright tests with iterative review.
   Use when the user wants to generate tests, create test specs, or test their modules.
-allowed-tools: Bash(ls:*) Bash(cat:*) Bash(find:*) Bash(grep:*) Read run_chain show_test_viewer discover_modules
+allowed-tools: Bash(ls:*) Bash(cat:*) Bash(find:*) Bash(grep:*) Bash(cmd:*) Read run_chain show_test_viewer discover_modules
 ---
 
 # Test Generation Skill
@@ -22,6 +22,32 @@ with your input.
 - User wants thoughtful, well-structured acceptance tests with Gherkin
 - User needs Playwright test code aligned with Gherkin scenarios
 - User says "run /test-gen" or "/test-gen <description>"
+
+## Commander CLI Tracking (for generated work)
+
+Long-running generation/execution flows should remain visible in `cmd`:
+
+```bash
+TEST_ROOT=$(cmd task add "Test generation: <feature/area>" --type feature --priority medium --json | jq -r '.id')
+cmd task comment "$TEST_ROOT" "Starting test-generation pipeline" --type progress --agent test-generation
+```
+
+For each generated slice (Scout, Planner, Builder, Reviewer), add/update child tasks and claim/update status as work proceeds:
+
+```bash
+SLICE_TASK=$(cmd task add "Generate tests for <slice>" --parent "$TEST_ROOT" --type task --priority medium --json | jq -r '.id')
+cmd task claim "$SLICE_TASK"
+cmd task comment "$SLICE_TASK" "Started" --type progress --agent test-generation
+# ... work ...
+cmd task update "$SLICE_TASK" --status done
+```
+
+At pipeline completion:
+
+```bash
+cmd task update "$TEST_ROOT" --status done
+cmd task comment "$TEST_ROOT" "Complete: generated suites for <feature>" --type progress --agent test-generation
+```
 
 ## The 6-Step Pipeline
 

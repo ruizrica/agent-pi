@@ -172,6 +172,10 @@ describe("mode/lifecycle tool bypass", () => {
 		expect(shouldBypassTaskGate("complex_problem_loop_start")).toBe(true);
 	});
 
+	it("should bypass for 'complex_problem_loop_advance' tool", () => {
+		expect(shouldBypassTaskGate("complex_problem_loop_advance")).toBe(true);
+	});
+
 	it("should bypass for 'debug_capture' tool", () => {
 		expect(shouldBypassTaskGate("debug_capture")).toBe(true);
 	});

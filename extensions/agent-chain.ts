@@ -83,6 +83,7 @@ import {
   parseChainOutput,
 } from "./lib/test-gen-parser.ts";
 import { storeDrafts } from "./lib/gopher-draft-storage.ts";
+import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -1605,6 +1606,15 @@ ${agentCatalog}
 - Agents maintain session context — they remember previous work within this session
 - You can run the chain multiple times with different tasks if needed
 - After the chain completes, review the result and summarize for the user
+
+${buildWardenTaskConfirmationSection("CHAIN", {
+  sliceName: "run_chain execution slice",
+  guardrails: [
+    "Treat each `run_chain` invocation as one task-confirmed sequential slice.",
+    "After chain output returns, review it and mark or update the active task before another chain run.",
+    "WARDEN does not replace `run_chain`; it confirms the chain slice and follow-through.",
+  ],
+})}
 
 ## Guidelines
 - Use your judgment — if it's quick, just do it; if it's real work, run the chain

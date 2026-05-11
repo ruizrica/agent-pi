@@ -2,7 +2,7 @@
 // ABOUTME: Validates that prompts contain expected keywords for their workflows.
 
 import { describe, it, expect } from "vitest";
-import { PLAN_PROMPT, SPEC_PROMPT } from "../lib/mode-prompts.ts";
+import { INVESTIGATE_PROMPT, PLAN_PROMPT, SPEC_PROMPT } from "../lib/mode-prompts.ts";
 
 describe("PLAN_PROMPT", () => {
 	it("is a non-empty string", () => {
@@ -72,6 +72,18 @@ describe("PLAN_PROMPT — scout-based context gathering", () => {
 	});
 });
 
+describe("PLAN_PROMPT — WARDEN task confirmation", () => {
+	it("teaches WARDEN without replacing plan approval", () => {
+		expect(PLAN_PROMPT).toContain("WARDEN");
+		expect(PLAN_PROMPT).toContain("tasks new-list");
+		expect(PLAN_PROMPT).toContain("tasks add");
+		expect(PLAN_PROMPT).toContain("tasks toggle");
+		expect(PLAN_PROMPT).toContain("inprogress");
+		expect(PLAN_PROMPT.toLowerCase()).toContain("continue");
+		expect(PLAN_PROMPT).toContain("never replaces mandatory `show_plan` approval");
+	});
+});
+
 describe("PLAN_PROMPT — structured plan format", () => {
 	it("teaches phased plan structure", () => {
 		expect(PLAN_PROMPT).toContain("Phase");
@@ -106,9 +118,60 @@ describe("PLAN_PROMPT — structured plan format", () => {
 	});
 });
 
+describe("INVESTIGATE_PROMPT — complex problem loop", () => {
+	it("is a non-empty string", () => {
+		expect(typeof INVESTIGATE_PROMPT).toBe("string");
+		expect(INVESTIGATE_PROMPT.length).toBeGreaterThan(0);
+	});
+
+	it("uses complex problem loop lifecycle tools", () => {
+		expect(INVESTIGATE_PROMPT).toContain("complex_problem_loop_start");
+		expect(INVESTIGATE_PROMPT).toContain("complex_problem_loop_advance");
+	});
+
+	it("preserves loop state concepts", () => {
+		expect(INVESTIGATE_PROMPT).toContain("Next Slice");
+		expect(INVESTIGATE_PROMPT).toContain("Active Hypothesis");
+	});
+
+	it("teaches the core loop stages", () => {
+		expect(INVESTIGATE_PROMPT).toContain("Clarify");
+		expect(INVESTIGATE_PROMPT).toContain("Recon");
+		expect(INVESTIGATE_PROMPT).toContain("Synthesize");
+		expect(INVESTIGATE_PROMPT).toContain("Reflect");
+		expect(INVESTIGATE_PROMPT).toContain("Continue or Handoff");
+	});
+
+	it("preserves approval and PIPELINE handoff guardrails", () => {
+		expect(INVESTIGATE_PROMPT).toContain("show_plan");
+		expect(INVESTIGATE_PROMPT).toContain("show_spec");
+		expect(INVESTIGATE_PROMPT).toContain("PIPELINE");
+		expect(INVESTIGATE_PROMPT).toContain("Never start coding before clarification and approval");
+	});
+
+	it("includes WARDEN task confirmation for diagnostic slices", () => {
+		expect(INVESTIGATE_PROMPT).toContain("WARDEN");
+		expect(INVESTIGATE_PROMPT).toContain("tasks new-list");
+		expect(INVESTIGATE_PROMPT).toContain("tasks toggle");
+		expect(INVESTIGATE_PROMPT).toContain("diagnostic slice");
+		expect(INVESTIGATE_PROMPT).toContain("Do not implement remediation");
+	});
+});
+
 describe("SPEC_PROMPT — Commander-first enforcement", () => {
 	it("contains 'ALWAYS' for Commander usage", () => {
 		expect(SPEC_PROMPT).toContain("ALWAYS");
+	});
+});
+
+describe("SPEC_PROMPT — WARDEN task confirmation", () => {
+	it("tracks spec document slices without replacing spec approval", () => {
+		expect(SPEC_PROMPT).toContain("WARDEN");
+		expect(SPEC_PROMPT).toContain("tasks new-list");
+		expect(SPEC_PROMPT).toContain("tasks add");
+		expect(SPEC_PROMPT).toContain("tasks toggle");
+		expect(SPEC_PROMPT).toContain("requirements.md, design.md, tasks.md");
+		expect(SPEC_PROMPT).toContain("Do not implement before the spec is approved");
 	});
 });
 

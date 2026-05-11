@@ -66,6 +66,25 @@ describe("buildCommanderSection — Commander-first enforcement", () => {
 	});
 });
 
+describe("buildNormalPrompt — WARDEN task confirmation", () => {
+	it("includes WARDEN guidance for non-trivial work using the existing tasks tool", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
+		expect(result).toContain("WARDEN");
+		expect(result).toContain("Task Confirmation");
+		expect(result).toContain("tasks new-list");
+		expect(result).toContain("tasks add");
+		expect(result).toContain("tasks toggle");
+		expect(result).toContain("inprogress");
+		expect(result).toContain("does **not** rename the existing `tasks` tool");
+	});
+
+	it("preserves simple direct-work guidance", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
+		expect(result).toContain("SIMPLE task");
+		expect(result).toContain("work directly in NORMAL");
+	});
+});
+
 describe("buildNormalPrompt — Commander task guidance", () => {
 	it("with commanderAvailable: true, mentions commander_mailbox in task guidance", () => {
 		const result = buildNormalPrompt({ commanderAvailable: true, activeChain: null, activePipeline: null });

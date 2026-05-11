@@ -1,7 +1,7 @@
 ---
 name: autoresearch
 description: Autonomous Goal-directed Iteration. Apply Karpathy's autoresearch principles to ANY task. Loops autonomously — modify, verify, keep/discard, repeat. Invoke with /skill:autoresearch or when user says "work autonomously", "iterate until done", "keep improving", or "run overnight".
-allowed-tools: Bash(git:*) Bash(npm:*) Bash(npx:*) Read Write Edit ask_user show_plan show_research subagent_create_batch dispatch_agent commander_task commander_mailbox show_report
+allowed-tools: Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(cmd:*) Read Write Edit ask_user show_plan show_research subagent_create_batch dispatch_agent show_report
 ---
 
 # Autoresearch — Autonomous Goal-directed Iteration
@@ -107,7 +107,7 @@ With understanding confirmed and plan approved, set up tracking and start.
 
 1. **Create results log** — Create `autoresearch-results.tsv` (see `references/results-logging.md`)
 2. **Record baseline** — Log the baseline metric from Phase 2 as iteration #0
-3. **Commander tracking** — If available, create task group and broadcast start (see Commander Integration below)
+3. **Commander tracking** — If available, create a root `cmd task` and broadcast start (see Commander Integration below)
 4. **Update session** — Set status to "researching"
 5. **Begin the loop** — Start iterating immediately. No further confirmation needed.
 
@@ -149,113 +149,67 @@ See `references/core-principles.md` for the 7 generalizable principles from auto
 
 ## Commander Integration (Task Tracking & Visibility)
 
-When Commander is available, autoresearch MUST track every iteration as a Commander task. This gives the dashboard full visibility into autonomous work — just like the `tasks` extension does for manual workflows.
+When `cmd` is available, autoresearch MUST track every iteration as a Commander task for local visibility in the Commander task tree.
 
-### Setup Phase (Phase 3) — Create Task Group
+### Setup Phase (Phase 3) — Create a root task
 
-After establishing the baseline and getting plan approval, create a Commander task group for this research session:
+After baseline + plan approval, create a root feature task for this research session:
 
-```
-commander_task {
-  operation: "group:create",
-  group_name: "Autoresearch: <goal summary>",
-  initiative_summary: "<full goal description with metric and scope>",
-  total_waves: 1,
-  working_directory: "<cwd>",
-  tasks: []
-}
+```bash
+ROOT_TASK_ID=$(cmd task add "Autoresearch: <goal summary>" --type feature --priority high --json | jq -r '.id')
+cmd task comment "$ROOT_TASK_ID" "Autoresearch started: <goal>. Baseline metric: <value>. Scope: <files>. Plan approved." --type progress --agent autoresearch
+cmd mailbox send commander "Autoresearch: <goal summary>" "Autoresearch started: <goal>. Baseline metric: <value>. Scope: <files>."
 ```
 
-Store the returned `group_id` — all iteration tasks will be added to this group.
+Keep the returned `ROOT_TASK_ID` and create each iteration as a child task.
 
-Send an initial mailbox status broadcast:
-```
-commander_mailbox {
-  operation: "send",
-  from_agent: "autoresearch",
-  to_agent: "commander",
-  body: "Autoresearch started: <goal>. Baseline metric: <value>. Scope: <files>. Plan approved.",
-  message_type: "status"
-}
-```
+### Per-Iteration — Create → Claim → Update
 
-### Per-Iteration — Create → Claim → Complete
+**Before modifying** (step 3), add and claim an iteration task:
 
-**Before modifying** (step 3 of each loop iteration), create and claim a Commander task:
-
-```
-commander_task { operation: "create", description: "Iteration #N: <planned change>", working_directory: "<cwd>", group_id: <group_id> }
-commander_task { operation: "claim", task_id: <task_id>, agent_name: "autoresearch" }
+```bash
+ITER_TASK_ID=$(cmd task add "Iteration #N: <planned change>" --parent "$ROOT_TASK_ID" --type task --priority medium --json | jq -r '.id')
+cmd task claim "$ITER_TASK_ID"
+cmd task comment "$ITER_TASK_ID" "STARTED: Iteration #N. Planned change: <short plan>." --type progress --agent autoresearch
 ```
 
-**After logging results** (step 7 of each loop iteration), complete the task with the outcome:
+**After logging results** (step 7), close the iteration task and capture metrics:
 
-```
-commander_task { operation: "complete", task_id: <task_id>, result: "<status>: <description>. Metric: <old> → <new> (delta: <delta>)" }
-```
-
-Also add a comment to the task with detailed results:
-```
-commander_task { operation: "comment:add", task_id: <task_id>, body: "Status: <keep|discard|crash>\nMetric: <value> (delta: <delta>)\nCommit: <hash or '-'>\nDescription: <what was tried>", agent_name: "autoresearch" }
+```bash
+cmd task comment "$ITER_TASK_ID" "RESULT: <keep|discard|crash>: <description>. Metric: <old> → <new> (delta: <delta>). Commit: <hash or '-'>" --type progress --agent autoresearch
+cmd task update "$ITER_TASK_ID" --status done
 ```
 
-**Note:** Use `complete` for ALL outcomes (keep, discard, crash). Discards and crashes are expected in autoresearch — they're not failures. Reserve `fail` only for unrecoverable errors that halt the entire loop.
+Use `done` for completed iterations; if an iteration must be retried intentionally, set it back to `todo`.
 
 ### Status Broadcasts — Every ~5 Iterations
 
-Every 5 iterations, send a mailbox status update AND add a comment to the group:
+Every 5 iterations, broadcast progress and add one root summary comment:
 
-```
-commander_mailbox {
-  operation: "send",
-  from_agent: "autoresearch",
-  to_agent: "commander",
-  body: "Autoresearch progress — Iteration #N: metric at <value> (baseline: <baseline>). Keeps: X | Discards: Y | Crashes: Z",
-  message_type: "status"
-}
+```bash
+cmd mailbox send commander "Autoresearch progress" "Iteration #N: metric at <value> (baseline: <baseline>). Keeps: X | Discards: Y | Crashes: Z"
+cmd task comment "$ROOT_TASK_ID" "Progress check: metric at <value>. Keeps: X | Discards: Y | Crashes: Z" --type progress --agent autoresearch
 ```
 
 ### Research Complete — Report & Implementation Handoff (MANDATORY)
 
-When the loop ends (bounded mode reaching N, or goal achieved):
+When the loop ends (bounded mode reached or goal achieved):
 
-1. **Final mailbox broadcast** with full summary:
-```
-commander_mailbox {
-  operation: "send",
-  from_agent: "autoresearch",
-  to_agent: "commander",
-  body: "Autoresearch complete (N iterations). Baseline: <X> → Final: <Y> (delta: <Z>). Keeps: A | Discards: B | Crashes: C. Best iteration: #M — <description>",
-  message_type: "result"
-}
+```bash
+cmd mailbox send commander "Autoresearch complete" "Iterations: N. Baseline: <X> → Final: <Y> (delta: <Z>). Keeps: A | Discards: B | Crashes: C. Best: #M — <description>"
+cmd task comment "$ROOT_TASK_ID" "Autoresearch complete. Baseline: <X> → Final: <Y> (delta: <Z>). Keeps: A, Discards: B, Crashes: C. Best iteration: #M." --type progress --agent autoresearch
 ```
 
-2. **Compile findings & next steps** — Extract prioritized, actionable implementation items from the research. Update the session file with findings, next steps array, and final metric.
-
-3. **Research report** — Present via `show_report` framed as a handoff:
-```
-show_report {
-  title: "Research Complete — Ready for Implementation: <goal>",
-  summary: "## Research Results\n\n...\n\n## Prioritized Next Steps\n\n1. <action item>\n2. ...\n\n## Recommended Implementation Approach\n\n<how to implement>"
-}
-```
-
-4. **Ask about implementation** — Use `ask_user` to offer three choices:
-   - **Implement now** → spawn a team of builder agents via `subagent_create_batch`
-   - **Save & pause** → set session to "paused", resume later via `/research`
-   - **Done** → mark session "complete"
-
-5. **Implementation (if chosen)** — Update session to "implementing", create Commander task group, dispatch builders, track completion. When done, present final comprehensive report covering research results AND implementation work. Set session to "complete".
-
-6. **Preserve the plan** — Leave `.context/autoresearch-plan.md` intact. Leave the session file for browsing via `/research`.
+Then continue with report generation and implementation handoff as described above.
 
 ### Graceful Degradation
 
-All Commander calls are **optional**. If Commander is unavailable:
-- Skip `commander_task` and `commander_mailbox` calls silently
-- The local `autoresearch-results.tsv` log remains the primary record
-- The `show_report` call still works (it only needs git, not Commander)
-- Never let a Commander error interrupt the autonomous loop
+All Commander tracking is best-effort:
+- If `cmd` is unavailable, skip `cmd task`/`cmd mailbox` calls silently.
+- Keep `.context/autoresearch-results.tsv` as the source of truth.
+- Do not let tracking failures interrupt the loop.
+
+show_report still works unchanged for final handoff.
 
 ## Adapting to Different Domains
 

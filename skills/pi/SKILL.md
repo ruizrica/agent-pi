@@ -31,6 +31,27 @@ Read the first word of the user's arguments and call `set_mode` with the matchin
 | `pipeline` | `set_mode { mode: "PIPELINE", reason: "/pi pipeline" }` | Phased orchestration: UNDERSTAND -> GATHER -> PLAN -> EXECUTE -> REVIEW |
 | `normal` | `set_mode { mode: "NORMAL", reason: "/pi normal" }` | Return to normal interactive mode |
 
+## Commander CLI Alignment
+
+For plan-driven work, this mode routes into workflows that expect `cmd`-tracked tasks:
+- `/pi plan` => plan workflows should usually start with `/commander-plan` and `/commander-plan` task trees.
+- `/pi chain` / `/pi team` / `/pi pipeline` with substantial execution => keep progress visible via `cmd task` parent/child tasks.
+
+Recommended one-liners for visibility:
+
+```bash
+PI_SESSION=$(cmd task add "Pi /pi $SUBCOMMAND session: $TASK" --type feature --priority high --json | jq -r '.id')
+cmd task update "$PI_SESSION" --status in-progress
+cmd task comment "$PI_SESSION" "Entered /pi $SUBCOMMAND mode" --type progress
+```
+
+At completion:
+
+```bash
+cmd task update "$PI_SESSION" --status done
+cmd task comment "$PI_SESSION" "Mode complete: $SUBCOMMAND" --type progress
+```
+
 ## Prerequisites
 
 Before calling `set_mode`, check whether the mode requires prior setup:

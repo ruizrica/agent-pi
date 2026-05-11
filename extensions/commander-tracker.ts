@@ -75,11 +75,22 @@ export default function (pi: ExtensionAPI) {
 		for (const action of actions) {
 			if (action.type === "create") {
 				const groupId = syncState?.groupId;
+				// When we have no group yet, the retry would otherwise land as a bare
+				// root task with no mission brief — then the Commander dashboard's
+				// InitiativeCard can't surface anything meaningful. Use the list's
+				// rich description (1-3 sentence work summary) as the mission brief
+				// for that fallback root so the UI has real content to show.
+				const listDescription = String(taskList.description || "").trim();
+				const listTitleStr = String(taskList.title || "").trim();
+				const missionBrief = groupId === undefined
+					? (listDescription || listTitleStr || undefined)
+					: undefined;
 				client.callTool("commander_task", {
 					operation: "create",
 					description: action.text,
 					working_directory: process.cwd(),
 					...(groupId !== undefined ? { group_id: groupId } : {}),
+					...(missionBrief ? { mission_brief: missionBrief } : {}),
 				}).then((res: any) => {
 					const cid = parseCommanderTaskId(res);
 					if (cid !== undefined && syncState) {

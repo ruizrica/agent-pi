@@ -35,7 +35,14 @@ describe("mission complete lifecycle", () => {
 
 	it("hides mission complete when tasks become active or incomplete again", () => {
 		expect(tasksSource).toContain('tasks.some((t) => t.status !== "done")');
-		expect(tasksSource).toContain('if (allDone) {\n\t\t\tshowMissionComplete(ctx);\n\t\t}');
+		// Verify the core mission-complete flow: when all done, show mission complete
+		const checkMissionSection = tasksSource.slice(
+			tasksSource.indexOf("function checkMissionComplete"),
+			tasksSource.indexOf("// ── State reconstruction from session"),
+		);
+		expect(checkMissionSection).toContain("const allDone = tasks.every(t => t.status === \"done\")");
+		expect(checkMissionSection).toContain("if (allDone) {");
+		expect(checkMissionSection).toContain("showMissionComplete(ctx);");
 	});
 
 	it("does not dismiss mission complete on ordinary user input", () => {

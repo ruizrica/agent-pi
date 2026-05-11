@@ -86,6 +86,11 @@ export class CommanderCliClient {
 				const args = ["task", "add", description, "--json", "--no-color"];
 				if (params.status) args.push("--status", String(params.status));
 				if (params.priority) args.push("--priority", String(params.priority));
+				if (params.title) args.push("--title", String(params.title));
+				const missionBrief = params.mission_brief ?? params.missionBrief;
+				if (missionBrief) args.push("--mission-brief", String(missionBrief));
+				const labels = normalizeLabelsParam(params.labels ?? params.label);
+				if (labels) args.push("--labels", labels);
 				if (params.group_id) args.push("--parent", String(params.group_id));
 				const created = normalizeTask(await this.runJson(args, timeoutMs, {}));
 				return { ...created, task_id: Number((created as any).task_id ?? (created as any).id) };
@@ -122,7 +127,15 @@ export class CommanderCliClient {
 	private async createTaskGroup(params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
 		const groupName = String(required(params.group_name, "group_name"));
 		const summary = String(params.initiative_summary || groupName);
-		const parent = await this.callTask({ operation: "create", description: groupName, status: "pending" }, timeoutMs) as any;
+		// Pi's initiative_summary is the mission brief shown in the Pi CLI task surfaces.
+		const parent = await this.callTask({
+			operation: "create",
+			description: summary,
+			title: groupName,
+			mission_brief: summary,
+			labels: ["initiative-root"],
+			status: "pending",
+		}, timeoutMs) as any;
 		const groupId = Number(parent.task_id ?? parent.id);
 		const tasks = Array.isArray(params.tasks) ? params.tasks as any[] : [];
 		const taskIds: number[] = [];
@@ -204,6 +217,15 @@ export class CommanderCliClient {
 function required(value: unknown, name: string): unknown {
 	if (value === undefined || value === null || value === "") throw new Error(`${name} is required`);
 	return value;
+}
+
+function normalizeLabelsParam(value: unknown): string | undefined {
+	if (value === undefined || value === null || value === "") return undefined;
+	if (Array.isArray(value)) {
+		const labels = value.map((v) => String(v).trim()).filter(Boolean);
+		return labels.length > 0 ? labels.join(",") : undefined;
+	}
+	return String(value);
 }
 
 function normalizeTask(task: any): any {

@@ -1,4 +1,4 @@
-// ABOUTME: Tests top-level Claude provider guard helpers for CLI-only routing.
+// ABOUTME: Tests legacy top-level Claude CLI provider helpers.
 
 import { describe, it, expect } from "vitest";
 import {
@@ -19,7 +19,7 @@ describe("Claude CLI provider routing guard", () => {
 		expect(isDirectClaudeModel({ provider: "ollama", id: "claude-like-local" } as any)).toBe(false);
 	});
 
-	it("keeps a clear fail-closed direct SDK/API message", () => {
+	it("keeps the legacy fail-closed direct SDK/API message available", () => {
 		expect(DIRECT_CLAUDE_BLOCKED_MESSAGE).toContain("Direct Anthropic SDK/API routing is disabled");
 		expect(DIRECT_CLAUDE_BLOCKED_MESSAGE).toContain("Claude CLI");
 	});

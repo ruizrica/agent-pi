@@ -152,7 +152,10 @@ export function renderTaskList(
 	const rawSummaryLines = taskList.description
 		? wrapWords(taskList.description, Math.max(20, width - 4))
 		: [];
-	const maxSummaryLines = Math.max(0, availableHeight - 3); // header + optional blank + hotkey hint
+	// Chrome when a summary is rendered: header(1) + "Mission Brief:" label(1) + blank(1) + hotkey hint(1) = 4 lines.
+	// When no summary is rendered the chrome is just header(1) + hotkey(1) = 2 lines.
+	// Budget the summary against the with-summary chrome to avoid overflowing the widget.
+	const maxSummaryLines = Math.max(0, availableHeight - 4);
 	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
 
 	// ── Header ────────────────────────────────────────────────────

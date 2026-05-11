@@ -1,7 +1,7 @@
 ---
 name: complex-problem-loop
 description: Iterative workflow for hard engineering tasks that need repeated back-and-forth, deep reconnaissance, phased planning, short execution slices, reflection, and explicit continuation or handoff. Use when the task is ambiguous, spans multiple files or systems, requires hypothesis-driven debugging, architecture exploration, or needs deliberate context preservation across iterations.
-allowed-tools: Read Write Edit ask_user show_plan show_report subagent_create_batch subagent_list subagent_continue subagent_enqueue_task cycle_memory tasks
+allowed-tools: Read Write Edit Bash(cmd:*) ask_user show_plan show_report subagent_create_batch subagent_list subagent_continue subagent_enqueue_task cycle_memory
 ---
 
 # Complex Problem Loop
@@ -9,6 +9,25 @@ allowed-tools: Read Write Edit ask_user show_plan show_report subagent_create_ba
 Use this skill when the user wants the agent to handle a difficult problem the way strong research-oriented agents do: clarify what is unknown, gather context in parallel when needed, externalize a plan, execute in small deliberate slices, reflect after each slice, and continue without losing the thread.
 
 This is a **meta-skill**. It does not replace the repository's planner, pipeline, or subagent systems. It composes them into a reusable operating model for problems that require repeated back-and-forth.
+
+## Commander CLI Tracking (recommended)
+
+When slice work is executed as a team workflow, maintain visibility in `cmd`:
+
+```bash
+LOOP_ROOT=$(cmd task add "Complex Problem Loop: <goal>" --type feature --priority high --json | jq -r '.id')
+SCOPE_TASK=$(cmd task add "Loop slice: <scope>" --parent "$LOOP_ROOT" --type task --priority medium --json | jq -r '.id')
+cmd task claim "$SCOPE_TASK"
+cmd task comment "$SCOPE_TASK" "Started: clarifying and executing next slice" --type progress --agent pi
+```
+
+At each slice end:
+
+```bash
+cmd task comment "$SCOPE_TASK" "Slice complete: <what changed>, next step: <what remains>" --type progress --agent pi
+cmd task update "$SCOPE_TASK" --status done
+cmd task update "$LOOP_ROOT" --status done
+```
 
 ## When to Use This Skill
 

@@ -39,6 +39,7 @@ import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWork
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
 import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
+import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -1144,7 +1145,8 @@ export default function (pi: ExtensionAPI) {
 You are in the UNDERSTAND phase. Your job is to:
 1. Analyze the task and classify its complexity
 2. Use your codebase tools to verify assumptions
-3. When the task is fully clarified, call \`advance_phase\` with a detailed summary
+3. Confirm WARDEN tasks represent the clarified goal before advancing
+4. When the task is fully clarified, call \`advance_phase\` with a detailed summary
 
 ## Task Complexity Routing
 
@@ -1261,6 +1263,15 @@ ${agentCatalog}
 ## Task
 ${taskSummary || "(Phase 1: Ask the user what they want to accomplish)"}
 ${contextSummary}${planSection}${microTaskSection}${worktreeSection}${reviewSection}${mergeSection}
+
+${buildWardenTaskConfirmationSection("PIPELINE", {
+	sliceName: "pipeline phase or dispatched builder slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm the active phase before `advance_phase`.",
+		"After dispatched agents finish, synthesize results and mark or update the active task before moving phases.",
+		"WARDEN does not replace `advance_phase` or `dispatch_agents`; it confirms phase follow-through.",
+	],
+})}
 
 ## Tools
 - \`advance_phase\`: Move to next phase (required summary of what was done)
