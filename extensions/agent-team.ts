@@ -44,6 +44,7 @@ import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
+import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -390,7 +391,9 @@ export default function (pi: ExtensionAPI) {
 						}
 
 						const termHeight = process.stdout.rows || 24;
-						const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
+						// Floor of 4 matches the chrome required to render the Mission Brief block
+						// (header + label + blank + hotkey). Lower values silently hide the brief.
+						const availableHeight = Math.max(4, Math.min(termHeight - 10, 14));
 						const taskLines = renderTaskList(
 							tl, taskListState, width, availableHeight,
 							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t), bold: (t: string) => theme.bold(t) },
@@ -420,7 +423,13 @@ export default function (pi: ExtensionAPI) {
 
 		// Re-pin mode bar as the last aboveEditor widget so it stays directly above the editor input.
 		// Without this, the agent-team widget (tasks) would render between the mode bar and the editor.
-		(globalThis as any).__piRefreshModeBlock?.();
+		// Pass our own widgetCtx so mode-cycler doesn't fall back to a stale captured ctx
+		// after session replacement (newSession/fork/switchSession/reload).
+		try {
+			(globalThis as any).__piRefreshModeBlock?.(widgetCtx);
+		} catch {
+			// Ignore stale-ctx errors — the next session event will rebind cleanly.
+		}
 	}
 
 	// ── Dispatch Agent (returns Promise) ─────────
@@ -1301,6 +1310,15 @@ ${scoutSection}
 - You have direct access to the \`tasks\` tool — use it yourself, do NOT dispatch agents for task management
 - Use \`tasks new-list\` to start a themed list, \`tasks add\` to add items, \`tasks toggle\` to cycle status
 - Define your plan as tasks BEFORE dispatching agents
+
+${buildWardenTaskConfirmationSection("TEAM", {
+	sliceName: "coordination or dispatched-agent workstream",
+	guardrails: [
+		"Before dispatching meaningful work, confirm the team mission is represented in the existing `tasks` list.",
+		"After each agent result, synthesize the result and mark or update the active task before dispatching more work.",
+		"WARDEN does not replace `dispatch_agent`; it confirms the coordinator's active slice and follow-through.",
+	],
+})}
 
 ## Agents
 

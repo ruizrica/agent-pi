@@ -20,7 +20,15 @@ export default function (pi: ExtensionAPI) {
 	let currentOverlay: ModeOverlayState = { ...DEFAULT_MODE_OVERLAY };
 
 	function updateWidgets(mode: Mode, ctx: ExtensionContext) {
-		if (!ctx.hasUI) return;
+		// Guard against stale ctx after newSession/fork/switchSession/reload.
+		// Accessing ctx.hasUI on a stale ctx throws via assertActive().
+		let uiAvailable = false;
+		try {
+			uiAvailable = !!ctx.hasUI;
+		} catch {
+			return;
+		}
+		if (!uiAvailable) return;
 		if ((globalThis as any).__piSummaryModeActive) {
 			ctx.ui.setWidget("mode-block", undefined);
 			return;
@@ -62,10 +70,32 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	// Track the most recent live ctx so the global refresh callback can fall
+	// back to it when a caller doesn't supply its own fresh ctx.
+	let liveCtx: ExtensionContext | null = null;
+
 	// Expose refresh function so other extensions (e.g. agent-team) can re-pin
 	// the mode-block as the last aboveEditor widget (closest to the editor input).
 	function refreshModeBlock(ctx: ExtensionContext) {
 		updateWidgets(currentMode, ctx);
+	}
+
+	// Install/refresh the global __piRefreshModeBlock callback bound to the
+	// given ctx. Callers may also pass their own fresh ctx to override the
+	// captured one — this is the recommended path from extensions that own a
+	// current ctx (e.g. agent-team after session_switch).
+	function installRefreshGlobal(ctx: ExtensionContext) {
+		liveCtx = ctx;
+		(globalThis as any).__piRefreshModeBlock = (ctxArg?: ExtensionContext) => {
+			const target = ctxArg ?? liveCtx;
+			if (!target) return;
+			try {
+				refreshModeBlock(target);
+			} catch {
+				// Stale ctx — silently ignore; the next session_start/session_switch
+				// will reinstall a fresh binding.
+			}
+		};
 	}
 
 	function syncOverlayGlobals() {
@@ -128,7 +158,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Publish refresh callback so other aboveEditor widgets can re-pin the mode bar
-		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
+		installRefreshGlobal(ctx);
 
 		updateWidgets(mode, ctx);
 	}
@@ -396,7 +426,7 @@ export default function (pi: ExtensionAPI) {
 		currentOverlay = { ...DEFAULT_MODE_OVERLAY };
 		(globalThis as any).__piCurrentMode = "NORMAL";
 		syncOverlayGlobals();
-		(globalThis as any).__piRefreshModeBlock = () => refreshModeBlock(ctx);
+		installRefreshGlobal(ctx);
 		(globalThis as any).__piSetModeForApproval = (mode: string, ctxArg: ExtensionContext) => {
 			const upper = mode.toUpperCase();
 			if (MODES.includes(upper as Mode)) {
@@ -413,6 +443,11 @@ export default function (pi: ExtensionAPI) {
 	// ── Session switch (/new) ──────────────────────
 
 	pi.on("session_switch", async (_event, ctx) => {
+		// CRITICAL: rebind the global refresh callback to the fresh ctx. Without
+		// this, any external extension calling __piRefreshModeBlock() after /new,
+		// fork, or switchSession would hit assertActive() on the old captured ctx.
+		installRefreshGlobal(ctx);
+
 		// Re-apply current mode widgets after banner is shown to ensure correct rendering order
 		// The banner is shown in agent-banner.ts's session_switch handler, so we need to
 		// re-set widgets here to ensure mode-block (if any) renders before banner is re-set
