@@ -40,6 +40,7 @@ import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig 
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
 import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
+import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -1239,15 +1240,20 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 - Warm, professional, collaborative tone — no emojis anywhere
 - Use file:open to show pipeline plans, phase results, or review reports` : "";
 
+		const pipelineDelegateSection = buildDelegateEverythingSection({
+			modeName: "PIPELINE",
+			dispatchTool: "dispatch_agents",
+			dispatchExample: `dispatch_agents { agents: [{ role: "builder", task: "Read src/index.ts and report its exports" }] }`,
+			extraRules: [
+				"`dispatch_agents` is your execution channel. The main agent never runs Read/Write/Edit/Bash directly — those go to dispatched agents.",
+				"`advance_phase` and `pipeline_status` are orchestration tools you call directly; they do not count as execution.",
+				"Phase 1 conversation (asking the user what they want) is orchestration. Once a phase plan exists, all file/code work is dispatched.",
+			],
+		});
+
 		return {
 			systemPrompt: `You are orchestrating a pipeline called "${activeConfig.name}".
-You have full codebase tools AND pipeline tools (advance_phase, dispatch_agents, pipeline_status).
-
-## When to Work Directly (Skip the Pipeline)
-- Simple one-off commands: reading a file, checking status, listing contents
-- Quick lookups, small edits, answering questions about the codebase
-- Anything you can handle in a single step without needing the pipeline
-Use your judgment — if it's quick, just do it; if it's real work, use the pipeline.
+You drive the pipeline via \`advance_phase\`, \`dispatch_agents\`, and \`pipeline_status\`; dispatched agents do every read, search, build, and edit.
 
 ## Current Phase: ${phaseName}
 ${phase.def.description}
@@ -1264,6 +1270,8 @@ ${agentCatalog}
 ${taskSummary || "(Phase 1: Ask the user what they want to accomplish)"}
 ${contextSummary}${planSection}${microTaskSection}${worktreeSection}${reviewSection}${mergeSection}
 
+${pipelineDelegateSection}
+
 ${buildWardenTaskConfirmationSection("PIPELINE", {
 	sliceName: "pipeline phase or dispatched builder slice",
 	guardrails: [
@@ -1273,11 +1281,10 @@ ${buildWardenTaskConfirmationSection("PIPELINE", {
 	],
 })}
 
-## Tools
+## Pipeline Tools
 - \`advance_phase\`: Move to next phase (required summary of what was done)
-- \`dispatch_agents\`: Send agents to work (array of {role, task})
-- \`pipeline_status\`: Check current pipeline state
-- Plus all standard codebase tools (read, write, edit, bash, etc.)${commanderSection}`,
+- \`dispatch_agents\`: Send agents to work (array of {role, task}) — your sole execution channel
+- \`pipeline_status\`: Check current pipeline state${commanderSection}`,
 		};
 	});
 

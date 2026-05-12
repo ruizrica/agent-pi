@@ -84,6 +84,7 @@ import {
 } from "./lib/test-gen-parser.ts";
 import { storeDrafts } from "./lib/gopher-draft-storage.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
+import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -1576,10 +1577,21 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 - Warm, professional, collaborative tone — no emojis anywhere`
       : "";
 
+    const chainDelegateSection = buildDelegateEverythingSection({
+      modeName: "CHAIN",
+      dispatchTool: "run_chain",
+      dispatchExample: `run_chain { task: "Read src/index.ts, summarize its exports, then write a JSDoc header" }`,
+      extraRules: [
+        "`run_chain` is your one execution channel — it runs the configured sequential pipeline. The main agent does not bypass the chain to read or edit files directly.",
+        "Each step's output feeds into the next step as $INPUT; agents maintain session context across steps.",
+        "After the chain completes, review and synthesize the result for the user — synthesis is orchestration, not execution.",
+      ],
+    });
+
     return {
       systemPrompt:
-        `You are an agent with a sequential pipeline called "${activeChain.name}" at your disposal.${desc}
-You have full access to your own tools AND the run_chain tool to delegate to your team.
+        `You are the orchestrator for a sequential pipeline called "${activeChain.name}".${desc}
+You drive the chain via \`run_chain\`; the chain's agents do all reads, searches, and execution.
 
 ## Active Chain: ${activeChain.name}
 Flow: ${flow}
@@ -1590,15 +1602,13 @@ ${steps}
 
 ${agentCatalog}
 
+${chainDelegateSection}
+
 ## When to Use run_chain
+- Any work that requires reading files, searching code, or modifying the codebase
 - Significant work: new features, refactors, multi-file changes, anything non-trivial
 - Tasks that benefit from the full pipeline: planning, building, reviewing
-- When you want structured, multi-agent collaboration on a problem
-
-## When to Work Directly
-- Simple one-off commands: reading a file, checking status, listing contents
-- Quick lookups, small edits, answering questions about the codebase
-- Anything you can handle in a single step without needing the pipeline
+- Structured, multi-agent collaboration on a problem
 
 ## How run_chain Works
 - Pass a clear task description to run_chain
@@ -1617,9 +1627,9 @@ ${buildWardenTaskConfirmationSection("CHAIN", {
 })}
 
 ## Guidelines
-- Use your judgment — if it's quick, just do it; if it's real work, run the chain
+- For any tool-driven work, dispatch via run_chain — do not run reads/edits/builds yourself
 - Keep chain tasks focused and clearly described
-- You can mix direct work and chain runs in the same conversation${commanderSection}`,
+- Chain runs can be repeated within a session — sessions persist between runs${commanderSection}`,
     };
   });
 

@@ -106,35 +106,26 @@ Commander CLI is offline/unavailable. Tasks are tracked locally only; continue u
 	// Scout delegation section — when a scout is pre-spawned and ready
 	const scoutSection = opts.scoutId != null ? `
 
-## Scout Agent (ALWAYS use for context gathering)
-A scout subagent (SA${opts.scoutId}) is pre-spawned and ready. **ALWAYS delegate context-gathering work to the scout** instead of doing it yourself.
+## Pre-Spawned Scout
+A scout subagent (SA${opts.scoutId}) is pre-spawned and ready. Route context-gathering work to this scout first; dispatch additional subagents as needed.
 
-### What to delegate to the scout:
-- Reading files, exploring directory structures
-- Searching for patterns, symbols, or text in the codebase (grep, find)
-- Understanding architecture, tracing code paths, mapping dependencies
-- Any investigation or information-gathering task
-
-### How to use the scout:
 \`\`\`
 subagent_continue { id: ${opts.scoutId}, prompt: "Read the file at src/index.ts and summarize its exports" }
 \`\`\`
-The scout runs in the background. When it finishes, its findings are delivered as a follow-up message. Then you can respond to the user with the information.
+The scout runs in the background. When it finishes, its findings are delivered as a follow-up message. Then synthesize and respond.` : "";
 
-### What YOU still do directly:
-- Respond to the user (synthesize scout findings, answer questions)
-- Write/edit files, run commands, make code changes
-- Plan, create tasks, manage workflow
-- Call set_mode for complex tasks
-- Any action that modifies the codebase
+	const delegateSection = buildDelegateEverythingSection({
+		modeName: "NORMAL",
+		dispatchTool: opts.scoutId != null ? "subagent_continue / subagent_create" : "subagent_create",
+		dispatchExample: opts.scoutId != null
+			? `subagent_continue { id: ${opts.scoutId}, prompt: "Read src/index.ts and summarize its exports" }`
+			: `subagent_create { name: "scout", task: "Read src/index.ts and summarize its exports", summary: "Scout for index.ts" }`,
+	});
 
-### Important:
-- Do NOT use Read, Bash (for reading), grep, find, or ls yourself — send those to the scout
-- You CAN still use Bash for running tests, builds, or commands that modify things
-- If the scout errors, fall back to doing the work directly` : "";
-
-	return `You are in NORMAL mode. This is the default complexity-aware orchestration mode. Work directly for simple and medium tasks; use strategic guidance and parallel execution for complex work.
+	return `You are in NORMAL mode. This is the default complexity-aware orchestration mode. You orchestrate, synthesize, and decide; subagents do the reading, searching, and execution.
 ${scoutSection}
+
+${delegateSection}
 
 ${buildWardenTaskConfirmationSection("NORMAL", {
 	sliceName: "complex direct-work slice",
@@ -246,7 +237,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 | PIPELINE | Full phased orchestration (gather→plan→execute→review). Complex.   |
 
 ### When to Switch Modes
-1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
+1. **SIMPLE task** (read, answer, single edit) — stay in NORMAL, dispatch a single subagent for the read/edit, synthesize the result, and respond. Do NOT call set_mode.
 2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, INVESTIGATE, or SPEC immediately, explain your choice, and await user approval of the plan.
 3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/INVESTIGATE/SPEC/TEAM/PIPELINE if the task needs explicit approval or a written spec.
 
@@ -297,6 +288,20 @@ export function buildPlanPrompt(opts: ModePromptOpts): string {
 ${buildQualityFirstSection("PLAN")}
 
 ${buildAdvisorOverlay("PLAN", opts)}
+
+${buildDelegateEverythingSection({
+	modeName: "PLAN",
+	dispatchTool: "subagent_create_batch (scouts) / subagent_create (builders)",
+	dispatchExample: `subagent_create_batch {
+  agents: [
+    { name: "scout", task: "Read src/auth/middleware.ts and summarize the JWT verification path", summary: "Auth middleware scout" }
+  ]
+}`,
+	extraRules: [
+		"Builders implement approved-plan phases. Even after approval, the main agent does not run Edit/Write/Bash itself — it dispatches builders.",
+		"`show_plan` and `show_report` are orchestration tools you call directly; they do not count as execution.",
+	],
+})}
 
 ${buildWardenTaskConfirmationSection("PLAN", {
 	sliceName: "approved plan or implementation phase",
@@ -558,6 +563,20 @@ ${buildQualityFirstSection("INVESTIGATE")}
 
 ${buildAdvisorOverlay("INVESTIGATE", opts)}
 
+${buildDelegateEverythingSection({
+	modeName: "INVESTIGATE",
+	dispatchTool: "subagent_create_batch (scouts) / subagent_create",
+	dispatchExample: `subagent_create_batch {
+  agents: [
+    { name: "scout", task: "Reproduce the bug by running pnpm test -- auth.spec and capture the failing assertion", summary: "Reproduction scout" }
+  ]
+}`,
+	extraRules: [
+		"Every diagnostic slice — reproduction, trace, log inspection, dependency check — is delegated to a scout or builder.",
+		"`complex_problem_loop_start` / `complex_problem_loop_advance` / `show_plan` / `show_spec` are orchestration tools you call directly.",
+	],
+})}
+
 ## Purpose
 INVESTIGATE mode exists for diagnosing problems through deliberate loop iterations before implementation. Your job is to clarify the target, preserve investigation state, choose the next best information move, execute one focused diagnostic slice, reflect on the evidence, and either continue, ask a precise question, or present findings plus a remediation plan for approval. Only approved remediation should hand off into PIPELINE for execution.
 
@@ -683,6 +702,21 @@ export function buildSpecPrompt(opts: ModePromptOpts): string {
 ${buildQualityFirstSection("SPEC")}
 
 ${buildAdvisorOverlay("SPEC", opts)}
+
+${buildDelegateEverythingSection({
+	modeName: "SPEC",
+	dispatchTool: "subagent_create_batch (scouts/builders)",
+	dispatchExample: `subagent_create_batch {
+  agents: [
+    { name: "scout", task: "Map existing auth code under src/auth/ and report exports + entry points", summary: "Auth structure scout" },
+    { name: "builder", task: "Implement Phase 1 of tasks.md: write requirements.md tests", summary: "Phase 1 builder" }
+  ]
+}`,
+	extraRules: [
+		"Scouts gather context for requirements/design. Builders implement approved-spec tasks. The main agent writes requirements.md / design.md / tasks.md only as orchestration synthesis — file content comes from dispatched scouts where appropriate.",
+		"`show_spec`, `commander_spec`, `commander_workflow` are orchestration tools you call directly.",
+	],
+})}
 
 ${buildWardenTaskConfirmationSection("SPEC", {
 	sliceName: "requirements, design, tasks, or implementation slice",

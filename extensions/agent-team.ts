@@ -45,6 +45,7 @@ import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/co
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
+import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -1246,57 +1247,45 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 		const hasScout = agentStates.has("scout");
 		const scoutSection = hasScout ? `
 
-## Scout Agent (ALWAYS use for context gathering)
-A scout agent is on your team. **ALWAYS dispatch to the scout** for any context-gathering work instead of doing it yourself.
+## Scout Agent on Team
+A scout agent is on your active team. Prefer the scout for context-gathering dispatches; use builders for execution-heavy work.
 
-### What to dispatch to the scout:
-- Reading files, exploring directory structures
-- Searching for patterns, symbols, or text in the codebase (grep, find)
-- Understanding architecture, tracing code paths, mapping dependencies
-- Any investigation or information-gathering task
-
-### How to use the scout:
 \`\`\`
 dispatch_agent { agent: "scout", task: "Read the file at src/index.ts and summarize its exports" }
 \`\`\`
-The scout runs in the background. When it finishes, its findings are returned. Then you synthesize and respond to the user.
+The scout runs in the background. When it finishes, its findings are returned. Then synthesize and respond.` : "";
 
-### What YOU still do directly:
-- Respond to the user (synthesize scout findings, answer questions)
-- Write/edit files, run commands, make code changes
-- Plan, create tasks, manage workflow
-- Any action that modifies the codebase
-
-### Important:
-- Do NOT use Read, grep, find, or ls yourself — dispatch those to the scout
-- You CAN still use Bash for running tests, builds, or commands that modify things
-- If the scout errors, fall back to doing the work directly` : "";
+		const teamDelegateSection = buildDelegateEverythingSection({
+			modeName: "TEAM",
+			dispatchTool: "dispatch_agent",
+			dispatchExample: `dispatch_agent { agent: "${hasScout ? "scout" : "<team-member>"}", task: "Read src/index.ts and summarize its exports" }`,
+			extraRules: [
+				`You can ONLY dispatch to agents listed in the team catalog below. Do not invent agent names.`,
+				`Builders on the team are responsible for code changes, builds, and tests — never run them yourself.`,
+				`You may call the \`tasks\` tool directly for task list bookkeeping (\`tasks new-list\`, \`tasks add\`, \`tasks toggle\`); that is orchestration, not execution.`,
+				`You may call \`ask_user\` directly for user clarification questions.`,
+			],
+		});
 
 		return {
-			systemPrompt: `You coordinate specialist agents and delegate context-gathering to them.
-You dispatch specialist agents for investigation and can work directly for responses and edits.
+			systemPrompt: `You coordinate specialist agents in TEAM mode. You orchestrate, synthesize, and decide; dispatched team members do the reading, searching, building, and testing.
 
 ## Active Team: ${activeTeamName}
 Members: ${teamMembers}
 You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
 ${scoutSection}
 
-## When to Work Directly
-- Responding to the user with information gathered by agents
-- Writing or editing files, running builds/tests
-- Small edits, answering questions you already know the answer to
-- Task management, planning, workflow decisions
+${teamDelegateSection}
 
 ## When to Dispatch Agents
-- ${hasScout ? "ANY context-gathering: reading files, searching code, exploring structure — ALWAYS dispatch scout" : "Simple lookups: reading a file, checking status, listing contents"}
+- ${hasScout ? "ANY context-gathering: reading files, searching code, exploring structure — dispatch the scout" : "Reads, searches, and lookups — dispatch a team member"}
 - Significant work: new features, refactors, multi-file changes
 - Tasks that benefit from specialist knowledge
-- When you want structured, multi-agent collaboration
+- Structured, multi-agent collaboration
 
 ## Guidelines
-- ${hasScout ? "ALWAYS dispatch scout for reads/searches — do NOT read files yourself" : "Use your judgment — if it's quick, just do it; if it's real work, dispatch"}
-- You can mix direct work and agent dispatches in the same conversation
-- You can chain agents: use scout to explore, then builder to implement
+- ${hasScout ? "Dispatch the scout for reads/searches — do NOT read files yourself" : "Dispatch a team member for any tool-driven work; you orchestrate"}
+- You can chain agents: scout to explore, builder to implement
 - You can dispatch the same agent multiple times with different tasks
 - Keep tasks focused — one clear objective per dispatch
 
