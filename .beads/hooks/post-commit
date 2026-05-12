@@ -1,0 +1,4 @@
+#!/bin/sh
+# BEGIN Qoder AI tracker
+"/Users/ricardo/.local/bin/qodercli" commit --hook 2>/dev/null || true
+# END Qoder AI tracker

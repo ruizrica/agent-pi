@@ -47,3 +47,8 @@ commands/private/
 .gopher/
 .kiro/
 tests/*.spec.ts
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
