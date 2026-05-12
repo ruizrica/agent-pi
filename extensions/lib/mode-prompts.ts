@@ -9,6 +9,59 @@ import {
 import { resolveCrossProviderSecondOpinion } from "./claude/advisor-default-orchestration.ts";
 import { buildWardenTaskConfirmationSection } from "./warden-prompt-section.ts";
 
+/** Options for the shared delegate-everything policy section. */
+export interface DelegateEverythingOpts {
+	/** Mode name used in headings, e.g. "NORMAL", "PLAN", "TEAM". */
+	modeName: string;
+	/** How the main agent dispatches work. e.g. "subagent_create" or "subagent_continue" or "dispatch_agent" or "run_chain" or "dispatch_agents". */
+	dispatchTool: string;
+	/** Short example showing how to invoke the dispatchTool for a read/search task. */
+	dispatchExample: string;
+	/** Optional extra rules appended after the core policy (mode-specific carve-outs). */
+	extraRules?: string[];
+}
+
+/**
+ * Shared "delegate everything" policy section. Centralizes the rule that the
+ * main frontier model thinks and plans only — all reads, searches, code
+ * execution, builds, and tests are delegated to subagents. Replaces older
+ * mode-specific blocks that previously allowed Bash/Read carve-outs or said
+ * the main agent could "work directly" for execution.
+ */
+export function buildDelegateEverythingSection(opts: DelegateEverythingOpts): string {
+	const extra = (opts.extraRules ?? []).map((r) => `- ${r}`).join("\n");
+	const extraBlock = extra ? `\n\n### Mode-Specific Rules\n${extra}` : "";
+	return `## Delegate Everything Policy (REQUIRED)
+You are the orchestrator in ${opts.modeName} mode. Your job is to **think, plan, decide, and synthesize** — not to execute. Every file read, code search, command run, build, test, grep, find, ls, or other tool-driven action MUST be delegated to a subagent via \`${opts.dispatchTool}\`.
+
+### What YOU do directly (frontier model — orchestration only)
+- Read user messages and ${opts.modeName === "NORMAL" ? "respond after synthesizing subagent results" : "drive the mode workflow"}
+- Decide what work to dispatch, to whom, and in what order
+- Synthesize subagent findings into decisions, plans, and next steps
+- Manage tasks, plans, mailbox, mode transitions, approval flows
+- Call \`set_mode\`, \`show_plan\`, \`show_spec\`, \`show_report\`, and other UI/workflow tools
+
+### What you MUST delegate to subagents
+- ANY file read — Read, cat, head, tail
+- ANY code search — grep, find, ripgrep, ls
+- ANY code execution — running tests, builds, scripts, dev servers
+- ANY shell command that inspects, queries, or produces output you need to interpret
+- ANY change you would normally make with Edit/Write — delegate to a builder
+
+### Why this matters
+- Frontier tokens are expensive; subagent tokens are not. Delegation keeps your context window clean.
+- Subagents return summarized findings, not raw file dumps. You stay focused on decisions.
+- This is the policy — not a fallback. There is no "if the scout errors, fall back to doing it yourself" carve-out.
+
+### How to delegate (canonical example)
+\`\`\`
+${opts.dispatchExample}
+\`\`\`
+
+### Recovery, not Fallback
+If a subagent errors, dispatch a **new subagent** with corrected context — do not switch to doing the work yourself. The only exceptions are tools listed in "What YOU do directly" above.${extraBlock}`;
+}
+
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
 	return `\n## Commander Integration (REQUIRED)
