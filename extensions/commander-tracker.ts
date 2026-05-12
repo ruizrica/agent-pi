@@ -14,6 +14,11 @@ import {
 	updateMappingStatus,
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
+import {
+	resolveAgentName,
+	resolveAgentType,
+	resolveAgentRole,
+} from "./agent-identity.ts";
 
 export default function (pi: ExtensionAPI) {
 	const g = globalThis as any;
@@ -32,6 +37,9 @@ export default function (pi: ExtensionAPI) {
 	function activate() {
 		if (tracker.active) return;
 		tracker.active = true;
+
+		// Register the agent on Commander before first heartbeat
+		registerAgent();
 
 		// Reconcile every 15s — find unmapped tasks and retry failed ops
 		reconcileTimer = setInterval(() => reconcileNow(), 15_000);
@@ -114,6 +122,25 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function registerAgent() {
+		const client = g.__piCommanderClient;
+		if (!client) return;
+
+		// One-time identity announcement so the board shows a stable name.
+		const name = resolveAgentName();
+		const agent_type = resolveAgentType();
+		const role = resolveAgentRole();
+
+		client.callTool("commander_orchestration", {
+			operation: "agent:register",
+			name,
+			agent_type,
+			role,
+		}).catch(() => {
+			// Registration is best-effort; duplicate-name is fine
+		});
+	}
+
 	function sendHeartbeat() {
 		const client = g.__piCommanderClient;
 		const currentTask = g.__piCurrentTask;
@@ -121,7 +148,7 @@ export default function (pi: ExtensionAPI) {
 
 		client.callTool("commander_orchestration", {
 			operation: "agent:heartbeat",
-			agent_name: process.env.PI_AGENT_NAME || "pi",
+			agent_name: resolveAgentName(),
 		}).catch(() => {});
 	}
 

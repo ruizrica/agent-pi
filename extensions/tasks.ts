@@ -56,6 +56,7 @@ import {
 	type MissionCompleteState,
 } from "./lib/mission-complete-render.ts";
 import { addRetry, isFullySynced } from "./lib/commander/commander-tracker.ts";
+import { resolveAgentName } from "./agent-identity.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function nowIso(): string {
 }
 
 function currentActor(): string {
-	return process.env.PI_AGENT_NAME || process.env.PI_SUBAGENT_NAME || process.env.USER || "agent";
+	return resolveAgentName();
 }
 
 function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, description?: string) {
