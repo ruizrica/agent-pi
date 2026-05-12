@@ -112,17 +112,20 @@ describe("WARDEN prompt coverage for inline operational modes", () => {
 		expect(source).toContain("buildWardenTaskConfirmationSection");
 		expect(source).toContain("TEAM");
 		expect(source).toContain("dispatch_agent");
-		expect(source).toContain("Scout Agent");
+		expect(source).toContain("Scout Agent on Team");
 		expect(source).toContain("tasks new-list");
 	});
 
-	it("chain prompt source includes WARDEN while preserving run_chain guidance", () => {
+	it("chain prompt source includes WARDEN while preserving run_chain guidance under the delegate-everything policy", () => {
 		const source = readFileSync(join(extensionRoot, "agent-chain.ts"), "utf-8");
 		expect(source).toContain("buildWardenTaskConfirmationSection");
 		expect(source).toContain("CHAIN");
 		expect(source).toContain("run_chain");
 		expect(source).toContain("sequential slice");
-		expect(source).toContain("When to Work Directly");
+		// The old "When to Work Directly" carve-out was removed in favor of
+		// buildDelegateEverythingSection() — assert the new policy is wired in.
+		expect(source).toContain("buildDelegateEverythingSection");
+		expect(source).not.toContain("When to Work Directly");
 	});
 });
 

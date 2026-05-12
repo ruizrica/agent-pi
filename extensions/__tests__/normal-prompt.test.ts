@@ -78,10 +78,10 @@ describe("buildNormalPrompt — WARDEN task confirmation", () => {
 		expect(result).toContain("does **not** rename the existing `tasks` tool");
 	});
 
-	it("preserves simple direct-work guidance", () => {
+	it("preserves simple-task guidance (now: stay in NORMAL and dispatch a subagent for the read/edit)", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result).toContain("SIMPLE task");
-		expect(result).toContain("work directly in NORMAL");
+		expect(result).toContain("stay in NORMAL, dispatch a single subagent for the read/edit");
 	});
 });
 
@@ -119,21 +119,21 @@ describe("buildCommanderSection", () => {
 });
 
 describe("buildNormalPrompt — Scout delegation", () => {
-	it("without scoutId, does not contain scout instructions", () => {
+	it("without scoutId, does not contain pre-spawned scout instructions", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
-		expect(result).not.toContain("Scout Agent");
-		expect(result).not.toContain("subagent_continue");
+		expect(result).not.toContain("Pre-Spawned Scout");
+		expect(result).not.toContain("subagent_continue { id:");
 	});
 
-	it("with scoutId: null, does not contain scout instructions", () => {
+	it("with scoutId: null, does not contain pre-spawned scout instructions", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: null });
-		expect(result).not.toContain("Scout Agent");
-		expect(result).not.toContain("subagent_continue");
+		expect(result).not.toContain("Pre-Spawned Scout");
+		expect(result).not.toContain("subagent_continue { id:");
 	});
 
-	it("with scoutId set, contains scout delegation section", () => {
+	it("with scoutId set, contains the pre-spawned scout block + delegation policy", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
-		expect(result).toContain("Scout Agent");
+		expect(result).toContain("Pre-Spawned Scout");
 		expect(result).toContain("subagent_continue");
 	});
 
@@ -143,21 +143,23 @@ describe("buildNormalPrompt — Scout delegation", () => {
 		expect(result).toContain("id: 42");
 	});
 
-	it("with scoutId set, instructs agent to delegate reads to scout", () => {
+	it("with scoutId set, instructs agent to delegate reads to subagents", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
-		expect(result).toContain("delegate");
+		expect(result).toContain("Delegate Everything Policy (REQUIRED)");
+		expect(result.toLowerCase()).toContain("delegate");
 		expect(result.toLowerCase()).toContain("read");
 	});
 
-	it("with scoutId set, instructs agent to still handle edits directly", () => {
+	it("with scoutId set, clarifies orchestration-only work YOU do directly", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
-		expect(result.toLowerCase()).toContain("edit");
-		expect(result).toContain("YOU still do directly");
+		expect(result).toContain("What YOU do directly");
+		expect(result).toContain("frontier model — orchestration only");
 	});
 
-	it("with scoutId set, mentions fallback if scout errors", () => {
+	it("no longer instructs the main agent to fall back to doing the work directly when the scout errors", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
-		expect(result.toLowerCase()).toContain("fall back");
+		expect(result).not.toMatch(/fall back to doing the work directly/);
+		expect(result).toContain("Recovery, not Fallback");
 	});
 });
 

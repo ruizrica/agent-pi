@@ -2,7 +2,13 @@
 // ABOUTME: Validates that prompts contain expected keywords for their workflows.
 
 import { describe, it, expect } from "vitest";
-import { INVESTIGATE_PROMPT, PLAN_PROMPT, SPEC_PROMPT } from "../lib/mode-prompts.ts";
+import {
+	INVESTIGATE_PROMPT,
+	PLAN_PROMPT,
+	SPEC_PROMPT,
+	buildDelegateEverythingSection,
+	buildNormalPrompt,
+} from "../lib/mode-prompts.ts";
 
 describe("PLAN_PROMPT", () => {
 	it("is a non-empty string", () => {
@@ -213,5 +219,119 @@ describe("SPEC_PROMPT", () => {
 
 	it("contains 'commander_mailbox'", () => {
 		expect(SPEC_PROMPT).toContain("commander_mailbox");
+	});
+});
+
+describe("buildDelegateEverythingSection — shared helper", () => {
+	it("returns a non-empty string containing the canonical policy heading", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "NORMAL",
+			dispatchTool: "subagent_create",
+			dispatchExample: 'subagent_create { name: "scout", task: "Read x.ts" }',
+		});
+		expect(typeof out).toBe("string");
+		expect(out).toContain("Delegate Everything Policy (REQUIRED)");
+	});
+
+	it("interpolates modeName, dispatchTool, and dispatchExample into the body", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "PIPELINE",
+			dispatchTool: "dispatch_agents",
+			dispatchExample: 'dispatch_agents { agents: [{ role: "builder", task: "read x" }] }',
+		});
+		expect(out).toContain("orchestrator in PIPELINE mode");
+		expect(out).toContain("dispatch_agents");
+		expect(out).toContain('dispatch_agents { agents: [{ role: "builder", task: "read x" }] }');
+	});
+
+	it("delegates reads, searches, code execution, builds, and tests", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "PLAN",
+			dispatchTool: "subagent_create",
+			dispatchExample: "subagent_create { name: \"scout\", task: \"...\" }",
+		});
+		expect(out).toContain("ANY file read");
+		expect(out).toContain("ANY code search");
+		expect(out).toContain("ANY code execution");
+	});
+
+	it("replaces 'fall back to doing the work directly' with a Recovery, not Fallback stance", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "NORMAL",
+			dispatchTool: "subagent_create",
+			dispatchExample: "subagent_create { name: \"scout\", task: \"...\" }",
+		});
+		expect(out).toContain("Recovery, not Fallback");
+		expect(out).not.toMatch(/fall back to doing the work directly/);
+	});
+
+	it("includes optional mode-specific extraRules when provided", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "TEAM",
+			dispatchTool: "dispatch_agent",
+			dispatchExample: 'dispatch_agent { agent: "scout", task: "..." }',
+			extraRules: ["Builders are responsible for code changes."],
+		});
+		expect(out).toContain("Mode-Specific Rules");
+		expect(out).toContain("Builders are responsible for code changes.");
+	});
+
+	it("omits the Mode-Specific Rules block when no extraRules are provided", () => {
+		const out = buildDelegateEverythingSection({
+			modeName: "CHAIN",
+			dispatchTool: "run_chain",
+			dispatchExample: "run_chain { task: \"...\" }",
+		});
+		expect(out).not.toContain("Mode-Specific Rules");
+	});
+});
+
+describe("Delegate-Everything Policy — wired into every operational-mode prompt", () => {
+	const NORMAL_PROMPT = buildNormalPrompt({
+		commanderAvailable: true,
+		activeChain: null,
+		activePipeline: null,
+		scoutId: null,
+		selectedAdvisorModel: null,
+	});
+
+	it("NORMAL prompt contains the delegate-everything heading", () => {
+		expect(NORMAL_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
+	});
+
+	it("PLAN prompt contains the delegate-everything heading", () => {
+		expect(PLAN_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
+	});
+
+	it("INVESTIGATE prompt contains the delegate-everything heading", () => {
+		expect(INVESTIGATE_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
+	});
+
+	it("SPEC prompt contains the delegate-everything heading", () => {
+		expect(SPEC_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
+	});
+
+	it("NORMAL prompt no longer instructs the main agent to fall back to doing the work directly", () => {
+		expect(NORMAL_PROMPT).not.toMatch(/fall back to doing the work directly/);
+	});
+
+	it("NORMAL prompt no longer says 'You CAN still use Bash for running tests'", () => {
+		expect(NORMAL_PROMPT).not.toContain("You CAN still use Bash for running tests");
+	});
+
+	it("PLAN prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
+		expect(PLAN_PROMPT).not.toMatch(/fall back to doing the work directly/);
+	});
+
+	it("INVESTIGATE prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
+		expect(INVESTIGATE_PROMPT).not.toMatch(/fall back to doing the work directly/);
+	});
+
+	it("SPEC prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
+		expect(SPEC_PROMPT).not.toMatch(/fall back to doing the work directly/);
+	});
+
+	it("NORMAL prompt's mode-selection guidance no longer says 'work directly in NORMAL, do NOT call set_mode'", () => {
+		expect(NORMAL_PROMPT).not.toContain("work directly in NORMAL, do NOT call set_mode");
 	});
 });
