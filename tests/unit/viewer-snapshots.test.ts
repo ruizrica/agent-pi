@@ -1,7 +1,10 @@
 // ABOUTME: Unit tests for snapshot schemas and builders.
 // Tests schema validation, round-trip serialization, builder functions, and error handling.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
 	SNAPSHOT_SCHEMA_VERSION,
 	buildPlanSnapshot,
@@ -9,6 +12,11 @@ import {
 	buildSpecSnapshot,
 	buildCompletionSnapshot,
 	validateSnapshot,
+	synthesizePlanSnapshotFromSource,
+	synthesizeQuestionsSnapshotFromSource,
+	synthesizeSpecSnapshotFromSource,
+	synthesizeCompletionSnapshotFromSource,
+	synthesizeSnapshotFromEntry,
 	type PlanSnapshot,
 	type QuestionsSnapshot,
 	type SpecSnapshot,
@@ -547,6 +555,306 @@ describe("viewer-snapshots", () => {
 				expect(task.children).toHaveLength(1);
 				expect(task.children![0].children).toHaveLength(1);
 				expect(task.children![0].children![0].checked).toBe(true);
+			}
+		});
+	});
+});
+
+describe("synthesizers", () => {
+	describe("synthesizePlanSnapshotFromSource", () => {
+		let tmpDir: string;
+
+		beforeEach(() => {
+			tmpDir = join(tmpdir(), `plan-test-${Date.now()}`);
+			mkdirSync(tmpDir, { recursive: true });
+		});
+
+		afterEach(() => {
+			try {
+				rmSync(tmpDir, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		});
+
+		it("returns null when sourcePath does not exist", () => {
+			const result = synthesizePlanSnapshotFromSource({
+				id: "test-1",
+				title: "Test Plan",
+				sourcePath: "/nonexistent/path.md",
+			});
+			expect(result).toBeNull();
+		});
+
+		it("returns valid PlanSnapshot when reading a tmp markdown file", () => {
+			const sourcePath = join(tmpDir, "plan.md");
+			writeFileSync(sourcePath, "# My Plan\nDo stuff", "utf-8");
+
+			const result = synthesizePlanSnapshotFromSource({
+				id: "test-1",
+				title: "My Plan",
+				sourcePath,
+			});
+
+			expect(result).not.toBeNull();
+			if (result) {
+				const validation = validateSnapshot(result);
+				expect(validation.ok).toBe(true);
+				expect(result.mode).toBe("plan");
+				expect(result.title).toBe("My Plan");
+				expect(result.summary).toBe("My Plan");
+				expect(result.markdownContent).toContain("Do stuff");
+			}
+		});
+	});
+
+	describe("synthesizeQuestionsSnapshotFromSource", () => {
+		let tmpDir: string;
+
+		beforeEach(() => {
+			tmpDir = join(tmpdir(), `questions-test-${Date.now()}`);
+			mkdirSync(tmpDir, { recursive: true });
+		});
+
+		afterEach(() => {
+			try {
+				rmSync(tmpDir, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		});
+
+		it("produces escaped questionsHtml when markdown contains script tags", () => {
+			const sourcePath = join(tmpDir, "questions.md");
+			const markdown = "# Questions\n<script>alert('xss')</script>\nQ1: What?";
+			writeFileSync(sourcePath, markdown, "utf-8");
+
+			const result = synthesizeQuestionsSnapshotFromSource({
+				id: "test-1",
+				title: "Questions",
+				sourcePath,
+			});
+
+			expect(result).not.toBeNull();
+			if (result) {
+				expect(result.questionsHtml).toContain("&lt;script&gt;");
+				expect(result.questionsHtml).toContain("&lt;/script&gt;");
+				expect(result.questionsHtml).not.toContain("<script>");
+				const validation = validateSnapshot(result);
+				expect(validation.ok).toBe(true);
+			}
+		});
+	});
+
+	describe("synthesizeSpecSnapshotFromSource", () => {
+		let tmpDir: string;
+
+		beforeEach(() => {
+			tmpDir = join(tmpdir(), `spec-test-${Date.now()}`);
+			mkdirSync(tmpDir, { recursive: true });
+		});
+
+		afterEach(() => {
+			try {
+				rmSync(tmpDir, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		});
+
+		it("reads requirements.md, design.md, tasks.md from a tmp folder", () => {
+			writeFileSync(join(tmpDir, "requirements.md"), "# Requirements\nReq 1", "utf-8");
+			writeFileSync(join(tmpDir, "design.md"), "# Design\nDesign 1", "utf-8");
+			writeFileSync(join(tmpDir, "tasks.md"), "# Tasks\nTask 1", "utf-8");
+
+			const result = synthesizeSpecSnapshotFromSource({
+				id: "test-1",
+				title: "Spec",
+				folderPath: tmpDir,
+			});
+
+			expect(result).not.toBeNull();
+			if (result) {
+				const validation = validateSnapshot(result);
+				expect(validation.ok).toBe(true);
+				expect(result.documents).toHaveLength(3);
+				const kinds = result.documents.map((d) => d.kind).sort();
+				expect(kinds).toEqual(["design", "requirements", "tasks"]);
+			}
+		});
+
+		it("reads spec-comments.json when present", () => {
+			writeFileSync(join(tmpDir, "requirements.md"), "# Requirements", "utf-8");
+			const comments = [
+				{
+					id: "comment-1",
+					section: "overview",
+					body: "Looks good",
+					author: "reviewer",
+					createdAt: new Date().toISOString(),
+				},
+			];
+			writeFileSync(join(tmpDir, "spec-comments.json"), JSON.stringify(comments), "utf-8");
+
+			const result = synthesizeSpecSnapshotFromSource({
+				id: "test-1",
+				title: "Spec",
+				folderPath: tmpDir,
+			});
+
+			expect(result).not.toBeNull();
+			if (result) {
+				const validation = validateSnapshot(result);
+				expect(validation.ok).toBe(true);
+				expect(result.comments).toHaveLength(1);
+				expect(result.comments[0].body).toBe("Looks good");
+			}
+		});
+
+		it("returns null for an empty folder", () => {
+			const result = synthesizeSpecSnapshotFromSource({
+				id: "test-1",
+				title: "Spec",
+				folderPath: tmpDir,
+			});
+			expect(result).toBeNull();
+		});
+	});
+
+	describe("synthesizeCompletionSnapshotFromSource", () => {
+		let tmpDir: string;
+
+		beforeEach(() => {
+			tmpDir = join(tmpdir(), `completion-test-${Date.now()}`);
+			mkdirSync(tmpDir, { recursive: true });
+		});
+
+		afterEach(() => {
+			try {
+				rmSync(tmpDir, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		});
+
+		it("always returns a snapshot (degraded when sourcePath missing)", () => {
+			const result = synthesizeCompletionSnapshotFromSource({
+				id: "test-1",
+				title: "Completed Work",
+			});
+
+			expect(result).not.toBeNull();
+			const validation = validateSnapshot(result);
+			expect(validation.ok).toBe(true);
+			expect(result.metadata?.degraded).toBe(true);
+			expect(result.metadata?.reason).toBe("no-snapshot-available");
+			expect(result.gitDiffs).toEqual([]);
+			expect(result.baseRefResolved).toBeNull();
+		});
+
+		it("reads sourcePath if available", () => {
+			const sourcePath = join(tmpDir, "summary.md");
+			writeFileSync(sourcePath, "# Work Summary\nFixed critical bug", "utf-8");
+
+			const result = synthesizeCompletionSnapshotFromSource({
+				id: "test-1",
+				title: "Completed Work",
+				sourcePath,
+			});
+
+			expect(result).not.toBeNull();
+			expect(result.summaryMarkdown).toContain("Fixed critical bug");
+		});
+	});
+
+	describe("synthesizeSnapshotFromEntry", () => {
+		let tmpDir: string;
+
+		beforeEach(() => {
+			tmpDir = join(tmpdir(), `entry-test-${Date.now()}`);
+			mkdirSync(tmpDir, { recursive: true });
+		});
+
+		afterEach(() => {
+			try {
+				rmSync(tmpDir, { recursive: true, force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		});
+
+		it("dispatches correctly by category", () => {
+			const planPath = join(tmpDir, "plan.md");
+			writeFileSync(planPath, "# Plan", "utf-8");
+
+			const result = synthesizeSnapshotFromEntry({
+				id: "entry-1",
+				category: "plan",
+				title: "My Plan",
+				sourcePath: planPath,
+			});
+
+			expect(result).not.toBeNull();
+			if (result) {
+				expect(result.mode).toBe("plan");
+				const validation = validateSnapshot(result);
+				expect(validation.ok).toBe(true);
+			}
+		});
+
+		it("returns null for unknown categories", () => {
+			const result = synthesizeSnapshotFromEntry({
+				id: "entry-1",
+				category: "unknown_category",
+				title: "Something",
+			});
+
+			expect(result).toBeNull();
+		});
+
+		it("handles questions category", () => {
+			const questionsPath = join(tmpDir, "questions.md");
+			writeFileSync(questionsPath, "# Questions\n<tag>content</tag>", "utf-8");
+
+			const result = synthesizeSnapshotFromEntry({
+				id: "entry-1",
+				category: "questions",
+				title: "Questions",
+				sourcePath: questionsPath,
+			});
+
+			expect(result).not.toBeNull();
+			if (result && "mode" in result) {
+				expect(result.mode).toBe("questions");
+			}
+		});
+
+		it("handles spec category", () => {
+			writeFileSync(join(tmpDir, "requirements.md"), "# Requirements", "utf-8");
+
+			const result = synthesizeSnapshotFromEntry({
+				id: "entry-1",
+				category: "spec",
+				title: "Spec",
+				viewerPath: tmpDir,
+			});
+
+			expect(result).not.toBeNull();
+			if (result && "documents" in result) {
+				expect(result.documents.length).toBeGreaterThan(0);
+			}
+		});
+
+		it("handles completion category", () => {
+			const result = synthesizeSnapshotFromEntry({
+				id: "entry-1",
+				category: "completion",
+				title: "Completion",
+			});
+
+			expect(result).not.toBeNull();
+			if (result && "gitDiffs" in result) {
+				expect(result.metadata?.degraded).toBe(true);
 			}
 		});
 	});

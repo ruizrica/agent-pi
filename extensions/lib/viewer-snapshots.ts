@@ -2,8 +2,11 @@
 // Captures the complete viewer state (markdown, parsed tasks, git diffs, comments) for re-opening from /reports browser.
 // Snapshots are persisted to .context/reports/raw/<id>.json and allow viewers to re-render without relying on original files.
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import type { PersistedReportEntry } from "./report-index.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -314,4 +317,217 @@ export function validateSnapshot(payload: unknown): { ok: true; snapshot: Viewer
 	}
 
 	return { ok: true, snapshot: payload as ViewerSnapshot };
+}
+
+// ── Synthesizers: Reconstruct snapshots from source files (backfill) ──
+
+/** HTML escape function for questionsHtml content. */
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+/** Synthesize a PlanSnapshot from a source markdown file. Returns null if source missing/empty. */
+export function synthesizePlanSnapshotFromSource(args: {
+	id: string;
+	title: string;
+	sourcePath: string;
+}): PlanSnapshot | null {
+	try {
+		if (!existsSync(args.sourcePath)) return null;
+		const markdown = readFileSync(args.sourcePath, "utf-8");
+		if (!markdown.trim()) return null;
+
+		// Summary = first non-empty line, truncated to 200 chars
+		const lines = markdown.split("\n");
+		const summary = (lines.find((line) => line.trim()) || "").replace(/^#+\s*/, "").slice(0, 200);
+
+		return buildPlanSnapshot({
+			title: args.title,
+			summary,
+			sourcePath: args.sourcePath,
+			markdownContent: markdown,
+			parsedTasks: [], // Minimal — keep it simple; viewer re-parses on load
+		});
+	} catch {
+		return null;
+	}
+}
+
+/** Synthesize a QuestionsSnapshot from a source markdown file. Returns null if source missing/empty. */
+export function synthesizeQuestionsSnapshotFromSource(args: {
+	id: string;
+	title: string;
+	sourcePath: string;
+}): QuestionsSnapshot | null {
+	try {
+		if (!existsSync(args.sourcePath)) return null;
+		const markdown = readFileSync(args.sourcePath, "utf-8");
+		if (!markdown.trim()) return null;
+
+		// Summary = first non-empty line, truncated to 200 chars
+		const lines = markdown.split("\n");
+		const summary = (lines.find((line) => line.trim()) || "").replace(/^#+\s*/, "").slice(0, 200);
+
+		// Render as escaped pre block (fallback; original questionsHtml is gone)
+		const questionsHtml = `<pre>${escapeHtml(markdown)}</pre>`;
+
+		return buildQuestionsSnapshot({
+			title: args.title,
+			summary,
+			sourcePath: args.sourcePath,
+			markdownContent: markdown,
+			questionsHtml,
+		});
+	} catch {
+		return null;
+	}
+}
+
+/** Synthesize a SpecSnapshot from a spec folder. Returns null if no spec documents exist. */
+export function synthesizeSpecSnapshotFromSource(args: {
+	id: string;
+	title: string;
+	folderPath: string;
+}): SpecSnapshot | null {
+	try {
+		if (!existsSync(args.folderPath)) return null;
+
+		// Read spec documents
+		const documents: Array<any> = [];
+		for (const kind of ["requirements", "design", "tasks"] as const) {
+			const filePath = join(args.folderPath, ".kiro", "specs", args.title.replace(/\s+/g, "_"), `${kind}.md`);
+			// Try direct path first, then fallback patterns
+			const altPath = join(args.folderPath, `${kind}.md`);
+			const pathToTry = existsSync(filePath) ? filePath : existsSync(altPath) ? altPath : null;
+
+			if (pathToTry) {
+				try {
+					const markdown = readFileSync(pathToTry, "utf-8");
+					documents.push({
+						kind,
+						path: pathToTry,
+						markdown,
+					});
+				} catch {
+					// Skip if unreadable
+				}
+			}
+		}
+
+		// Return null if no documents found
+		if (documents.length === 0) return null;
+
+		// Try to read spec-comments.json if present
+		const comments: Array<any> = [];
+		const commentsPath = join(args.folderPath, ".kiro", "specs", args.title.replace(/\s+/g, "_"), "spec-comments.json");
+		const altCommentsPath = join(args.folderPath, "spec-comments.json");
+		const pathToComments = existsSync(commentsPath) ? commentsPath : existsSync(altCommentsPath) ? altCommentsPath : null;
+
+		if (pathToComments) {
+			try {
+				const data = JSON.parse(readFileSync(pathToComments, "utf-8"));
+				if (Array.isArray(data)) comments.push(...data);
+			} catch {
+				// Ignore JSON parse errors
+			}
+		}
+
+		// First non-empty line from first document as summary
+		const firstDoc = documents[0]?.markdown || "";
+		const lines = firstDoc.split("\n");
+		const summary = (lines.find((line) => line.trim()) || "").replace(/^#+\s*/, "").slice(0, 200);
+
+		return buildSpecSnapshot({
+			title: args.title,
+			summary,
+			folderPath: args.folderPath,
+			documents,
+			comments,
+			visuals: [], // Minimal — no inline visual data
+		});
+	} catch {
+		return null;
+	}
+}
+
+/** Synthesize a CompletionSnapshot (always returns, degraded if no source). */
+export function synthesizeCompletionSnapshotFromSource(args: {
+	id: string;
+	title: string;
+	sourcePath?: string;
+}): CompletionSnapshot {
+	let summaryMarkdown = "Original git state lost — diffs unavailable.";
+
+	if (args.sourcePath) {
+		try {
+			if (existsSync(args.sourcePath)) {
+				summaryMarkdown = readFileSync(args.sourcePath, "utf-8");
+			}
+		} catch {
+			// Use fallback message
+		}
+	}
+
+	return buildCompletionSnapshot({
+		title: args.title,
+		summaryMarkdown,
+		baseRef: "unknown",
+		baseRefResolved: null,
+		gitDiffs: [],
+		filesChanged: 0,
+		metadata: {
+			degraded: true,
+			reason: "no-snapshot-available",
+		},
+	});
+}
+
+/** Dispatcher: synthesize snapshot from entry by category. Returns null for unknown categories. */
+export function synthesizeSnapshotFromEntry(entry: {
+	id: string;
+	category: string;
+	title: string;
+	sourcePath?: string;
+	viewerPath?: string;
+}): ViewerSnapshot | null {
+	switch (entry.category) {
+		case "plan":
+			if (!entry.sourcePath) return null;
+			return synthesizePlanSnapshotFromSource({
+				id: entry.id,
+				title: entry.title,
+				sourcePath: entry.sourcePath,
+			});
+
+		case "questions":
+			if (!entry.sourcePath) return null;
+			return synthesizeQuestionsSnapshotFromSource({
+				id: entry.id,
+				title: entry.title,
+				sourcePath: entry.sourcePath,
+			});
+
+		case "spec":
+			if (!entry.viewerPath) return null;
+			return synthesizeSpecSnapshotFromSource({
+				id: entry.id,
+				title: entry.title,
+				folderPath: entry.viewerPath,
+			});
+
+		case "completion":
+			return synthesizeCompletionSnapshotFromSource({
+				id: entry.id,
+				title: entry.title,
+				sourcePath: entry.sourcePath,
+			});
+
+		default:
+			return null;
+	}
 }

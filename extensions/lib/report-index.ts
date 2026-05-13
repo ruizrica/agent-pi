@@ -47,6 +47,7 @@ export interface PersistedReportIndex {
 const INDEX_DIR = resolve(".context", "reports");
 const INDEX_PATH = join(INDEX_DIR, "index.json");
 const DB_PATH = join(INDEX_DIR, "reports.db");
+const RAW_REPORTS_DIR = join(INDEX_DIR, "raw");
 const DB_RETENTION_DAYS = parsePositiveInt(process.env.PI_REPORT_RETENTION_DAYS, 30);
 const DB_MAX_ENTRIES = parsePositiveInt(process.env.PI_REPORT_MAX_ENTRIES, 500);
 
@@ -473,4 +474,22 @@ export function resetReportStorageForTests(): void {
 /** Returns true if node:sqlite is available on this runtime. */
 export function isSqliteAvailable(): boolean {
 	return initSqlite();
+}
+
+/** Reads a raw payload from .context/reports/raw/<id>.json. Returns parsed JSON or null if missing/invalid. */
+export function readRawPayload(id: string): unknown | null {
+	// Sanitize id to prevent path traversal: alphanumeric, dash, underscore only
+	const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+	if (!sanitized) return null;
+
+	const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
+
+	try {
+		if (!existsSync(filePath)) return null;
+		const content = readFileSync(filePath, "utf-8");
+		return JSON.parse(content);
+	} catch {
+		// File missing, unreadable, or invalid JSON — return null
+		return null;
+	}
 }
