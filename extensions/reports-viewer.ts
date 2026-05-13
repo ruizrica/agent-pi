@@ -30,20 +30,56 @@ function validatePath(raw: string): string {
 	return abs;
 }
 
-function openOriginalReport(entry: any): void {
-	const target = entry.viewerPath || entry.sourcePath;
-	if (!target) throw new Error("No source path available for this report");
-	const safePath = validatePath(String(target));
+export function openOriginalReport(entry: any): void {
+	const id = String(entry.id);
+	const path = entry.viewerPath || entry.sourcePath;
 	const cwd = process.cwd();
-	const command = entry.category === "spec" ? "/spec" : "/show-file";
+
+	let args: string[] = [];
+
+	switch (entry.category) {
+		case "plan": {
+			if (!path) throw new Error("No source path available for plan report");
+			const safePath = validatePath(path);
+			args = ["/show-plan", safePath, "--readonly", "--payload-id", id];
+			break;
+		}
+
+		case "questions": {
+			if (!path) throw new Error("No source path available for questions report");
+			const safePath = validatePath(path);
+			args = ["/show-plan", safePath, "--readonly", "--payload-id", id, "--mode", "questions"];
+			break;
+		}
+
+		case "spec": {
+			if (!path) throw new Error("No source path available for spec report");
+			const safePath = validatePath(path);
+			args = ["/show-spec", safePath, "--readonly", "--payload-id", id];
+			break;
+		}
+
+		case "completion": {
+			args = ["/show-report", "--readonly", "--payload-id", id];
+			break;
+		}
+
+		default: {
+			// Existing behavior for qa_rico, swagbucks, pr_review, and unknown categories
+			if (!path) throw new Error("No source path available for this report");
+			const safePath = validatePath(path);
+			args = ["/show-file", safePath];
+			break;
+		}
+	}
 
 	if (process.platform === "darwin") {
-		execFileSync("open", ["-na", "Terminal", "--args", "bash", "-lc", `cd '${cwd}' && pi ${command} '${safePath}'`], { stdio: "ignore" });
+		execFileSync("open", ["-na", "Terminal", "--args", "bash", "-lc", `cd '${cwd}' && pi ${args.join(" ")}`], { stdio: "ignore" });
 		return;
 	}
 
 	// Linux: spawn detached so the process outlives this one (replaces bash "... &")
-	const child = spawn("bash", ["-lc", `cd '${cwd}' && pi ${command} '${safePath}'`], {
+	const child = spawn("bash", ["-lc", `cd '${cwd}' && pi ${args.join(" ")}`], {
 		stdio: "ignore",
 		detached: true,
 	});

@@ -546,13 +546,16 @@ ${VIEWER_SCROLLBAR_STYLES}
           '<button class="btn btn-ghost" onclick="showCategory(\\'' + category + '\\')">Table View</button>' +
         '</div>' +
         (recent.length ?
-          '<div class="cards">' + recent.map((entry) =>
-            '<div class="report-card" onclick="openFromTable(\\'' + entry.id + '\\')">' +
+          '<div class="cards">' + recent.map((entry) => {
+            const isReadOnlyCategory = ['plan', 'questions', 'spec', 'completion'].includes(entry.category);
+            const hint = isReadOnlyCategory ? '<div style="font-size: 0.85em; color: var(--dim); margin-top: 0.5em;">Opens in read-only viewer</div>' : '';
+            return '<div class="report-card" onclick="openFromTable(\'' + entry.id + '\')">' +
               '<h3>' + escapeHtml(entry.title) + '</h3>' +
               '<p>' + escapeHtml(entry.summary || 'No summary available.') + '</p>' +
+              hint +
               '<div class="meta"><span>' + escapeHtml(fmtDate(entry.updatedAt)) + '</span><span>' + escapeHtml(entry.sourceLabel || entry.viewerLabel || 'Viewer') + '</span><span class="open">Open ↗</span></div>' +
-            '</div>'
-          ).join('') + '</div>'
+            '</div>';
+          }).join('') + '</div>'
           : '<div class="empty">No reports in this section yet.</div>') +
       '</div>';
     }).join('');
