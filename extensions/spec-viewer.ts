@@ -14,6 +14,7 @@ import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaf
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/viewers/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
+import { buildSpecSnapshot, type SpecSnapshot } from "./lib/viewer-snapshots.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
 import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
@@ -262,6 +263,8 @@ const ShowSpecParams = Type.Object({
 	folder_path: Type.String({ description: "Path to the spec folder (e.g. .kiro/specs/feature-name/)" }),
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
 	feature_idea: Type.Optional(Type.String({ description: "Optional raw feature idea used to scaffold Kiro spec documents when the folder is empty" })),
+	readonly: Type.Optional(Type.Boolean({ description: "Open the viewer in read-only mode (no edit/approve UI). Used by /reports re-opens." })),
+	payload_id: Type.Optional(Type.String({ description: "ID of a persisted report snapshot to load instead of folder_path. Used by /reports re-opens." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -422,6 +425,49 @@ export default function (pi: ExtensionAPI) {
 			try {
 				const editedDocCount = result.markdownChanges ? Object.keys(result.markdownChanges).length : 0;
 				const specContent = documents.map((doc) => `# ${doc.label}\n\n${doc.markdown}`).join("\n\n");
+
+				// Build a re-renderable snapshot of viewer state so /reports can
+				// re-open this spec in read-only mode without re-scanning the folder.
+				let snapshot: SpecSnapshot | undefined;
+				try {
+					const snapshotDocs = documents
+						.filter((d) => !d.isVisuals)
+						.map((d) => {
+							const lowerKey = (d.key || "").toLowerCase();
+							const kind: "requirements" | "design" | "tasks" =
+								lowerKey.includes("requirement") ? "requirements" :
+								lowerKey.includes("task") ? "tasks" : "design";
+							return { kind, path: d.filePath || "", markdown: d.markdown || "" };
+						});
+					const snapshotVisuals = documents
+						.filter((d) => d.isVisuals && Array.isArray(d.visualFiles))
+						.flatMap((d) =>
+							(d.visualFiles || []).map((vf) => ({
+								fileName: typeof vf === "string" ? basename(vf) : basename(String(vf)),
+								relativePath: typeof vf === "string" ? vf : String(vf),
+							})),
+						);
+					const snapshotComments = (result.comments || []).map((c: any) => ({
+						id: String(c.id ?? ""),
+						section: String(c.sectionId ?? c.section ?? c.document ?? ""),
+						body: String(c.text ?? c.body ?? ""),
+						author: String(c.author ?? "user"),
+						createdAt: String(c.timestamp ?? c.createdAt ?? new Date().toISOString()),
+					}));
+					snapshot = buildSpecSnapshot({
+						title,
+						summary: `${documents.length} document(s) reviewed`,
+						folderPath,
+						documents: snapshotDocs,
+						comments: snapshotComments,
+						visuals: snapshotVisuals,
+						featureIdea: feature_idea,
+						actionResult: result.action ? { action: String(result.action), note: result.feedback } : undefined,
+					});
+				} catch {
+					snapshot = undefined;
+				}
+
 				upsertPersistedReport({
 					category: "spec",
 					title,
@@ -438,6 +484,7 @@ export default function (pi: ExtensionAPI) {
 						editedDocCount,
 						documentCount: documents.length,
 					},
+					payload: snapshot,
 				});
 			} catch {}
 

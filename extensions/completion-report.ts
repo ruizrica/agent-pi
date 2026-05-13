@@ -16,6 +16,70 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCompletionReportHTML, type ReportData, type ChangedFile } from "./lib/completion-report-html.ts";
 import { createCompletionReportStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
+import { buildCompletionSnapshot, type CompletionSnapshot } from "./lib/viewer-snapshots.ts";
+
+// Parses a unified-diff string into snapshot hunks. Best-effort; falls back to a single synthetic hunk
+// containing the raw diff text as context lines when the diff doesn't match the standard format.
+function parseUnifiedDiffToHunks(diff: string): CompletionSnapshot["gitDiffs"][number]["hunks"] {
+	if (!diff || typeof diff !== "string") return [];
+	const hunks: CompletionSnapshot["gitDiffs"][number]["hunks"] = [];
+	const lines = diff.split("\n");
+	let current: CompletionSnapshot["gitDiffs"][number]["hunks"][number] | null = null;
+	const hunkRegex = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+	for (const line of lines) {
+		const m = line.match(hunkRegex);
+		if (m) {
+			if (current) hunks.push(current);
+			current = {
+				oldStart: parseInt(m[1] || "0", 10),
+				oldLines: parseInt(m[2] || "1", 10),
+				newStart: parseInt(m[3] || "0", 10),
+				newLines: parseInt(m[4] || "1", 10),
+				lines: [],
+			};
+			continue;
+		}
+		if (!current) continue;
+		if (line.startsWith("+") && !line.startsWith("+++")) current.lines.push({ type: "add", content: line.slice(1) });
+		else if (line.startsWith("-") && !line.startsWith("---")) current.lines.push({ type: "del", content: line.slice(1) });
+		else if (line.startsWith(" ") || line === "") current.lines.push({ type: "context", content: line.startsWith(" ") ? line.slice(1) : line });
+	}
+	if (current) hunks.push(current);
+	return hunks;
+}
+
+function buildCompletionSnapshotFromReport(report: ReportData, summary: string, actionResult?: { action: string; note?: string }, cwd?: string): CompletionSnapshot {
+	let baseRefResolved: string | null = null;
+	try {
+		if (cwd) {
+			const sha = execSync(`git rev-parse ${report.baseRef}`, { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+			if (sha) baseRefResolved = sha;
+		}
+	} catch {
+		baseRefResolved = null;
+	}
+	const gitDiffs = report.files.map((f) => ({
+		path: f.path,
+		oldPath: f.oldPath,
+		mode: f.status,
+		hunks: parseUnifiedDiffToHunks(f.diff),
+	}));
+	return buildCompletionSnapshot({
+		title: report.title,
+		summaryMarkdown: summary,
+		baseRef: report.baseRef,
+		baseRefResolved,
+		gitDiffs,
+		tasksMarkdown: report.taskMarkdown,
+		filesChanged: report.files.length,
+		workingDirectory: cwd,
+		actionResult,
+		metadata: {
+			totalAdditions: report.totalAdditions,
+			totalDeletions: report.totalDeletions,
+		},
+	});
+}
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 
@@ -400,6 +464,8 @@ const ShowReportParams = Type.Object({
 	title: Type.Optional(Type.String({ description: "Title for the report (default: 'Completion Report')" })),
 	summary: Type.Optional(Type.String({ description: "Markdown summary of the work done" })),
 	base_ref: Type.Optional(Type.String({ description: "Git ref to diff against (default: auto-detect — HEAD for uncommitted changes, HEAD~1 for committed)" })),
+	readonly: Type.Optional(Type.Boolean({ description: "Open the viewer in read-only mode (no rollback UI). Used by /reports re-opens." })),
+	payload_id: Type.Optional(Type.String({ description: "ID of a persisted completion snapshot to render instead of running fresh git diffs. Used by /reports re-opens." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -493,6 +559,8 @@ export default function (pi: ExtensionAPI) {
 
 				if (commanderResult.inCommander) {
 					try {
+						let snapshot: CompletionSnapshot | undefined;
+						try { snapshot = buildCompletionSnapshotFromReport(report, summary, { action: "done" }, cwd); } catch { snapshot = undefined; }
 						upsertPersistedReport({
 							category: "completion",
 							title,
@@ -510,6 +578,7 @@ export default function (pi: ExtensionAPI) {
 								action: "done",
 								rolledBackFiles: [],
 							},
+							payload: snapshot,
 						});
 					} catch {}
 
@@ -554,6 +623,13 @@ export default function (pi: ExtensionAPI) {
 				const result = await waitForResult();
 
 				try {
+					let snapshot: CompletionSnapshot | undefined;
+					try {
+						snapshot = buildCompletionSnapshotFromReport(report, summary, { action: result.action, note: result.rolledBackFiles?.length ? `rolled back ${result.rolledBackFiles.length} file(s)` : undefined }, cwd);
+						if (snapshot && Array.isArray(result.rolledBackFiles)) {
+							(snapshot.metadata as any) = { ...(snapshot.metadata || {}), rolledBackFiles: result.rolledBackFiles };
+						}
+					} catch { snapshot = undefined; }
 					upsertPersistedReport({
 						category: "completion",
 						title,
@@ -571,6 +647,7 @@ export default function (pi: ExtensionAPI) {
 							action: result.action,
 							rolledBackFiles: result.rolledBackFiles,
 						},
+						payload: snapshot,
 					});
 				} catch {}
 

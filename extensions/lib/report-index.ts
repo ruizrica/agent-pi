@@ -395,6 +395,12 @@ export function upsertPersistedReport(input: {
 	viewerLabel?: string;
 	tags?: string[];
 	metadata?: Record<string, any>;
+	/**
+	 * Optional raw payload (e.g. a viewer snapshot) persisted to
+	 * .context/reports/raw/<entry-id>.json so the entry can be re-rendered
+	 * offline without re-reading source files or recomputing git state.
+	 */
+	payload?: unknown;
 }): PersistedReportEntry {
 	const database = getDb();
 	const timestamp = nowIso();
@@ -410,6 +416,9 @@ export function upsertPersistedReport(input: {
 			sourcePath,
 			viewerPath,
 		});
+		if (input.payload !== undefined) {
+			writeRawPayload(entry.id, input.payload);
+		}
 		const idx = legacy.entries.findIndex((e) => e.id === entry.id);
 		if (idx >= 0) legacy.entries[idx] = entry;
 		else legacy.entries.unshift(entry);
@@ -455,9 +464,26 @@ export function upsertPersistedReport(input: {
 		serializeJson(entry.metadata || {}),
 	);
 
+	if (input.payload !== undefined) {
+		writeRawPayload(entry.id, input.payload);
+	}
+
 	pruneExpiredReports();
 	writeLegacyJsonSnapshot(loadEntriesFromDb());
 	return entry;
+}
+
+/** Writes a raw payload (snapshot JSON) to .context/reports/raw/<id>.json. Best-effort — silently swallows errors. */
+function writeRawPayload(id: string, payload: unknown): void {
+	try {
+		const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+		if (!sanitized) return;
+		if (!existsSync(RAW_REPORTS_DIR)) mkdirSync(RAW_REPORTS_DIR, { recursive: true });
+		const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
+		writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+	} catch {
+		// Best-effort — swallow disk/permission errors so persistence never crashes the viewer.
+	}
 }
 
 export function resetReportStorageForTests(): void {
