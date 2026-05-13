@@ -16,10 +16,12 @@ import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
-import { upsertPersistedReport } from "./lib/report-index.ts";
+import { upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { getPlanTargetMode } from "./lib/plan-complexity.ts";
 import { getProjectContext } from "./lib/project-context.ts";
+import { buildPlanSnapshot, buildQuestionsSnapshot, validateSnapshot, synthesizeSnapshotFromEntry } from "./lib/viewer-snapshots.ts";
+import type { PlanSnapshot, QuestionsSnapshot } from "./lib/viewer-snapshots.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -143,6 +145,44 @@ async function startViewerServer(
 	};
 }
 
+// ── Task Parsing ──────────────────────────────────────────────────────────────
+
+interface TaskNode {
+	id: string;
+	level: number;
+	text: string;
+	checked: boolean;
+	children?: TaskNode[];
+}
+
+function parsePlainTasksFromMarkdown(markdown: string): TaskNode[] {
+	const lines = markdown.split('\n');
+	const tasks: TaskNode[] = [];
+	let taskId = 0;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const match = line.match(/^(\s*)- \[([\sxX])\]\s+(.*)/);
+		if (!match) continue;
+
+		const indent = match[1].length;
+		const checked = match[2].toLowerCase() === 'x';
+		const text = match[3].trim();
+		const level = Math.floor(indent / 2);
+
+		const task: TaskNode = {
+			id: `task-${taskId++}`,
+			level,
+			text,
+			checked,
+		};
+
+		tasks.push(task);
+	}
+
+	return tasks;
+}
+
 // ── Tool Parameters ──────────────────────────────────────────────────
 
 const ShowPlanParams = Type.Object({
@@ -150,6 +190,8 @@ const ShowPlanParams = Type.Object({
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
 	mode: Type.Optional(Type.String({ description: "Viewer mode: 'plan' (default) for plan review/approval, or 'questions' for follow-up questions with inline answers" })),
 	force_browser: Type.Optional(Type.Boolean({ description: "Bypass Commander and open the local browser viewer directly. Useful for testing browser fallback and Needs Changes feedback." })),
+	readonly: Type.Optional(Type.Boolean({ description: "Open the viewer in read-only mode. Hides approve/decline UI; shows a banner with toggle to enter interactive mode." })),
+	payload_id: Type.Optional(Type.String({ description: "ID of a persisted report snapshot to load instead of file_path. Used by the /reports browser to re-open previous viewers." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -182,13 +224,43 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult) {
+	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult, markdownContent?: string) {
 		try {
+			const actualMarkdown = markdownContent ?? result.markdown;
+			const parsedTasks = purpose === "plan" ? parsePlainTasksFromMarkdown(actualMarkdown) : [];
+
+			const actionResult = {
+				action: result.action,
+				note: result.modified ? "Plan was modified before closing" : undefined,
+			};
+
+			let payload: unknown;
+			if (purpose === "questions") {
+				const questionsHtml = "";
+				payload = buildQuestionsSnapshot({
+					title,
+					summary: result.answers || actualMarkdown,
+					sourcePath: filePath,
+					markdownContent: actualMarkdown,
+					questionsHtml,
+					actionResult,
+				});
+			} else {
+				payload = buildPlanSnapshot({
+					title,
+					summary: actualMarkdown,
+					sourcePath: filePath,
+					markdownContent: actualMarkdown,
+					parsedTasks,
+					actionResult,
+				});
+			}
+
 			upsertPersistedReport({
 				category: purpose,
 				title,
-				summary: result.answers || result.markdown,
-				content: result.markdown,
+				summary: result.answers || actualMarkdown,
+				content: actualMarkdown,
 				sourcePath: filePath,
 				viewerPath: filePath,
 				viewerLabel: title,
@@ -197,6 +269,7 @@ export default function (pi: ExtensionAPI) {
 					action: result.action,
 					modified: result.modified,
 				},
+				payload,
 			});
 		} catch {
 			// Persistence is best-effort; viewer result should still return.
