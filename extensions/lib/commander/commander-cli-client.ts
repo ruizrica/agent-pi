@@ -2,6 +2,7 @@
 // ABOUTME: Preserves the former callTool-style contract while using the local `cmd` binary.
 
 import { execFile } from "node:child_process";
+import { resolveRuntimeLabel, resolveModelName } from "../../agent-identity.js";
 
 export interface CommanderCliClientOptions {
 	bin?: string;
@@ -197,9 +198,16 @@ export class CommanderCliClient {
 		return JSON.parse(trimmed);
 	}
 
+	private withIdentity(args: string[]): string[] {
+		if (args.length > 0 && args[0] === "--runtime") {
+			return args;
+		}
+		return ["--runtime", resolveRuntimeLabel(), "--model", resolveModelName(), ...args];
+	}
+
 	private run(args: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
 		return new Promise((resolve, reject) => {
-			execFile(this.bin, args, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
+			execFile(this.bin, this.withIdentity(args), { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
 				if (error) {
 					reject(new Error(stderr?.trim() || error.message));
 					return;

@@ -24,6 +24,8 @@ cmd whoami                              # agent identity
 
 Pi registers itself with Commander on session start using `commander_orchestration { operation: "agent:register" }`. The default name is `pi-${shortHostname}-${pid}` (e.g. `pi-ricardo-mbp-48213`), which is stable within a session and human-readable. Override with `PI_AGENT_NAME` environment variable for a stable cross-session name, or `PI_SUBAGENT_NAME` to mark a process as a subagent (sets `agent_type=pi-subagent` and `role=worker`). The same name is reused for heartbeats and task ownership via `currentActor()`, so the board shows one consistent row per process.
 
+Additionally, every `cmd` shell-out from Pi prepends `--runtime pi --model <model>` to the command-line arguments so the Commander kanban board can attribute writes correctly. The model is resolved from environment variables in this order: `PI_MODEL`, `ANTHROPIC_MODEL`, `PACIFICO_MODEL`, `CLAUDE_MODEL`, or `"unknown"` as fallback. Without these flags the board shows the assignee as "unknown".
+
 ## Stage notice
 
 Commander v2 is in shell-first stage. The CLI's data layer is a

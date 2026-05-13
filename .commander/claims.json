@@ -1,5 +1,5 @@
 {
-  "nextAuditId": 15,
+  "nextAuditId": 16,
   "byBead": {
     "agent-pi-eno": {
       "identity": {
@@ -273,6 +273,25 @@
         "capturedAt": "2026-05-12T20:51:48.111Z"
       },
       "at": "2026-05-12T20:51:49.701Z"
+    },
+    "agent-pi-zep": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "verified",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true"
+        ],
+        "modelDeclared": null,
+        "modelConfidence": "fallback",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 28071,
+        "ppid": 28070,
+        "parentComm": "node",
+        "sessionId": "e7522969-00b3-41f0-a851-0f495349d6dd",
+        "capturedAt": "2026-05-12T22:58:41.614Z"
+      },
+      "at": "2026-05-12T22:58:43.039Z"
     }
   },
   "audit": [
@@ -590,6 +609,28 @@
         "capturedAt": "2026-05-12T20:51:48.111Z"
       },
       "createdAt": "2026-05-12T20:51:49.701Z"
+    },
+    {
+      "id": 15,
+      "beadId": "agent-pi-zep",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "verified",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true"
+        ],
+        "modelDeclared": null,
+        "modelConfidence": "fallback",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 28071,
+        "ppid": 28070,
+        "parentComm": "node",
+        "sessionId": "e7522969-00b3-41f0-a851-0f495349d6dd",
+        "capturedAt": "2026-05-12T22:58:41.614Z"
+      },
+      "createdAt": "2026-05-12T22:58:43.039Z"
     }
   ]
 }

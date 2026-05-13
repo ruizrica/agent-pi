@@ -2,10 +2,13 @@
 // Tests default fallback behavior, environment variable precedence, caching, and hostname normalization.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
+import agentIdentityDefault, {
 	resolveAgentName,
 	resolveAgentType,
 	resolveAgentRole,
+	resolveModelName,
+	resolveRuntimeLabel,
+	applyCmdIdentityFlags,
 	__resetIdentityCacheForTests,
 } from "../extensions/agent-identity.js";
 
@@ -19,6 +22,11 @@ describe("agent-identity", () => {
 		// Reset env to clean state
 		delete process.env.PI_AGENT_NAME;
 		delete process.env.PI_SUBAGENT_NAME;
+		delete process.env.PI_MODEL;
+		delete process.env.ANTHROPIC_MODEL;
+		delete process.env.PACIFICO_MODEL;
+		delete process.env.CLAUDE_MODEL;
+		delete process.env.PI_RUNTIME_LABEL;
 	});
 
 	afterEach(() => {
@@ -26,6 +34,21 @@ describe("agent-identity", () => {
 		Object.assign(process.env, originalEnv);
 		// Clean up cache
 		__resetIdentityCacheForTests();
+	});
+
+	describe("pi extension loader contract", () => {
+		// The pi runtime auto-discovers every top-level .ts file in extensions/ and
+		// requires each to default-export a factory (pi: ExtensionAPI) => void.
+		// agent-identity.ts is a utility module, so its default export is a no-op
+		// factory that exists purely to satisfy the loader.
+		it("default-exports a function so pi can load it as an extension", () => {
+			expect(typeof agentIdentityDefault).toBe("function");
+		});
+
+		it("default factory is a no-op (does not throw when invoked with a stub ExtensionAPI)", () => {
+			const piStub = { on: () => {} } as unknown as Parameters<typeof agentIdentityDefault>[0];
+			expect(() => agentIdentityDefault(piStub)).not.toThrow();
+		});
 	});
 
 	describe("resolveAgentName()", () => {
@@ -190,6 +213,154 @@ describe("agent-identity", () => {
 			expect(name).toBe("worker-1");
 			expect(type).toBe("pi-subagent");
 			expect(role).toBe("worker");
+		});
+	});
+
+	describe("resolveModelName()", () => {
+		it("returns 'unknown' when no model env vars are set", () => {
+			const model = resolveModelName();
+			expect(model).toBe("unknown");
+		});
+
+		it("prefers PI_MODEL over other env vars", () => {
+			process.env.PI_MODEL = "claude-opus";
+			process.env.ANTHROPIC_MODEL = "claude-haiku";
+
+			const model = resolveModelName();
+			expect(model).toBe("claude-opus");
+		});
+
+		it("uses ANTHROPIC_MODEL when PI_MODEL is not set", () => {
+			process.env.ANTHROPIC_MODEL = "claude-haiku";
+
+			const model = resolveModelName();
+			expect(model).toBe("claude-haiku");
+		});
+
+		it("uses PACIFICO_MODEL when higher precedence vars are not set", () => {
+			process.env.PACIFICO_MODEL = "claude-sonnet";
+
+			const model = resolveModelName();
+			expect(model).toBe("claude-sonnet");
+		});
+
+		it("uses CLAUDE_MODEL as final fallback", () => {
+			process.env.CLAUDE_MODEL = "claude-3";
+
+			const model = resolveModelName();
+			expect(model).toBe("claude-3");
+		});
+
+		it("ignores whitespace-only model values", () => {
+			process.env.PI_MODEL = "   ";
+			process.env.ANTHROPIC_MODEL = "claude-haiku";
+
+			const model = resolveModelName();
+			expect(model).toBe("claude-haiku");
+		});
+
+		it("caches the model on first call", () => {
+			process.env.PI_MODEL = "claude-opus";
+
+			const firstCall = resolveModelName();
+
+			process.env.PI_MODEL = "claude-haiku";
+			const secondCall = resolveModelName();
+
+			expect(secondCall).toBe(firstCall);
+			expect(secondCall).toBe("claude-opus");
+		});
+	});
+
+	describe("resolveRuntimeLabel()", () => {
+		it("returns 'pi' by default", () => {
+			const label = resolveRuntimeLabel();
+			expect(label).toBe("pi");
+		});
+
+		it("uses PI_RUNTIME_LABEL when set", () => {
+			process.env.PI_RUNTIME_LABEL = "claude-code";
+
+			const label = resolveRuntimeLabel();
+			expect(label).toBe("claude-code");
+		});
+
+		it("ignores whitespace-only PI_RUNTIME_LABEL", () => {
+			process.env.PI_RUNTIME_LABEL = "   ";
+
+			const label = resolveRuntimeLabel();
+			expect(label).toBe("pi");
+		});
+
+		it("caches the runtime label on first call", () => {
+			process.env.PI_RUNTIME_LABEL = "claude-code";
+
+			const firstCall = resolveRuntimeLabel();
+
+			process.env.PI_RUNTIME_LABEL = "cursor";
+			const secondCall = resolveRuntimeLabel();
+
+			expect(secondCall).toBe(firstCall);
+			expect(secondCall).toBe("claude-code");
+		});
+	});
+
+	describe("applyCmdIdentityFlags()", () => {
+		it("prepends --runtime and --model flags to args", () => {
+			const args = ["task", "list", "--json"];
+			const result = applyCmdIdentityFlags(args);
+
+			expect(result[0]).toBe("--runtime");
+			expect(result[1]).toBe("pi");
+			expect(result[2]).toBe("--model");
+			expect(result[3]).toBe("unknown");
+			expect(result.slice(4)).toEqual(["task", "list", "--json"]);
+		});
+
+		it("uses resolved values from env vars", () => {
+			process.env.PI_RUNTIME_LABEL = "claude-code";
+			process.env.PI_MODEL = "claude-opus";
+
+			const args = ["task", "claim", "123"];
+			const result = applyCmdIdentityFlags(args);
+
+			expect(result).toEqual([
+				"--runtime",
+				"claude-code",
+				"--model",
+				"claude-opus",
+				"task",
+				"claim",
+				"123",
+			]);
+		});
+
+		it("does not double-inject if args already start with --runtime", () => {
+			const args = ["--runtime", "existing", "--model", "existing-model", "task", "list"];
+			const result = applyCmdIdentityFlags(args);
+
+			expect(result).toEqual(args);
+		});
+
+		it("handles empty args array", () => {
+			const args: string[] = [];
+			const result = applyCmdIdentityFlags(args);
+
+			expect(result).toEqual(["--runtime", "pi", "--model", "unknown"]);
+		});
+
+		it("maintains correct order", () => {
+			process.env.PI_RUNTIME_LABEL = "droid";
+			process.env.ANTHROPIC_MODEL = "claude-sonnet";
+
+			const args = ["mailbox", "send", "agent", "status", "msg"];
+			const result = applyCmdIdentityFlags(args);
+
+			expect(result[0]).toBe("--runtime");
+			expect(result[1]).toBe("droid");
+			expect(result[2]).toBe("--model");
+			expect(result[3]).toBe("claude-sonnet");
+			expect(result.slice(4)).toEqual(args);
 		});
 	});
 });

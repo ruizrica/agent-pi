@@ -1,5 +1,5 @@
 {
-  "next": 23,
+  "next": 24,
   "byBead": {
     "agent-pi-m0m": 1,
     "agent-pi-eno": 2,
@@ -22,7 +22,8 @@
     "agent-pi-8hu": 19,
     "agent-pi-i5m": 20,
     "agent-pi-dvw": 21,
-    "agent-pi-6j9": 22
+    "agent-pi-6j9": 22,
+    "agent-pi-zep": 23
   },
   "byNumeric": {
     "1": "agent-pi-m0m",
@@ -46,6 +47,7 @@
     "19": "agent-pi-8hu",
     "20": "agent-pi-i5m",
     "21": "agent-pi-dvw",
-    "22": "agent-pi-6j9"
+    "22": "agent-pi-6j9",
+    "23": "agent-pi-zep"
   }
 }
