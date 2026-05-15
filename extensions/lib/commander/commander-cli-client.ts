@@ -199,10 +199,16 @@ export class CommanderCliClient {
 	}
 
 	private withIdentity(args: string[]): string[] {
-		if (args.length > 0 && args[0] === "--runtime") {
-			return args;
+		if (args.includes("--runtime")) {
+			return args;  // caller already declared identity
 		}
-		return ["--runtime", resolveRuntimeLabel(), "--model", resolveModelName(), ...args];
+		const idx = Math.min(2, args.length);  // insert after subcommand + sub-subcommand
+		return [
+			...args.slice(0, idx),
+			"--runtime", resolveRuntimeLabel(),
+			"--model",   resolveModelName(),
+			...args.slice(idx),
+		];
 	}
 
 	private run(args: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {

@@ -20,11 +20,26 @@ cmd guide overview                      # full command reference
 cmd whoami                              # agent identity
 ```
 
-## Agent identity on the Commander board
+## Agent Identity Contract
+
+Pi → Commander communication flows through `cmd` CLI invocations via `execFile`. Every Pi command inserts two flags at **position 2** of argv (after subcommand + sub-subcommand) to declare the invoking agent's identity:
+
+- `--runtime <label>` — the agent runtime (e.g., `claude-code`, `pi`, `cursor`, `gemini`)
+- `--model <name>` — the LLM model in use (e.g., `opus-4.7`, `gpt-4`)
+
+Example argv transformations:
+- `["task", "list", "--json"]` becomes `["task", "list", "--runtime", "pi", "--model", "opus-4.7", "--json"]`
+- `["mailbox", "send", "agent", "subject", "body"]` becomes `["mailbox", "send", "--runtime", "pi", "--model", "opus-4.7", "agent", "subject", "body"]` (positionals remain at tail)
+
+Defaults: `PI_RUNTIME_LABEL` env → `"pi"`; `PI_MODEL` env (with fallback to `ANTHROPIC_MODEL`, `PACIFICO_MODEL`, `CLAUDE_MODEL`) → `"unknown"`.
+
+The `cmd` CLI also accepts identity flags **before the subcommand** (legacy pattern) and automatically normalizes them to post-subcommand position via `liftIdentityFlagsToTail()`. Both patterns produce identical behavior.
+
+Without these flags the Commander board shows task assignees as `"unknown"`.
+
+### Session identity
 
 Pi registers itself with Commander on session start using `commander_orchestration { operation: "agent:register" }`. The default name is `pi-${shortHostname}-${pid}` (e.g. `pi-ricardo-mbp-48213`), which is stable within a session and human-readable. Override with `PI_AGENT_NAME` environment variable for a stable cross-session name, or `PI_SUBAGENT_NAME` to mark a process as a subagent (sets `agent_type=pi-subagent` and `role=worker`). The same name is reused for heartbeats and task ownership via `currentActor()`, so the board shows one consistent row per process.
-
-Additionally, every `cmd` shell-out from Pi prepends `--runtime pi --model <model>` to the command-line arguments so the Commander kanban board can attribute writes correctly. The model is resolved from environment variables in this order: `PI_MODEL`, `ANTHROPIC_MODEL`, `PACIFICO_MODEL`, `CLAUDE_MODEL`, or `"unknown"` as fallback. Without these flags the board shows the assignee as "unknown".
 
 ## Stage notice
 

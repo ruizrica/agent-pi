@@ -125,15 +125,21 @@ export function resolveRuntimeLabel(): string {
 }
 
 /**
- * Convenience helper for prepending cmd identity flags to an args array.
- * Ensures every `cmd` invocation carries `--runtime <label> --model <model>` at the start.
- * If args already start with `--runtime`, they pass through unchanged (no double-injection).
+ * Insert cmd identity flags at position 2 (after subcommand + sub-subcommand).
+ * Ensures every `cmd` invocation carries `--runtime <label> --model <model>` in the right place.
+ * If args already include `--runtime`, they pass through unchanged (no double-injection).
  */
 export function applyCmdIdentityFlags(args: string[]): string[] {
-	if (args.length > 0 && args[0] === "--runtime") {
+	if (args.includes("--runtime")) {
 		return args;
 	}
-	return ["--runtime", resolveRuntimeLabel(), "--model", resolveModelName(), ...args];
+	const idx = Math.min(2, args.length);
+	return [
+		...args.slice(0, idx),
+		"--runtime", resolveRuntimeLabel(),
+		"--model",   resolveModelName(),
+		...args.slice(idx),
+	];
 }
 
 /**
