@@ -17,8 +17,8 @@
   },
   "agents": {
     "scout": {
-      "provider": "openai",
-      "model": "gpt-5.4-nano"
+      "provider": "openrouter",
+      "model": "openai/gpt-5.4-nano"
     },
     "ranger": {
       "provider": "openai-codex",
@@ -57,8 +57,8 @@
       "model": "gpt-5.5"
     },
     "test-scout": {
-      "provider": "openai",
-      "model": "gpt-5.4-nano"
+      "provider": "openrouter",
+      "model": "openai/gpt-5.4-nano"
     },
     "test-planner": {
       "provider": "openai-codex",
