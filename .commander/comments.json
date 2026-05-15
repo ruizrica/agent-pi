@@ -1,5 +1,5 @@
 {
-  "nextId": 20,
+  "nextId": 21,
   "byBead": {
     "agent-pi-eno": [
       {
@@ -184,6 +184,16 @@
         "message": "COMPLETED: All 6 subtasks done. Refactor introduces buildDelegateEverythingSection() in extensions/lib/mode-prompts.ts and wires it into NORMAL/PLAN/INVESTIGATE/SPEC/TEAM/CHAIN/PIPELINE system prompts. The Bash and 'work directly' carve-outs are removed (replaced by Recovery-not-Fallback). 1622/1625 tests pass; 3 remaining failures are pre-existing and unrelated. CAVEAT: Wave 3 (tests) was authored after Waves 1-2 (implementation), inverting the TDD-first policy in global CLAUDE.md. Wave-3 tests do assert the new behaviors and snapshot text, so coverage is sound — but if strict test-first matters, the next iteration on this surface should be planned as Wave 0: tests, then implementation. Files touched: extensions/lib/mode-prompts.ts, extensions/agent-team.ts, extensions/agent-chain.ts, extensions/pipeline-team.ts, extensions/__tests__/mode-prompts.test.ts, extensions/__tests__/normal-prompt.test.ts, extensions/__tests__/pipeline-team-prompt.test.ts.",
         "createdAt": "2026-05-12T18:40:56.891Z",
         "type": "info"
+      }
+    ],
+    "agent-pi-fmt": [
+      {
+        "id": 20,
+        "beadId": "agent-pi-fmt",
+        "numericTaskId": 104,
+        "agentName": "ricardo",
+        "message": "Repo: /Users/ricardo/Workshop/GitHub/agent-pi | Branch: main | Latest commit: 77288b7 (chore: commit current work) | Working tree: 1 file modified (.beads/cmd-writer.log) - not clean | Assessment: Commit created successfully. Requested work appears committed.",
+        "createdAt": "2026-05-15T01:27:00.079Z"
       }
     ]
   }
