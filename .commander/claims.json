@@ -1,5 +1,5 @@
 {
-  "nextAuditId": 16,
+  "nextAuditId": 54,
   "byBead": {
     "agent-pi-eno": {
       "identity": {
@@ -292,6 +292,766 @@
         "capturedAt": "2026-05-12T22:58:41.614Z"
       },
       "at": "2026-05-12T22:58:43.039Z"
+    },
+    "agent-pi-j25": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 46856,
+        "ppid": 46854,
+        "parentComm": "node",
+        "sessionId": "e426e969-1599-4237-b892-3412f99a47cc",
+        "capturedAt": "2026-05-13T02:33:42.379Z"
+      },
+      "at": "2026-05-13T02:33:44.040Z"
+    },
+    "agent-pi-zvt": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48203,
+        "ppid": 48183,
+        "parentComm": "node",
+        "sessionId": "d938a53c-1067-4c4e-be9d-8ea348cec7d2",
+        "capturedAt": "2026-05-13T02:34:48.214Z"
+      },
+      "at": "2026-05-13T02:34:50.444Z"
+    },
+    "agent-pi-cxr": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48206,
+        "ppid": 48201,
+        "parentComm": "node",
+        "sessionId": "0f730c6e-c009-4d66-90dd-073819fe3c26",
+        "capturedAt": "2026-05-13T02:34:49.889Z"
+      },
+      "at": "2026-05-13T02:34:52.049Z"
+    },
+    "agent-pi-5m4": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48204,
+        "ppid": 48189,
+        "parentComm": "node",
+        "sessionId": "66a4da1b-4d4d-4eb1-9ebc-971862e792b0",
+        "capturedAt": "2026-05-13T02:34:48.496Z"
+      },
+      "at": "2026-05-13T02:34:53.899Z"
+    },
+    "agent-pi-14b": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48607,
+        "ppid": 48604,
+        "parentComm": "node",
+        "sessionId": "0a6ff9da-b2ba-41c3-a5a5-6f572634be5f",
+        "capturedAt": "2026-05-13T02:34:59.842Z"
+      },
+      "at": "2026-05-13T02:35:06.933Z"
+    },
+    "agent-pi-svy": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 56436,
+        "ppid": 56428,
+        "parentComm": "node",
+        "sessionId": "1f281e98-4abf-43ec-a298-57556409c9eb",
+        "capturedAt": "2026-05-13T02:37:13.587Z"
+      },
+      "at": "2026-05-13T02:37:18.912Z"
+    },
+    "agent-pi-abx": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 66156,
+        "ppid": 66146,
+        "parentComm": "node",
+        "sessionId": "fd54f5fb-7df2-4e2b-a68b-e8d74d926896",
+        "capturedAt": "2026-05-13T02:39:28.349Z"
+      },
+      "at": "2026-05-13T02:39:32.280Z"
+    },
+    "agent-pi-4t1": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 71408,
+        "ppid": 71404,
+        "parentComm": "node",
+        "sessionId": "701c416f-83c5-48da-8a2b-5b518f705fc1",
+        "capturedAt": "2026-05-13T02:45:46.680Z"
+      },
+      "at": "2026-05-13T02:45:48.143Z"
+    },
+    "agent-pi-d4q": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79302,
+        "ppid": 79301,
+        "parentComm": "node",
+        "sessionId": "054a011e-ee7e-49d6-aa7b-aa29b5967c22",
+        "capturedAt": "2026-05-13T02:59:19.155Z"
+      },
+      "at": "2026-05-13T02:59:20.765Z"
+    },
+    "agent-pi-9ty": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79401,
+        "ppid": 79393,
+        "parentComm": "node",
+        "sessionId": "4d468fb3-6138-4a33-b315-d10ae898a43b",
+        "capturedAt": "2026-05-13T02:59:25.689Z"
+      },
+      "at": "2026-05-13T02:59:28.332Z"
+    },
+    "agent-pi-2u6": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79476,
+        "ppid": 79475,
+        "parentComm": "node",
+        "sessionId": "d2f3a047-c23d-484c-bf4c-32d3a468faba",
+        "capturedAt": "2026-05-13T02:59:27.321Z"
+      },
+      "at": "2026-05-13T02:59:30.592Z"
+    },
+    "agent-pi-8db": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79402,
+        "ppid": 79387,
+        "parentComm": "node",
+        "sessionId": "c4635b88-34b1-4170-9044-dd0119393971",
+        "capturedAt": "2026-05-13T02:59:31.186Z"
+      },
+      "at": "2026-05-13T02:59:33.415Z"
+    },
+    "agent-pi-udt": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 81393,
+        "ppid": 81392,
+        "parentComm": "node",
+        "sessionId": "38b2a082-b55f-4bd9-8a60-a4da5078a90c",
+        "capturedAt": "2026-05-13T03:03:23.620Z"
+      },
+      "at": "2026-05-13T03:03:25.289Z"
+    },
+    "agent-pi-e05": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 81501,
+        "ppid": 81497,
+        "parentComm": "node",
+        "sessionId": "7a3e3a22-fc14-4ded-9bf1-99aba9fbd8b2",
+        "capturedAt": "2026-05-13T03:03:25.677Z"
+      },
+      "at": "2026-05-13T03:03:27.145Z"
+    },
+    "agent-pi-j13": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 84721,
+        "ppid": 84719,
+        "parentComm": "node",
+        "sessionId": "1d766abe-ece6-435c-92d4-d21905e6bec4",
+        "capturedAt": "2026-05-13T03:08:55.648Z"
+      },
+      "at": "2026-05-13T03:08:57.306Z"
+    },
+    "agent-pi-azu": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 87235,
+        "ppid": 87234,
+        "parentComm": "node",
+        "sessionId": "db8d0138-3851-42b0-9544-c5eb5c94e181",
+        "capturedAt": "2026-05-13T03:12:34.417Z"
+      },
+      "at": "2026-05-13T03:12:35.874Z"
+    },
+    "agent-pi-x57": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 87953,
+        "ppid": 87952,
+        "parentComm": "node",
+        "sessionId": "8c9b7dd5-e4f2-4e41-b8f7-62c51c0a2d7a",
+        "capturedAt": "2026-05-13T03:14:08.913Z"
+      },
+      "at": "2026-05-13T03:14:10.392Z"
+    },
+    "agent-pi-7v6": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 88070,
+        "ppid": 88069,
+        "parentComm": "node",
+        "sessionId": "1dc8eac9-386d-41a3-b02d-7b6bf145550f",
+        "capturedAt": "2026-05-13T03:14:10.728Z"
+      },
+      "at": "2026-05-13T03:14:12.194Z"
+    },
+    "agent-pi-gwg": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 88329,
+        "ppid": 88328,
+        "parentComm": "node",
+        "sessionId": "485a7b64-c0f1-4e32-82c6-a84f87063f1a",
+        "capturedAt": "2026-05-13T03:14:42.601Z"
+      },
+      "at": "2026-05-13T03:14:44.403Z"
+    },
+    "agent-pi-1xv": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 90150,
+        "ppid": 90148,
+        "parentComm": "node",
+        "sessionId": "8c75e884-6460-43db-b760-be2df9876311",
+        "capturedAt": "2026-05-13T03:17:16.935Z"
+      },
+      "at": "2026-05-13T03:17:18.663Z"
+    },
+    "agent-pi-1b8": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 90723,
+        "ppid": 90722,
+        "parentComm": "node",
+        "sessionId": "80e12535-e9a9-41bd-afad-a10cc06d440a",
+        "capturedAt": "2026-05-13T03:18:21.817Z"
+      },
+      "at": "2026-05-13T03:18:23.298Z"
+    },
+    "agent-pi-uxg": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 91203,
+        "ppid": 91202,
+        "parentComm": "node",
+        "sessionId": "c01cc71d-8c5b-45a2-8f73-00e8d43a5b4b",
+        "capturedAt": "2026-05-13T03:19:21.172Z"
+      },
+      "at": "2026-05-13T03:19:22.964Z"
+    },
+    "agent-pi-0dm": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 92407,
+        "ppid": 92406,
+        "parentComm": "node",
+        "sessionId": "b39d7895-1fc7-4b8b-bd9b-b7e41189ac60",
+        "capturedAt": "2026-05-13T03:21:10.759Z"
+      },
+      "at": "2026-05-13T03:21:12.235Z"
+    },
+    "agent-pi-54q": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5745,
+        "ppid": 5737,
+        "parentComm": "node",
+        "sessionId": "2096c8e6-75d5-46ac-8630-3e860fd0aede",
+        "capturedAt": "2026-05-13T03:36:30.963Z"
+      },
+      "at": "2026-05-13T03:36:32.674Z"
+    },
+    "agent-pi-2ad": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5984,
+        "ppid": 5976,
+        "parentComm": "node",
+        "sessionId": "6d5ef972-a5b4-4af3-be13-ec331480347e",
+        "capturedAt": "2026-05-13T03:36:42.794Z"
+      },
+      "at": "2026-05-13T03:36:44.494Z"
+    },
+    "agent-pi-gb0": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6404,
+        "ppid": 6403,
+        "parentComm": "node",
+        "sessionId": "5fd66adc-133c-4e94-ba1a-5e4addb14970",
+        "capturedAt": "2026-05-13T03:36:56.972Z"
+      },
+      "at": "2026-05-13T03:36:59.007Z"
+    },
+    "agent-pi-7j5": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6812,
+        "ppid": 6811,
+        "parentComm": "node",
+        "sessionId": "d5200b37-a427-4705-929b-fbd935068fae",
+        "capturedAt": "2026-05-13T03:37:10.394Z"
+      },
+      "at": "2026-05-13T03:37:11.939Z"
+    },
+    "agent-pi-5f1": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 41656,
+        "ppid": 41655,
+        "parentComm": "node",
+        "sessionId": "7530b554-878e-429a-90ea-6bd62d1d2243",
+        "capturedAt": "2026-05-15T01:08:44.680Z"
+      },
+      "at": "2026-05-15T01:08:46.319Z"
+    },
+    "agent-pi-gxl": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 41873,
+        "ppid": 41872,
+        "parentComm": "node",
+        "sessionId": "d4760e20-78a7-49d5-83d4-cbbecf483b0d",
+        "capturedAt": "2026-05-15T01:08:50.482Z"
+      },
+      "at": "2026-05-15T01:08:52.095Z"
+    },
+    "agent-pi-kx2": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 42601,
+        "ppid": 42600,
+        "parentComm": "node",
+        "sessionId": "d4437c78-7d90-4110-a6b9-b2f9126d4664",
+        "capturedAt": "2026-05-15T01:09:14.237Z"
+      },
+      "at": "2026-05-15T01:09:20.706Z"
+    },
+    "agent-pi-5jr": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 42972,
+        "ppid": 42971,
+        "parentComm": "node",
+        "sessionId": "d5d42ad5-ba88-46e5-9358-4f93ed23055a",
+        "capturedAt": "2026-05-15T01:09:22.724Z"
+      },
+      "at": "2026-05-15T01:09:27.106Z"
+    },
+    "agent-pi-5ra": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 43102,
+        "ppid": 43101,
+        "parentComm": "node",
+        "sessionId": "5f16a312-aa85-4d76-b2ff-fcdb57094697",
+        "capturedAt": "2026-05-15T01:09:24.778Z"
+      },
+      "at": "2026-05-15T01:09:30.785Z"
+    },
+    "agent-pi-ggr": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 52730,
+        "ppid": 52690,
+        "parentComm": "node",
+        "sessionId": "39200473-1e7a-4fb1-8c02-6d39ed77ad93",
+        "capturedAt": "2026-05-15T01:10:47.163Z"
+      },
+      "at": "2026-05-15T01:10:50.787Z"
+    },
+    "agent-pi-4m5": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 64578,
+        "ppid": 64573,
+        "parentComm": "node",
+        "sessionId": "68614d93-1c8b-4b8c-8931-3e6423555c2c",
+        "capturedAt": "2026-05-15T01:11:51.398Z"
+      },
+      "at": "2026-05-15T01:11:58.880Z"
+    },
+    "agent-pi-axb": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 77887,
+        "ppid": 77886,
+        "parentComm": "node",
+        "sessionId": "cf25ae32-0554-4d9c-81cb-e356d899de9b",
+        "capturedAt": "2026-05-15T01:15:56.560Z"
+      },
+      "at": "2026-05-15T01:15:59.583Z"
+    },
+    "agent-pi-34h": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 78129,
+        "ppid": 78127,
+        "parentComm": "node",
+        "sessionId": "4e42f333-aeff-4521-a7b5-337e6b4746ea",
+        "capturedAt": "2026-05-15T01:16:03.756Z"
+      },
+      "at": "2026-05-15T01:16:05.533Z"
+    },
+    "agent-pi-47r": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5632,
+        "ppid": 5631,
+        "parentComm": "node",
+        "sessionId": "f57cc420-9285-4e08-8354-307f2de14a9f",
+        "capturedAt": "2026-05-15T01:23:52.800Z"
+      },
+      "at": "2026-05-15T01:23:55.204Z"
+    },
+    "agent-pi-fmt": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6017,
+        "ppid": 6016,
+        "parentComm": "node",
+        "sessionId": "d686d295-0dac-41bb-a39b-14abe52c9bfa",
+        "capturedAt": "2026-05-15T01:24:05.064Z"
+      },
+      "at": "2026-05-15T01:24:06.720Z"
     }
   },
   "audit": [
@@ -631,6 +1391,880 @@
         "capturedAt": "2026-05-12T22:58:41.614Z"
       },
       "createdAt": "2026-05-12T22:58:43.039Z"
+    },
+    {
+      "id": 16,
+      "beadId": "agent-pi-j25",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 46856,
+        "ppid": 46854,
+        "parentComm": "node",
+        "sessionId": "e426e969-1599-4237-b892-3412f99a47cc",
+        "capturedAt": "2026-05-13T02:33:42.379Z"
+      },
+      "createdAt": "2026-05-13T02:33:44.040Z"
+    },
+    {
+      "id": 17,
+      "beadId": "agent-pi-zvt",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48203,
+        "ppid": 48183,
+        "parentComm": "node",
+        "sessionId": "d938a53c-1067-4c4e-be9d-8ea348cec7d2",
+        "capturedAt": "2026-05-13T02:34:48.214Z"
+      },
+      "createdAt": "2026-05-13T02:34:50.444Z"
+    },
+    {
+      "id": 18,
+      "beadId": "agent-pi-cxr",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48206,
+        "ppid": 48201,
+        "parentComm": "node",
+        "sessionId": "0f730c6e-c009-4d66-90dd-073819fe3c26",
+        "capturedAt": "2026-05-13T02:34:49.889Z"
+      },
+      "createdAt": "2026-05-13T02:34:52.049Z"
+    },
+    {
+      "id": 19,
+      "beadId": "agent-pi-5m4",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48204,
+        "ppid": 48189,
+        "parentComm": "node",
+        "sessionId": "66a4da1b-4d4d-4eb1-9ebc-971862e792b0",
+        "capturedAt": "2026-05-13T02:34:48.496Z"
+      },
+      "createdAt": "2026-05-13T02:34:53.899Z"
+    },
+    {
+      "id": 20,
+      "beadId": "agent-pi-14b",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 48607,
+        "ppid": 48604,
+        "parentComm": "node",
+        "sessionId": "0a6ff9da-b2ba-41c3-a5a5-6f572634be5f",
+        "capturedAt": "2026-05-13T02:34:59.842Z"
+      },
+      "createdAt": "2026-05-13T02:35:06.933Z"
+    },
+    {
+      "id": 21,
+      "beadId": "agent-pi-svy",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 56436,
+        "ppid": 56428,
+        "parentComm": "node",
+        "sessionId": "1f281e98-4abf-43ec-a298-57556409c9eb",
+        "capturedAt": "2026-05-13T02:37:13.587Z"
+      },
+      "createdAt": "2026-05-13T02:37:18.912Z"
+    },
+    {
+      "id": 22,
+      "beadId": "agent-pi-abx",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 66156,
+        "ppid": 66146,
+        "parentComm": "node",
+        "sessionId": "fd54f5fb-7df2-4e2b-a68b-e8d74d926896",
+        "capturedAt": "2026-05-13T02:39:28.349Z"
+      },
+      "createdAt": "2026-05-13T02:39:32.280Z"
+    },
+    {
+      "id": 23,
+      "beadId": "agent-pi-4t1",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 71408,
+        "ppid": 71404,
+        "parentComm": "node",
+        "sessionId": "701c416f-83c5-48da-8a2b-5b518f705fc1",
+        "capturedAt": "2026-05-13T02:45:46.680Z"
+      },
+      "createdAt": "2026-05-13T02:45:48.143Z"
+    },
+    {
+      "id": 24,
+      "beadId": "agent-pi-d4q",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79302,
+        "ppid": 79301,
+        "parentComm": "node",
+        "sessionId": "054a011e-ee7e-49d6-aa7b-aa29b5967c22",
+        "capturedAt": "2026-05-13T02:59:19.155Z"
+      },
+      "createdAt": "2026-05-13T02:59:20.765Z"
+    },
+    {
+      "id": 25,
+      "beadId": "agent-pi-9ty",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79401,
+        "ppid": 79393,
+        "parentComm": "node",
+        "sessionId": "4d468fb3-6138-4a33-b315-d10ae898a43b",
+        "capturedAt": "2026-05-13T02:59:25.689Z"
+      },
+      "createdAt": "2026-05-13T02:59:28.332Z"
+    },
+    {
+      "id": 26,
+      "beadId": "agent-pi-2u6",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79476,
+        "ppid": 79475,
+        "parentComm": "node",
+        "sessionId": "d2f3a047-c23d-484c-bf4c-32d3a468faba",
+        "capturedAt": "2026-05-13T02:59:27.321Z"
+      },
+      "createdAt": "2026-05-13T02:59:30.592Z"
+    },
+    {
+      "id": 27,
+      "beadId": "agent-pi-8db",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 79402,
+        "ppid": 79387,
+        "parentComm": "node",
+        "sessionId": "c4635b88-34b1-4170-9044-dd0119393971",
+        "capturedAt": "2026-05-13T02:59:31.186Z"
+      },
+      "createdAt": "2026-05-13T02:59:33.415Z"
+    },
+    {
+      "id": 28,
+      "beadId": "agent-pi-udt",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 81393,
+        "ppid": 81392,
+        "parentComm": "node",
+        "sessionId": "38b2a082-b55f-4bd9-8a60-a4da5078a90c",
+        "capturedAt": "2026-05-13T03:03:23.620Z"
+      },
+      "createdAt": "2026-05-13T03:03:25.289Z"
+    },
+    {
+      "id": 29,
+      "beadId": "agent-pi-e05",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 81501,
+        "ppid": 81497,
+        "parentComm": "node",
+        "sessionId": "7a3e3a22-fc14-4ded-9bf1-99aba9fbd8b2",
+        "capturedAt": "2026-05-13T03:03:25.677Z"
+      },
+      "createdAt": "2026-05-13T03:03:27.145Z"
+    },
+    {
+      "id": 30,
+      "beadId": "agent-pi-j13",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 84721,
+        "ppid": 84719,
+        "parentComm": "node",
+        "sessionId": "1d766abe-ece6-435c-92d4-d21905e6bec4",
+        "capturedAt": "2026-05-13T03:08:55.648Z"
+      },
+      "createdAt": "2026-05-13T03:08:57.306Z"
+    },
+    {
+      "id": 31,
+      "beadId": "agent-pi-azu",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 87235,
+        "ppid": 87234,
+        "parentComm": "node",
+        "sessionId": "db8d0138-3851-42b0-9544-c5eb5c94e181",
+        "capturedAt": "2026-05-13T03:12:34.417Z"
+      },
+      "createdAt": "2026-05-13T03:12:35.874Z"
+    },
+    {
+      "id": 32,
+      "beadId": "agent-pi-x57",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 87953,
+        "ppid": 87952,
+        "parentComm": "node",
+        "sessionId": "8c9b7dd5-e4f2-4e41-b8f7-62c51c0a2d7a",
+        "capturedAt": "2026-05-13T03:14:08.913Z"
+      },
+      "createdAt": "2026-05-13T03:14:10.392Z"
+    },
+    {
+      "id": 33,
+      "beadId": "agent-pi-7v6",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 88070,
+        "ppid": 88069,
+        "parentComm": "node",
+        "sessionId": "1dc8eac9-386d-41a3-b02d-7b6bf145550f",
+        "capturedAt": "2026-05-13T03:14:10.728Z"
+      },
+      "createdAt": "2026-05-13T03:14:12.194Z"
+    },
+    {
+      "id": 34,
+      "beadId": "agent-pi-gwg",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 88329,
+        "ppid": 88328,
+        "parentComm": "node",
+        "sessionId": "485a7b64-c0f1-4e32-82c6-a84f87063f1a",
+        "capturedAt": "2026-05-13T03:14:42.601Z"
+      },
+      "createdAt": "2026-05-13T03:14:44.403Z"
+    },
+    {
+      "id": 35,
+      "beadId": "agent-pi-1xv",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 90150,
+        "ppid": 90148,
+        "parentComm": "node",
+        "sessionId": "8c75e884-6460-43db-b760-be2df9876311",
+        "capturedAt": "2026-05-13T03:17:16.935Z"
+      },
+      "createdAt": "2026-05-13T03:17:18.663Z"
+    },
+    {
+      "id": 36,
+      "beadId": "agent-pi-1b8",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 90723,
+        "ppid": 90722,
+        "parentComm": "node",
+        "sessionId": "80e12535-e9a9-41bd-afad-a10cc06d440a",
+        "capturedAt": "2026-05-13T03:18:21.817Z"
+      },
+      "createdAt": "2026-05-13T03:18:23.298Z"
+    },
+    {
+      "id": 37,
+      "beadId": "agent-pi-uxg",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 91203,
+        "ppid": 91202,
+        "parentComm": "node",
+        "sessionId": "c01cc71d-8c5b-45a2-8f73-00e8d43a5b4b",
+        "capturedAt": "2026-05-13T03:19:21.172Z"
+      },
+      "createdAt": "2026-05-13T03:19:22.964Z"
+    },
+    {
+      "id": 38,
+      "beadId": "agent-pi-0dm",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 92407,
+        "ppid": 92406,
+        "parentComm": "node",
+        "sessionId": "b39d7895-1fc7-4b8b-bd9b-b7e41189ac60",
+        "capturedAt": "2026-05-13T03:21:10.759Z"
+      },
+      "createdAt": "2026-05-13T03:21:12.235Z"
+    },
+    {
+      "id": 39,
+      "beadId": "agent-pi-54q",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5745,
+        "ppid": 5737,
+        "parentComm": "node",
+        "sessionId": "2096c8e6-75d5-46ac-8630-3e860fd0aede",
+        "capturedAt": "2026-05-13T03:36:30.963Z"
+      },
+      "createdAt": "2026-05-13T03:36:32.674Z"
+    },
+    {
+      "id": 40,
+      "beadId": "agent-pi-2ad",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5984,
+        "ppid": 5976,
+        "parentComm": "node",
+        "sessionId": "6d5ef972-a5b4-4af3-be13-ec331480347e",
+        "capturedAt": "2026-05-13T03:36:42.794Z"
+      },
+      "createdAt": "2026-05-13T03:36:44.494Z"
+    },
+    {
+      "id": 41,
+      "beadId": "agent-pi-gb0",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6404,
+        "ppid": 6403,
+        "parentComm": "node",
+        "sessionId": "5fd66adc-133c-4e94-ba1a-5e4addb14970",
+        "capturedAt": "2026-05-13T03:36:56.972Z"
+      },
+      "createdAt": "2026-05-13T03:36:59.007Z"
+    },
+    {
+      "id": 42,
+      "beadId": "agent-pi-7j5",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6812,
+        "ppid": 6811,
+        "parentComm": "node",
+        "sessionId": "d5200b37-a427-4705-929b-fbd935068fae",
+        "capturedAt": "2026-05-13T03:37:10.394Z"
+      },
+      "createdAt": "2026-05-13T03:37:11.939Z"
+    },
+    {
+      "id": 43,
+      "beadId": "agent-pi-5f1",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 41656,
+        "ppid": 41655,
+        "parentComm": "node",
+        "sessionId": "7530b554-878e-429a-90ea-6bd62d1d2243",
+        "capturedAt": "2026-05-15T01:08:44.680Z"
+      },
+      "createdAt": "2026-05-15T01:08:46.319Z"
+    },
+    {
+      "id": 44,
+      "beadId": "agent-pi-gxl",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 41873,
+        "ppid": 41872,
+        "parentComm": "node",
+        "sessionId": "d4760e20-78a7-49d5-83d4-cbbecf483b0d",
+        "capturedAt": "2026-05-15T01:08:50.482Z"
+      },
+      "createdAt": "2026-05-15T01:08:52.095Z"
+    },
+    {
+      "id": 45,
+      "beadId": "agent-pi-kx2",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 42601,
+        "ppid": 42600,
+        "parentComm": "node",
+        "sessionId": "d4437c78-7d90-4110-a6b9-b2f9126d4664",
+        "capturedAt": "2026-05-15T01:09:14.237Z"
+      },
+      "createdAt": "2026-05-15T01:09:20.706Z"
+    },
+    {
+      "id": 46,
+      "beadId": "agent-pi-5jr",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 42972,
+        "ppid": 42971,
+        "parentComm": "node",
+        "sessionId": "d5d42ad5-ba88-46e5-9358-4f93ed23055a",
+        "capturedAt": "2026-05-15T01:09:22.724Z"
+      },
+      "createdAt": "2026-05-15T01:09:27.106Z"
+    },
+    {
+      "id": 47,
+      "beadId": "agent-pi-5ra",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 43102,
+        "ppid": 43101,
+        "parentComm": "node",
+        "sessionId": "5f16a312-aa85-4d76-b2ff-fcdb57094697",
+        "capturedAt": "2026-05-15T01:09:24.778Z"
+      },
+      "createdAt": "2026-05-15T01:09:30.785Z"
+    },
+    {
+      "id": 48,
+      "beadId": "agent-pi-ggr",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 52730,
+        "ppid": 52690,
+        "parentComm": "node",
+        "sessionId": "39200473-1e7a-4fb1-8c02-6d39ed77ad93",
+        "capturedAt": "2026-05-15T01:10:47.163Z"
+      },
+      "createdAt": "2026-05-15T01:10:50.787Z"
+    },
+    {
+      "id": 49,
+      "beadId": "agent-pi-4m5",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 64578,
+        "ppid": 64573,
+        "parentComm": "node",
+        "sessionId": "68614d93-1c8b-4b8c-8931-3e6423555c2c",
+        "capturedAt": "2026-05-15T01:11:51.398Z"
+      },
+      "createdAt": "2026-05-15T01:11:58.880Z"
+    },
+    {
+      "id": 50,
+      "beadId": "agent-pi-axb",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 77887,
+        "ppid": 77886,
+        "parentComm": "node",
+        "sessionId": "cf25ae32-0554-4d9c-81cb-e356d899de9b",
+        "capturedAt": "2026-05-15T01:15:56.560Z"
+      },
+      "createdAt": "2026-05-15T01:15:59.583Z"
+    },
+    {
+      "id": 51,
+      "beadId": "agent-pi-34h",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 78129,
+        "ppid": 78127,
+        "parentComm": "node",
+        "sessionId": "4e42f333-aeff-4521-a7b5-337e6b4746ea",
+        "capturedAt": "2026-05-15T01:16:03.756Z"
+      },
+      "createdAt": "2026-05-15T01:16:05.533Z"
+    },
+    {
+      "id": 52,
+      "beadId": "agent-pi-47r",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 5632,
+        "ppid": 5631,
+        "parentComm": "node",
+        "sessionId": "f57cc420-9285-4e08-8354-307f2de14a9f",
+        "capturedAt": "2026-05-15T01:23:52.800Z"
+      },
+      "createdAt": "2026-05-15T01:23:55.204Z"
+    },
+    {
+      "id": 53,
+      "beadId": "agent-pi-fmt",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 6017,
+        "ppid": 6016,
+        "parentComm": "node",
+        "sessionId": "d686d295-0dac-41bb-a39b-14abe52c9bfa",
+        "capturedAt": "2026-05-15T01:24:05.064Z"
+      },
+      "createdAt": "2026-05-15T01:24:06.720Z"
     }
   ]
 }

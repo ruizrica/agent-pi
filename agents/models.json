@@ -17,12 +17,12 @@
   },
   "agents": {
     "scout": {
-      "provider": "x-ai",
-      "model": "grok-4.1-fast"
+      "provider": "openai",
+      "model": "gpt-5.4-nano"
     },
     "ranger": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "model": "gpt-5.5"
     },
     "builder": {
       "provider": "anthropic",
@@ -30,87 +30,39 @@
     },
     "paladin": {
       "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "model": "claude-opus-4-7"
     },
     "reviewer": {
       "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "model": "claude-opus-4-7"
     },
     "warden": {
       "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "model": "claude-opus-4-7"
     },
     "planner": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "model": "gpt-5.5"
     },
     "tester": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "model": "gpt-5.5"
     },
     "herald": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "model": "gpt-5.5"
     },
     "red-team": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
-    },
-    "knight": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
-    },
-    "rlm-subcall": {
-      "provider": "anthropic",
-      "model": "claude-haiku-4-5"
-    },
-    "builder-kimi-k2-5-turbo": {
-      "provider": "fireworks",
-      "model": "accounts/fireworks/routers/kimi-k2p5-turbo"
-    },
-    "builder-kimi-k2-5": {
-      "provider": "openrouter",
-      "model": "moonshotai/kimi-k2.5"
-    },
-    "builder-qwen3-coder": {
-      "provider": "openrouter",
-      "model": "qwen/qwen3-coder"
-    },
-    "builder-qwen3-coder-next": {
-      "provider": "openrouter",
-      "model": "qwen/qwen3-coder:next"
-    },
-    "builder-qwen3-5-flash-02-23": {
-      "provider": "openrouter",
-      "model": "qwen/qwen3.5-flash-02-23"
-    },
-    "builder-qwen3-5-122b-a10b": {
-      "provider": "openrouter",
-      "model": "qwen/qwen3.5-122b-a10b"
-    },
-    "builder-minimax-m2-5": {
-      "provider": "openrouter",
-      "model": "minimax/minimax-m2.5"
-    },
-    "builder-gpt-5-1-codex-mini": {
-      "provider": "openrouter",
-      "model": "openai/gpt-5.1-codex-mini"
-    },
-    "builder-gemini-3-1-flash-lite-preview": {
-      "provider": "openrouter",
-      "model": "google/gemini-3-1-flash-lite-preview"
-    },
-    "builder-gemma4": {
-      "provider": "ollama",
-      "model": "gemma4"
+      "model": "gpt-5.5"
     },
     "test-scout": {
-      "provider": "x-ai",
-      "model": "grok-4.1-fast"
+      "provider": "openai",
+      "model": "gpt-5.4-nano"
     },
     "test-planner": {
       "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "model": "gpt-5.5"
     },
     "test-builder": {
       "provider": "anthropic",
@@ -118,7 +70,7 @@
     },
     "test-reviewer": {
       "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "model": "claude-opus-4-7"
     },
     "claude-worker": {
       "provider": "anthropic",
@@ -126,7 +78,7 @@
     },
     "claude-advisor": {
       "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "model": "claude-opus-4-7"
     }
   }
 }
