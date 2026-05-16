@@ -130,27 +130,33 @@ describe("WARDEN prompt coverage for inline operational modes", () => {
 });
 
 describe("post-approval pipeline phase instruction coverage", () => {
-	it("supports investigate mode handoff into pipeline after approval", () => {
-		const source = `approved investigation findings\nhand off to PIPELINE\nparallel execution`;
+	// These tests previously asserted against locally-constructed string
+	// literals (e.g. `const source = "REFINE\\n..."`), which made them
+	// tautological — they could never catch a regression in the real prompt
+	// source. They now read the actual source files used by the prompts,
+	// matching the WARDEN/UNDERSTAND/MAIN test pattern earlier in this file.
+
+	it("documents the INVESTIGATE → PIPELINE handoff after approval", () => {
+		const source = readFileSync(join(extensionRoot, "lib/mode-prompts.ts"), "utf-8");
 		expect(source).toContain("PIPELINE");
-		expect(source).toContain("approved investigation findings");
+		expect(source).toContain("hand off into PIPELINE");
 	});
 
 	it("documents refine phase as a non-planning micro-task decomposition step", () => {
-		const source = `REFINE\nDo NOT plan again\nline_ranges\nparallel_group\nvalid JSON`;
+		const source = readFileSync(join(extensionRoot, "pipeline-team.ts"), "utf-8");
 		expect(source).toContain("Do NOT plan again");
 		expect(source).toContain("line_ranges");
 		expect(source).toContain("parallel_group");
 	});
 
 	it("documents execute phase worktree constraints", () => {
-		const source = `EXECUTE\nassigned its own isolated worktree path/branch\nspecified files and line ranges`;
+		const source = readFileSync(join(extensionRoot, "pipeline-team.ts"), "utf-8");
 		expect(source).toContain("isolated worktree path/branch");
 		expect(source).toContain("specified files and line ranges");
 	});
 
-	it("documents remediatie and merge phases", () => {
-		const source = `REMEDIATE\nMERGE\nresolve merge conflicts\nfinal integrated result`;
+	it("documents remediate and merge phases", () => {
+		const source = readFileSync(join(extensionRoot, "pipeline-team.ts"), "utf-8");
 		expect(source).toContain("REMEDIATE");
 		expect(source).toContain("MERGE");
 		expect(source).toContain("resolve merge conflicts");

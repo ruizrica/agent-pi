@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, get as httpGet } from "node:http";
 import { getSoundImageCacheDir } from "../lib/sounds/sounds-config.ts";
 import { createImageCacheKey, readCachedImageEntry } from "../lib/sounds/sounds-image-cache.ts";
 
@@ -60,8 +60,7 @@ describe("sounds image route", () => {
 			const cached = readCachedImageEntry(key);
 			expect(cached).not.toBeNull();
 			const response = await new Promise<{ status: number; headers: Record<string, string> }>((resolve, reject) => {
-				const http = require("node:http");
-				http.get(`http://127.0.0.1:${handle.port}/api/image/${key}`, (res: any) => {
+				httpGet(`http://127.0.0.1:${handle.port}/api/image/${key}`, (res: any) => {
 					res.resume();
 					res.on("end", () => resolve({
 						status: res.statusCode || 0,

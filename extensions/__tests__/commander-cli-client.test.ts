@@ -61,13 +61,21 @@ describe("CommanderCliClient", () => {
 		expect(JSON.parse(text(result))).toEqual({ tasks: [{ id: 7, description: "Do it" }] });
 	});
 
-	it("maps commander_task create to cmd task add with identity inserted after subcommand", async () => {
+	it("maps commander_task create to cmd task add with identity + auto mission-brief on root tasks", async () => {
 		mockExec({ id: 42, status: "pending" });
 		const client = new CommanderCliClient({ bin: "cmd-test" });
+		// No explicit mission_brief, no group_id → root task. The client must
+		// auto-supply a brief (using description as fallback) so the cmd guard
+		// doesn't reject the argv at runtime.
 		const result = await client.callTool("commander_task", { operation: "create", description: "Build", status: "pending" });
 		expect(execFileMock).toHaveBeenCalledWith(
 			"cmd-test",
-			["task", "add", "--runtime", "pi", "--model", "unknown", "Build", "--json", "--no-color", "--status", "pending"],
+			[
+				"task", "add", "--runtime", "pi", "--model", "unknown",
+				"Build", "--json", "--no-color",
+				"--status", "pending",
+				"--mission-brief", "Build",
+			],
 			expect.any(Object),
 			expect.any(Function),
 		);

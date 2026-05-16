@@ -51,10 +51,10 @@ tests/*.spec.ts
 *.db
 .beads-credential-key
 
-# Task tracker volatile state (per-session, never push to public)
-.beads/issues.jsonl
-.beads/cmd-writer.log
-.beads/metadata.json
+# Task tracker — entire directories are local-only (config, hooks, state).
+# Hooks live here from `bd init` and are machine-specific; we don't want them
+# tracked on the public repo. Reinstall locally with `bd init` after cloning.
+.beads/
 .commander/
 
 # Claude per-machine settings overrides (user-specific allow-lists, paths)

@@ -88,8 +88,18 @@ export class CommanderCliClient {
 				if (params.status) args.push("--status", String(params.status));
 				if (params.priority) args.push("--priority", String(params.priority));
 				if (params.title) args.push("--title", String(params.title));
-				const missionBrief = params.mission_brief ?? params.missionBrief;
-				if (missionBrief) args.push("--mission-brief", String(missionBrief));
+
+				// Mission-brief contract (enforced by scripts/cmd guard):
+				// root tasks (no --parent) MUST carry a --mission-brief. Children
+				// inherit the brief from the parent and don't need one. If the
+				// caller didn't supply one for a root task, fall back to using
+				// the description as the brief so the argv stays valid instead
+				// of being rejected by the guard at runtime.
+				const explicitBrief = params.mission_brief ?? params.missionBrief;
+				const isSubtask = !!params.group_id;
+				const effectiveBrief = explicitBrief ?? (isSubtask ? null : description);
+				if (effectiveBrief) args.push("--mission-brief", String(effectiveBrief));
+
 				const labels = normalizeLabelsParam(params.labels ?? params.label);
 				if (labels) args.push("--labels", labels);
 				if (params.group_id) args.push("--parent", String(params.group_id));

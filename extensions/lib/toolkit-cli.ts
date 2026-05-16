@@ -127,6 +127,22 @@ export function isOllamaModel(model: string | undefined | null): boolean {
   return model.startsWith("ollama/");
 }
 
+/**
+ * Claude execution routing is locked to direct-api in this build — Claude
+ * worker/advisor agents always go through the Anthropic SDK path, never
+ * through the Claude CLI. The signature still accepts the original three
+ * parameters (including the /claude overlay state) for source-compatibility
+ * with existing callers, but the answer is unconditionally `false`. The
+ * `void` statements suppress unused-parameter warnings to make the lock
+ * obvious to readers and codemods.
+ *
+ * If you need to re-enable Claude CLI routing on overlay later, replace the
+ * body with the real predicate and keep the same signature so callers stay
+ * unchanged. The companion test at
+ * extensions/__tests__/claude-overlay-routing.test.ts pins this locked
+ * behavior; the README's "Operational Modes" section describes the overlay
+ * as cosmetic-only (banner color + label).
+ */
 export function shouldUseClaudeCliForAgent(
   agentName: string,
   model: string | undefined | null,

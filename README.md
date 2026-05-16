@@ -6,7 +6,7 @@
 
 **An extension suite that turns [Pi](https://github.com/earendil-works/pi) into a multi-agent orchestration platform**
 
-[Install](#install) · [Extensions](#extensions) · [Modes](#operational-modes) · [Skills](#skills-library) · [Task Tracking](#task-tracking-with-cmd) · [Orchestration](#multi-agent-orchestration)
+[Install](#install) · [Extensions](#extensions) · [Modes](#operational-modes) · [Orchestration](#multi-agent-orchestration)
 
 </div>
 
@@ -50,7 +50,7 @@ Pi discovers all extensions, themes, and skills automatically.
 
 1. **Type a task** — Pi operates in plan-first mode. It will ask you to define tasks before using tools.
 2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → INVESTIGATE → SPEC → PIPELINE → TEAM → CHAIN)
-3. **`/claude`** — Toggle the CLAUDE overlay for the active mode. Active modes render as `MODE + CLAUDE`, use a dark-orange banner, and route Claude-family execution paths through the Claude CLI runtime.
+3. **`/claude`** — Toggle the CLAUDE overlay for the active mode. Active modes render as `MODE + CLAUDE` with a dark-orange banner. This is a cosmetic overlay only — Claude execution is locked to the direct Anthropic SDK path regardless of overlay state.
 4. **Alt+T** — Cycle themes (`Alt+Shift+T` for reverse direction)
 5. **`/agents-team`** — Switch between agent teams
 6. **`/chain`** — Switch between chain workflows
@@ -162,16 +162,16 @@ Agent-Pi is organized as a thin extension shell with testable feature modules un
 | **commander-mcp** | CLI-backed bridge exposing Commander dashboard tools as native Pi tools |
 | **commander-tracker** | Reconciles local tasks with Commander; retries failed sync |
 
-See [Task Tracking with cmd](#task-tracking-with-cmd) for the full task-tracking workflow including the mission-brief enforcement wrapper.
+See [`CLAUDE.md`](CLAUDE.md#cmd-commander-v2--task-tracking) and [`AGENTS.md`](AGENTS.md) for the full `cmd` task-tracking workflow including the mission-brief enforcement wrapper.
 
 ### Operational Modes
 
 | Extension | Description |
 |-----------|-------------|
-| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / INVESTIGATE / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a Claude CLI overlay for the active mode |
+| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / INVESTIGATE / SPEC / PIPELINE / TEAM / CHAIN, and `/claude` toggles a cosmetic CLAUDE overlay (banner color + label) for the active mode |
 | **gemma-overlay / lmstudio-overlay** | Local model overlays for routing eligible builder-style work through LM Studio-hosted models |
 
-Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. INVESTIGATE mode drives structured bug/problem diagnosis with scout-led context gathering and remediation approval. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cross-mode overlay that changes the banner to dark orange, displays the active mode as `MODE + CLAUDE`, and routes Claude-family worker/advisor execution through the Claude CLI path.
+Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. INVESTIGATE mode drives structured bug/problem diagnosis with scout-led context gathering and remediation approval. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems. Use `/claude` to enable a cosmetic cross-mode overlay — banner changes to dark orange, the active mode renders as `MODE + CLAUDE`. The overlay does not change execution routing; Claude-family agents always run through the direct Anthropic SDK path in this build.
 
 ### Multi-Agent Orchestration
 
