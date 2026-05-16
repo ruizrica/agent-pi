@@ -20,7 +20,7 @@ import { upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { getPlanTargetMode } from "./lib/plan-complexity.ts";
 import { getProjectContext } from "./lib/project-context.ts";
-import { buildPlanSnapshot, buildQuestionsSnapshot, validateSnapshot, synthesizeSnapshotFromEntry } from "./lib/viewer-snapshots.ts";
+import { buildPlanSnapshot, buildQuestionsSnapshot, loadValidatedSnapshot, validateSnapshot, synthesizeSnapshotFromEntry } from "./lib/viewer-snapshots.ts";
 import type { PlanSnapshot, QuestionsSnapshot } from "./lib/viewer-snapshots.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -301,14 +301,16 @@ export default function (pi: ExtensionAPI) {
 		title: string,
 		purpose: ViewerPurpose,
 		signal?: AbortSignal,
-		options: { forceBrowser?: boolean } = {},
+		options: { forceBrowser?: boolean; readonly?: boolean } = {},
 	): Promise<ViewerResult> {
 		// Clean up any previous server
 		cleanupServer();
 
 		// Try Commander first for plan mode, but only treat it as approved once
 		// Commander reports a real user action. Otherwise fall back to browser.
-		if (purpose === "plan" && !options.forceBrowser) {
+		// In readonly (snapshot-replay) mode we skip Commander because there is no
+		// pending action — we're just showing an immutable historical record.
+		if (purpose === "plan" && !options.forceBrowser && !options.readonly) {
 			const commanderResult = await openAndWaitInCommander(
 				{
 					content: markdown,
@@ -381,8 +383,13 @@ export default function (pi: ExtensionAPI) {
 				feedback: rawResult?.feedback,
 			};
 
-			saveModifiedMarkdown(filePath, result);
-			persistViewerResult(filePath, title, purpose, result);
+			// In readonly snapshot-replay mode we never write back to the source
+			// file (the live .context/todo.md belongs to whatever plan is current)
+			// and we don't re-persist as a new report entry.
+			if (!options.readonly) {
+				saveModifiedMarkdown(filePath, result);
+				persistViewerResult(filePath, title, purpose, result);
+			}
 
 			return result;
 		} finally {
@@ -410,40 +417,75 @@ export default function (pi: ExtensionAPI) {
 		parameters: ShowPlanParams,
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const { file_path, title, mode: modeStr, force_browser: forceBrowser } = params as {
+			const { file_path, title, mode: modeStr, force_browser: forceBrowser, payload_id: payloadId, readonly: readonlyFlag } = params as {
 				file_path: string;
 				title?: string;
 				mode?: string;
 				force_browser?: boolean;
+				payload_id?: string;
+				readonly?: boolean;
 			};
 
 			const purpose: ViewerPurpose = modeStr === "questions" ? "questions" : "plan";
 
-			// Read the file
+			// When a payload_id is provided we render the persisted snapshot
+			// rather than re-reading the live source file. This is what /reports
+			// re-opens use — without it every historical plan ends up showing
+			// the current contents of .context/todo.md, since that's the path
+			// almost every plan writes to.
 			let markdown: string;
-			try {
-				markdown = readFileSync(file_path, "utf-8");
-			} catch (err: any) {
-				return {
-					content: [{ type: "text" as const, text: `Error reading file: ${err.message}` }],
-				};
+			let effectiveFilePath = file_path;
+			let displayTitle: string;
+			const fromSnapshot = !!payloadId;
+
+			if (fromSnapshot) {
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || (snapshot.mode !== "plan" && snapshot.mode !== "questions")) {
+					return {
+						content: [{ type: "text" as const, text: `No persisted snapshot found for payload_id=${payloadId}.` }],
+					};
+				}
+				markdown = snapshot.markdownContent;
+				effectiveFilePath = snapshot.sourcePath || file_path || "";
+				displayTitle = title || snapshot.title;
+			} else {
+				try {
+					markdown = readFileSync(file_path, "utf-8");
+				} catch (err: any) {
+					return {
+						content: [{ type: "text" as const, text: `Error reading file: ${err.message}` }],
+					};
+				}
+				displayTitle = title || basename(file_path, ".md");
 			}
 
-			const displayTitle = title || basename(file_path, ".md");
-
-			// Open viewer and wait for result
+			// Open viewer and wait for result. Snapshot replays are always
+			// readonly — they must not overwrite the live source file or be
+			// re-persisted as new report entries.
 			let result: ViewerResult;
 			try {
-				result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal, { forceBrowser: !!forceBrowser });
+				result = await runViewer(ctx, markdown, effectiveFilePath, displayTitle, purpose, signal, {
+					forceBrowser: !!forceBrowser,
+					readonly: fromSnapshot || !!readonlyFlag,
+				});
 			} catch (err: any) {
 				// Handle user cancellation / abort gracefully
 				if (err?.message === "Aborted" || signal?.aborted) {
 					return {
 						content: [{ type: "text" as const, text: "Plan viewer was cancelled by user. Ask if they want to re-open it or proceed differently." }],
-						details: { action: "declined" as const, purpose, modified: false, filePath: file_path },
+						details: { action: "declined" as const, purpose, modified: false, filePath: effectiveFilePath },
 					};
 				}
 				throw err;
+			}
+
+			// Snapshot replays are display-only: never dispatch follow-ups
+			// (approve/changes-requested) for a historical viewer.
+			if (fromSnapshot) {
+				return {
+					content: [{ type: "text" as const, text: "Historical plan snapshot closed." }],
+					details: { action: "declined" as const, purpose, modified: false, filePath: effectiveFilePath, fromSnapshot: true },
+				};
 			}
 
 			// ── Questions mode result ────────────────────────────────
@@ -624,26 +666,61 @@ export default function (pi: ExtensionAPI) {
 	// ── /plan command ────────────────────────────────────────────────
 
 	pi.registerCommand("plan", {
-		description: "Open the plan viewer for .context/todo.md or a given file",
+		description: "Open the plan viewer for .context/todo.md or a given file. Supports --payload-id <id> --readonly --mode questions for /reports re-opens.",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui.notify("/plan requires interactive mode", "error");
 				return;
 			}
 
-			const filePath = args.trim() || join(ctx.cwd, ".context", "todo.md");
-
-			let markdown: string;
-			try {
-				markdown = readFileSync(filePath, "utf-8");
-			} catch {
-				ctx.ui.notify(`Cannot read: ${filePath}`, "error");
-				return;
+			// Parse: [file_path] [--readonly] [--payload-id ID]
+			// When --payload-id is given the viewer purpose (plan vs questions)
+			// is taken from the persisted snapshot, not from a CLI flag.
+			const parts = args.trim().split(/\s+/).filter(Boolean);
+			let cliFilePath = "";
+			let payloadId = "";
+			let readonlyFlag = false;
+			for (let i = 0; i < parts.length; i++) {
+				const part = parts[i];
+				if (part === "--readonly") readonlyFlag = true;
+				else if (part === "--payload-id" && i + 1 < parts.length) payloadId = parts[++i];
+				else if (part === "--mode" && i + 1 < parts.length) i++;
+				else if (!part.startsWith("--")) cliFilePath = part;
 			}
 
-			const displayTitle = basename(filePath, ".md");
+			const fromSnapshot = !!payloadId;
+			let purpose: ViewerPurpose = "plan";
+			let markdown: string;
+			let filePath: string;
+			let displayTitle: string;
 
-			const result = await runViewer(ctx, markdown, filePath, displayTitle, "plan");
+			if (fromSnapshot) {
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || (snapshot.mode !== "plan" && snapshot.mode !== "questions")) {
+					ctx.ui.notify(`No persisted snapshot for payload_id=${payloadId}`, "error");
+					return;
+				}
+				purpose = snapshot.mode;
+				markdown = snapshot.markdownContent;
+				filePath = snapshot.sourcePath || cliFilePath || join(ctx.cwd, ".context", "todo.md");
+				displayTitle = snapshot.title || basename(filePath, ".md");
+			} else {
+				filePath = cliFilePath || join(ctx.cwd, ".context", "todo.md");
+				try {
+					markdown = readFileSync(filePath, "utf-8");
+				} catch {
+					ctx.ui.notify(`Cannot read: ${filePath}`, "error");
+					return;
+				}
+				displayTitle = basename(filePath, ".md");
+			}
+
+			const result = await runViewer(ctx, markdown, filePath, displayTitle, purpose, undefined, {
+				readonly: fromSnapshot || readonlyFlag,
+			});
+
+			// Snapshot replays are display-only: no follow-up dispatch.
+			if (fromSnapshot) return;
 
 			if (result.action === "approved") {
 				try {

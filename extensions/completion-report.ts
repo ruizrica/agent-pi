@@ -16,7 +16,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateCompletionReportHTML, type ReportData, type ChangedFile } from "./lib/completion-report-html.ts";
 import { createCompletionReportStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
-import { buildCompletionSnapshot, type CompletionSnapshot } from "./lib/viewer-snapshots.ts";
+import { buildCompletionSnapshot, loadValidatedSnapshot, type CompletionSnapshot } from "./lib/viewer-snapshots.ts";
 
 // Parses a unified-diff string into snapshot hunks. Best-effort; falls back to a single synthetic hunk
 // containing the raw diff text as context lines when the diff doesn't match the standard format.
@@ -46,6 +46,54 @@ function parseUnifiedDiffToHunks(diff: string): CompletionSnapshot["gitDiffs"][n
 	}
 	if (current) hunks.push(current);
 	return hunks;
+}
+
+// Reverse of parseUnifiedDiffToHunks: serialize snapshot hunks back to a
+// unified-diff string the existing report HTML renderer expects.
+function hunksToUnifiedDiff(hunks: CompletionSnapshot["gitDiffs"][number]["hunks"]): string {
+	const out: string[] = [];
+	for (const hunk of hunks) {
+		out.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
+		for (const line of hunk.lines) {
+			const prefix = line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+			out.push(`${prefix}${line.content}`);
+		}
+	}
+	return out.join("\n");
+}
+
+// Reconstruct the ReportData shape from a persisted CompletionSnapshot so the
+// existing browser viewer can render historical reports without re-running git.
+function reportDataFromSnapshot(snapshot: CompletionSnapshot): ReportData {
+	const files: ChangedFile[] = snapshot.gitDiffs.map((diff) => {
+		let additions = 0;
+		let deletions = 0;
+		for (const hunk of diff.hunks) {
+			for (const line of hunk.lines) {
+				if (line.type === "add") additions++;
+				else if (line.type === "del") deletions++;
+			}
+		}
+		return {
+			path: diff.path,
+			oldPath: diff.oldPath,
+			status: diff.mode,
+			additions,
+			deletions,
+			diff: hunksToUnifiedDiff(diff.hunks),
+		};
+	});
+	const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
+	const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
+	return {
+		title: snapshot.title,
+		summary: snapshot.summaryMarkdown,
+		files,
+		baseRef: snapshot.baseRefResolved || snapshot.baseRef,
+		totalAdditions,
+		totalDeletions,
+		taskMarkdown: snapshot.tasksMarkdown,
+	};
 }
 
 function buildCompletionSnapshotFromReport(report: ReportData, summary: string, actionResult?: { action: string; note?: string }, cwd?: string): CompletionSnapshot {
@@ -505,9 +553,55 @@ export default function (pi: ExtensionAPI) {
 				title = "Completion Report",
 				summary = "",
 				base_ref,
-			} = params as { title?: string; summary?: string; base_ref?: string };
+				payload_id: payloadId,
+				readonly: readonlyFlag,
+			} = params as { title?: string; summary?: string; base_ref?: string; payload_id?: string; readonly?: boolean };
 
 			const cwd = ctx.cwd || process.cwd();
+
+			// Snapshot replay path: render the persisted completion snapshot.
+			// Without this every /reports re-open re-runs fresh git diffs against
+			// the current working tree — which has nothing to do with the
+			// historical report the user clicked.
+			if (payloadId) {
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || !("gitDiffs" in snapshot)) {
+					return {
+						content: [{ type: "text" as const, text: `No persisted completion snapshot found for payload_id=${payloadId}.` }],
+					};
+				}
+				const report = reportDataFromSnapshot(snapshot);
+				cleanupServer();
+				const { port, server, waitForResult } = await startReportServer(report, cwd);
+				activeServer = server;
+				const url = `http://127.0.0.1:${port}`;
+				activeSession = {
+					kind: "report",
+					title: snapshot.title,
+					url,
+					server,
+					onClose: () => { activeServer = null; activeSession = null; },
+				};
+				registerActiveViewer(activeSession);
+				openBrowser(url);
+				notifyViewerOpen(ctx, activeSession);
+				try {
+					await waitForResult();
+				} finally {
+					cleanupServer();
+				}
+				return {
+					content: [{ type: "text" as const, text: "Historical completion snapshot closed." }],
+					details: {
+						action: "done",
+						rolledBackFiles: [],
+						totalFiles: report.files.length,
+						totalAdditions: report.totalAdditions,
+						totalDeletions: report.totalDeletions,
+						fromSnapshot: true,
+					},
+				};
+			}
 
 			// Check if we're in a git repo
 			if (!isGitRepo(cwd)) {
@@ -518,6 +612,7 @@ export default function (pi: ExtensionAPI) {
 
 			// Gather report data
 			const report = gatherReportData(cwd, title, summary, base_ref || "");
+			void readonlyFlag;
 
 			if (report.files.length === 0) {
 				return {
@@ -710,10 +805,43 @@ export default function (pi: ExtensionAPI) {
 	// ── /report command ──────────────────────────────────────────────
 
 	pi.registerCommand("report", {
-		description: "Open the completion report viewer for current git changes",
+		description: "Open the completion report viewer for current git changes. Supports --payload-id <id> --readonly for /reports re-opens.",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui.notify("/report requires interactive mode", "error");
+				return;
+			}
+
+			// Snapshot replay short-circuit
+			const trimmedArgs = args.trim();
+			const payloadMatch = trimmedArgs.match(/--payload-id\s+(\S+)/);
+			if (payloadMatch) {
+				const payloadId = payloadMatch[1];
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || !("gitDiffs" in snapshot)) {
+					ctx.ui.notify(`No persisted completion snapshot for payload_id=${payloadId}`, "error");
+					return;
+				}
+				const report = reportDataFromSnapshot(snapshot);
+				cleanupServer();
+				const { port, server, waitForResult } = await startReportServer(report, ctx.cwd || process.cwd());
+				activeServer = server;
+				const url = `http://127.0.0.1:${port}`;
+				activeSession = {
+					kind: "report",
+					title: snapshot.title,
+					url,
+					server,
+					onClose: () => { activeServer = null; activeSession = null; },
+				};
+				registerActiveViewer(activeSession);
+				openBrowser(url);
+				notifyViewerOpen(ctx, activeSession);
+				try {
+					await waitForResult();
+				} finally {
+					cleanupServer();
+				}
 				return;
 			}
 
@@ -725,7 +853,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// Parse optional base ref from args
-			const baseRef = args.trim() || "";
+			const baseRef = trimmedArgs.replace(/--readonly/g, "").trim();
 			const report = gatherReportData(cwd, "Completion Report", "", baseRef);
 
 			if (report.files.length === 0) {

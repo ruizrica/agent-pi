@@ -14,7 +14,7 @@ import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaf
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/viewers/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
-import { buildSpecSnapshot, type SpecSnapshot } from "./lib/viewer-snapshots.ts";
+import { buildSpecSnapshot, loadValidatedSnapshot, type SpecSnapshot } from "./lib/viewer-snapshots.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
 import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
@@ -320,28 +320,34 @@ export default function (pi: ExtensionAPI) {
 		ctx: ExtensionContext,
 		folderPath: string,
 		title: string,
+		options: { preloadedDocuments?: SpecDocument[]; preloadedComments?: SpecComment[]; readonly?: boolean } = {},
 	): Promise<SpecViewerResult> {
 		cleanupServer();
 
-		// Discover documents
-		const documents = discoverSpecDocuments(folderPath);
+		// In snapshot-replay mode the docs and comments come from the persisted
+		// snapshot, not from disk — the original folder may have moved or been
+		// rewritten by a newer spec.
+		const documents = options.preloadedDocuments ?? discoverSpecDocuments(folderPath);
 		if (documents.length === 0) {
 			throw new Error(`No spec documents found in ${folderPath}`);
 		}
 
-		// Load existing comments
-		let existingComments: SpecComment[] = [];
-		const commentsPath = join(folderPath, "spec-comments.json");
-		if (existsSync(commentsPath)) {
-			try {
-				const data = JSON.parse(readFileSync(commentsPath, "utf-8"));
-				existingComments = data.comments || [];
-			} catch {}
+		// Load existing comments (snapshot replay supplies its own list)
+		let existingComments: SpecComment[] = options.preloadedComments ?? [];
+		if (!options.preloadedComments) {
+			const commentsPath = join(folderPath, "spec-comments.json");
+			if (existsSync(commentsPath)) {
+				try {
+					const data = JSON.parse(readFileSync(commentsPath, "utf-8"));
+					existingComments = data.comments || [];
+				} catch {}
+			}
 		}
 
 		// Try Commander first (multi-page spec viewer in native UI), but only
 		// treat it as approved/declined after Commander reports a real user action.
-		if (isCommanderAvailable()) {
+		// Snapshot replays skip Commander — they're historical display only.
+		if (!options.readonly && isCommanderAvailable()) {
 			const content = JSON.stringify({
 				folderPath,
 				pages: documents.map((doc) => ({
@@ -402,6 +408,19 @@ export default function (pi: ExtensionAPI) {
 		try {
 			const result = await handle.waitForResult();
 
+			// In snapshot-replay mode we never write back to the source folder
+			// (it may belong to a different, current spec) and we don't
+			// re-persist as a new report entry.
+			if (options.readonly) {
+				return {
+					action: "declined",
+					comments: result.comments || [],
+					markdownChanges: {},
+					modified: false,
+					feedback: undefined,
+				};
+			}
+
 			// Save any markdown changes back to files
 			if (result.modified && result.markdownChanges) {
 				for (const [relPath, content] of Object.entries(result.markdownChanges)) {
@@ -416,6 +435,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// Save final comments
+			const commentsPath = join(folderPath, "spec-comments.json");
 			if (result.comments && result.comments.length > 0) {
 				try {
 					writeFileSync(commentsPath, JSON.stringify({ comments: result.comments }, null, 2), "utf-8");
@@ -461,7 +481,11 @@ export default function (pi: ExtensionAPI) {
 						documents: snapshotDocs,
 						comments: snapshotComments,
 						visuals: snapshotVisuals,
-						featureIdea: feature_idea,
+						// featureIdea is not threaded into runSpecViewer; the prior
+						// `feature_idea` reference was out-of-scope here and was
+						// silently swallowed by the surrounding try/catch — which
+						// is why spec snapshots were never captured before.
+						featureIdea: undefined,
 						actionResult: result.action ? { action: String(result.action), note: result.feedback } : undefined,
 					});
 				} catch {
@@ -518,11 +542,58 @@ export default function (pi: ExtensionAPI) {
 		parameters: ShowSpecParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const { folder_path, title: titleParam, feature_idea } = params as {
+			const { folder_path, title: titleParam, feature_idea, payload_id: payloadId, readonly: readonlyFlag } = params as {
 				folder_path: string;
 				title?: string;
 				feature_idea?: string;
+				payload_id?: string;
+				readonly?: boolean;
 			};
+
+			// Snapshot replay path: render the persisted spec snapshot instead
+			// of scanning the live folder. Without this every /reports re-open
+			// shows whatever spec currently lives at the original folder, even
+			// if it was overwritten by a newer spec.
+			if (payloadId) {
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || !("documents" in snapshot)) {
+					return {
+						content: [{ type: "text" as const, text: `No persisted spec snapshot found for payload_id=${payloadId}.` }],
+					};
+				}
+				const preloadedDocuments: SpecDocument[] = snapshot.documents.map((doc) => {
+					const kindLower = (doc.kind || "").toLowerCase();
+					return {
+						key: kindLower,
+						label: kindLower.charAt(0).toUpperCase() + kindLower.slice(1),
+						markdown: doc.markdown,
+						filePath: doc.path,
+					};
+				});
+				const preloadedComments: SpecComment[] = (snapshot.comments || []).map((c) => ({
+					id: c.id,
+					document: c.section,
+					sectionId: c.section,
+					sectionText: c.section,
+					text: c.body,
+					timestamp: c.createdAt,
+				}));
+				try {
+					await runSpecViewer(ctx, snapshot.folderPath, titleParam || snapshot.title, {
+						preloadedDocuments,
+						preloadedComments,
+						readonly: true,
+					});
+					return {
+						content: [{ type: "text" as const, text: "Historical spec snapshot closed." }],
+						details: { action: "declined" as const, folderPath: snapshot.folderPath, fromSnapshot: true },
+					};
+				} catch (err: any) {
+					return {
+						content: [{ type: "text" as const, text: `Spec snapshot replay failed: ${err.message}` }],
+					};
+				}
+			}
 
 			const folderPath = resolve(folder_path);
 			if (existsSync(folderPath) && !statSync(folderPath).isDirectory()) {
@@ -538,7 +609,7 @@ export default function (pi: ExtensionAPI) {
 				: "";
 
 			try {
-				const result = await runSpecViewer(ctx, folderPath, displayTitle);
+				const result = await runSpecViewer(ctx, folderPath, displayTitle, { readonly: !!readonlyFlag });
 
 				if (result.action === "approved") {
 					const modifiedNote = result.modified
@@ -662,16 +733,56 @@ export default function (pi: ExtensionAPI) {
 	// ── /spec command ────────────────────────────────────────────────
 
 	pi.registerCommand("spec", {
-		description: "Open the spec viewer for a spec folder (e.g. /spec .kiro/specs/feature-name/ --idea add a checkout flow). Empty folders are scaffolded with Kiro spec documents.",
+		description: "Open the spec viewer for a spec folder. Supports --payload-id <id> --readonly for /reports re-opens.",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui.notify("/spec requires interactive mode", "error");
 				return;
 			}
 
+			// Snapshot replay short-circuit: --payload-id wins over folder path
+			// because the source folder may have been overwritten or removed.
+			const trimmed = args.trim();
+			const payloadMatch = trimmed.match(/--payload-id\s+(\S+)/);
+			if (payloadMatch) {
+				const payloadId = payloadMatch[1];
+				const snapshot = loadValidatedSnapshot(payloadId);
+				if (!snapshot || !("documents" in snapshot)) {
+					ctx.ui.notify(`No persisted spec snapshot for payload_id=${payloadId}`, "error");
+					return;
+				}
+				const preloadedDocuments: SpecDocument[] = snapshot.documents.map((doc) => {
+					const kindLower = (doc.kind || "").toLowerCase();
+					return {
+						key: kindLower,
+						label: kindLower.charAt(0).toUpperCase() + kindLower.slice(1),
+						markdown: doc.markdown,
+						filePath: doc.path,
+					};
+				});
+				const preloadedComments: SpecComment[] = (snapshot.comments || []).map((c) => ({
+					id: c.id,
+					document: c.section,
+					sectionId: c.section,
+					sectionText: c.section,
+					text: c.body,
+					timestamp: c.createdAt,
+				}));
+				try {
+					await runSpecViewer(ctx, snapshot.folderPath, snapshot.title, {
+						preloadedDocuments,
+						preloadedComments,
+						readonly: true,
+					});
+				} catch (err: any) {
+					ctx.ui.notify(`Spec snapshot replay failed: ${err.message}`, "error");
+				}
+				return;
+			}
+
 			const { folderPath, featureIdea } = parseSpecCommandArgs(args);
 			if (!folderPath) {
-				ctx.ui.notify("Usage: /spec <folder-path> [--idea <feature idea>]", "error");
+				ctx.ui.notify("Usage: /spec <folder-path> [--idea <feature idea>] [--payload-id <id>] [--readonly]", "error");
 				return;
 			}
 

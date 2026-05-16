@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import type { PersistedReportEntry } from "./report-index.js";
+import { readRawPayload, type PersistedReportEntry } from "./report-index.js";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -317,6 +317,26 @@ export function validateSnapshot(payload: unknown): { ok: true; snapshot: Viewer
 	}
 
 	return { ok: true, snapshot: payload as ViewerSnapshot };
+}
+
+// ── Loader: load + validate a persisted snapshot by id ──────────────
+
+/**
+ * Load a persisted viewer snapshot by id and validate it against the schema.
+ * Returns the typed snapshot on success, or null when the payload is missing,
+ * unreadable, malformed, or fails schema validation.
+ *
+ * This is the single entrypoint the viewer tools use to honor --payload-id:
+ * before this helper existed, the aliases parsed the flag and threw the value
+ * away, so every re-open fell back to re-reading the live source file (which
+ * had since been overwritten by the next plan), making every report look the
+ * same.
+ */
+export function loadValidatedSnapshot(id: string): ViewerSnapshot | null {
+	const raw = readRawPayload(id);
+	if (raw === null || raw === undefined) return null;
+	const result = validateSnapshot(raw);
+	return result.ok ? result.snapshot : null;
 }
 
 // ── Synthesizers: Reconstruct snapshots from source files (backfill) ──
