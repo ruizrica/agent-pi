@@ -49,7 +49,7 @@ Pi discovers all extensions, themes, and skills automatically.
 1. **Type a task** — Pi operates in plan-first mode. It will ask you to define tasks before using tools.
 2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → INVESTIGATE → SPEC → PIPELINE → TEAM → CHAIN)
 3. **`/claude`** — Toggle the CLAUDE overlay for the active mode. Active modes render as `MODE + CLAUDE`, use a dark-orange banner, and route Claude-family execution paths through the Claude CLI runtime.
-4. **Ctrl+X** — Cycle themes
+4. **Alt+T** — Cycle themes (`Alt+Shift+T` for reverse direction)
 5. **`/agents-team`** — Switch between agent teams
 6. **`/chain`** — Switch between chain workflows
 7. **`/tex`** — Open Text Tools in the browser
@@ -422,3 +422,29 @@ The security system operates at three layers:
 3. **`before_agent_start` hook** — System prompt hardening reminds the agent of security rules
 
 The `/secure` command runs a comprehensive AI security sweep on any project and can install portable protections.
+
+## Migration notes
+
+### SDK namespace rename: `@mariozechner/pi-*` → `@earendil-works/pi-*`
+
+The upstream Pi SDK moved scopes from `@mariozechner` to `@earendil-works`. This package's `peerDependencies` now point at the new `@earendil-works/pi-agent-core`, `@earendil-works/pi-coding-agent`, and `@earendil-works/pi-tui` packages, and all extension imports have been updated to match.
+
+If you're upgrading from an earlier checkout, after pulling:
+
+```bash
+yarn install
+```
+
+This refreshes the lockfile and pulls the new scoped packages. No source changes are needed in your own extensions unless you authored imports against the old `@mariozechner` scope — in that case, do a project-wide find/replace from `@mariozechner/pi-` to `@earendil-works/pi-`.
+
+The installer (`./install.sh`) and the `pi install git:github.com/earendil-works/pi` flow already use the new scope, so fresh installs need no extra step.
+
+### Theme-cycle hotkey: Ctrl+X → Alt+T
+
+The theme-cycle shortcut moved from `Ctrl+X` (which collides with terminal "cut" and the Emacs prefix) and `Ctrl+Q` (which collides with XON/XOFF flow control in some terminals) to:
+
+- **`Alt+T`** — Cycle theme forward
+- **`Alt+Shift+T`** — Cycle theme backward
+
+The `/theme` command still works for direct picking. If you had a muscle-memory binding to `Ctrl+X`, the new key keeps the same mnemonic ("T" for Theme) and avoids the terminal conflicts.
+

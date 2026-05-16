@@ -1,11 +1,11 @@
-// ABOUTME: Cycles through available themes with Ctrl+X/Q shortcuts and /theme command.
+// ABOUTME: Cycles through available themes with Alt+T / Alt+Shift+T shortcuts and /theme command.
 // ABOUTME: Shows color swatch preview on switch and persists selection to settings.json.
 /**
  * Theme Cycler — Keyboard shortcuts to cycle through available themes
  *
  * Shortcuts:
- *   Ctrl+X          — Cycle theme forward
- *   Ctrl+Q          — Cycle theme backward
+ *   Alt+T           — Cycle theme forward
+ *   Alt+Shift+T     — Cycle theme backward
  *
  * Commands:
  *   /theme          — Open select picker to choose a theme
@@ -112,9 +112,11 @@ export default function (pi: ExtensionAPI) {
 
 	// --- Shortcuts ---
 
-	// Ctrl+X is intentionally owned by this extension. install.sh unbinds the
-	// picker-scoped app.models.clearAll default to avoid a startup diagnostic.
-	pi.registerShortcut("ctrl+x", {
+	// Alt+T / Alt+Shift+T replace the prior Ctrl+X / Ctrl+Q bindings.
+	// Ctrl+X collides with terminal "cut" and Emacs prefix; Ctrl+Q collides with
+	// XON/XOFF flow control in some terminal emulators. Alt-modified letters are
+	// free of those conflicts and the T mnemonic ties to "Theme".
+	pi.registerShortcut("alt+t", {
 		description: "Cycle theme forward",
 		handler: async (ctx) => {
 			currentCtx = ctx;
@@ -122,7 +124,7 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+q", {
+	pi.registerShortcut("alt+shift+t", {
 		description: "Cycle theme backward",
 		handler: async (ctx) => {
 			currentCtx = ctx;

@@ -52,3 +52,10 @@ tests/*.spec.ts
 .dolt/
 *.db
 .beads-credential-key
+
+# Task tracker volatile state (per-session, never push to public)
+.beads/issues.jsonl
+.beads/cmd-writer.log
+.beads/metadata.json
+.commander/
+
