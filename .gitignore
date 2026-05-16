@@ -19,8 +19,6 @@ extensions/.pi/
 extensions/__tests__/.pi/
 extensions/node_modules/
 extensions/web-test-worker/.env
-extensions/.pacifico.env
-.pacifico.env
 extensions/settings.json
 extensions/web-test-worker/node_modules/
 autoresearch-results.tsv

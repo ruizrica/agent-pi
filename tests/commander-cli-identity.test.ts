@@ -19,7 +19,6 @@ describe("commander CLI identity flags", () => {
 		// Reset env to clean state
 		delete process.env.PI_MODEL;
 		delete process.env.ANTHROPIC_MODEL;
-		delete process.env.PACIFICO_MODEL;
 		delete process.env.CLAUDE_MODEL;
 		delete process.env.PI_RUNTIME_LABEL;
 	});
@@ -40,7 +39,6 @@ describe("commander CLI identity flags", () => {
 		it("prefers PI_MODEL over other env vars", () => {
 			process.env.PI_MODEL = "claude-opus";
 			process.env.ANTHROPIC_MODEL = "claude-haiku";
-			process.env.PACIFICO_MODEL = "claude-sonnet";
 			process.env.CLAUDE_MODEL = "claude-3";
 
 			const model = resolveModelName();
@@ -49,19 +47,10 @@ describe("commander CLI identity flags", () => {
 
 		it("uses ANTHROPIC_MODEL when PI_MODEL is not set", () => {
 			process.env.ANTHROPIC_MODEL = "claude-haiku";
-			process.env.PACIFICO_MODEL = "claude-sonnet";
 			process.env.CLAUDE_MODEL = "claude-3";
 
 			const model = resolveModelName();
 			expect(model).toBe("claude-haiku");
-		});
-
-		it("uses PACIFICO_MODEL when PI_MODEL and ANTHROPIC_MODEL are not set", () => {
-			process.env.PACIFICO_MODEL = "claude-sonnet";
-			process.env.CLAUDE_MODEL = "claude-3";
-
-			const model = resolveModelName();
-			expect(model).toBe("claude-sonnet");
 		});
 
 		it("uses CLAUDE_MODEL as fallback", () => {

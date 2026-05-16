@@ -24,7 +24,6 @@ describe("agent-identity", () => {
 		delete process.env.PI_SUBAGENT_NAME;
 		delete process.env.PI_MODEL;
 		delete process.env.ANTHROPIC_MODEL;
-		delete process.env.PACIFICO_MODEL;
 		delete process.env.CLAUDE_MODEL;
 		delete process.env.PI_RUNTIME_LABEL;
 	});
@@ -235,13 +234,6 @@ describe("agent-identity", () => {
 
 			const model = resolveModelName();
 			expect(model).toBe("claude-haiku");
-		});
-
-		it("uses PACIFICO_MODEL when higher precedence vars are not set", () => {
-			process.env.PACIFICO_MODEL = "claude-sonnet";
-
-			const model = resolveModelName();
-			expect(model).toBe("claude-sonnet");
 		});
 
 		it("uses CLAUDE_MODEL as final fallback", () => {

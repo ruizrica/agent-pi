@@ -80,9 +80,8 @@ export function resolveAgentRole(): string {
  * Resolve the model name with this precedence:
  * 1. PI_MODEL environment variable
  * 2. ANTHROPIC_MODEL environment variable
- * 3. PACIFICO_MODEL environment variable
- * 4. CLAUDE_MODEL environment variable
- * 5. "unknown" fallback
+ * 3. CLAUDE_MODEL environment variable
+ * 4. "unknown" fallback
  *
  * The result is cached so all callers get the same model for the lifetime of the process.
  */
@@ -91,7 +90,6 @@ export function resolveModelName(): string {
 
 	const piModel = process.env.PI_MODEL?.trim();
 	const anthropicModel = process.env.ANTHROPIC_MODEL?.trim();
-	const pacifico = process.env.PACIFICO_MODEL?.trim();
 	const claude = process.env.CLAUDE_MODEL?.trim();
 
 	let model: string;
@@ -99,8 +97,6 @@ export function resolveModelName(): string {
 		model = piModel;
 	} else if (anthropicModel) {
 		model = anthropicModel;
-	} else if (pacifico) {
-		model = pacifico;
 	} else if (claude) {
 		model = claude;
 	} else {
