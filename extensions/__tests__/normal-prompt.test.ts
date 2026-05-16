@@ -17,9 +17,9 @@ describe("buildNormalPrompt", () => {
 		expect(result).toContain("set_mode");
 	});
 
-	it("contains all 6 mode names", () => {
+	it("contains all 8 mode names", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
-		for (const mode of ["NORMAL", "PLAN", "SPEC", "TEAM", "CHAIN", "PIPELINE"]) {
+		for (const mode of ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "PIPELINE", "TEAM", "CHAIN"]) {
 			expect(result).toContain(mode);
 		}
 	});

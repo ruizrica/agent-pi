@@ -6,7 +6,7 @@ import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAn
 
 describe("MODES", () => {
 	it("has exactly 8 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "GOAL", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
+		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "PIPELINE", "TEAM", "CHAIN"]);
 	});
 });
 
@@ -15,20 +15,20 @@ describe("nextMode", () => {
 		expect(nextMode("NORMAL")).toBe("PLAN");
 	});
 
-	it("cycles PLAN → INVESTIGATE", () => {
-		expect(nextMode("PLAN")).toBe("INVESTIGATE");
+	it("cycles PLAN → SPEC", () => {
+		expect(nextMode("PLAN")).toBe("SPEC");
+	});
+
+	it("cycles SPEC → INVESTIGATE", () => {
+		expect(nextMode("SPEC")).toBe("INVESTIGATE");
 	});
 
 	it("cycles INVESTIGATE → GOAL", () => {
 		expect(nextMode("INVESTIGATE")).toBe("GOAL");
 	});
 
-	it("cycles GOAL → SPEC", () => {
-		expect(nextMode("GOAL")).toBe("SPEC");
-	});
-
-	it("cycles SPEC → PIPELINE", () => {
-		expect(nextMode("SPEC")).toBe("PIPELINE");
+	it("cycles GOAL → PIPELINE", () => {
+		expect(nextMode("GOAL")).toBe("PIPELINE");
 	});
 
 	it("cycles PIPELINE → TEAM", () => {
@@ -49,16 +49,16 @@ describe("prevMode", () => {
 		expect(prevMode("PLAN")).toBe("NORMAL");
 	});
 
-	it("cycles INVESTIGATE → PLAN", () => {
-		expect(prevMode("INVESTIGATE")).toBe("PLAN");
+	it("cycles SPEC → PLAN", () => {
+		expect(prevMode("SPEC")).toBe("PLAN");
+	});
+
+	it("returns SPEC as previous mode for INVESTIGATE", () => {
+		expect(prevMode("INVESTIGATE")).toBe("SPEC");
 	});
 
 	it("cycles GOAL → INVESTIGATE", () => {
 		expect(prevMode("GOAL")).toBe("INVESTIGATE");
-	});
-
-	it("cycles SPEC → GOAL", () => {
-		expect(prevMode("SPEC")).toBe("GOAL");
 	});
 
 	it("wraps NORMAL → CHAIN", () => {
@@ -67,6 +67,10 @@ describe("prevMode", () => {
 
 	it("cycles CHAIN → TEAM", () => {
 		expect(prevMode("CHAIN")).toBe("TEAM");
+	});
+
+	it("cycles PIPELINE → GOAL", () => {
+		expect(prevMode("PIPELINE")).toBe("GOAL");
 	});
 
 });

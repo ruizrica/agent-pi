@@ -1,7 +1,7 @@
-// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, INVESTIGATE, GOAL, SPEC, PIPELINE, TEAM, CHAIN).
+// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, PIPELINE, TEAM, CHAIN).
 // ABOUTME: No side effects — used by mode-cycler.ts extension and tested independently.
 
-export const MODES = ["NORMAL", "PLAN", "INVESTIGATE", "GOAL", "SPEC", "PIPELINE", "TEAM", "CHAIN"] as const;
+export const MODES = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "PIPELINE", "TEAM", "CHAIN"] as const;
 export type Mode = typeof MODES[number];
 export type ModeOverlay = "CLAUDE" | "GEMMA" | "QWEN";
 

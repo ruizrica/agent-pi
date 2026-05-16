@@ -1,5 +1,5 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, and PIPELINE prompts plus shared Commander integration helper.
+// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, and PIPELINE prompts plus shared Commander integration helper.
 
 import {
 	DEFAULT_ADVISOR_MODEL,
@@ -25,8 +25,8 @@ export interface DelegateEverythingOpts {
  * Shared "delegate everything" policy section. Centralizes the rule that the
  * main frontier model thinks and plans only — all reads, searches, code
  * execution, builds, and tests are delegated to subagents. Used by team,
- * chain, and pipeline orchestrators. The four user-facing operational modes
- * (NORMAL / PLAN / INVESTIGATE / SPEC) intentionally do NOT use this helper —
+ * chain, and pipeline orchestrators. The five direct-work operational modes
+ * (NORMAL / PLAN / SPEC / INVESTIGATE / GOAL) intentionally do NOT use this helper —
  * they allow the main agent to work directly for simple/medium tasks.
  */
 export function buildDelegateEverythingSection(opts: DelegateEverythingOpts): string {
@@ -141,7 +141,7 @@ ${buildWardenTaskConfirmationSection("NORMAL", {
 	sliceName: "complex direct-work slice",
 	guardrails: [
 		"Use WARDEN for non-trivial work; do not force ceremony for simple answers, quick reads, or one-off status checks.",
-		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, INVESTIGATE, SPEC, TEAM, CHAIN, or PIPELINE instead of improvising.",
+		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, GOAL, PIPELINE, TEAM, or CHAIN instead of improvising.",
 	],
 })}
 
@@ -240,17 +240,17 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 | Mode     | Use when...                                                        |
 |----------|--------------------------------------------------------------------|
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
+| SPEC     | New features needing requirements gathering and a written spec.    |
 | INVESTIGATE | Structured bug/problem diagnosis with clarification, scout gathering, findings, and remediation approval. |
 | GOAL     | Objective-driven loop that continues until an explicit success condition is met. |
-| SPEC     | New features needing requirements gathering and a written spec.    |
+| PIPELINE | Full phased orchestration (gather→plan→execute→review). Complex.   |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
 | CHAIN    | Sequential pipeline — audit, migrate, structured multi-step flow.  |
-| PIPELINE | Full phased orchestration (gather→plan→execute→review). Complex.   |
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, INVESTIGATE, GOAL, or SPEC immediately, explain your choice, and await user approval of the plan when that mode requires it.
-3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/INVESTIGATE/GOAL/SPEC/TEAM/PIPELINE if the task needs explicit approval, a written spec, or an explicit success-condition loop.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, or GOAL immediately, explain your choice, and await user approval of the plan when that mode requires it.
+3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/GOAL/PIPELINE/TEAM/CHAIN if the task needs explicit approval, a written spec, or an explicit success-condition loop.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}

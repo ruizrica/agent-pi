@@ -804,7 +804,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   }
 
   // ── Mode Cycling ────────────────────────────────────
-  const MODES = ['NORMAL','PLAN','SPEC','PIPELINE','TEAM','CHAIN'];
+  const MODES = ['NORMAL','PLAN','SPEC','INVESTIGATE','GOAL','PIPELINE','TEAM','CHAIN'];
   let currentMode = 'NORMAL';
   const modeBar = document.getElementById('mode-bar');
 
