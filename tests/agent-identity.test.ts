@@ -24,7 +24,6 @@ describe("agent-identity", () => {
 		delete process.env.PI_SUBAGENT_NAME;
 		delete process.env.PI_MODEL;
 		delete process.env.ANTHROPIC_MODEL;
-		delete process.env.PACIFICO_MODEL;
 		delete process.env.CLAUDE_MODEL;
 		delete process.env.PI_RUNTIME_LABEL;
 	});
@@ -237,13 +236,6 @@ describe("agent-identity", () => {
 			expect(model).toBe("claude-haiku");
 		});
 
-		it("uses PACIFICO_MODEL when higher precedence vars are not set", () => {
-			process.env.PACIFICO_MODEL = "claude-sonnet";
-
-			const model = resolveModelName();
-			expect(model).toBe("claude-sonnet");
-		});
-
 		it("uses CLAUDE_MODEL as final fallback", () => {
 			process.env.CLAUDE_MODEL = "claude-3";
 
@@ -306,15 +298,16 @@ describe("agent-identity", () => {
 	});
 
 	describe("applyCmdIdentityFlags()", () => {
-		it("prepends --runtime and --model flags to args", () => {
+		// Identity flags are inserted AFTER the subcommand prefix (first 2 args),
+		// so the cmd binary sees `cmd task list --runtime ... --model ... --json`
+		// instead of `cmd --runtime ... --model ... task list --json`.
+		// Empty or 1-arg inputs put the flags at the start since there's no prefix.
+
+		it("inserts --runtime and --model flags after the subcommand prefix", () => {
 			const args = ["task", "list", "--json"];
 			const result = applyCmdIdentityFlags(args);
 
-			expect(result[0]).toBe("--runtime");
-			expect(result[1]).toBe("pi");
-			expect(result[2]).toBe("--model");
-			expect(result[3]).toBe("unknown");
-			expect(result.slice(4)).toEqual(["task", "list", "--json"]);
+			expect(result).toEqual(["task", "list", "--runtime", "pi", "--model", "unknown", "--json"]);
 		});
 
 		it("uses resolved values from env vars", () => {
@@ -325,42 +318,43 @@ describe("agent-identity", () => {
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual([
+				"task",
+				"claim",
 				"--runtime",
 				"claude-code",
 				"--model",
 				"claude-opus",
-				"task",
-				"claim",
 				"123",
 			]);
 		});
 
-		it("does not double-inject if args already start with --runtime", () => {
-			const args = ["--runtime", "existing", "--model", "existing-model", "task", "list"];
+		it("does not double-inject if args already contain --runtime", () => {
+			const args = ["task", "list", "--runtime", "existing", "--model", "existing-model"];
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual(args);
 		});
 
-		it("handles empty args array", () => {
+		it("handles empty args array (flags go first since there's no prefix)", () => {
 			const args: string[] = [];
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual(["--runtime", "pi", "--model", "unknown"]);
 		});
 
-		it("maintains correct order", () => {
+		it("maintains correct order with a long argv", () => {
 			process.env.PI_RUNTIME_LABEL = "droid";
 			process.env.ANTHROPIC_MODEL = "claude-sonnet";
 
 			const args = ["mailbox", "send", "agent", "status", "msg"];
 			const result = applyCmdIdentityFlags(args);
 
-			expect(result[0]).toBe("--runtime");
-			expect(result[1]).toBe("droid");
-			expect(result[2]).toBe("--model");
-			expect(result[3]).toBe("claude-sonnet");
-			expect(result.slice(4)).toEqual(args);
+			expect(result).toEqual([
+				"mailbox", "send",
+				"--runtime", "droid",
+				"--model", "claude-sonnet",
+				"agent", "status", "msg",
+			]);
 		});
 	});
 });

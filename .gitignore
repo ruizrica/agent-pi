@@ -19,8 +19,6 @@ extensions/.pi/
 extensions/__tests__/.pi/
 extensions/node_modules/
 extensions/web-test-worker/.env
-extensions/.pacifico.env
-.pacifico.env
 extensions/settings.json
 extensions/web-test-worker/node_modules/
 autoresearch-results.tsv
@@ -58,4 +56,7 @@ tests/*.spec.ts
 .beads/cmd-writer.log
 .beads/metadata.json
 .commander/
+
+# Claude per-machine settings overrides (user-specific allow-lists, paths)
+.claude/settings.local.json
 

@@ -31,7 +31,7 @@ Example argv transformations:
 - `["task", "list", "--json"]` becomes `["task", "list", "--runtime", "pi", "--model", "opus-4.7", "--json"]`
 - `["mailbox", "send", "agent", "subject", "body"]` becomes `["mailbox", "send", "--runtime", "pi", "--model", "opus-4.7", "agent", "subject", "body"]` (positionals remain at tail)
 
-Defaults: `PI_RUNTIME_LABEL` env → `"pi"`; `PI_MODEL` env (with fallback to `ANTHROPIC_MODEL`, `PACIFICO_MODEL`, `CLAUDE_MODEL`) → `"unknown"`.
+Defaults: `PI_RUNTIME_LABEL` env → `"pi"`; `PI_MODEL` env (with fallback to `ANTHROPIC_MODEL`, `CLAUDE_MODEL`) → `"unknown"`.
 
 The `cmd` CLI also accepts identity flags **before the subcommand** (legacy pattern) and automatically normalizes them to post-subcommand position via `liftIdentityFlagsToTail()`. Both patterns produce identical behavior.
 

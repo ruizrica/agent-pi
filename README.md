@@ -143,30 +143,6 @@ That keeps Cloud Code usage inside the same approved auth path already supported
 
 Agent-Pi is organized as a thin extension shell with testable feature modules under `extensions/lib/`. See [`docs/architecture/module-boundaries.md`](docs/architecture/module-boundaries.md) before adding new module-by-module functionality or moving business logic.
 
-### Pacifico backend (`pacifico` extension)
-
-The [`extensions/pacifico.ts`](extensions/pacifico.ts) extension calls your Pacifico Worker (`POST /api/infer`, job APIs) with `Authorization: Bearer …`. Use the **same** secret the Worker validates as `PACIFICO_API_KEY` (Wrangler secret in production, [`.dev.vars`](https://developers.cloudflare.com/workers/testing/local-development/#local-only-environment-variables) for `wrangler dev`). The Worker requires the secret to be **at least 32 characters** (shorter or empty disables bearer auth).
-
-**Recommended:** run **`/pacifico-api-key`** in Pi (same TUI flow as the model picker). It stores the bearer secret in **`settings.json`** next to `pacificoModel` — the same file path Pi already uses for Pacifico model persistence, so it works even when env files and `process.env` are unavailable.
-
-Alternatively, put `PACIFICO_API_KEY` in `process.env` or in `.pacifico.env` files (see [`extensions/.pacifico.env.example`](extensions/.pacifico.env.example)): **`<agent-pi-package-root>/.pacifico.env`** (sibling of `settings.json`), **`<cwd>/.pacifico.env`**, **`~/.config/pi/pacifico.env`**, **`~/.pacifico.env`**, **`extensions/.pacifico.env`**. You can also add a **`pacificoApiKey`** string field to `settings.json` by hand (do not commit that file if it contains secrets).
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PACIFICO_API_KEY` | Yes for `/pacifico` and `pacifico_infer` | Bearer token; `process.env`, `.pacifico.env` files, **`pacificoApiKey` in `settings.json`**, or **`/pacifico-api-key`** |
-| `HARNESS_API_KEY` | Alternate | Same bearer as Pacifico’s legacy env name; used if `PACIFICO_API_KEY` is unset |
-| `PACIFICO_BASE_URL` | No | Worker origin; defaults to `https://pacifico.ruizrica2.workers.dev`; set `http://localhost:8787` when pointing at local `wrangler dev` |
-
-Export in the environment that launches `pi` (shell profile, IDE terminal, or direnv), when you prefer not to use `.pacifico.env`:
-
-```bash
-export PACIFICO_API_KEY='your-key-matching-the-worker'
-# optional for local Worker:
-export PACIFICO_BASE_URL='http://localhost:8787'
-```
-
-From the Pacifico repo, upload the production secret (interactive Wrangler OAuth or `CLOUDFLARE_API_TOKEN` set): `printf '%s' "$KEY" | npx wrangler secret put PACIFICO_API_KEY`. See Pacifico `docs/hybrid-ai-harness.md`.
-
 ### Core UI
 
 | Extension | Description |

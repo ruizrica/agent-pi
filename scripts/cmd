@@ -1,10 +1,35 @@
 #!/usr/bin/env bash
 # ABOUTME: cmd wrapper that enforces --mission-brief on root task creation.
-# ABOUTME: Shadows /Users/ricardo/.local/bin/cmd when scripts/ is earlier in PATH; passes everything except `task add` straight through.
+# ABOUTME: Shadows the real `cmd` binary when scripts/ is earlier in PATH; passes everything except `task add` straight through.
 
 set -u
 
-REAL_CMD="${CMD_REAL:-/Users/ricardo/.local/bin/cmd}"
+# Resolve the real cmd binary portably. Order of precedence:
+#   1. CMD_REAL env var (explicit override — useful in tests / non-standard installs)
+#   2. First `cmd` on PATH that isn't this wrapper itself
+# Exit 127 with a helpful error if neither yields an executable, so users get
+# actionable guidance instead of bash's raw "No such file or directory".
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REAL_CMD="${CMD_REAL:-}"
+
+if [[ -z "$REAL_CMD" ]]; then
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] && continue
+    [[ "$candidate" == "$SCRIPT_DIR/cmd" ]] && continue
+    REAL_CMD="$candidate"
+    break
+  done < <(type -aP cmd 2>/dev/null || true)
+fi
+
+# Validation:
+#   - empty → exit 127 with help
+#   - absolute path that isn't executable → exit 127 with help
+#   - bare name (e.g. "echo", "cmd") → trust bash to resolve via PATH at exec time
+#     (this is important for builtins and test mocks like CMD_REAL=echo)
+if [[ -z "${REAL_CMD:-}" || ( "$REAL_CMD" == /* && ! -x "$REAL_CMD" ) ]]; then
+  echo "cmd-guard: unable to locate real 'cmd' binary. Set CMD_REAL=/absolute/path/to/cmd or install cmd on PATH." >&2
+  exit 127
+fi
 
 if [[ "${1:-}" == "task" && "${2:-}" == "add" ]]; then
   has_mission_brief=false

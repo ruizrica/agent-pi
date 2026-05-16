@@ -74,6 +74,19 @@ rc=${rc:-0}
 assert_exit 0 "$rc" "exit code with equals form"
 unset rc
 
+echo "Test 7: portable fallback — CMD_REAL pointing at nonexistent path exits 127 with helpful error"
+out=$(CMD_REAL=/this/path/does/not/exist "$WRAPPER" list 2>&1) || rc=$?
+rc=${rc:-0}
+assert_exit 127 "$rc" "exit 127 when CMD_REAL points at non-executable"
+assert_contains "unable to locate real 'cmd'" "$out" "error message names CMD_REAL escape hatch (not bash's raw 'No such file' output)"
+unset rc
+
+echo "Test 8: portable fallback — CMD_REAL pointing at a real binary works"
+out=$(CMD_REAL=$(command -v echo) "$WRAPPER" guide agent 2>&1) || rc=$?
+rc=${rc:-0}
+assert_exit 0 "$rc" "exit 0 when CMD_REAL is an explicit, executable path"
+unset rc
+
 echo ""
 echo "Results: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

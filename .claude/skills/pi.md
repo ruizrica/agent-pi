@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write"]
 
 # Pi — Agent Subprocess Dispatcher
 
-Dispatch Pi agents as subprocesses using the `pi-agent-orchestrator` bridge at `/Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs`. This spawns real `pi` CLI processes with the correct agent definitions, models, and system prompts from `agents/`.
+Dispatch Pi agents as subprocesses using the `pi-agent-orchestrator` bridge at `scripts/pi-agent-orchestrator.mjs`. This spawns real `pi` CLI processes with the correct agent definitions, models, and system prompts from `agents/`.
 
 ## User's Arguments
 
@@ -19,7 +19,7 @@ Parse the first word of the arguments above as the subcommand (case-insensitive)
 ### Step 1: Inspect (always run first)
 
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs inspect
+node scripts/pi-agent-orchestrator.mjs inspect
 ```
 
 Verify auth is present and agents are available. If inspect fails, tell the user.
@@ -37,7 +37,7 @@ Verify auth is present and agents are available. If inspect fails, tell the user
 #### plan — Plan-Build-Review Chain
 
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs chain \
+node scripts/pi-agent-orchestrator.mjs chain \
   --chain plan-build-review \
   --task "<task>" \
   --approved true \
@@ -48,7 +48,7 @@ node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs c
 
 Step 1: Dispatch scout for context gathering:
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs dispatch \
+node scripts/pi-agent-orchestrator.mjs dispatch \
   --agent scout \
   --task "Explore the codebase and gather context for: <task>" \
   --execute
@@ -56,7 +56,7 @@ node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs d
 
 Step 2: Use scout output to dispatch planner for spec writing:
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs dispatch \
+node scripts/pi-agent-orchestrator.mjs dispatch \
   --agent planner \
   --task "Write a detailed spec based on this context:\n\n<scout output>\n\nOriginal request: <task>" \
   --execute
@@ -76,7 +76,7 @@ Step 1: Write a batch spec to `.context/pi-batch.json`:
 
 Step 2: Execute the batch:
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs batch \
+node scripts/pi-agent-orchestrator.mjs batch \
   --spec .context/pi-batch.json \
   --approved true \
   --execute
@@ -94,7 +94,7 @@ Available chains can be seen from the inspect output. Common ones:
 - `test-fix` — test-driven fix cycle
 
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs chain \
+node scripts/pi-agent-orchestrator.mjs chain \
   --chain <chain-name> \
   --task "<task>" \
   --approved true \
@@ -104,7 +104,7 @@ node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs c
 #### pipeline — Full Pipeline Chain
 
 ```bash
-node /Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs chain \
+node scripts/pi-agent-orchestrator.mjs chain \
   --chain full-pipeline \
   --task "<task>" \
   --approved true \
@@ -145,7 +145,7 @@ Examples:
 
 ## Important
 
-- The bridge script lives at `/Users/ricardo/Workshop/GitHub/agent-pi/scripts/pi-agent-orchestrator.mjs`
+- The bridge script lives at `scripts/pi-agent-orchestrator.mjs`
 - The bridge automatically reads agent definitions from the agent-pi repo's `agents/` directory
 - All agents run as **separate `pi` CLI subprocesses** — they are NOT Claude Code agents
 - Each agent has its own model (scout uses Grok, builder uses Haiku, reviewer uses Opus, etc.)

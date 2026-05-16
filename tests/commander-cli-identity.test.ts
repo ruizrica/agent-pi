@@ -19,7 +19,6 @@ describe("commander CLI identity flags", () => {
 		// Reset env to clean state
 		delete process.env.PI_MODEL;
 		delete process.env.ANTHROPIC_MODEL;
-		delete process.env.PACIFICO_MODEL;
 		delete process.env.CLAUDE_MODEL;
 		delete process.env.PI_RUNTIME_LABEL;
 	});
@@ -40,7 +39,6 @@ describe("commander CLI identity flags", () => {
 		it("prefers PI_MODEL over other env vars", () => {
 			process.env.PI_MODEL = "claude-opus";
 			process.env.ANTHROPIC_MODEL = "claude-haiku";
-			process.env.PACIFICO_MODEL = "claude-sonnet";
 			process.env.CLAUDE_MODEL = "claude-3";
 
 			const model = resolveModelName();
@@ -49,19 +47,10 @@ describe("commander CLI identity flags", () => {
 
 		it("uses ANTHROPIC_MODEL when PI_MODEL is not set", () => {
 			process.env.ANTHROPIC_MODEL = "claude-haiku";
-			process.env.PACIFICO_MODEL = "claude-sonnet";
 			process.env.CLAUDE_MODEL = "claude-3";
 
 			const model = resolveModelName();
 			expect(model).toBe("claude-haiku");
-		});
-
-		it("uses PACIFICO_MODEL when PI_MODEL and ANTHROPIC_MODEL are not set", () => {
-			process.env.PACIFICO_MODEL = "claude-sonnet";
-			process.env.CLAUDE_MODEL = "claude-3";
-
-			const model = resolveModelName();
-			expect(model).toBe("claude-sonnet");
 		});
 
 		it("uses CLAUDE_MODEL as fallback", () => {
@@ -132,15 +121,17 @@ describe("commander CLI identity flags", () => {
 	});
 
 	describe("applyCmdIdentityFlags()", () => {
-		it("prepends --runtime and --model flags to args", () => {
+		// Identity flags are inserted AFTER the subcommand prefix (the first
+		// min(2, args.length) args). This means `cmd task list --json` becomes
+		// `cmd task list --runtime <label> --model <model> --json` — the cmd
+		// binary sees identity flags after its subcommand, not before, which
+		// is what its argv parser expects.
+
+		it("inserts --runtime and --model flags after the subcommand prefix", () => {
 			const args = ["task", "list", "--json"];
 			const result = applyCmdIdentityFlags(args);
 
-			expect(result[0]).toBe("--runtime");
-			expect(result[1]).toBe("pi");
-			expect(result[2]).toBe("--model");
-			expect(result[3]).toBe("unknown");
-			expect(result.slice(4)).toEqual(["task", "list", "--json"]);
+			expect(result).toEqual(["task", "list", "--runtime", "pi", "--model", "unknown", "--json"]);
 		});
 
 		it("uses resolved runtime label and model name", () => {
@@ -151,45 +142,48 @@ describe("commander CLI identity flags", () => {
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual([
+				"task",
+				"claim",
 				"--runtime",
 				"claude-code",
 				"--model",
 				"claude-opus",
-				"task",
-				"claim",
 				"123",
 			]);
 		});
 
-		it("preserves original args in order after identity flags", () => {
+		it("preserves the trailing original args after the identity flags", () => {
 			const args = ["task", "show", "456", "--no-color"];
 			const result = applyCmdIdentityFlags(args);
 
-			expect(result.slice(4)).toEqual(["task", "show", "456", "--no-color"]);
+			// flags inserted at idx=2; everything after the prefix is the trailing argv
+			expect(result.slice(0, 2)).toEqual(["task", "show"]);
+			expect(result.slice(2, 6)).toEqual(["--runtime", "pi", "--model", "unknown"]);
+			expect(result.slice(6)).toEqual(["456", "--no-color"]);
 		});
 
-		it("does not double-inject if args already start with --runtime", () => {
-			const args = ["--runtime", "existing-runtime", "--model", "existing-model", "task", "list"];
+		it("does not double-inject if args already contain --runtime", () => {
+			const args = ["task", "list", "--runtime", "existing-runtime", "--model", "existing-model"];
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual(args);
 		});
 
-		it("handles empty args array", () => {
+		it("handles empty args array (flags go first since there's no prefix)", () => {
 			const args: string[] = [];
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual(["--runtime", "pi", "--model", "unknown"]);
 		});
 
-		it("handles single arg", () => {
+		it("handles single arg (flags inserted after that 1-arg prefix)", () => {
 			const args = ["task"];
 			const result = applyCmdIdentityFlags(args);
 
-			expect(result).toEqual(["--runtime", "pi", "--model", "unknown", "task"]);
+			expect(result).toEqual(["task", "--runtime", "pi", "--model", "unknown"]);
 		});
 
-		it("maintains correct order: --runtime <label> --model <name> <original args>", () => {
+		it("maintains correct order: <subcommand prefix> --runtime <label> --model <name> <tail>", () => {
 			process.env.PI_RUNTIME_LABEL = "droid";
 			process.env.ANTHROPIC_MODEL = "claude-sonnet";
 
@@ -197,12 +191,12 @@ describe("commander CLI identity flags", () => {
 			const result = applyCmdIdentityFlags(args);
 
 			expect(result).toEqual([
+				"mailbox",
+				"send",
 				"--runtime",
 				"droid",
 				"--model",
 				"claude-sonnet",
-				"mailbox",
-				"send",
 				"agent-name",
 				"status",
 				"message body",
@@ -228,7 +222,8 @@ describe("commander CLI identity flags", () => {
 			const model = resolveModelName();
 			const args = applyCmdIdentityFlags(["task", "list"]);
 
-			expect(args[3]).toBe(model);
+			// flags inserted at idx=2 → ["task","list","--runtime",label,"--model",model]
+			expect(args[5]).toBe(model);
 		});
 
 		it("uses the same runtime label in applyCmdIdentityFlags as resolveRuntimeLabel", () => {
@@ -237,7 +232,8 @@ describe("commander CLI identity flags", () => {
 			const label = resolveRuntimeLabel();
 			const args = applyCmdIdentityFlags(["task", "list"]);
 
-			expect(args[1]).toBe(label);
+			// flags inserted at idx=2 → ["task","list","--runtime",label,...]
+			expect(args[3]).toBe(label);
 		});
 	});
 });

@@ -185,17 +185,26 @@ These skills ship with the project under `skills/` and are loaded by default. Tr
 2. **Run quality gates** (if code changed) — tests, linters, builds
 3. **Update task status** — `cmd task update <id> --status completed` on finished slices
 4. **PUSH TO REMOTE** (only when the user has authorized push for this session):
+   First, inspect the current branch and configured remotes so the explicit
+   `<remote> <branch>` pair is known and intentional:
    ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
+   git branch --show-current
+   git remote -v
+   ```
+   Then push using the explicit remote/branch the user authorized (never bare
+   `git push`, which can silently target the wrong remote — `origin` is the
+   public mirror in this repo):
+   ```bash
+   git pull --rebase <remote> <branch>
+   git push <remote> <branch>
+   git status -sb  # MUST show "up to date with <remote>/<branch>"
    ```
 5. **Clean up** — clear stashes, prune remote branches
 6. **Verify** — all changes committed AND pushed
 7. **Hand off** — provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds (when push is authorized for this session)
-- Per Git Operations policy above: NEVER push without explicit user instruction
+- Work is NOT complete until `git push <remote> <branch>` succeeds (when push is authorized for this session)
+- Per Git Operations policy above: NEVER push without explicit user instruction; NEVER use bare `git push`; NEVER push to `origin` (public) without explicit per-push approval
 - If push fails after authorization, resolve and retry until it succeeds
 <!-- END CMD INTEGRATION -->

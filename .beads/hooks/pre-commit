@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Universal pre-commit hook that calls the validator
-VALIDATOR_SCRIPT="/Users/ricardo/Documents/Github-Work/claude-code-hooks/pre-commit-validator.sh"
+# Universal pre-commit hook that calls the validator (if installed).
+# Override the validator location with CLAUDE_HOOKS_VALIDATOR=/path/to/script.sh.
+# Default falls back to a $HOME-relative path; if neither resolves the validator,
+# the script logs a warning and continues so the beads integration below still runs.
+VALIDATOR_SCRIPT="${CLAUDE_HOOKS_VALIDATOR:-${HOME}/Documents/Github-Work/claude-code-hooks/pre-commit-validator.sh}"
 
 # Check if validator exists
 if [[ -f "$VALIDATOR_SCRIPT" ]]; then
@@ -33,7 +36,8 @@ else
     fi
 fi
 
-exit 0
+# Fall through to the beads integration below — the prior unconditional `exit 0`
+# here was blocking it from running.
 
 # --- BEGIN BEADS INTEGRATION v1.0.3 ---
 # This section is managed by beads. Do not remove these markers.
