@@ -4,6 +4,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
+import type { Server } from "node:http";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { ensurePacificoEnvLoaded } from "./lib/load-pacifico-env.ts";
 import {
 	listIncompletePacificoJobs,
@@ -15,7 +19,16 @@ import {
 	saveSubmittedPacificoJob,
 	type PacificoTrackedJob,
 } from "./lib/pacifico-job-state.ts";
+import { collectPacificoAdvisorContext, formatPacificoAdvisorResult, normalizeAdvisorResponse, type PacificoAdvisorArgs } from "./lib/pacifico-advisor.ts";
 import { loadPacificoApiKey, loadPacificoModel, persistPacificoApiKey, persistPacificoModel } from "./lib/persist-pacifico.ts";
+import { pacificoResultToMarkdown, type PacificoComplexity, type PacificoResultAction, type PacificoResultData } from "./lib/pacifico-result-html.ts";
+import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
+import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
+import { getProjectContext } from "./lib/project-context.ts";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { readRawPayload, upsertPersistedReport } from "./lib/report-index.ts";
+import { outputLine } from "./lib/output-box.ts";
 
 const PACIFICO_MESSAGE_TYPE = "pacifico_message";
 const PACIFICO_JOB_COMPLETE_TYPE = "pacifico_job_complete";
@@ -23,6 +36,35 @@ const DEFAULT_BASE_URL = "https://pacifico.ruizrica2.workers.dev";
 const COMPLETION_FLUSH_DELAY_MS = 500;
 const COMPLETION_RETRY_DELAY_MS = 5_000;
 const PACIFICO_JOB_PRUNE_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
+const PACIFICO_WIDGET_KEY = "pacifico-status";
+const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const ANSI_RESET = "\x1b[0m";
+const PACIFICO_PENDING_BG = "\x1b[48;2;50;50;50m";
+const PACIFICO_COMPLETED_BG = "\x1b[48;2;30;144;255m";
+// Copied from the operational mode active header blue in mode-cycler-logic.ts.
+const PACIFICO_OPERATIONAL_MODE_BG = "\x1b[48;2;30;144;255m";
+const PACIFICO_HEADER_BG = PACIFICO_OPERATIONAL_MODE_BG;
+const PACIFICO_HEADER_TEXT = "\x1b[1;97m";
+const PACIFICO_HEADER_VERTICAL_PADDING_ROWS = 0;
+const PACIFICO_HEADER_HORIZONTAL_PADDING = 1;
+const PACIFICO_DETAIL_TOP_VERTICAL_PADDING_ROWS = 1;
+const PACIFICO_DETAIL_BOTTOM_VERTICAL_PADDING_ROWS = 1;
+const PACIFICO_DETAIL_HORIZONTAL_PADDING = 2;
+const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+
+type TaskStatus = "idle" | "inprogress" | "done";
+
+type CurrentTask = {
+	id: number;
+	text: string;
+	commanderTaskId?: number;
+};
+
+type TaskList = {
+	title?: string;
+	description?: string;
+	tasks?: { id: number; text: string; status: TaskStatus }[];
+};
 
 interface ModelChoice {
 	id: string | null;
@@ -43,6 +85,10 @@ interface InferRequest {
 	prompt: string;
 	mode?: "sync" | "async" | "auto";
 	model?: string;
+	executionClass?: "standard" | "expensive" | "planning";
+	outputComplexity?: PacificoComplexity;
+	maxOutputTokens?: number;
+	outputDelivery?: "inline" | "artifact_summary" | "artifact_full";
 	metadata?: Record<string, unknown>;
 }
 
@@ -139,9 +185,39 @@ function renderStatus(status: PacificoWidgetStatus): string {
 	return `${statusColor(status)}${status}\x1b[39m`;
 }
 
+function pacificoBgAnsi(_status: PacificoWidgetStatus): string {
+	return PACIFICO_PENDING_BG;
+}
+
+function visibleAnsiLength(text: string): number {
+	return text.replace(ANSI_PATTERN, "").length;
+}
+
+function padAnsiRow(bg: string, text: string, rawLabel: string, width?: number): string {
+	if (!width || width <= 0) return bg + text + rawLabel + ANSI_RESET;
+	const safeWidth = Math.max(0, width);
+	const visibleLength = visibleAnsiLength(rawLabel);
+	const pad = " ".repeat(Math.max(0, safeWidth - visibleLength));
+	return bg + text + rawLabel + pad + ANSI_RESET;
+}
+
+function spinnerFrame(now = Date.now()): string {
+	return BRAILLE_FRAMES[Math.floor(now / 80) % BRAILLE_FRAMES.length];
+}
+
+function isActiveWidgetStatus(status: PacificoWidgetStatus): boolean {
+	return status === "queued" || status === "processing";
+}
+
+function shortJobId(jobId: string | null | undefined): string {
+	if (!jobId) return "pending";
+	const parts = jobId.split("-");
+	return parts[parts.length - 1] || jobId;
+}
+
 function formatPacificoWidgetContent(details: PacificoWidgetDetails): string {
 	const lines = [`status: ${normalizeWidgetStatus(details.status)}`];
-	if (details.jobId) lines.push(`job: ${details.jobId}`);
+	if (details.jobId) lines.push(`job ID: ${shortJobId(details.jobId)}`);
 	if (details.model) lines.push(`model: ${details.model}`);
 	return lines.join("\n");
 }
@@ -155,26 +231,55 @@ function emitPacificoWidget(pi: ExtensionAPI, details: PacificoWidgetDetails): v
 	});
 }
 
+function renderPacificoRows(details: PacificoWidgetDetails | undefined, theme: any, content = "", width?: number, paintBackground = true): string[] {
+	const d = details ?? {};
+	const status = normalizeWidgetStatus(d.status);
+	const detailBg = pacificoBgAnsi(status);
+	const spinner = isActiveWidgetStatus(status) ? `${spinnerFrame()} ` : "";
+	const key = (text: string) => theme.fg("dim", text.padEnd(7));
+	const modelText = d.model ?? "(default)";
+	const model = theme.bold(`\x1b[38;2;125;137;151m${modelText}\x1b[39m`);
+	const headerPad = " ".repeat(PACIFICO_HEADER_HORIZONTAL_PADDING);
+	const detailPad = " ".repeat(PACIFICO_DETAIL_HORIZONTAL_PADDING);
+	const lines: Array<{ bg: string; text: string; value: string }> = [];
+	for (let i = 0; i < PACIFICO_HEADER_VERTICAL_PADDING_ROWS; i++) {
+		lines.push({ bg: PACIFICO_HEADER_BG, text: "", value: "" });
+	}
+	lines.push({ bg: PACIFICO_HEADER_BG, text: PACIFICO_HEADER_TEXT, value: `${headerPad}PACIFICO${headerPad}` });
+	for (let i = 0; i < PACIFICO_HEADER_VERTICAL_PADDING_ROWS; i++) {
+		lines.push({ bg: PACIFICO_HEADER_BG, text: "", value: "" });
+	}
+	for (let i = 0; i < PACIFICO_DETAIL_TOP_VERTICAL_PADDING_ROWS; i++) {
+		lines.push({ bg: detailBg, text: "", value: "" });
+	}
+	lines.push(
+		{ bg: detailBg, text: "", value: `${detailPad}${key("status")} ${spinner}${renderStatus(status)}` },
+		{ bg: detailBg, text: "", value: `${detailPad}${key("job ID")} ${theme.fg("muted", shortJobId(d.jobId))}` },
+		{ bg: detailBg, text: "", value: `${detailPad}${key("model")} ${model}` },
+	);
+	for (let i = 0; i < PACIFICO_DETAIL_BOTTOM_VERTICAL_PADDING_ROWS; i++) {
+		lines.push({ bg: detailBg, text: "", value: "" });
+	}
+	if (!details && content) {
+		lines.push({ bg: detailBg, text: "", value: "" });
+		for (const line of content.split("\n")) {
+			lines.push({ bg: detailBg, text: "", value: `${detailPad}${theme.fg("muted", line)}` });
+		}
+	}
+	return lines.map((line) => paintBackground ? padAnsiRow(line.bg, line.text, line.value, width) : line.text + line.value + (line.text ? "\x1b[22;39m" : ""));
+}
+
 function renderPacificoMessage(message: { content?: unknown; details?: PacificoWidgetDetails }, _options: unknown, theme: any): Box {
 	const content = typeof message.content === "string" ? message.content : "";
-	const details = message.details ?? {};
-	const status = normalizeWidgetStatus(details.status);
-	const label = `\x1b[38;2;234;179;8m${theme.bold("pacifico")}\x1b[39m`;
-	const key = (text: string) => theme.fg("dim", text.padEnd(6));
-	const modelText = details.model ?? "(default)";
-	const model = theme.bold(`\x1b[38;2;125;137;151m${modelText}\x1b[39m`);
-	const lines = [
-		label,
-		`${key("status")} ${renderStatus(status)}`,
-		`${key("job")} ${theme.fg("muted", details.jobId ?? "pending")}`,
-		`${key("model")} ${model}`,
-	];
-	if (!message.details && content) {
-		lines.push("", theme.fg("muted", content));
-	}
-	const cardBg = (text: string) => `\x1b[48;2;50;50;50m${text}\x1b[49m`;
-	const box = new Box(2, 1, cardBg);
-	box.addChild(new Text(lines.join("\n"), 0, 0));
+	const box = new Box(0, 0);
+	box.addChild({
+		render(width: number): string[] {
+			return renderPacificoRows(message.details, theme, content, width, true);
+		},
+		invalidate() {
+			return undefined;
+		},
+	});
 	return box;
 }
 
@@ -187,6 +292,59 @@ function updateStatus(ctx: ExtensionContext): void {
 	const model = resolveModel();
 	const label = model ? `pf: ${model}` : "pf: default";
 	ctx.ui.setStatus("pacifico", label);
+}
+
+function currentTaskContext(): string | undefined {
+	const g = globalThis as any;
+	const current = g.__piCurrentTask as CurrentTask | undefined;
+	const taskList = g.__piTaskList as TaskList | undefined;
+	const lines: string[] = [];
+	if (current?.text) {
+		lines.push(`Current local task: #${current.id} ${current.text}${current.commanderTaskId ? ` (Commander #${current.commanderTaskId})` : ""}`);
+	}
+	if (taskList?.title) {
+		lines.push(`Task list: ${taskList.title}${taskList.description ? ` — ${taskList.description}` : ""}`);
+	}
+	if (Array.isArray(taskList?.tasks) && taskList.tasks.length) {
+		lines.push("Tasks:");
+		for (const task of taskList.tasks.slice(0, 12)) {
+			lines.push(`- [${task.status === "done" ? "x" : task.status === "inprogress" ? "*" : " "}] #${task.id}: ${task.text}`);
+		}
+		if (taskList.tasks.length > 12) lines.push(`- … ${taskList.tasks.length - 12} more task(s)`);
+	}
+	return lines.length ? lines.join("\n") : undefined;
+}
+
+function normalizePacificoComplexity(value: unknown): PacificoComplexity | undefined {
+	if (value === "simple" || value === "standard" || value === "complex" || value === "super_complex") return value;
+	if (value === "super-complex") return "super_complex";
+	return undefined;
+}
+
+function parsePacificoCommandArgs(raw: string): { question: string; complexity?: PacificoComplexity; maxOutputTokens?: number } {
+	const tokens = raw.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+	const rest: string[] = [];
+	let complexity: PacificoComplexity | undefined;
+	let maxOutputTokens: number | undefined;
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i].replace(/^(["'])(.*)\1$/, "$2");
+		if (token === "--simple") { complexity = "simple"; continue; }
+		if (token === "--standard") { complexity = "standard"; continue; }
+		if (token === "--complex") { complexity = "complex"; continue; }
+		if (token === "--super-complex" || token === "--super_complex") { complexity = "super_complex"; continue; }
+		if (token === "--complexity" && tokens[i + 1]) {
+			const next = tokens[++i].replace(/^(["'])(.*)\1$/, "$2");
+			complexity = normalizePacificoComplexity(next) ?? complexity;
+			continue;
+		}
+		if (token === "--max-output-tokens" && tokens[i + 1]) {
+			const next = Number(tokens[++i].replace(/^(["'])(.*)\1$/, "$2"));
+			if (Number.isFinite(next) && next > 0) maxOutputTokens = Math.trunc(next);
+			continue;
+		}
+		rest.push(token);
+	}
+	return { question: rest.join(" ").trim(), complexity, maxOutputTokens };
 }
 
 async function pacificoFetch(path: string, init: RequestInit & { body?: string }): Promise<Response> {
@@ -371,11 +529,7 @@ function emitJobComplete(pi: ExtensionAPI, job: JobDetail): void {
 	const details = jobCompletionDetails(job);
 	pi.sendMessage({
 		customType: PACIFICO_JOB_COMPLETE_TYPE,
-		content: formatPacificoWidgetContent({
-			status: job.status,
-			jobId: job.id,
-			model: String(details.model ?? job.model ?? "(default)"),
-		}),
+		content: formatJobOutcome(job),
 		display: false,
 		details,
 	}, {
@@ -390,33 +544,75 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	pi.registerMessageRenderer(PACIFICO_JOB_COMPLETE_TYPE, renderPacificoMessage);
 	const pollers = new Map<string, Poller>();
 	const pendingCompletions = new Map<string, PendingCompletion>();
-	const widgetStates = new Map<string, PacificoWidgetDetails>();
-	let activeWidgetKey: string | undefined;
 	let activeWidgetDetails: PacificoWidgetDetails | undefined;
 	let widgetCtx: ExtensionContext | undefined;
+	let widgetRegistered = false;
+	let pacificoWidgetInvalidate: (() => void) | undefined;
+	let pacificoAnimationTimer: ReturnType<typeof setInterval> | undefined;
 	let agentActive = false;
 	let completionFlushTimer: ReturnType<typeof setTimeout> | undefined;
+	let activeResultServer: Server | null = null;
+	let activeResultSession: { kind: "report"; title: string; url: string; server: Server; onClose: () => void } | null = null;
+
+	function cleanupPacificoResultServer(): void {
+		const server = activeResultServer;
+		activeResultServer = null;
+		if (server) {
+			try { server.close(); } catch {}
+		}
+		if (activeResultSession) {
+			clearActiveViewer(activeResultSession);
+			activeResultSession = null;
+		}
+	}
+
+	function startPacificoAnimation(): void {
+		if (pacificoAnimationTimer) return;
+		pacificoAnimationTimer = setInterval(() => pacificoWidgetInvalidate?.(), 120);
+	}
+
+	function stopPacificoAnimation(): void {
+		if (!pacificoAnimationTimer) return;
+		clearInterval(pacificoAnimationTimer);
+		pacificoAnimationTimer = undefined;
+	}
+
+	function refreshPacificoWidget(): void {
+		const status = normalizeWidgetStatus(activeWidgetDetails?.status);
+		if (isActiveWidgetStatus(status)) startPacificoAnimation();
+		else stopPacificoAnimation();
+		pacificoWidgetInvalidate?.();
+	}
 
 	function registerPacificoStatusWidget(ctx: ExtensionContext): void {
-		if (!ctx.hasUI || !activeWidgetKey) return;
+		if (!ctx.hasUI) return;
 		widgetCtx = ctx;
-		ctx.ui.setWidget(activeWidgetKey, (_tui: any, theme: any) => renderPacificoMessage({ details: activeWidgetDetails }, undefined, theme), { placement: "aboveEditor" } as any);
+		if (widgetRegistered) return;
+		widgetRegistered = true;
+		ctx.ui.setWidget(PACIFICO_WIDGET_KEY, (_tui: any, theme: any) => {
+			const widget = {
+				render(width: number): string[] {
+					return renderPacificoRows(activeWidgetDetails, theme, "", width, true);
+				},
+				invalidate() {
+					return undefined;
+				},
+			};
+			pacificoWidgetInvalidate = () => widget.invalidate();
+			return widget;
+		}, { placement: "aboveEditor" } as any);
 	}
 
-	function setPacificoWidget(ctx: ExtensionContext, key: string, details: PacificoWidgetDetails): void {
-		widgetStates.set(key, details);
-		activeWidgetKey = `pacifico-${key}`;
+	function setPacificoWidget(ctx: ExtensionContext | undefined, _key: string, details: PacificoWidgetDetails): void {
 		activeWidgetDetails = details;
-		registerPacificoStatusWidget(ctx);
+		if (ctx?.hasUI) registerPacificoStatusWidget(ctx);
+		else if (widgetCtx?.hasUI) registerPacificoStatusWidget(widgetCtx);
+		refreshPacificoWidget();
 	}
 
-	function clearPacificoWidget(key: string): void {
-		widgetStates.delete(key);
-		if (activeWidgetKey === `pacifico-${key}`) {
-			widgetCtx?.ui.setWidget(activeWidgetKey, undefined);
-			activeWidgetKey = undefined;
-			activeWidgetDetails = undefined;
-		}
+	function clearPacificoWidget(_key: string): void {
+		// Stable single-widget mode: do not clear when replacing provisional job state.
+		refreshPacificoWidget();
 	}
 
 	function scheduleCompletionFlush(delayMs = COMPLETION_FLUSH_DELAY_MS): void {
@@ -444,7 +640,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	function queueJobCompletion(job: JobDetail, cwd: string): void {
 		markPacificoJobTerminal(cwd, terminalInputFromJob(job));
 		pendingCompletions.set(job.id, { cwd, job });
-		setPacificoWidget(widgetCtx ?? ({ hasUI: false } as ExtensionContext), job.id, {
+		setPacificoWidget(widgetCtx, job.id, {
 			status: job.status,
 			jobId: job.id,
 			model: job.result?.model ?? job.model ?? "(default)",
@@ -499,6 +695,165 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		return toPersist;
 	}
 
+	function buildPacificoResultData(question: string, result: Awaited<ReturnType<typeof runPacificoAdvisor>>, complexity: PacificoComplexity, ancestry: PacificoResultData["followUpAncestry"] = []): PacificoResultData {
+		const text = result.content?.[0]?.type === "text" ? result.content[0].text : "";
+		const details = (result.details ?? {}) as any;
+		return {
+			title: "Pacifico Result",
+			question,
+			generatedAt: new Date().toISOString(),
+			advisor: {
+				summary: String(details.summary || "No summary returned."),
+				recommendation: String(details.recommendation || details.summary || "No recommendation returned."),
+				risks: Array.isArray(details.risks) ? details.risks.map(String) : [],
+				alternatives: Array.isArray(details.alternatives) ? details.alternatives.map(String) : [],
+				nextActions: Array.isArray(details.nextActions) ? details.nextActions.map(String) : [],
+				raw: String(details.raw || text),
+			},
+			formattedText: text,
+			metadata: {
+				model: typeof details.model === "string" ? details.model : null,
+				provider: typeof details.provider === "string" ? details.provider : null,
+				route: typeof details.route === "string" ? details.route : null,
+				jobId: typeof details.jobId === "string" ? details.jobId : null,
+				requestId: typeof details.requestId === "string" ? details.requestId : null,
+				complexity,
+				mode: typeof details.mode === "string" ? details.mode : null,
+			},
+			diagnostics: Array.isArray(details.contextDiagnostics) ? details.contextDiagnostics : [],
+			followUpAncestry: ancestry,
+		};
+	}
+
+	function persistPacificoResult(ctx: ExtensionContext, data: PacificoResultData): void {
+		try {
+			upsertPersistedReport({
+				category: "pacifico",
+				title: `${data.title} — ${data.question.slice(0, 80)}`,
+				summary: data.advisor.summary,
+				content: data.formattedText,
+				sourcePath: join(ctx.cwd || process.cwd(), ".context", "todo.md"),
+				viewerPath: join(ctx.cwd || process.cwd(), ".context", "todo.md"),
+				viewerLabel: data.title,
+				tags: ["pacifico", "advisor", data.metadata?.complexity || "standard"],
+				metadata: {
+					question: data.question,
+					complexity: data.metadata?.complexity,
+					model: data.metadata?.model,
+					provider: data.metadata?.provider,
+					route: data.metadata?.route,
+					jobId: data.metadata?.jobId,
+				},
+				payload: data,
+			});
+		} catch {}
+	}
+
+	async function showPacificoResult(ctx: ExtensionContext, data: PacificoResultData, signal?: AbortSignal): Promise<PacificoResultAction> {
+		persistPacificoResult(ctx, data);
+		cleanupPacificoResultServer();
+		const markdown = pacificoResultToMarkdown(data);
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		let roundTripState = {
+			status: "idle",
+			feedback: "",
+			revision: 0,
+			changeSummary: [] as string[],
+			payload: { markdown },
+		};
+		let latestMarkdown = markdown;
+		const handle = await createViewerServer({
+			getHtml: (port) => generatePlanViewerHTML({
+				markdown: latestMarkdown,
+				title: data.title || "Pacifico Result",
+				mode: "plan",
+				port,
+				roundTripEnabled: true,
+				projectContext,
+			}),
+			routes: [
+				{
+					method: "POST",
+					path: "/save",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", () => {
+							try {
+								const parsed = JSON.parse(body || "{}");
+								const desktop = join(homedir(), "Desktop");
+								if (!existsSync(desktop)) mkdirSync(desktop, { recursive: true });
+								const fileName = `pacifico-result-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.md`;
+								writeFileSync(join(desktop, fileName), String(parsed.markdown || latestMarkdown), "utf-8");
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: true, message: `Saved to ~/Desktop/${fileName}` }));
+							} catch (err: any) {
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err?.message || "Save failed" }));
+							}
+						});
+					},
+				},
+				{
+					method: "POST",
+					path: "/export-standalone",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", () => {
+							try {
+								const parsed = JSON.parse(body || "{}");
+								const html = createPlanStandaloneExport({ title: data.title || "Pacifico Result", markdown: String(parsed.markdown || latestMarkdown), mode: "plan" });
+								const saved = saveStandaloneExport({ filePrefix: "pacifico-result", html });
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
+							} catch (err: any) {
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err?.message || "Standalone export failed" }));
+							}
+						});
+					},
+				},
+			],
+			onFeedback: async (body) => {
+				roundTripState = {
+					status: "feedback_submitted",
+					feedback: body?.feedback || "",
+					revision: roundTripState.revision,
+					changeSummary: [],
+					payload: { markdown: latestMarkdown },
+				};
+			},
+			getRoundTripState: () => roundTripState,
+		});
+		activeResultServer = handle.server;
+		const url = `http://127.0.0.1:${handle.port}`;
+		activeResultSession = {
+			kind: "report",
+			title: data.title,
+			url,
+			server: handle.server,
+			onClose: () => { activeResultServer = null; activeResultSession = null; },
+		};
+		registerActiveViewer(activeResultSession);
+		openBrowser(url);
+		notifyViewerOpen(ctx, activeResultSession);
+		try {
+			const abortPromise = signal ? new Promise<PacificoResultAction>((_, reject) => {
+				if (signal.aborted) reject(new Error("Aborted"));
+				signal.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+			}) : null;
+			const result = await (abortPromise ? Promise.race([handle.waitForResult(), abortPromise]) : handle.waitForResult());
+			if (typeof result?.markdown === "string" && result.markdown.trim()) latestMarkdown = result.markdown;
+			const feedback = typeof result?.feedback === "string" ? result.feedback.trim() : "";
+			return result?.action === "changes_requested" && feedback
+				? { action: "follow_up", question: feedback }
+				: { action: "closed" };
+		} finally {
+			cleanupPacificoResultServer();
+		}
+	}
+
 	async function runInferAndRender(prompt: string, ctx: ExtensionContext): Promise<void> {
 		widgetCtx = ctx;
 		if (!getApiKey()) {
@@ -515,6 +870,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			if (result.kind === "sync") {
 				const r = result.data;
 				const meta = `_${r.provider} · ${r.model} · route ${r.route}_`;
+				setPacificoWidget(ctx, provisionalKey, { status: "completed", model: r.model });
 				emitMessage(pi, `${meta}\n\n${r.output}`);
 			} else {
 				const r = result.data;
@@ -547,6 +903,10 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		if (completionFlushTimer) clearTimeout(completionFlushTimer);
 		completionFlushTimer = undefined;
+		cleanupPacificoResultServer();
+		stopPacificoAnimation();
+		widgetCtx?.ui.setWidget(PACIFICO_WIDGET_KEY, undefined);
+		widgetRegistered = false;
 		for (const p of pollers.values()) p.abort();
 		pollers.clear();
 	});
@@ -566,13 +926,16 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		updateStatus(ctx);
 		prunePacificoJobs(ctx.cwd, PACIFICO_JOB_PRUNE_AGE_MS);
 		for (const job of listIncompletePacificoJobs(ctx.cwd)) {
+			setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)" });
 			registerPoller(job.jobId, ctx);
 		}
 		for (const job of listPendingPacificoCompletions(ctx.cwd)) {
 			try {
 				const fresh = await getJob(job.jobId);
+				setPacificoWidget(ctx, fresh.id, { status: fresh.status, jobId: fresh.id, model: fresh.result?.model ?? fresh.model ?? "(default)" });
 				pendingCompletions.set(fresh.id, { cwd: ctx.cwd, job: fresh });
 			} catch {
+				setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)" });
 				pendingCompletions.set(job.jobId, { cwd: ctx.cwd, job: jobFromTracked(job) });
 			}
 		}
@@ -585,23 +948,43 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	// --- /pacifico [prompt] ---
+	// --- /pacifico [--simple|--standard|--complex|--super-complex] [question] ---
 	pi.registerCommand("pacifico", {
-		description: "Send a prompt to the pacifico backend; with no args, opens the model picker (first run) or shows current model.",
+		description: "Ask Pacifico for Claude-advisor-style guidance; with no args, opens the model picker (first run) or shows current model.",
 		handler: async (args, ctx) => {
-			const prompt = args.trim();
-			if (prompt.length === 0) {
+			const parsed = parsePacificoCommandArgs(args.trim());
+			if (parsed.question.length === 0) {
 				const current = resolveModel();
 				if (current === null) {
 					const picked = await pickAndPersistModel(ctx);
 					if (picked === undefined) return;
-					emitMessage(pi, `Pacifico model set to **${describeModel(picked)}**. Use \`/pacifico <message>\` to send a prompt, or \`/pacifico-model\` to change.`);
+					emitMessage(pi, `Pacifico model set to **${describeModel(picked)}**. Use \`/pacifico --complex <question>\` to ask the advisor, or \`/pacifico-model\` to change.`);
 					return;
 				}
-				emitMessage(pi, `Pacifico model is **${describeModel(current)}**. Send a prompt with \`/pacifico <message>\`, change with \`/pacifico-model\`.`);
+				emitMessage(pi, `Pacifico model is **${describeModel(current)}**. Ask with \`/pacifico <question>\`, add \`--simple\`, \`--complex\`, or \`--super-complex\`, change with \`/pacifico-model\`.`);
 				return;
 			}
-			await runInferAndRender(prompt, ctx);
+			let question = parsed.question;
+			const complexity = parsed.complexity ?? "standard";
+			const ancestry: PacificoResultData["followUpAncestry"] = [];
+			for (let turn = 0; turn < 5; turn++) {
+				const priorContext = ancestry.length
+					? `Previous Pacifico advisor turns:\n${ancestry.map((item, i) => `${i + 1}. Question: ${item.question}\nSummary: ${item.summary}`).join("\n\n")}`
+					: "";
+				const taskContext = [
+					"The user invoked /pacifico for on-demand advisor guidance. Pacifico cannot access the filesystem, so reason only from this supplied current task/session context and any embedded files.",
+					currentTaskContext(),
+					priorContext,
+				].filter(Boolean).join("\n\n");
+				ctx.ui.notify(`Consulting Pacifico advisor (${complexity})…`, "info");
+				const result = await runPacificoAdvisor({ question, task_context: taskContext, agent_role: "pacifico-command", complexity, max_output_tokens: parsed.maxOutputTokens }, undefined, undefined, ctx);
+				const data = buildPacificoResultData(question, result, complexity, [...ancestry]);
+				const action = await showPacificoResult(ctx, data);
+				if (action.action !== "follow_up" || !action.question?.trim()) return;
+				ancestry.push({ question, summary: data.advisor.summary });
+				question = action.question.trim();
+			}
+			ctx.ui.notify("Pacifico follow-up limit reached; run /pacifico again to continue.", "warning");
 		},
 	});
 
@@ -717,6 +1100,143 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			} catch (err) {
 				ctx.ui.notify(`pacifico-cancel failed: ${err instanceof Error ? err.message : String(err)}`, "error");
 			}
+		},
+	});
+
+	async function runPacificoAdvisor(args: PacificoAdvisorArgs, signal: AbortSignal | undefined, onUpdate: ((update: any) => void) | undefined, ctx: ExtensionContext) {
+		const apiKey = getApiKey();
+		if (!apiKey) {
+			return {
+				content: [{ type: "text" as const, text: "Pacifico API key missing; set PACIFICO_API_KEY or extensions/.pacifico.env — refusing pacifico_advisor." }],
+				details: { error: "missing_api_key" },
+			};
+		}
+		const complexity = normalizePacificoComplexity(args.complexity) ?? "standard";
+		const packet = collectPacificoAdvisorContext({ ...args, complexity }, { cwd: ctx.cwd });
+		const chosen = args.model ?? resolveModel();
+		const body: InferRequest = {
+			prompt: packet.prompt,
+			mode: args.mode ?? "auto",
+			executionClass: "planning",
+			outputComplexity: complexity,
+			metadata: { source: "pi_extension", tool: "pacifico_advisor", kind: "advisor_review", advisorComplexity: complexity },
+		};
+		if (args.max_output_tokens) body.maxOutputTokens = Math.trunc(args.max_output_tokens);
+		if (chosen) body.model = chosen;
+		setPacificoWidget(ctx, `advisor-${Date.now()}`, { status: "queued", model: chosen ?? "(default)" });
+		try {
+			const result = await postInfer(body);
+			let raw = "";
+			let meta: Record<string, unknown> = { contextDiagnostics: packet.diagnostics, promptBytes: packet.promptBytes, includedFiles: packet.includedFiles, complexity };
+			if (result.kind === "sync") {
+				const r = result.data;
+				raw = r.output;
+				meta = { ...meta, route: r.route, provider: r.provider, model: r.model, mode: r.mode, requestId: r.requestId };
+				setPacificoWidget(ctx, r.requestId, { status: "completed", model: r.model });
+			} else {
+				const r = result.data;
+				setPacificoWidget(ctx, r.id, { status: r.status, jobId: r.id, model: r.model ?? chosen ?? "(default)" });
+				onUpdate?.({ content: [{ type: "text", text: `Pacifico advisor job ${r.id} accepted; waiting for result.` }] });
+				const ctrl = new AbortController();
+				const onParentAbort = () => ctrl.abort();
+				if (signal) {
+					if (signal.aborted) ctrl.abort();
+					else signal.addEventListener("abort", onParentAbort);
+				}
+				try {
+					const job = await pollJob(r.id, ctrl.signal, (jobUpdate) => {
+						setPacificoWidget(ctx, jobUpdate.id, { status: jobUpdate.status, jobId: jobUpdate.id, model: jobUpdate.result?.model ?? jobUpdate.model ?? r.model ?? chosen ?? "(default)" });
+					});
+					meta = { ...meta, jobId: job.id, status: job.status, route: job.result?.route ?? job.route ?? null, provider: job.result?.provider ?? null, model: job.result?.model ?? job.model ?? r.model ?? null };
+					if (job.status === "completed" && job.result?.output) raw = job.result.output;
+					else raw = `Pacifico advisor job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : " without output."}`;
+				} finally {
+					if (signal) signal.removeEventListener("abort", onParentAbort);
+				}
+			}
+			const normalized = normalizeAdvisorResponse(raw);
+			const text = formatPacificoAdvisorResult(normalized, {
+				diagnostics: packet.diagnostics,
+				jobId: typeof meta.jobId === "string" ? meta.jobId : undefined,
+				model: typeof meta.model === "string" ? meta.model : chosen,
+				route: typeof meta.route === "string" ? meta.route : null,
+			});
+			return { content: [{ type: "text" as const, text }], details: { ...normalized, ...meta } };
+		} catch (err) {
+			setPacificoWidget(ctx, "advisor-error", { status: "error", model: chosen ?? "(default)", error: err instanceof Error ? err.message : String(err) });
+			return {
+				content: [{ type: "text" as const, text: `pacifico_advisor failed: ${err instanceof Error ? err.message : String(err)}` }],
+				details: { error: err instanceof Error ? err.message : String(err), contextDiagnostics: packet.diagnostics },
+			};
+		}
+	}
+
+	async function showPersistedPacificoResult(payloadId: string, ctx: ExtensionContext, signal?: AbortSignal) {
+		const payload = readRawPayload(payloadId) as PacificoResultData | null;
+		if (!payload || typeof payload !== "object" || !("advisor" in payload)) {
+			return { content: [{ type: "text" as const, text: `No persisted Pacifico result found for payload_id=${payloadId}.` }] };
+		}
+		await showPacificoResult(ctx, payload, signal);
+		return { content: [{ type: "text" as const, text: "Pacifico result viewer closed." }] };
+	}
+
+	pi.registerTool({
+		name: "show_pacifico_result",
+		label: "Show Pacifico Result",
+		description: "Open a formatted Pacifico Result viewer for a fresh or persisted Pacifico advisor response.",
+		parameters: Type.Object({
+			payload_id: Type.Optional(Type.String({ description: "ID of a persisted Pacifico result payload to reopen" })),
+			report_data: Type.Optional(Type.String({ description: "JSON-encoded PacificoResultData payload to display" })),
+		}),
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const p = params as { payload_id?: string; report_data?: string };
+			if (p.payload_id) return showPersistedPacificoResult(p.payload_id, ctx, signal);
+			if (p.report_data) {
+				const data = JSON.parse(p.report_data) as PacificoResultData;
+				await showPacificoResult(ctx, data, signal);
+				return { content: [{ type: "text" as const, text: "Pacifico result viewer closed." }] };
+			}
+			return { content: [{ type: "text" as const, text: "Provide payload_id or report_data." }] };
+		},
+		renderCall(args, theme) {
+			const p = args as any;
+			return new Text(outputLine(theme, "accent", `${theme.bold("show_pacifico_result ")}${theme.fg("accent", p.payload_id || "Pacifico Result")}`), 0, 0);
+		},
+	});
+
+	pi.registerCommand("show-pacifico-result", {
+		description: "Open a persisted Pacifico Result payload: /show-pacifico-result --payload-id <id>",
+		handler: async (args, ctx) => {
+			const match = args.match(/--payload-id\s+(\S+)/) || args.match(/--payload_id\s+(\S+)/);
+			const payloadId = match?.[1]?.trim();
+			if (!payloadId) {
+				ctx.ui.notify("Usage: /show-pacifico-result --payload-id <id>", "warning");
+				return;
+			}
+			await showPersistedPacificoResult(payloadId, ctx);
+		},
+	});
+
+	// --- pacifico_advisor tool (agent-callable; context-packed async advisor review) ---
+	pi.registerTool({
+		name: "pacifico_advisor",
+		label: "Pacifico Advisor",
+		description:
+			"Ask Pacifico for advisor-style async review using only context provided by this tool call. Pacifico has no filesystem access; include relevant task_context and files explicitly.",
+		parameters: Type.Object({
+			question: Type.String({ description: "Question or decision to ask Pacifico to review" }),
+			task_context: Type.Optional(Type.String({ description: "All relevant context/findings to include directly in the Pacifico prompt" })),
+			files: Type.Optional(Type.Array(Type.String({ description: "Local files to read and embed into the Pacifico prompt; Pacifico cannot read them itself" }))),
+			model: Type.Optional(Type.String({ description: "Optional Pacifico model override" })),
+			mode: Type.Optional(Type.Union([Type.Literal("sync"), Type.Literal("async"), Type.Literal("auto")], { description: "Routing hint; defaults to auto" })),
+			agent_role: Type.Optional(Type.String({ description: "Role of the calling agent (planner, reviewer, builder, etc.)" })),
+			complexity: Type.Optional(Type.Union([Type.Literal("simple"), Type.Literal("standard"), Type.Literal("complex"), Type.Literal("super_complex")], { description: "Deterministic Pacifico response budget tier; defaults to standard for advisor calls." })),
+			max_output_tokens: Type.Optional(Type.Number({ description: "Explicit max output token override for Pacifico backend; use complexity unless you need a precise budget." })),
+			max_file_bytes: Type.Optional(Type.Number({ description: "Maximum bytes per embedded file" })),
+			max_context_bytes: Type.Optional(Type.Number({ description: "Maximum total advisor prompt bytes" })),
+		}) as any,
+		async execute(_id, params, signal, onUpdate, ctx) {
+			return runPacificoAdvisor(params as PacificoAdvisorArgs, signal, onUpdate, ctx);
 		},
 	});
 

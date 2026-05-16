@@ -64,6 +64,11 @@ export function openOriginalReport(entry: any): void {
 			break;
 		}
 
+		case "pacifico": {
+			args = ["/show-pacifico-result", "--readonly", "--payload-id", id];
+			break;
+		}
+
 		default: {
 			// Existing behavior for qa_rico, swagbucks, pr_review, and unknown categories
 			if (!path) throw new Error("No source path available for this report");

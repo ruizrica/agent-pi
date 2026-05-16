@@ -19,7 +19,7 @@ function initSqlite(): boolean {
 	return sqliteAvailable;
 }
 
-export type PersistedReportCategory = "plan" | "questions" | "spec" | "completion" | "tests" | "security" | "qa" | "research" | "generic";
+export type PersistedReportCategory = "plan" | "questions" | "spec" | "completion" | "tests" | "security" | "qa" | "research" | "pacifico" | "generic";
 
 export interface PersistedReportEntry {
 	id: string;
