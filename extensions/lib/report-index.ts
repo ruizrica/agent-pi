@@ -1,7 +1,7 @@
 // ABOUTME: Shared persisted report index for plans, questions, specs, and completion reports.
 // ABOUTME: Stores searchable metadata in SQLite with JSON migration and retention pruning.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 let DatabaseSync: any = null;
@@ -408,19 +408,28 @@ export function upsertPersistedReport(input: {
 	const viewerPath = input.viewerPath ? resolve(input.viewerPath) : undefined;
 
 	if (!database) {
-		// JSON-only fallback: load, upsert in-memory, write back
+		// JSON-only fallback: mirror SQLite's logical-entry upsert behavior.
 		const legacy = legacyLoadJsonIndex();
+		const existingIndex = legacy.entries.findIndex((entry) =>
+			entry.category === input.category &&
+			(entry.viewerPath || entry.sourcePath || "") === (viewerPath || sourcePath || "") &&
+			entry.title === input.title,
+		);
+		const existing = existingIndex >= 0 ? legacy.entries[existingIndex] : undefined;
 		const entry = normalizeEntry({
 			...input,
+			id: existing?.id,
+			createdAt: existing?.createdAt || timestamp,
 			updatedAt: timestamp,
 			sourcePath,
 			viewerPath,
 		});
 		if (input.payload !== undefined) {
 			writeRawPayload(entry.id, input.payload);
+		} else {
+			clearRawPayload(entry.id);
 		}
-		const idx = legacy.entries.findIndex((e) => e.id === entry.id);
-		if (idx >= 0) legacy.entries[idx] = entry;
+		if (existingIndex >= 0) legacy.entries[existingIndex] = entry;
 		else legacy.entries.unshift(entry);
 		writeLegacyJsonSnapshot(legacy.entries);
 		return entry;
@@ -466,6 +475,8 @@ export function upsertPersistedReport(input: {
 
 	if (input.payload !== undefined) {
 		writeRawPayload(entry.id, input.payload);
+	} else {
+		clearRawPayload(entry.id);
 	}
 
 	pruneExpiredReports();
@@ -473,16 +484,31 @@ export function upsertPersistedReport(input: {
 	return entry;
 }
 
+function rawPayloadPath(id: string): string | null {
+	const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+	if (!sanitized) return null;
+	return join(RAW_REPORTS_DIR, `${sanitized}.json`);
+}
+
 /** Writes a raw payload (snapshot JSON) to .context/reports/raw/<id>.json. Best-effort — silently swallows errors. */
 function writeRawPayload(id: string, payload: unknown): void {
 	try {
-		const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
-		if (!sanitized) return;
+		const filePath = rawPayloadPath(id);
+		if (!filePath) return;
 		if (!existsSync(RAW_REPORTS_DIR)) mkdirSync(RAW_REPORTS_DIR, { recursive: true });
-		const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
 		writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
 	} catch {
 		// Best-effort — swallow disk/permission errors so persistence never crashes the viewer.
+	}
+}
+
+/** Clears a raw payload when a logical report entry is updated without a fresh payload. */
+function clearRawPayload(id: string): void {
+	try {
+		const filePath = rawPayloadPath(id);
+		if (filePath && existsSync(filePath)) unlinkSync(filePath);
+	} catch {
+		// Best-effort — stale snapshots must not crash the viewer.
 	}
 }
 
@@ -495,6 +521,12 @@ export function resetReportStorageForTests(): void {
 	if (existsSync(DB_PATH)) {
 		try { unlinkSync(DB_PATH); } catch {}
 	}
+	if (existsSync(INDEX_PATH)) {
+		try { unlinkSync(INDEX_PATH); } catch {}
+	}
+	if (existsSync(RAW_REPORTS_DIR)) {
+		try { rmSync(RAW_REPORTS_DIR, { recursive: true, force: true }); } catch {}
+	}
 }
 
 /** Returns true if node:sqlite is available on this runtime. */
@@ -504,11 +536,8 @@ export function isSqliteAvailable(): boolean {
 
 /** Reads a raw payload from .context/reports/raw/<id>.json. Returns parsed JSON or null if missing/invalid. */
 export function readRawPayload(id: string): unknown | null {
-	// Sanitize id to prevent path traversal: alphanumeric, dash, underscore only
-	const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
-	if (!sanitized) return null;
-
-	const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
+	const filePath = rawPayloadPath(id);
+	if (!filePath) return null;
 
 	try {
 		if (!existsSync(filePath)) return null;
