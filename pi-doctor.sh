@@ -302,6 +302,13 @@ else
     fail "No extensions found in extensions/"
 fi
 
+if [ -d "extensions/private" ]; then
+	PACIFICO_COUNT=$(find extensions/private -maxdepth 1 -iname "*pacifico*" 2>/dev/null | wc -l | xargs)
+	if [ "$PACIFICO_COUNT" -gt 0 ]; then
+		warn "Pacifico private extension detected in ${DIM}extensions/private${NC} — remove/disable it to avoid API key warnings"
+	fi
+fi
+
 # ═══════════════════════════════════════════════════════════════════
 # 9. Themes
 # ═══════════════════════════════════════════════════════════════════

@@ -391,6 +391,13 @@ fi
 step "Linking private extensions"
 
 PRIVATE_PKG="$HOME/.pi/packages/private"
+PRIVATE_EXCLUDE_PATTERN="pacifico"
+
+should_exclude_private_entry() {
+	local name="$1"
+	local lower="${name,,}"
+	[[ "$lower" == *"$PRIVATE_EXCLUDE_PATTERN"* ]]
+}
 
 if [ -d "$PRIVATE_PKG" ]; then
     success "Private package found at ${DIM}$PRIVATE_PKG${NC}"
@@ -408,18 +415,86 @@ if [ -d "$PRIVATE_PKG" ]; then
         TARGET_PATH="$PRIVATE_PKG/$REMOTE_DIR"
 
         if [ -d "$TARGET_PATH" ]; then
-            if [ -L "$LINK_PATH" ]; then
-                success "${DIM}$LOCAL_DIR/private${NC} symlink exists"
-            elif [ -d "$LINK_PATH" ]; then
-                warn "${DIM}$LOCAL_DIR/private${NC} is a directory (not a symlink) — skipping"
-            else
-                if [ "$DRY_RUN" -eq 1 ]; then
-                    info "[dry-run] Would symlink ${DIM}$LOCAL_DIR/private${NC} → ${DIM}$TARGET_PATH${NC}"
-                else
-                    ln -s "$TARGET_PATH" "$LINK_PATH"
-                    success "Linked ${DIM}$LOCAL_DIR/private${NC} → ${DIM}$TARGET_PATH${NC}"
-                fi
-            fi
+			# Exclude Pacifico from private extensions to avoid API key/runtime warnings.
+			if [ "$LOCAL_DIR" = "extensions" ]; then
+				if [ -L "$LINK_PATH" ]; then
+					if [ "$DRY_RUN" -eq 1 ]; then
+						warn "[dry-run] Would replace ${DIM}$LOCAL_DIR/private${NC} symlink with a filtered directory (excludes: ${PRIVATE_EXCLUDE_PATTERN})"
+					else
+						rm "$LINK_PATH" 2>/dev/null || true
+					fi
+				fi
+
+				if [ -e "$LINK_PATH" ] && [ ! -d "$LINK_PATH" ]; then
+					warn "${DIM}$LOCAL_DIR/private${NC} exists but is not a directory — skipping"
+					continue
+				fi
+
+				if [ ! -d "$LINK_PATH" ]; then
+					if [ "$DRY_RUN" -eq 1 ]; then
+						info "[dry-run] Would create directory ${DIM}$LOCAL_DIR/private${NC}"
+					else
+						mkdir -p "$LINK_PATH"
+					fi
+				fi
+
+				# Remove any existing excluded entries (files/symlinks only; never rm -r).
+				shopt -s nullglob dotglob
+				for existing in "$LINK_PATH"/*; do
+					base="$(basename "$existing")"
+					if should_exclude_private_entry "$base"; then
+						if [ -L "$existing" ] || [ -f "$existing" ]; then
+							if [ "$DRY_RUN" -eq 1 ]; then
+								warn "[dry-run] Would remove excluded private entry: ${DIM}$existing${NC}"
+							else
+								rm "$existing" 2>/dev/null || true
+							fi
+						elif [ -d "$existing" ]; then
+							warn "Excluded private entry is a directory — remove manually: ${DIM}$existing${NC}"
+						fi
+					fi
+				done
+				shopt -u nullglob dotglob
+
+				# Link each private extension entry, excluding matches (e.g. Pacifico).
+				shopt -s nullglob dotglob
+				for entry in "$TARGET_PATH"/*; do
+					base="$(basename "$entry")"
+					if should_exclude_private_entry "$base"; then
+						warn "Skipping private extension excluded by policy: ${DIM}$base${NC}"
+						continue
+					fi
+
+					dest="$LINK_PATH/$base"
+					if [ -e "$dest" ] || [ -L "$dest" ]; then
+						success "${DIM}extensions/private/$base${NC} exists"
+						continue
+					fi
+
+					if [ "$DRY_RUN" -eq 1 ]; then
+						info "[dry-run] Would symlink ${DIM}extensions/private/$base${NC} → ${DIM}$entry${NC}"
+					else
+						ln -s "$entry" "$dest"
+						success "Linked ${DIM}extensions/private/$base${NC}"
+					fi
+				done
+				shopt -u nullglob dotglob
+				continue
+			fi
+
+			# Default behavior for private commands/skills: whole-directory symlink
+			if [ -L "$LINK_PATH" ]; then
+				success "${DIM}$LOCAL_DIR/private${NC} symlink exists"
+			elif [ -d "$LINK_PATH" ]; then
+				warn "${DIM}$LOCAL_DIR/private${NC} is a directory (not a symlink) — skipping"
+			else
+				if [ "$DRY_RUN" -eq 1 ]; then
+					info "[dry-run] Would symlink ${DIM}$LOCAL_DIR/private${NC} → ${DIM}$TARGET_PATH${NC}"
+				else
+					ln -s "$TARGET_PATH" "$LINK_PATH"
+					success "Linked ${DIM}$LOCAL_DIR/private${NC} → ${DIM}$TARGET_PATH${NC}"
+				fi
+			fi
         fi
     done
 else
