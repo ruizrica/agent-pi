@@ -1,5 +1,5 @@
 {
-  "nextId": 21,
+  "nextId": 23,
   "byBead": {
     "agent-pi-eno": [
       {
@@ -194,6 +194,26 @@
         "agentName": "ricardo",
         "message": "Repo: /Users/ricardo/Workshop/GitHub/agent-pi | Branch: main | Latest commit: 77288b7 (chore: commit current work) | Working tree: 1 file modified (.beads/cmd-writer.log) - not clean | Assessment: Commit created successfully. Requested work appears committed.",
         "createdAt": "2026-05-15T01:27:00.079Z"
+      }
+    ],
+    "agent-pi-eb3m": [
+      {
+        "id": 21,
+        "beadId": "agent-pi-eb3m",
+        "numericTaskId": 188,
+        "agentName": "ricardo",
+        "message": "Phase 0 (cmd migration), Phase 1 (13 skills imported, 3 hand-ported), Phase 2 partial (DELETE-ME markers + gemma-overlay fold), Phase 3 (mode-prompts.ts wiring), Phase 4 (CLAUDE.md Skills section) all done. Running tsc next.",
+        "createdAt": "2026-05-16T01:49:00.250Z",
+        "type": "progress"
+      },
+      {
+        "id": 22,
+        "beadId": "agent-pi-eb3m",
+        "numericTaskId": 188,
+        "agentName": "ricardo",
+        "message": "Verification complete. grep for bd prime/ready/close/update/dolt/show/remember/memories across .md/.json/.ts/.sh (excluding node_modules, .beads, .commander, .git) returns zero hits. AGENTS.md also migrated to cmd (had its own beads block at lines 3-13 plus marker-bounded block). Ready to mark completed.",
+        "createdAt": "2026-05-16T01:50:16.917Z",
+        "type": "progress"
       }
     ]
   }

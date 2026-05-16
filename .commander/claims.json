@@ -1,5 +1,5 @@
 {
-  "nextAuditId": 120,
+  "nextAuditId": 122,
   "byBead": {
     "agent-pi-eno": {
       "identity": {
@@ -2372,6 +2372,47 @@
         "capturedAt": "2026-05-15T03:11:06.377Z"
       },
       "at": "2026-05-15T03:11:08.625Z"
+    },
+    "agent-pi-ufaj": {
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 17989,
+        "ppid": 17985,
+        "parentComm": "node",
+        "sessionId": "1135cf03-4784-47a2-9a20-6bd2de007f9e",
+        "capturedAt": "2026-05-15T03:26:07.604Z"
+      },
+      "at": "2026-05-15T03:26:09.311Z"
+    },
+    "agent-pi-eb3m": {
+      "identity": {
+        "runtime": "claude-code",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:CLAUDECODE=1",
+          "env:CLAUDE_CODE_ENTRYPOINT=cli",
+          "declared:claude-code"
+        ],
+        "modelDeclared": "claude-opus-4-7",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 16998,
+        "ppid": 16993,
+        "parentComm": "node",
+        "sessionId": "b8990629-6e15-4672-9ac3-1dd9128fcde7",
+        "capturedAt": "2026-05-16T01:43:14.618Z"
+      },
+      "at": "2026-05-16T01:43:15.422Z"
     }
   },
   "audit": [
@@ -5103,6 +5144,53 @@
         "capturedAt": "2026-05-15T03:11:06.377Z"
       },
       "createdAt": "2026-05-15T03:11:08.625Z"
+    },
+    {
+      "id": 120,
+      "beadId": "agent-pi-ufaj",
+      "event": "claim",
+      "identity": {
+        "runtime": "pi",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:PI_CODING_AGENT=true",
+          "declared:pi"
+        ],
+        "modelDeclared": "unknown",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 17989,
+        "ppid": 17985,
+        "parentComm": "node",
+        "sessionId": "1135cf03-4784-47a2-9a20-6bd2de007f9e",
+        "capturedAt": "2026-05-15T03:26:07.604Z"
+      },
+      "createdAt": "2026-05-15T03:26:09.311Z"
+    },
+    {
+      "id": 121,
+      "beadId": "agent-pi-eb3m",
+      "event": "claim",
+      "identity": {
+        "runtime": "claude-code",
+        "runtimeConfidence": "declared",
+        "runtimeSignals": [
+          "env:CLAUDECODE=1",
+          "env:CLAUDE_CODE_ENTRYPOINT=cli",
+          "declared:claude-code"
+        ],
+        "modelDeclared": "claude-opus-4-7",
+        "modelConfidence": "declared",
+        "osUser": "ricardo",
+        "hostname": "Ricardos-MacBook-Pro.local",
+        "pid": 16998,
+        "ppid": 16993,
+        "parentComm": "node",
+        "sessionId": "b8990629-6e15-4672-9ac3-1dd9128fcde7",
+        "capturedAt": "2026-05-16T01:43:14.618Z"
+      },
+      "createdAt": "2026-05-16T01:43:15.422Z"
     }
   ]
 }
