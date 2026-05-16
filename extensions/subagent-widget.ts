@@ -30,23 +30,22 @@ import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
 import { buildSubagentBatchBrief } from "./lib/commander/subagent-mission-brief.ts";
+import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
 import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 
-// ── Commander availability ───────────────────────────────────────────────────
-
-function isCommanderAvailable(): boolean {
-	const g = globalThis as any;
-	return g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
-}
+// ── Commander client accessor ────────────────────────────────────────────────
+// Commander is now backed by the local `cmd` CLI via CommanderCliClient.
+// isCommanderAvailable() is imported from commander-cli-client.ts and checks
+// `cmd` presence on PATH. getCommanderClient() returns the singleton client
+// (or undefined when `cmd` isn't installed).
 
 function getCommanderClient(): any | undefined {
-	const g = globalThis as any;
 	if (!isCommanderAvailable()) return undefined;
-	return g.__piCommanderClient;
+	return getCommanderCliClient();
 }
 
 // ── Graceful kill helper ─────────────────────────────────────────────────────

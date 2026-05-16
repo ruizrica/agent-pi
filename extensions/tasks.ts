@@ -48,7 +48,7 @@ import {
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
-import { enqueueOrExecute } from "./lib/commander/commander-ready.ts";
+import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import {
 	renderMissionComplete,
@@ -269,19 +269,15 @@ export default function (pi: ExtensionAPI) {
 	// ── Commander sync (gate-aware) ─────────────────────────────────────
 
 	function syncToCommander(label: string, fn: (client: any) => Promise<void>): void {
+		if (!isCommanderAvailable()) return;
 		const g = globalThis as any;
-		const gate = g.__piCommanderGate;
-		if (!gate) return; // commander-mcp not loaded
-		const wrappedFn = async (client: any) => {
-			try { await fn(client); }
-			catch {
-				const tracker = g.__piCommanderTracker;
-				if (tracker?._state) {
-					tracker._state = addRetry(tracker._state, label, fn);
-				}
+		const client = getCommanderCliClient();
+		fn(client).catch(() => {
+			const tracker = g.__piCommanderTracker;
+			if (tracker?._state) {
+				tracker._state = addRetry(tracker._state, label, fn);
 			}
-		};
-		enqueueOrExecute(gate, { fn: wrappedFn, label }, g.__piCommanderClient);
+		});
 	}
 
 	function saveSharedStateIfNeeded(_action: string, _body?: string): void {
@@ -312,7 +308,7 @@ export default function (pi: ExtensionAPI) {
 
 	const refreshUI = (ctx: ExtensionContext) => {
 		const summaryOnly = !!(globalThis as any).__piSummaryModeActive;
-		const syncIndicator = (globalThis as any).__piCommanderGate?.state === "available" ? "(synced)" : "(local)";
+		const syncIndicator = isCommanderAvailable() ? "(synced)" : "(local)";
 		if (!summaryOnly) {
 			if (tasks.length === 0) {
 				ctx.ui.setStatus(`Tasks: none ${syncIndicator}`, "tasks");
@@ -342,14 +338,13 @@ export default function (pi: ExtensionAPI) {
 
 	function auditCommanderBoardForMissionComplete(): void {
 		if (isExternalSyncActive()) return;
-		const gate = g.__piCommanderGate;
-		const client = g.__piCommanderClient;
 		const tracker = g.__piCommanderTracker;
 
-		if (gate?.state !== "available" || !client || syncState.mappings.length === 0) {
+		if (!isCommanderAvailable() || syncState.mappings.length === 0) {
 			if (tracker?.reconcileNow) tracker.reconcileNow();
 			return;
 		}
+		const client = getCommanderCliClient();
 
 		for (const task of tasks) {
 			if (task.status !== "done") continue;
@@ -376,7 +371,7 @@ export default function (pi: ExtensionAPI) {
 
 	function isCommanderAvailableForPreStopAudit(): boolean {
 		if (isExternalSyncActive()) return false;
-		return g.__piCommanderGate?.state === "available";
+		return isCommanderAvailable();
 	}
 
 	function getPreStopTaskAudit(): PreStopTaskAudit {
@@ -967,10 +962,8 @@ export default function (pi: ExtensionAPI) {
 
 					// Sync: update Commander task status (skip if external sync owns it)
 					if (!isExternalSyncActive()) {
-						const gate = g.__piCommanderGate;
-						const client = g.__piCommanderClient;
-
-						if (gate?.state === "available" && client) {
+						if (isCommanderAvailable()) {
+							const client = getCommanderCliClient();
 							// Commander available: await sync for per-task verification
 							const cid = lookupMapping(syncState, task.id);
 							if (cid !== undefined) {

@@ -1,8 +1,41 @@
 // ABOUTME: Commander CLI client adapter for Pi's native commander_* tools.
 // ABOUTME: Preserves the former callTool-style contract while using the local `cmd` binary.
 
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { resolveRuntimeLabel, resolveModelName } from "../../agent-identity.js";
+
+// ── Module-level singleton + availability cache ─────────────────────
+// Replaces the old __piCommanderClient/__piCommanderGate globals that
+// were set by commander-mcp.ts. Now callers ask the module directly.
+
+let _singleton: CommanderCliClient | null = null;
+let _availability: boolean | null = null;
+
+export function getCommanderCliClient(): CommanderCliClient {
+	if (!_singleton) _singleton = new CommanderCliClient();
+	return _singleton;
+}
+
+/**
+ * Returns true if the `cmd` binary is on PATH. Result is cached after the
+ * first call; pass `force` to re-probe (useful in tests).
+ */
+export function isCommanderAvailable(force = false): boolean {
+	if (_availability !== null && !force) return _availability;
+	const bin = process.env.COMMANDER_CMD_BIN || "cmd";
+	try {
+		const result = spawnSync("which", [bin], { encoding: "utf8" });
+		_availability = result.status === 0 && !!result.stdout.trim();
+	} catch {
+		_availability = false;
+	}
+	return _availability;
+}
+
+export function _resetCommanderClientForTests(): void {
+	_singleton = null;
+	_availability = null;
+}
 
 export interface CommanderCliClientOptions {
 	bin?: string;

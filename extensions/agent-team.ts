@@ -42,6 +42,7 @@ import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
 import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
@@ -502,16 +503,15 @@ export default function (pi: ExtensionAPI) {
 		const footerExtPath = join(extDir, "footer.ts");
 		const memoryCycleExtPath = join(extDir, "memory-cycle.ts");
 
-		// Resolve tools — append commander tools when Commander is available
+		// Commander is now backed by the local `cmd` CLI.
 		const g = globalThis as any;
-		const commanderAvailableAtSpawn = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+		const commanderAvailableAtSpawn = isCommanderAvailable();
 
-		// Commander lifecycle: gate-aware fire-and-forget helper
-		// Re-reads gate state each time so it reflects current availability, not spawn-time
+		// Commander lifecycle: availability-aware fire-and-forget helper.
+		// Re-checks availability each call so a missing `cmd` doesn't crash callers.
 		function commanderSync(fn: (client: any) => Promise<void>): void {
-			const gate = g.__piCommanderGate;
-			if (!gate || gate.state !== "available" || !g.__piCommanderClient) return;
-			fn(g.__piCommanderClient).catch((err) => {
+			if (!isCommanderAvailable()) return;
+			fn(getCommanderCliClient()).catch((err) => {
 				console.error(`[agent-team] commanderSync failed:`, err?.message || err);
 			});
 		}
@@ -625,7 +625,7 @@ export default function (pi: ExtensionAPI) {
 
 				// Re-evaluate Commander availability at finish time (not spawn time)
 				// to handle transient connectivity issues during agent lifetime
-				const cmdAvailNow = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+				const cmdAvailNow = isCommanderAvailable();
 				if (cmdAvailNow && taskId !== undefined) {
 					const summary = full.trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
@@ -1222,7 +1222,7 @@ export default function (pi: ExtensionAPI) {
 
 		const teamMembers = Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ");
 
-		const commanderAvailable = (globalThis as any).__piCommanderGate?.state === "available";
+		const commanderAvailable = isCommanderAvailable();
 		const commanderSection = commanderAvailable ? `
 
 ## Commander Integration (REQUIRED)
@@ -1349,8 +1349,8 @@ ${agentCatalog}${commanderSection}`,
 		// Reconciliation sweep: mark any Commander tasks from running agents as failed
 		// so they don't stay stuck in "working" on the kanban board forever
 		const g = globalThis as any;
-		const cmdClient = g.__piCommanderGate?.state === "available" && g.__piCommanderClient;
-		if (cmdClient) {
+		if (isCommanderAvailable()) {
+			const cmdClient = getCommanderCliClient();
 			for (const [, state] of agentStates) {
 				// If the agent was running and had a Commander task, mark it failed
 				if (state.status === "running") {
