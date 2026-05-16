@@ -183,9 +183,10 @@ describe("GOAL_PROMPT — success-condition loop", () => {
 		expect(GOAL_PROMPT).toContain("loop until");
 	});
 
-	it("uses terminal UI instead of browser UI for completion", () => {
-		expect(GOAL_PROMPT).toContain("CLI/TUI GOAL MET card");
-		expect(GOAL_PROMPT).toContain("must not open a browser window");
+	it("cleans up GOAL mode and UI on completion", () => {
+		expect(GOAL_PROMPT).toContain("clear GOAL UI");
+		expect(GOAL_PROMPT).toContain("switch back to NORMAL mode");
+		expect(GOAL_PROMPT).toContain("Do not leave the session in GOAL mode");
 	});
 
 	it("includes WARDEN and approval handoff guardrails", () => {

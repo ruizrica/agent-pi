@@ -27,4 +27,13 @@ describe("tool_call hook ordering invariant", () => {
 		// message < security — message-integrity-guard fires first on context hook
 		expect(messageGuard.localeCompare(securityGuard)).toBeLessThan(0);
 	});
+
+	it("security-guard.ts sorts before tool-advisor.ts alphabetically", () => {
+		// security-guard's pattern-based block must short-circuit BEFORE the
+		// LLM-based tool-advisor gate runs, otherwise we pay an OpenRouter
+		// round-trip on every clearly-malicious call.
+		const securityGuard = "security-guard.ts";
+		const toolAdvisor = "tool-advisor.ts";
+		expect(securityGuard.localeCompare(toolAdvisor)).toBeLessThan(0);
+	});
 });

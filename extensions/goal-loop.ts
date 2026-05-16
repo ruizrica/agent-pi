@@ -1,4 +1,4 @@
-// ABOUTME: GOAL mode loop tools and terminal GOAL MET widget.
+// ABOUTME: GOAL mode loop tools with completion cleanup back to NORMAL mode.
 // ABOUTME: Mirrors complex-problem-loop state management for objective-driven loops until a success condition is met.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -16,7 +16,6 @@ import {
 	setCurrentGoalSession,
 	upsertGoalSection,
 } from "./lib/goal-loop-session.ts";
-import { GOAL_MET_BG, renderGoalMet, type GoalMetState } from "./lib/goal-met-render.ts";
 
 const StartParams = Type.Object({
 	goal: Type.String({ description: "Objective to pursue in GOAL mode" }),
@@ -42,7 +41,7 @@ const CompleteParams = Type.Object({
 	goal: Type.String({ description: "Completed objective" }),
 	success_condition: Type.String({ description: "Condition that has been met" }),
 	evidence: Type.Optional(Type.Array(Type.String(), { description: "Evidence proving the goal is met" })),
-	summary: Type.Optional(Type.String({ description: "Concise completion summary for the GOAL MET card" })),
+	summary: Type.Optional(Type.String({ description: "Concise completion summary recorded in GOAL state" })),
 	next_steps: Type.Optional(Type.Array(Type.String(), { description: "Optional follow-up actions after completion" })),
 	iterations: Type.Optional(Type.Number({ description: "Optional number of loop iterations completed" })),
 	session_name: Type.Optional(Type.String({ description: "Optional stable session slug; defaults to the current GOAL session or a slug of the goal" })),
@@ -53,31 +52,15 @@ function evidenceLines(items?: string[]): string {
 	return items.map((item) => `| ${item.replace(/\|/g, "\\|")} | tool: goal_loop_advance |`).join("\n");
 }
 
-function showGoalMet(ctx: ExtensionContext, state: GoalMetState): void {
-	if (!ctx.hasUI) return;
+function clearGoalUi(ctx: ExtensionContext): void {
+	if (ctx.hasUI) ctx.ui.setWidget("goal-met", undefined);
+}
 
-	const RESET_BG = "\x1b[49m";
-	const WHITE_BOLD = "\x1b[1;97m";
-	const RESET_ALL = "\x1b[0m";
-
-	ctx.ui.setWidget("goal-met", (_tui: any, theme: any) => {
-		const { Box, Text: TuiText } = require("@earendil-works/pi-tui");
-		const bgFn = (text: string): string => `${GOAL_MET_BG}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
-		const box = new Box(1, 1, bgFn);
-		const content = new TuiText("", 0, 0);
-		box.addChild(content);
-
-		return {
-			render(width: number): string[] {
-				const result = renderGoalMet(state, width, theme);
-				content.setText(result.lines.join("\n"));
-				return box.render(width);
-			},
-			invalidate() {
-				box.invalidate();
-			},
-		};
-	});
+function switchToNormalMode(ctx: ExtensionContext): boolean {
+	const setMode = (globalThis as any).__piSetModeForApproval;
+	if (typeof setMode !== "function") return false;
+	setMode("NORMAL", ctx);
+	return true;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -163,7 +146,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "goal_loop_complete",
 		label: "GOAL Loop Complete",
-		description: "Mark a GOAL session complete and show the terminal GOAL MET widget",
+		description: "Mark a GOAL session complete, clear GOAL UI, and switch back to NORMAL mode",
 		parameters: CompleteParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const { goal, success_condition, evidence, summary, next_steps, iterations, session_name } = params as {
@@ -191,21 +174,15 @@ export default function (pi: ExtensionAPI) {
 			});
 			writeFileSync(filePath, updated, "utf-8");
 			setCurrentGoalSession(cwd, resolvedSession);
-			showGoalMet(ctx, {
-				goal,
-				successCondition: success_condition,
-				summary,
-				evidence,
-				nextSteps: next_steps,
-				completedAt: Date.now(),
-				iterations,
-			});
-			return { content: [{ type: "text" as const, text: `GOAL MET. Updated GOAL session at ${filePath}` }] };
+			clearGoalUi(ctx);
+			const switchedToNormal = switchToNormalMode(ctx);
+			const modeMessage = switchedToNormal ? " Switched to NORMAL mode and cleared GOAL UI." : " Cleared GOAL UI.";
+			return { content: [{ type: "text" as const, text: `GOAL MET. Updated GOAL session at ${filePath}.${modeMessage}` }] };
 		},
 	});
 
 	pi.registerCommand("goal-met-dismiss", {
-		description: "Dismiss the GOAL MET terminal widget",
+		description: "Dismiss any GOAL MET terminal widget",
 		handler: async (_args, ctx) => {
 			if (ctx.hasUI) ctx.ui.setWidget("goal-met", undefined);
 		},

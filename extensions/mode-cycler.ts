@@ -6,10 +6,12 @@ import { Type } from "@sinclair/typebox";
 import { Text } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
+import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
 import { checkGemmaHealth, checkQwenHealth } from "./lmstudio-overlay.ts";
 import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt, buildGoalPrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
+import { persistModeHintsEnabled, resolveModeHintsEnabled } from "./lib/mode-hints-settings.ts";
+import { wordWrap } from "./lib/ui-helpers.ts";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
 
 const MODE_FILE = "/tmp/pi-current-mode.txt";
@@ -18,6 +20,73 @@ const MODE_FILE = "/tmp/pi-current-mode.txt";
 export default function (pi: ExtensionAPI) {
 	let currentMode: Mode = "NORMAL";
 	let currentOverlay: ModeOverlayState = { ...DEFAULT_MODE_OVERLAY };
+	let modeHintsEnabled = resolveModeHintsEnabled();
+	let modeHintVisible = false;
+	let modeHintTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const MODE_HINT_DURATION_MS = 4000;
+	const MODE_HINT_HORIZONTAL_PADDING = 2;
+	const RESET = "\x1b[0m";
+	const NORMAL_HEADER_BG = "\x1b[48;2;45;50;60m";
+	const NORMAL_HEADER_TEXT = "\x1b[1;97m";
+
+	function padAnsiRow(bg: string, text: string, rawLabel: string, width: number): string {
+		const safeWidth = Math.max(0, width);
+		const visible = rawLabel.length > safeWidth ? rawLabel.slice(0, safeWidth) : rawLabel;
+		const pad = " ".repeat(Math.max(0, safeWidth - visible.length));
+		return bg + text + visible + pad + RESET;
+	}
+
+	function renderWrappedHintRows(mode: Mode, width: number, hintBg: string, hintText: string): string[] {
+		const contentWidth = Math.max(1, width - MODE_HINT_HORIZONTAL_PADDING * 2);
+		const leftPad = " ".repeat(MODE_HINT_HORIZONTAL_PADDING);
+		const wrappedLines = wordWrap(modeHintText(mode), contentWidth);
+		return [
+			padAnsiRow(hintBg, hintText, "", width),
+			...wrappedLines.map((line) => padAnsiRow(hintBg, hintText, `${leftPad}${line}`, width)),
+			padAnsiRow(hintBg, hintText, "", width),
+		];
+	}
+
+	function renderModeBlockRows(mode: Mode, width: number): string[] {
+		const rows: string[] = [];
+		const mainBg = mode === "NORMAL" ? NORMAL_HEADER_BG : modeBgAnsi(mode, currentOverlay);
+		const mainText = mode === "NORMAL" ? NORMAL_HEADER_TEXT : modeTextAnsi(mode, currentOverlay);
+		const label = ` ${modeDisplayName(mode, currentOverlay)} `;
+		rows.push(padAnsiRow(mainBg, mainText, label, width));
+
+		if (modeHintVisible && modeHintsEnabled) {
+			const hintBg = modeHintBgAnsi(mode, currentOverlay);
+			const hintText = modeHintTextAnsi(mode, currentOverlay);
+			rows.push(...renderWrappedHintRows(mode, width, hintBg, hintText));
+		}
+
+		return rows;
+	}
+
+	function clearModeHintTimer() {
+		if (modeHintTimer) {
+			clearTimeout(modeHintTimer);
+			modeHintTimer = null;
+		}
+	}
+
+	function dismissModeHint(ctx: ExtensionContext) {
+		clearModeHintTimer();
+		modeHintVisible = false;
+		updateWidgets(currentMode, ctx);
+	}
+
+	function scheduleModeHintDismiss(ctx: ExtensionContext) {
+		clearModeHintTimer();
+		modeHintTimer = setTimeout(() => {
+			dismissModeHint(ctx);
+		}, MODE_HINT_DURATION_MS);
+	}
+
+	function shouldRenderModeBlock(mode: Mode): boolean {
+		return mode !== "NORMAL" || (modeHintVisible && modeHintsEnabled);
+	}
 
 	function updateWidgets(mode: Mode, ctx: ExtensionContext) {
 		// Guard against stale ctx after newSession/fork/switchSession/reload.
@@ -30,11 +99,13 @@ export default function (pi: ExtensionAPI) {
 		}
 		if (!uiAvailable) return;
 		if ((globalThis as any).__piSummaryModeActive) {
+			clearModeHintTimer();
+			modeHintVisible = false;
 			ctx.ui.setWidget("mode-block", undefined);
 			return;
 		}
 
-		if (mode === "NORMAL") {
+		if (!shouldRenderModeBlock(mode)) {
 			ctx.ui.setWidget("mode-block", undefined);
 			// Re-set agent-banner after clearing mode-block to ensure correct rendering order
 			// Only re-set if banner was previously visible (not hidden by user input)
@@ -44,19 +115,13 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Mode block — full-width colored banner with mode name
-		// Uses theme accent color (same as model name in footer)
+		// Mode block — full-width colored banner with optional temporary guidance rows.
 		ctx.ui.setWidget(
 			"mode-block",
 			(_tui, _theme) => ({
 				invalidate() {},
 				render(width: number): string[] {
-					const bg = modeBgAnsi(mode, currentOverlay);
-					const text = modeTextAnsi(mode, currentOverlay);
-					const reset = "\x1b[0m";
-					const label = ` ${modeDisplayName(mode, currentOverlay)} `;
-					const pad = " ".repeat(Math.max(0, width - label.length));
-					return [bg + text + label + pad + reset];
+					return renderModeBlockRows(mode, width);
 				},
 			}),
 			{ placement: "aboveEditor" },
@@ -145,7 +210,7 @@ export default function (pi: ExtensionAPI) {
 		updateWidgets(currentMode, ctx);
 	}
 
-	function setMode(mode: Mode, ctx: ExtensionContext) {
+	function setMode(mode: Mode, ctx: ExtensionContext, options: { showHint?: boolean } = {}) {
 		currentMode = mode;
 		(globalThis as any).__piCurrentMode = mode;
 		syncOverlayGlobals();
@@ -160,6 +225,14 @@ export default function (pi: ExtensionAPI) {
 		// Publish refresh callback so other aboveEditor widgets can re-pin the mode bar
 		installRefreshGlobal(ctx);
 
+		if (options.showHint && modeHintsEnabled && ctx.hasUI && !(globalThis as any).__piSummaryModeActive) {
+			modeHintVisible = true;
+			scheduleModeHintDismiss(ctx);
+		} else if (!options.showHint || !modeHintsEnabled) {
+			modeHintVisible = false;
+			clearModeHintTimer();
+		}
+
 		updateWidgets(mode, ctx);
 	}
 
@@ -168,7 +241,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerShortcut("shift+tab", {
 		description: "Cycle operational mode",
 		handler: async (ctx) => {
-			setMode(nextMode(currentMode), ctx);
+			setMode(nextMode(currentMode), ctx, { showHint: true });
 		},
 	});
 
@@ -304,7 +377,7 @@ export default function (pi: ExtensionAPI) {
 
 			const arg = args.trim().toUpperCase();
 			if (arg && MODES.includes(arg as Mode)) {
-				setMode(arg as Mode, ctx);
+				setMode(arg as Mode, ctx, { showHint: true });
 				return;
 			}
 
@@ -322,7 +395,39 @@ export default function (pi: ExtensionAPI) {
 			if (!selected) return;
 
 			const name = selected.split(/\s/)[0] as Mode;
-			setMode(name, ctx);
+			setMode(name, ctx, { showHint: true });
+		},
+	});
+
+	pi.registerCommand("mode-hints", {
+		description: "Toggle operational mode hints: /mode-hints [on|off|toggle|status]",
+		handler: async (args, ctx) => {
+			if (!ctx.hasUI) return;
+			const arg = args.trim().toLowerCase();
+
+			if (!arg || arg === "status") {
+				ctx.ui.notify(`Mode hints are ${modeHintsEnabled ? "enabled" : "disabled"}`);
+				return;
+			}
+
+			let next: boolean | null = null;
+			if (["on", "enable", "enabled", "true", "1"].includes(arg)) next = true;
+			if (["off", "disable", "disabled", "false", "0"].includes(arg)) next = false;
+			if (arg === "toggle") next = !modeHintsEnabled;
+
+			if (next === null) {
+				ctx.ui.notify("Usage: /mode-hints [on|off|toggle|status]", "error");
+				return;
+			}
+
+			modeHintsEnabled = next;
+			persistModeHintsEnabled(next);
+			if (!next) {
+				modeHintVisible = false;
+				clearModeHintTimer();
+				updateWidgets(currentMode, ctx);
+			}
+			ctx.ui.notify(`Mode hints ${next ? "enabled" : "disabled"}`);
 		},
 	});
 
@@ -348,7 +453,7 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			setMode(upper as Mode, ctx);
+			setMode(upper as Mode, ctx, { showHint: true });
 			const display = modeDisplayName(upper as Mode, currentOverlay);
 			const msg = reason
 				? `Mode set to ${display}. Reason: ${reason}`
@@ -409,7 +514,7 @@ export default function (pi: ExtensionAPI) {
 	 * Exposed as global function so other extensions can invoke it.
 	 */
 	function setModeForApproval(mode: Mode, ctx: ExtensionContext): void {
-		setMode(mode, ctx);
+		setMode(mode, ctx, { showHint: true });
 	}
 
 	(globalThis as any).__piSetModeForApproval = (mode: string, ctx: ExtensionContext) => {
@@ -425,6 +530,9 @@ export default function (pi: ExtensionAPI) {
 		applyExtensionDefaults(import.meta.url, ctx);
 		currentMode = "NORMAL";
 		currentOverlay = { ...DEFAULT_MODE_OVERLAY };
+		modeHintsEnabled = resolveModeHintsEnabled();
+		modeHintVisible = false;
+		clearModeHintTimer();
 		(globalThis as any).__piCurrentMode = "NORMAL";
 		syncOverlayGlobals();
 		installRefreshGlobal(ctx);

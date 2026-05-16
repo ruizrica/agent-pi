@@ -17,6 +17,22 @@ export const DEFAULT_MODE_OVERLAY: ModeOverlayState = {
 	qwen: false,
 };
 
+export const MODE_HINTS: Record<Mode, string> = {
+	NORMAL: "Default direct mode. Use for straightforward asks where the agent can respond or act without a specialized workflow.",
+	PLAN: "Use when the task needs structured planning, context gathering, and approval before implementation.",
+	SPEC: "Use for larger feature work that needs requirements, design, tasks, and review before coding.",
+	INVESTIGATE: "Use for bugs or unclear failures where the agent should diagnose before proposing fixes.",
+	GOAL: "Use when there is an explicit success condition and the agent should loop until it is met.",
+	PIPELINE: "Use for phased orchestration with understand, gather, plan, execute, and review stages.",
+	TEAM: "Use when parallel specialists should gather, build, or review different slices.",
+	CHAIN: "Use when steps must run sequentially and each output feeds the next.",
+};
+
+/** Short guidance shown briefly when switching into a mode. */
+export function modeHintText(mode: Mode): string {
+	return MODE_HINTS[mode];
+}
+
 /** Advance to the next mode in the cycle, wrapping CHAIN → NORMAL. */
 export function nextMode(current: Mode): Mode {
 	const idx = MODES.indexOf(current);
@@ -47,9 +63,15 @@ export function modeColor(mode: Mode): string {
 
 const BOLD_WHITE = "\x1b[1;97m";
 const BOLD_DARK = "\x1b[1;30m";
+const DIM_WHITE = "\x1b[38;2;220;230;240m";
 const DARK_ORANGE_BG = "\x1b[48;2;180;90;0m";
 const GEMMA_GREEN_BG = "\x1b[48;2;20;140;80m"; // green for local Gemma overlay
 const QWEN_PURPLE_BG = "\x1b[48;2;102;51;153m"; // purple for local Qwen overlay
+const NORMAL_HINT_BG = "\x1b[48;2;32;36;44m";
+const DODGER_BLUE_HINT_BG = "\x1b[48;2;20;104;190m";
+const DARK_ORANGE_HINT_BG = "\x1b[48;2;130;65;0m";
+const GEMMA_GREEN_HINT_BG = "\x1b[48;2;14;96;56m";
+const QWEN_PURPLE_HINT_BG = "\x1b[48;2;76;38;116m";
 
 const MODE_TEXT_ANSI: Record<Mode, string> = {
 	NORMAL: "",
@@ -87,6 +109,20 @@ export function modeBgAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_
 	if (overlay.gemma && mode !== "NORMAL") return GEMMA_GREEN_BG;
 	if (overlay.claude && mode !== "NORMAL") return DARK_ORANGE_BG;
 	return ANSI_BG[mode];
+}
+
+/** Slightly different background used for the temporary mode guidance row. */
+export function modeHintBgAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	if (mode === "NORMAL") return NORMAL_HINT_BG;
+	if (overlay.qwen) return QWEN_PURPLE_HINT_BG;
+	if (overlay.gemma) return GEMMA_GREEN_HINT_BG;
+	if (overlay.claude) return DARK_ORANGE_HINT_BG;
+	return DODGER_BLUE_HINT_BG;
+}
+
+/** Text color for the temporary mode guidance row. */
+export function modeHintTextAnsi(_mode: Mode, _overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {
+	return DIM_WHITE;
 }
 
 export function modeDisplayName(mode: Mode, overlay: ModeOverlayState = DEFAULT_MODE_OVERLAY): string {

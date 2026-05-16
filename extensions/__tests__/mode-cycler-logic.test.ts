@@ -2,7 +2,7 @@
 // ABOUTME: Validates cycle order, GOAL mode placement, wrapping, and label formatting.
 
 import { describe, it, expect } from "vitest";
-import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName } from "../lib/mode-cycler-logic.ts";
+import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
 	it("has exactly 8 entries in correct order", () => {
@@ -228,4 +228,51 @@ describe("modeTextAnsi", () => {
 		expect(modeTextAnsi("CHAIN")).toBe("\x1b[1;97m");
 	});
 
+});
+
+describe("mode hints", () => {
+	it("defines guidance for every mode", () => {
+		for (const mode of MODES) {
+			expect(modeHintText(mode)).toEqual(expect.any(String));
+			expect(modeHintText(mode).length).toBeGreaterThan(20);
+		}
+	});
+
+	it("describes when to use key modes", () => {
+		expect(modeHintText("NORMAL").toLowerCase()).toContain("default direct mode");
+		expect(modeHintText("PLAN").toLowerCase()).toContain("planning");
+		expect(modeHintText("SPEC").toLowerCase()).toContain("requirements");
+		expect(modeHintText("INVESTIGATE").toLowerCase()).toContain("diagnose");
+		expect(modeHintText("GOAL").toLowerCase()).toContain("success condition");
+		expect(modeHintText("PIPELINE").toLowerCase()).toContain("phased");
+		expect(modeHintText("TEAM").toLowerCase()).toContain("parallel specialists");
+		expect(modeHintText("CHAIN").toLowerCase()).toContain("sequentially");
+	});
+
+	it("uses a contrasting hint background for active modes", () => {
+		for (const mode of MODES.filter((m) => m !== "NORMAL")) {
+			expect(modeHintBgAnsi(mode)).not.toBe(modeBgAnsi(mode));
+		}
+	});
+
+	it("uses a neutral hint background for NORMAL", () => {
+		expect(modeHintBgAnsi("NORMAL")).toBe("\x1b[48;2;32;36;44m");
+		expect(modeHintBgAnsi("NORMAL")).not.toBe(modeBgAnsi("NORMAL"));
+	});
+
+	it("keeps overlay hint backgrounds distinct from overlay banner backgrounds", () => {
+		const overlays = [
+			{ claude: true, gemma: false, qwen: false },
+			{ claude: false, gemma: true, qwen: false },
+			{ claude: false, gemma: false, qwen: true },
+		];
+		for (const overlay of overlays) {
+			expect(modeHintBgAnsi("PLAN", overlay)).not.toBe(modeBgAnsi("PLAN", overlay));
+		}
+	});
+
+	it("uses readable text on hint rows", () => {
+		expect(modeHintTextAnsi("PLAN")).toBe("\x1b[38;2;220;230;240m");
+		expect(modeHintTextAnsi("NORMAL")).toBe("\x1b[38;2;220;230;240m");
+	});
 });

@@ -1,54 +1,22 @@
 {
   "default": {
-    "provider": "anthropic",
-    "model": "claude-haiku-4-5-20251001"
-  },
-  "providers": {
-    "openai-codex": {
-      "modelOverrides": {
-        "gpt-5.4": {
-          "contextWindow": 1000000
-        },
-        "gpt-5.5": {
-          "contextWindow": 1000000
-        }
-      }
-    }
+    "provider": "openai-codex",
+    "model": "gpt-5.4-mini"
   },
   "agents": {
     "scout": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.4-nano"
-    },
-    "ranger": {
-      "provider": "openai-codex",
-      "model": "gpt-5.5"
+      "model": "openai/gpt-5-nano"
     },
     "builder": {
-      "provider": "anthropic",
-      "model": "claude-haiku-4-5"
-    },
-    "paladin": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-7"
+      "provider": "openai-codex",
+      "model": "gpt-5.4-mini"
     },
     "reviewer": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-7"
-    },
-    "warden": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-7"
+      "provider": "openrouter",
+      "model": "qwen/qwen3.6-plus"
     },
     "planner": {
-      "provider": "openai-codex",
-      "model": "gpt-5.5"
-    },
-    "tester": {
-      "provider": "openai-codex",
-      "model": "gpt-5.5"
-    },
-    "herald": {
       "provider": "openai-codex",
       "model": "gpt-5.5"
     },
@@ -56,21 +24,17 @@
       "provider": "openai-codex",
       "model": "gpt-5.5"
     },
+    "test-dev": {
+      "provider": "openai-codex",
+      "model": "gpt-5.4-mini"
+    },
     "test-scout": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.4-nano"
-    },
-    "test-planner": {
-      "provider": "openai-codex",
-      "model": "gpt-5.5"
-    },
-    "test-builder": {
-      "provider": "anthropic",
-      "model": "claude-haiku-4-5"
+      "model": "openai/gpt-5-nano"
     },
     "test-reviewer": {
       "provider": "anthropic",
-      "model": "claude-opus-4-7"
+      "model": "qwen/qwen3.6-plus"
     },
     "claude-worker": {
       "provider": "anthropic",
@@ -79,6 +43,10 @@
     "claude-advisor": {
       "provider": "anthropic",
       "model": "claude-opus-4-7"
+    },
+    "tool-advisor": {
+      "provider": "openrouter",
+      "model": "openai/gpt-5-nano"
     }
   }
 }

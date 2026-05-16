@@ -695,7 +695,7 @@ ${buildWardenTaskConfirmationSection("GOAL", {
 })}
 
 ## Purpose
-GOAL mode exists for long-running objectives with a clear success condition. Your job is to clarify the goal, preserve loop state, pick one focused next slice, execute or delegate that slice, reflect on evidence, evaluate the success condition, and continue the loop until the condition is met. When the condition is met, call \`goal_loop_complete\` to show the CLI/TUI \`GOAL MET\` card.
+GOAL mode exists for long-running objectives with a clear success condition. Your job is to clarify the goal, preserve loop state, pick one focused next slice, execute or delegate that slice, reflect on evidence, evaluate the success condition, and continue the loop until the condition is met. When the condition is met, call \`goal_loop_complete\` to record GOAL MET, clear GOAL UI, and switch back to NORMAL mode.
 
 ## Loop-State Tools
 Use the GOAL loop tools for non-trivial objectives:
@@ -737,13 +737,13 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ### Phase 5: GOAL MET Completion
 - Only call \`goal_loop_complete\` when evidence shows the success condition is met.
-- \`goal_loop_complete\` shows a CLI/TUI GOAL MET card in the terminal. It is not a browser viewer and must not open a browser window.
+- \`goal_loop_complete\` records GOAL MET, clears the GOAL UI, and switches back to NORMAL mode.
 - Include concise evidence and any useful next steps in the completion call.
 
 ## Rules
 - Loop until the success condition is met, blocked by a user question, or handed off to a more appropriate approved workflow.
 - Do not declare GOAL MET without evidence.
-- Do not use browser UI for the GOAL MET card.
+- Do not leave the session in GOAL mode or leave GOAL UI visible after completion.
 - Preserve state in \`.context/goal-sessions/\` after each meaningful slice.
 - Prefer one focused slice over broad unfocused context gathering.
 

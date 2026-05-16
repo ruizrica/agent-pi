@@ -207,32 +207,47 @@ function scenarioModes(captureDir: string, ts: string, opts: CaptureOptions, abs
 	const modes = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "PIPELINE", "TEAM", "CHAIN"];
 	const lines = [tapeHeader(captureDir, ts, opts)];
 
-	// Write a helper script that shows all mode banners
+	// Write a helper script that shows all mode banners plus temporary hint rows.
 	const script = `#!/bin/bash
-BG_BLUE="\\033[44m"
+BG_MODE="\\033[48;2;30;144;255m"
+BG_HINT="\\033[48;2;20;104;190m"
+BG_NORMAL="\\033[48;2;45;50;60m"
+BG_NORMAL_HINT="\\033[48;2;32;36;44m"
+BG_CLAUDE="\\033[48;2;180;90;0m"
+BG_CLAUDE_HINT="\\033[48;2;130;65;0m"
 FG_WHITE="\\033[1;97m"
+FG_HINT="\\033[38;2;220;230;240m"
 RST="\\033[0m"
 PAD="                                                            "
 
+hint() {
+  local bg="$1"
+  local text="$2"
+  echo -e "\${bg}\${FG_HINT}\${PAD}\${RST}"
+  echo -e "\${bg}\${FG_HINT}  \${text}\${RST}"
+  echo -e "\${bg}\${FG_HINT}\${PAD}\${RST}"
+  echo ""
+}
+
 echo ""
-echo -e "\${FG_WHITE}Mode: NORMAL (no banner)\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} PLAN \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} SPEC \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} INVESTIGATE \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} GOAL \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} PIPELINE \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} TEAM \${PAD}\${RST}"
-echo ""
-echo -e "\${BG_BLUE}\${FG_WHITE} CHAIN \${PAD}\${RST}"
-echo ""
-echo -e "\\033[48;2;180;90;0m\${FG_WHITE} PLAN + CLAUDE \${PAD}\${RST}"
-echo ""
+echo -e "\${BG_NORMAL}\${FG_WHITE} NORMAL \${PAD}\${RST}"
+hint "\${BG_NORMAL_HINT}" "Default direct mode. Use for straightforward asks where no specialized workflow is needed."
+echo -e "\${BG_MODE}\${FG_WHITE} PLAN \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use when the task needs structured planning, context gathering, and approval before implementation."
+echo -e "\${BG_MODE}\${FG_WHITE} SPEC \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use for larger feature work that needs requirements, design, tasks, and review before coding."
+echo -e "\${BG_MODE}\${FG_WHITE} INVESTIGATE \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use for bugs or unclear failures where the agent should diagnose before proposing fixes."
+echo -e "\${BG_MODE}\${FG_WHITE} GOAL \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use when there is an explicit success condition and the agent should loop until it is met."
+echo -e "\${BG_MODE}\${FG_WHITE} PIPELINE \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use for phased orchestration with understand, gather, plan, execute, and review stages."
+echo -e "\${BG_MODE}\${FG_WHITE} TEAM \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use when parallel specialists should gather, build, or review different slices."
+echo -e "\${BG_MODE}\${FG_WHITE} CHAIN \${PAD}\${RST}"
+hint "\${BG_HINT}" "Use when steps must run sequentially and each output feeds the next."
+echo -e "\${BG_CLAUDE}\${FG_WHITE} PLAN + CLAUDE \${PAD}\${RST}"
+hint "\${BG_CLAUDE_HINT}" "Use when the task needs structured planning with Claude-family execution overlay enabled."
 `;
 
 	const scriptPath = writeHelperScript(captureDir, absCaptureDir, `modes-${ts}`, script);
