@@ -123,6 +123,9 @@ interface SubState {
 	commanderTaskId?: number;  // pre-assigned Commander task ID
 	autoRemove?: boolean;      // auto-remove widget ~2s after done (default: true)
 	model?: string;            // resolved model string for display
+	lifecycleEvents?: string[]; // safe, short spawn/failure breadcrumbs for widget display
+	lifecycleLogPath?: string;  // durable project-local lifecycle log path
+	failureDetail?: string;    // concise failure reason shown after ERROR
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
 	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
@@ -149,6 +152,51 @@ export default function (pi: ExtensionAPI) {
 		const dir = path.join(os.homedir(), ".pi", "agent", "sessions", "subagents");
 		fs.mkdirSync(dir, { recursive: true });
 		return path.join(dir, `subagent-${id}-${Date.now()}.jsonl`);
+	}
+
+	// ── Lifecycle diagnostics ──────────────────────────────────────────────────
+
+	const LIFECYCLE_PREFIX = "[SUBAGENT-SPAWN]";
+	const MAX_LIFECYCLE_FIELD = 600;
+
+	function truncateDiagnostic(value: unknown, max = MAX_LIFECYCLE_FIELD): string {
+		const raw = typeof value === "string" ? value : JSON.stringify(value ?? "");
+		const singleLine = raw.replace(/\s+/g, " ").trim();
+		const redacted = singleLine
+			.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[REDACTED]")
+			.replace(/((?:api[_-]?key|token|secret|password)\s*[:=]\s*)[^\s,;}]+/gi, "$1[REDACTED]");
+		return redacted.length > max ? redacted.slice(0, max - 3) + "..." : redacted;
+	}
+
+	function logLifecycle(state: SubState, ctx: any, event: string, fields: Record<string, unknown> = {}) {
+		const safeFields: Record<string, string | number | boolean | null> = {};
+		for (const [key, value] of Object.entries(fields)) {
+			if (value === undefined) continue;
+			if (typeof value === "number" || typeof value === "boolean" || value === null) {
+				safeFields[key] = value;
+			} else {
+				safeFields[key] = truncateDiagnostic(value);
+			}
+		}
+		const entry = {
+			ts: new Date().toISOString(),
+			id: state.id,
+			name: state.name,
+			event,
+			...safeFields,
+		};
+		const line = `${LIFECYCLE_PREFIX} ${JSON.stringify(entry)}`;
+		state.lifecycleEvents = [...(state.lifecycleEvents || []), `${event}: ${truncateDiagnostic(safeFields)}`].slice(-6);
+		try {
+			const cwd = ctx?.cwd || process.cwd();
+			const dir = path.join(cwd, ".context");
+			fs.mkdirSync(dir, { recursive: true });
+			state.lifecycleLogPath = path.join(dir, "subagent-spawn.log");
+			fs.appendFileSync(state.lifecycleLogPath, line + "\n", "utf-8");
+		} catch (err: any) {
+			state.lifecycleEvents = [...(state.lifecycleEvents || []), `log_write_failed: ${truncateDiagnostic(err?.message || err)}`].slice(-6);
+		}
+		invalidateWidget(state.id);
 	}
 
 	// ── Widget rendering ──────────────────────────────────────────────────────
@@ -293,6 +341,7 @@ export default function (pi: ExtensionAPI) {
 		// 2) Agent definition model (from .md file, resolved via models.json)
 		// 3) models.json agent entry (even without .md file)
 		// 4) models.json default entry
+		const requestedModel = state.model;
 		const agentDef = resolveAgentByName(state.name, knownAgents, modelsConfig || undefined);
 		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
 		let model = resolveToolkitWorkerModel(
@@ -309,6 +358,16 @@ export default function (pi: ExtensionAPI) {
 			model = "lmstudio/qwen/qwen3.6-27b";
 		}
 		state.model = model;
+		logLifecycle(state, ctx, "spawn_requested", {
+			requestedModel,
+			resolvedModel: model,
+			agentDef: agentDef?.name,
+			configModel,
+			commanderTaskId: state.commanderTaskId,
+			autoRemove: state.autoRemove !== false,
+			maxDurationMs: state.maxDurationMs,
+			summary: state.summary,
+		});
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
 		const tasksExtPath = path.join(extDir, "tasks.ts");
@@ -323,12 +382,28 @@ export default function (pi: ExtensionAPI) {
 
 		// Tools: use agent definition tools if available, else default set
 		let tools = agentDef?.tools || "read,bash,grep,find,ls";
+		logLifecycle(state, ctx, "route_resolved", {
+			backend: isToolkitCliAgent(state.name) ? "toolkit-worker" : "pi-json",
+			model,
+			tools,
+		});
 		const extensions = [
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			"-e", claudeAdvisorExtPath,
 		];
+		const claudeAdvisorDeps = [path.join(extDir, "lib", "claude-cli.ts")];
+		const missingClaudeAdvisorDep = claudeAdvisorDeps.find(dep => !fs.existsSync(dep));
+		if (fs.existsSync(claudeAdvisorExtPath) && !missingClaudeAdvisorDep) {
+			extensions.push("-e", claudeAdvisorExtPath);
+		} else {
+			logLifecycle(state, ctx, "extension_skipped", {
+				extension: "claude-advisor",
+				path: claudeAdvisorExtPath,
+				reason: fs.existsSync(claudeAdvisorExtPath) ? "missing_dependency" : "missing",
+				dependency: missingClaudeAdvisorDep,
+			});
+		}
 		if (commanderAvailAtSpawn) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
 			// go in --tools (which only accepts built-in names and warns on unknowns).
@@ -391,15 +466,20 @@ export default function (pi: ExtensionAPI) {
 				state.watchdogTimer = setTimeout(() => {
 					if (state.status !== "running") return; // already finished
 					const mins = Math.round(state.maxDurationMs / 60_000);
-					state.textChunks.push(`\n[TIMEOUT] Agent timed out after ${mins} minutes.`);
+					const timeoutMsg = `Agent timed out after ${mins} minutes.`;
+					state.failureDetail = timeoutMsg;
+					state.textChunks.push(`\n[TIMEOUT] ${timeoutMsg}`);
+					logLifecycle(state, ctx, "timeout", { maxDurationMs: state.maxDurationMs, pid: state.proc?.pid });
 					ctx.ui.notify(`SA${state.id} (${state.name}) timed out after ${mins}m`, "warning");
 					if (state.proc) {
-						killGracefully(state.proc, TIMEOUT_KILL_GRACE_MS).catch(() => {});
+						killGracefully(state.proc, TIMEOUT_KILL_GRACE_MS).catch((err: any) => {
+							logLifecycle(state, ctx, "timeout_kill_error", { error: err?.message || err });
+						});
 					}
 				}, state.maxDurationMs);
 			}
 
-			const finish = (code: number | null) => {
+			const finish = (code: number | null, signal?: string | null) => {
 				clearInterval(timer);
 				// Clear watchdog — agent exited normally before timeout
 				if (state.watchdogTimer) {
@@ -408,6 +488,17 @@ export default function (pi: ExtensionAPI) {
 				}
 				state.elapsed = Date.now() - startTime;
 				state.status = code === 0 ? "done" : "error";
+				if (state.status === "error" && !state.failureDetail) {
+					const finalText = state.textChunks.join("").trim();
+					state.failureDetail = finalText.split("\n").map(l => l.trim()).filter(Boolean).pop() || `Agent exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`;
+				}
+				logLifecycle(state, ctx, "finish", {
+					status: state.status,
+					code,
+					signal,
+					elapsedMs: state.elapsed,
+					failureDetail: state.status === "error" ? state.failureDetail : undefined,
+				});
 				state.proc = undefined;
 				invalidateWidget(state.id);
 
@@ -475,28 +566,34 @@ export default function (pi: ExtensionAPI) {
 					state.standby = false;
 				}
 
-				// Auto-remove widget ~2s after the agent reaches a terminal state.
+				// Auto-remove widget ~2s after the agent reaches a terminal state, but keep
+				// failed widgets visible so provider/startup errors are readable.
 				// Tracked on state.dismissTimer so /subcont, /subrm, /subclear, and
 				// subagent_cleanup can cancel it cleanly if the agent gets reused.
-				if (state.autoRemove !== false) {
+				if (state.autoRemove !== false && state.status !== "error") {
+					logLifecycle(state, ctx, "auto_remove_scheduled", { delayMs: 2_000 });
 					if (state.dismissTimer) {
 						clearTimeout(state.dismissTimer);
 					}
 					state.dismissTimer = setTimeout(() => {
 						state.dismissTimer = undefined;
 						if (agents.has(state.id) && state.status !== "running") {
+							logLifecycle(state, ctx, "auto_remove", { status: state.status });
 							ctx.ui.setWidget(`sub-${state.id}`, undefined);
 							widgetBoxes.delete(state.id);
 							agents.delete(state.id);
 							(globalThis as any).__piRefreshAgentTeamWidget?.();
 						}
 					}, 2_000);
+				} else if (state.status === "error") {
+					logLifecycle(state, ctx, "auto_remove_skipped", { reason: "error_visible_for_diagnostics", logPath: state.lifecycleLogPath });
 				}
 
 				resolve();
 			};
 
 			if (isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, model, !!(globalThis as any).__piClaudeOverlay)) {
+				logLifecycle(state, ctx, "toolkit_worker_start", { model, tools });
 				spawnToolkitWorker({
 					name: state.name,
 					tools,
@@ -507,9 +604,13 @@ export default function (pi: ExtensionAPI) {
 					cwd: ctx.cwd,
 					env: spawnEnv,
 					model,
-					onSpawn: (proc: any) => { state.proc = proc; },
+					onSpawn: (proc: any) => {
+						state.proc = proc;
+						logLifecycle(state, ctx, "process_started", { backend: "toolkit-worker", pid: proc?.pid });
+					},
 					onStdoutLine: (line: string) => processLine(state, line),
 					onStderr: (chunk: string) => {
+						if (chunk.trim()) logLifecycle(state, ctx, "stderr", { text: chunk });
 						for (const line of chunk.split("\n")) {
 							if (line.trim()) processLine(state, line);
 						}
@@ -520,6 +621,11 @@ export default function (pi: ExtensionAPI) {
 						state.summary = toolkitFinalOutput.trim().split("\n").pop() || state.summary;
 					}
 					finish(exitCode);
+				}).catch((err: any) => {
+					state.failureDetail = err?.message || String(err);
+					state.textChunks.push(`Error: ${state.failureDetail}`);
+					logLifecycle(state, ctx, "spawn_error", { backend: "toolkit-worker", error: state.failureDetail, stack: err?.stack });
+					finish(1);
 				});
 				return;
 			}
@@ -542,6 +648,7 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			state.proc = proc;
+			logLifecycle(state, ctx, "process_started", { backend: "pi-json", pid: proc.pid, command: "pi --mode json" });
 			let buffer = "";
 
 			proc.stdout!.setEncoding("utf-8");
@@ -555,18 +662,23 @@ export default function (pi: ExtensionAPI) {
 			proc.stderr!.setEncoding("utf-8");
 			proc.stderr!.on("data", (chunk: string) => {
 				if (chunk.trim()) {
+					const summary = truncateDiagnostic(chunk);
+					state.failureDetail = summary;
+					logLifecycle(state, ctx, "stderr", { text: summary });
 					state.textChunks.push(chunk);
 					invalidateWidget(state.id);
 				}
 			});
 
-			proc.on("close", (code) => {
+			proc.on("close", (code, signal) => {
 				if (buffer.trim()) processLine(state, buffer);
-				finish(code);
+				finish(code, signal);
 			});
 
 			proc.on("error", (err) => {
+				state.failureDetail = err.message;
 				state.textChunks.push(`Error: ${err.message}`);
+				logLifecycle(state, ctx, "process_error", { error: err.message, stack: err.stack });
 				finish(1);
 			});
 
@@ -762,6 +874,8 @@ export default function (pi: ExtensionAPI) {
 			state.status = "running";
 			state.task = args.prompt;
 			state.textChunks = [];
+			state.lifecycleEvents = [];
+			state.failureDetail = undefined;
 			state.elapsed = 0;
 			state.turnCount++;
 

@@ -52,6 +52,20 @@ describe("renderSubagentWidget", () => {
 		expect(errorResult.lines[0]).toContain("✗");
 	});
 
+	it("shows persistent failure diagnostics for errored agents", () => {
+		const state = makeState({
+			status: "error",
+			failureDetail: "No API key found for azure-openai-responses",
+			lifecycleEvents: ["finish: {status:error}"],
+			lifecycleLogPath: ".context/subagent-spawn.log",
+		});
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines).toContain("  Error: No API key found for azure-openai-responses");
+		expect(result.lines).toContain("  Last: finish: {status:error}");
+		expect(result.lines).toContain("  Log: .context/subagent-spawn.log");
+	});
+
 	it("shows summary on line 2 instead of task when present", () => {
 		const state = makeState({ summary: "Code quality check passed" });
 		const result = renderSubagentWidget(state, 80, theme);

@@ -13,6 +13,9 @@ export interface SubRenderState {
 	turnCount: number;
 	summary?: string;
 	model?: string;
+	failureDetail?: string;
+	lifecycleEvents?: string[];
+	lifecycleLogPath?: string;
 	maxDurationMs?: number; // watchdog timeout for progress warning
 }
 
@@ -97,6 +100,23 @@ export function renderSubagentWidget(
 		? detail.slice(0, 37) + "..."
 		: detail;
 	lines.push(`  ${detailPreview}`);
+
+	if (state.status === "error") {
+		if (state.failureDetail) {
+			const failure = state.failureDetail.length > 96
+				? state.failureDetail.slice(0, 93) + "..."
+				: state.failureDetail;
+			lines.push(`  Error: ${failure}`);
+		}
+		const lastEvent = state.lifecycleEvents?.[state.lifecycleEvents.length - 1];
+		if (lastEvent) {
+			const event = lastEvent.length > 96 ? lastEvent.slice(0, 93) + "..." : lastEvent;
+			lines.push(`  Last: ${event}`);
+		}
+		if (state.lifecycleLogPath) {
+			lines.push(`  Log: ${state.lifecycleLogPath}`);
+		}
+	}
 
 	return { lines, borderCount: 1 };
 }
