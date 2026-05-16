@@ -60,3 +60,10 @@ tests/*.spec.ts
 .beads/metadata.json
 .commander/
 
+# Catch nested .beads/ and .commander/ folders — `cmd` initialises these in
+# whatever cwd it's invoked from (e.g. extensions/.beads/ when tests run cmd).
+# The root-anchored lines above won't match nested directories because they
+# contain a middle slash; this glob does.
+**/.beads/
+**/.commander/
+
