@@ -1,10 +1,51 @@
 #!/usr/bin/env bash
-# ABOUTME: cmd wrapper that enforces --mission-brief on root task creation.
+# ABOUTME: cmd wrapper that enforces --mission-brief on root task creation and auto-inits a missing bd database.
 # ABOUTME: Shadows /Users/ricardo/.local/bin/cmd when scripts/ is earlier in PATH; passes everything except `task add` straight through.
 
 set -u
 
 REAL_CMD="${CMD_REAL:-/Users/ricardo/.local/bin/cmd}"
+REAL_BD="${BD_REAL:-bd}"
+
+# ── Auto-init: detect a project where .beads/ was initialized but the
+# Dolt database is gone (deleted manually, by `git clean -fdx`, etc.), and
+# transparently run `bd init --from-jsonl --non-interactive` so the next
+# command works instead of erroring with "no beads database found".
+# Disable with CMD_AUTO_INIT=off.
+maybe_auto_init_bd() {
+  [[ "${CMD_AUTO_INIT:-on}" == "off" ]] && return 0
+
+  # Walk up from $PWD looking for a .beads/config.yaml — that's the marker
+  # that this directory tree was initialized.
+  local dir="$PWD"
+  local beads_dir=""
+  while [[ "$dir" != "/" && "$dir" != "" ]]; do
+    if [[ -f "$dir/.beads/config.yaml" ]]; then
+      beads_dir="$dir/.beads"
+      break
+    fi
+    dir=$(dirname "$dir")
+  done
+  [[ -z "$beads_dir" ]] && return 0
+
+  # If any Dolt data dir or legacy *.db file exists, the db is alive — skip.
+  if [[ -d "$beads_dir/embeddeddolt" || -d "$beads_dir/dolt" ]]; then
+    return 0
+  fi
+  if compgen -G "$beads_dir/*.db" > /dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "cmd: auto-init — bd database missing at $beads_dir; running 'bd init --from-jsonl --non-interactive'" >&2
+  (
+    cd "$(dirname "$beads_dir")" || exit 0
+    "$REAL_BD" init --from-jsonl --non-interactive --role maintainer --skip-agents --skip-hooks >/dev/null 2>&1
+  ) || {
+    echo "cmd: auto-init failed — forwarding the original command; bd will surface the underlying error." >&2
+  }
+}
+
+maybe_auto_init_bd
 
 if [[ "${1:-}" == "task" && "${2:-}" == "add" ]]; then
   has_mission_brief=false

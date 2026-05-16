@@ -2,7 +2,33 @@
 // ABOUTME: Preserves the former callTool-style contract while using the local `cmd` binary.
 
 import { execFile, spawnSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { resolveRuntimeLabel, resolveModelName } from "../../agent-identity.js";
+
+/**
+ * Walks up from `cwd` looking for `scripts/cmd` (the project-local wrapper that
+ * enforces --mission-brief and auto-inits a missing bd database). Returns the
+ * wrapper path if found and executable, else null.
+ */
+function findCmdWrapper(cwd: string): string | null {
+	let dir = cwd;
+	while (dir && dir !== "/") {
+		const candidate = join(dir, "scripts", "cmd");
+		try {
+			if (existsSync(candidate)) {
+				const mode = statSync(candidate).mode;
+				if ((mode & 0o111) !== 0) return candidate;
+			}
+		} catch {
+			// keep walking on stat errors
+		}
+		const parent = dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	return null;
+}
 
 // ── Module-level singleton + availability cache ─────────────────────
 // Replaces the old __piCommanderClient/__piCommanderGate globals that
@@ -61,8 +87,12 @@ export class CommanderCliClient {
 	private readonly defaultTimeoutMs: number;
 
 	constructor(options: CommanderCliClientOptions = {}) {
-		this.bin = options.bin || process.env.COMMANDER_CMD_BIN || "cmd";
 		this.cwd = options.cwd || process.cwd();
+		this.bin =
+			options.bin ||
+			process.env.COMMANDER_CMD_BIN ||
+			findCmdWrapper(this.cwd) ||
+			"cmd";
 		this.defaultTimeoutMs = options.defaultTimeoutMs || 8000;
 	}
 

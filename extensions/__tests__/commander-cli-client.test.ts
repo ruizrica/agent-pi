@@ -315,4 +315,89 @@ describe("CommanderCliClient", () => {
 			}
 		});
 	});
+
+	describe("wrapper auto-discovery", () => {
+		// Auto-discover scripts/cmd from the project root so the wrapper's
+		// auto-init + mission-brief guard fire for pi-extension invocations.
+		// We mock the filesystem check exposed by the client.
+
+		const fs = require("node:fs") as typeof import("node:fs");
+		const path = require("node:path") as typeof import("node:path");
+
+		it("prefers scripts/cmd from cwd when it exists and is executable", () => {
+			const fakeProject = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "cli-client-"));
+			try {
+				fs.mkdirSync(path.join(fakeProject, "scripts"), { recursive: true });
+				const wrapper = path.join(fakeProject, "scripts", "cmd");
+				fs.writeFileSync(wrapper, "#!/usr/bin/env bash\nexec /usr/bin/true\n");
+				fs.chmodSync(wrapper, 0o755);
+
+				const client = new CommanderCliClient({ cwd: fakeProject });
+				expect((client as any).bin).toBe(wrapper);
+			} finally {
+				fs.rmSync(fakeProject, { recursive: true, force: true });
+			}
+		});
+
+		it("walks up from a nested cwd to find scripts/cmd at the project root", () => {
+			const fakeProject = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "cli-client-"));
+			try {
+				fs.mkdirSync(path.join(fakeProject, "scripts"), { recursive: true });
+				const wrapper = path.join(fakeProject, "scripts", "cmd");
+				fs.writeFileSync(wrapper, "#!/usr/bin/env bash\nexec /usr/bin/true\n");
+				fs.chmodSync(wrapper, 0o755);
+
+				const nested = path.join(fakeProject, "a", "b", "c");
+				fs.mkdirSync(nested, { recursive: true });
+				const client = new CommanderCliClient({ cwd: nested });
+				expect((client as any).bin).toBe(wrapper);
+			} finally {
+				fs.rmSync(fakeProject, { recursive: true, force: true });
+			}
+		});
+
+		it("falls back to bare 'cmd' when no scripts/cmd wrapper is present in the tree", () => {
+			const fakeProject = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "cli-client-"));
+			try {
+				const client = new CommanderCliClient({ cwd: fakeProject });
+				expect((client as any).bin).toBe("cmd");
+			} finally {
+				fs.rmSync(fakeProject, { recursive: true, force: true });
+			}
+		});
+
+		it("respects explicit options.bin over any wrapper discovery", () => {
+			const fakeProject = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "cli-client-"));
+			try {
+				fs.mkdirSync(path.join(fakeProject, "scripts"), { recursive: true });
+				const wrapper = path.join(fakeProject, "scripts", "cmd");
+				fs.writeFileSync(wrapper, "#!/usr/bin/env bash\nexec /usr/bin/true\n");
+				fs.chmodSync(wrapper, 0o755);
+
+				const client = new CommanderCliClient({ bin: "custom-cmd", cwd: fakeProject });
+				expect((client as any).bin).toBe("custom-cmd");
+			} finally {
+				fs.rmSync(fakeProject, { recursive: true, force: true });
+			}
+		});
+
+		it("respects COMMANDER_CMD_BIN env var over wrapper discovery", () => {
+			const fakeProject = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "cli-client-"));
+			const prev = process.env.COMMANDER_CMD_BIN;
+			try {
+				fs.mkdirSync(path.join(fakeProject, "scripts"), { recursive: true });
+				const wrapper = path.join(fakeProject, "scripts", "cmd");
+				fs.writeFileSync(wrapper, "#!/usr/bin/env bash\nexec /usr/bin/true\n");
+				fs.chmodSync(wrapper, 0o755);
+
+				process.env.COMMANDER_CMD_BIN = "env-cmd";
+				const client = new CommanderCliClient({ cwd: fakeProject });
+				expect((client as any).bin).toBe("env-cmd");
+			} finally {
+				if (prev !== undefined) process.env.COMMANDER_CMD_BIN = prev;
+				else delete process.env.COMMANDER_CMD_BIN;
+				fs.rmSync(fakeProject, { recursive: true, force: true });
+			}
+		});
+	});
 });
