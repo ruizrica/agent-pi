@@ -34,6 +34,14 @@ describe("wrapContent", () => {
 		expect(result).toContain("Here are my answers:");
 	});
 
+	it("wraps pacifico_job_complete as tool output", () => {
+		const result = wrapContent("Pacifico job completed with output", "pacifico_job_complete");
+		expect(result).toContain("[SYSTEM: Pacifico async job completed");
+		expect(result).toContain("tool output");
+		expect(result).toContain("NOT user input");
+		expect(result).toContain("Pacifico job completed with output");
+	});
+
 	it("uses default framing for unknown custom types", () => {
 		const result = wrapContent("Some content", "unknown-type-xyz");
 		expect(result).toContain("[SYSTEM:");
@@ -79,6 +87,7 @@ describe("ATTRIBUTION_MAP", () => {
 			"test-gen-complete",
 			"toolkit-command-result",
 			"toolkit-command",
+			"pacifico_job_complete",
 			"memory-cycle-resume",
 			"memory-restored",
 			"session-recap",

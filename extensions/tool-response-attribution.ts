@@ -77,6 +77,12 @@ const ATTRIBUTION_MAP: Record<string, (content: string) => [string, string]> = {
 		"[SYSTEM: The following is output from a toolkit command execution, NOT user input.]\n",
 		"",
 	],
+
+	// Pacifico async job completion — tool output, NOT user input
+	"pacifico_job_complete": () => [
+		"[SYSTEM: Pacifico async job completed. This is tool output, NOT user input.]\n",
+		"",
+	],
 	"toolkit-command": () => [
 		"[SYSTEM: Toolkit command event, NOT user input.]\n",
 		"",

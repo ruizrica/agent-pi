@@ -7,6 +7,7 @@ import { ensurePacificoEnvLoaded } from "./lib/load-pacifico-env.ts";
 import { loadPacificoApiKey, loadPacificoModel, persistPacificoApiKey, persistPacificoModel } from "./lib/persist-pacifico.ts";
 
 const PACIFICO_MESSAGE_TYPE = "pacifico_message";
+const PACIFICO_JOB_COMPLETE_TYPE = "pacifico_job_complete";
 const DEFAULT_BASE_URL = "https://pacifico.ruizrica2.workers.dev";
 
 interface ModelChoice {
@@ -28,6 +29,7 @@ interface InferRequest {
 	prompt: string;
 	mode?: "sync" | "async" | "auto";
 	model?: string;
+	metadata?: Record<string, unknown>;
 }
 
 interface InferSyncResponse {
@@ -58,16 +60,17 @@ interface JobDetail {
 	status: string;
 	taskType?: string;
 	input?: string;
+	model?: string | null;
+	mode?: string | null;
+	route?: string | null;
 	result?: { output?: string; provider?: string; model?: string; route?: string } | null;
 	error?: string | null;
 	createdAt?: string;
 	completedAt?: string | null;
 }
 
-const POLL_SCHEDULE: Array<{ count: number; intervalMs: number }> = [
-	{ count: 10, intervalMs: 1_000 },
-	{ count: 12, intervalMs: 5_000 },
-	{ count: 84, intervalMs: 10_000 },
+const ASYNC_POLL_SCHEDULE: Array<{ count: number; intervalMs: number }> = [
+	{ count: 120, intervalMs: 30_000 },
 ];
 
 function getBaseUrl(): string {
@@ -175,8 +178,9 @@ function isTerminal(status: string): boolean {
 function pollJob(jobId: string, signal: AbortSignal): Promise<JobDetail> {
 	return new Promise((resolve, reject) => {
 		const ticks: number[] = [];
-		for (const phase of POLL_SCHEDULE) for (let i = 0; i < phase.count; i++) ticks.push(phase.intervalMs);
+		for (const phase of ASYNC_POLL_SCHEDULE) for (let i = 0; i < phase.count; i++) ticks.push(phase.intervalMs);
 		let cancelled = false;
+		let lastError: unknown;
 		const onAbort = () => {
 			cancelled = true;
 			signal.removeEventListener("abort", onAbort);
@@ -189,20 +193,22 @@ function pollJob(jobId: string, signal: AbortSignal): Promise<JobDetail> {
 				if (cancelled) return;
 				try {
 					const job = await getJob(jobId);
+					lastError = undefined;
 					if (isTerminal(job.status)) {
 						signal.removeEventListener("abort", onAbort);
 						resolve(job);
 						return;
 					}
 				} catch (err) {
-					signal.removeEventListener("abort", onAbort);
-					reject(err);
-					return;
+					// Async watcher polling is intentionally quiet. A transient 404/network
+					// miss should not create UI noise; remember it and keep polling.
+					lastError = err;
 				}
 				await new Promise((r) => setTimeout(r, intervalMs));
 			}
 			signal.removeEventListener("abort", onAbort);
-			reject(new Error("Polling timed out before job reached terminal state"));
+		const suffix = lastError instanceof Error ? ` Last poll error: ${lastError.message}` : "";
+		reject(new Error(`Polling timed out before job reached terminal state.${suffix}`));
 		};
 		void run();
 	});
@@ -225,21 +231,47 @@ function formatJobOutcome(job: JobDetail): string {
 	return `${header}\n\n_Job ended with status ${job.status} but no output was returned._`;
 }
 
+function jobCompletionDetails(job: JobDetail): Record<string, unknown> {
+	return {
+		jobId: job.id,
+		status: job.status,
+		model: job.result?.model ?? job.model ?? null,
+		mode: job.mode ?? null,
+		route: job.result?.route ?? job.route ?? null,
+		output: job.result?.output ?? null,
+		error: job.error ?? null,
+		createdAt: job.createdAt ?? null,
+		completedAt: job.completedAt ?? null,
+	};
+}
+
+function emitJobComplete(pi: ExtensionAPI, job: JobDetail): void {
+	pi.sendMessage({
+		customType: PACIFICO_JOB_COMPLETE_TYPE,
+		content: formatJobOutcome(job),
+		display: true,
+		details: jobCompletionDetails(job),
+	}, {
+		triggerTurn: true,
+		deliverAs: "followUp",
+	});
+}
+
 export default function pacificoExtension(pi: ExtensionAPI) {
 	ensurePacificoEnvLoaded();
 	const pollers = new Map<string, Poller>();
 
-	function registerPoller(jobId: string, ctx: ExtensionContext): void {
+	function registerPoller(jobId: string, _ctx: ExtensionContext): void {
 		if (pollers.has(jobId)) return;
 		const controller = new AbortController();
 		pollers.set(jobId, { jobId, abort: () => controller.abort() });
 		void (async () => {
 			try {
 				const final = await pollJob(jobId, controller.signal);
-				if (ctx.hasUI) ctx.ui.notify(`Pacifico job ${jobId} ${final.status}`, final.status === "completed" ? "info" : "warning");
-				emitMessage(pi, formatJobOutcome(final));
-			} catch (err) {
-				if (ctx.hasUI) ctx.ui.notify(`Pacifico job ${jobId} poll failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+				emitJobComplete(pi, final);
+			} catch {
+				// Stay silent for timeout/not-found/network polling failures. The user
+				// asked for no UI when nothing actionable has been found.
 			} finally {
 				pollers.delete(jobId);
 			}
@@ -274,7 +306,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			return;
 		}
 		const model = resolveModel();
-		const body: InferRequest = { prompt, mode: "auto" };
+		const body: InferRequest = { prompt, mode: "auto", metadata: { source: "pi_extension", command: "/pacifico" } };
 		if (model) body.model = model;
 		try {
 			const result = await postInfer(body);
@@ -284,7 +316,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				emitMessage(pi, `${meta}\n\n${r.output}`);
 			} else {
 				const r = result.data;
-				const queued = `⏳ Queued as \`${r.id}\` — model \`${r.model ?? "(default)"}\`${r.reason ? ` — ${r.reason}` : ""}.\nWill notify when complete.`;
+				const queued = `⏳ Queued as \`${r.id}\` — model \`${r.model ?? "(default)"}\`${r.reason ? ` — ${r.reason}` : ""}.\nI'll stay quiet while Pacifico works and continue when the result is ready.`;
 				emitMessage(pi, queued);
 				registerPoller(r.id, ctx);
 			}
@@ -468,7 +500,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				};
 			}
 			const p = params as { prompt: string; model?: string; mode?: "sync" | "async" | "auto" };
-			const body: InferRequest = { prompt: p.prompt, mode: p.mode ?? "auto" };
+			const body: InferRequest = { prompt: p.prompt, mode: p.mode ?? "auto", metadata: { source: "pi_extension", tool: "pacifico_infer" } };
 			const chosen = p.model ?? resolveModel();
 			if (chosen) body.model = chosen;
 			try {
