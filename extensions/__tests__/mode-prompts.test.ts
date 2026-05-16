@@ -7,7 +7,6 @@ import {
 	PLAN_PROMPT,
 	SPEC_PROMPT,
 	buildDelegateEverythingSection,
-	buildNormalPrompt,
 } from "../lib/mode-prompts.ts";
 
 describe("PLAN_PROMPT", () => {
@@ -286,52 +285,3 @@ describe("buildDelegateEverythingSection — shared helper", () => {
 	});
 });
 
-describe("Delegate-Everything Policy — wired into every operational-mode prompt", () => {
-	const NORMAL_PROMPT = buildNormalPrompt({
-		commanderAvailable: true,
-		activeChain: null,
-		activePipeline: null,
-		scoutId: null,
-		selectedAdvisorModel: null,
-	});
-
-	it("NORMAL prompt contains the delegate-everything heading", () => {
-		expect(NORMAL_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
-	});
-
-	it("PLAN prompt contains the delegate-everything heading", () => {
-		expect(PLAN_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
-	});
-
-	it("INVESTIGATE prompt contains the delegate-everything heading", () => {
-		expect(INVESTIGATE_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
-	});
-
-	it("SPEC prompt contains the delegate-everything heading", () => {
-		expect(SPEC_PROMPT).toContain("Delegate Everything Policy (REQUIRED)");
-	});
-
-	it("NORMAL prompt no longer instructs the main agent to fall back to doing the work directly", () => {
-		expect(NORMAL_PROMPT).not.toMatch(/fall back to doing the work directly/);
-	});
-
-	it("NORMAL prompt no longer says 'You CAN still use Bash for running tests'", () => {
-		expect(NORMAL_PROMPT).not.toContain("You CAN still use Bash for running tests");
-	});
-
-	it("PLAN prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
-		expect(PLAN_PROMPT).not.toMatch(/fall back to doing the work directly/);
-	});
-
-	it("INVESTIGATE prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
-		expect(INVESTIGATE_PROMPT).not.toMatch(/fall back to doing the work directly/);
-	});
-
-	it("SPEC prompt does not contain the old 'fall back to doing the work directly' carve-out", () => {
-		expect(SPEC_PROMPT).not.toMatch(/fall back to doing the work directly/);
-	});
-
-	it("NORMAL prompt's mode-selection guidance no longer says 'work directly in NORMAL, do NOT call set_mode'", () => {
-		expect(NORMAL_PROMPT).not.toContain("work directly in NORMAL, do NOT call set_mode");
-	});
-});

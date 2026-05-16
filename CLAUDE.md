@@ -166,10 +166,6 @@ cmd task update <id> --status completed --runtime claude-code --model <m>   # Co
 
 These skills ship with the project under `skills/` and are loaded by default. Tracker-aware skills route through `cmd`.
 
-**Bound to operational modes:**
-- `diagnose` — canonical loop for INVESTIGATE mode (wired in `extensions/lib/mode-prompts.ts:buildInvestigatePrompt`)
-- `grill-with-docs` — plan validation against `CONTEXT.md` + `docs/adr/` (wired in `buildPlanPrompt`)
-
 **Standalone slash commands:**
 - `/diagnose`, `/grill-me`, `/grill-with-docs`, `/prototype`, `/improve-architecture`, `/tdd`
 - `/triage`, `/to-issues`, `/to-prd` — all route through `cmd task add` / `cmd task update`
