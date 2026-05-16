@@ -98,7 +98,7 @@ Structure: `raw/` (ingested content) → `wiki/` (compiled articles with `[[wiki
 - Be cost-conscious: advisor tokens are billed at Opus rates; keep calls targeted.
 
 **Example**
-```
+```text
 claude_advisor {
   question: "Should we split the service into read/write paths or keep a single handler?",
   task_context: "Current design: monolith handler in api/server.ts; performance concerns under load",
@@ -135,12 +135,22 @@ This project uses **cmd (Commander v2)** for task tracking. Run `cmd guide agent
 
 ### Enforcement: `scripts/cmd` wrapper
 
-A guard wrapper lives at `scripts/cmd` and is auto-shadowed in front of the real `cmd` binary via `.claude/settings.json` (`env.PATH` prepends `scripts/` to PATH for new sessions). It intercepts `cmd task add` only — every other subcommand passes through unchanged. If a root `task add` is attempted without `--mission-brief` (and without `--parent`), the wrapper **exits 2** with an explanation; the task is NOT created. Tests live at `scripts/cmd.test.sh`. Bypass for testing only via `CMD_GUARD=off`.
+A guard wrapper lives at `scripts/cmd` and intercepts `cmd task add` when `scripts/` is prepended ahead of the real `cmd` binary in `PATH` for the session. It intercepts `cmd task add` only — every other subcommand passes through unchanged. If a root `task add` is attempted without `--mission-brief` (and without `--parent`), the wrapper **exits 2** with an explanation; the task is NOT created. Tests live at `scripts/cmd.test.sh`. Bypass for testing only via `CMD_GUARD=off`.
 
-Verify in a new session:
+To activate the guard, prepend `scripts/` to your PATH (one-time setup per machine):
+
 ```bash
-which cmd                       # → /Users/ricardo/Workshop/GitHub/agent-pi/scripts/cmd
-scripts/cmd.test.sh             # → "Results: 10 passed, 0 failed"
+# In a project-local .envrc / direnv config:
+export PATH="$PWD/scripts:$PATH"
+
+# Or in your shell rc, with an absolute project path:
+# export PATH="$HOME/path/to/agent-pi/scripts:$PATH"
+```
+
+Verify activation:
+```text
+which cmd                       # → .../agent-pi/scripts/cmd (the wrapper)
+scripts/cmd.test.sh             # → "Results: 13 passed, 0 failed"
 ```
 
 ### Quick Reference
@@ -153,7 +163,7 @@ cmd task add "Title" --mission-brief "1-3 sentence what & why" --runtime claude-
 cmd task add "Title" --parent <id> --runtime claude-code --model <m>
 cmd context <id>                       # Full task context bundle
 cmd task claim <id> --runtime claude-code --model <m>     # Claim work
-cmd task comment <id> "msg" --type progress|error --runtime claude-code --model <m>  # Log progress
+cmd task comment <id> "msg" --type <progress|error> --runtime claude-code --model <m>  # Log progress
 cmd task update <id> --status completed --runtime claude-code --model <m>   # Complete
 ```
 

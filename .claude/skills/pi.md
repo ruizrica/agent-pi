@@ -123,7 +123,7 @@ The bridge returns JSON. Parse it and summarize:
 
 If no valid subcommand is found, display:
 
-```
+```text
 /pi — Pi Agent Dispatcher
 
 Usage: /pi <mode> <task>
