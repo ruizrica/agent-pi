@@ -118,13 +118,25 @@ interface PacificoWidgetDetails {
 	error?: string | null;
 }
 
-function normalizeWidgetStatus(status: string | null | undefined): "processing" | "submitted" | "completed" | "failed" | "cancelled" {
+type PacificoWidgetStatus = "queued" | "processing" | "completed" | "error";
+
+function normalizeWidgetStatus(status: string | null | undefined): PacificoWidgetStatus {
 	const s = status?.trim().toLowerCase();
-	if (s === "submitted") return "submitted";
-	if (s === "completed") return "completed";
-	if (s === "failed") return "failed";
-	if (s === "cancelled") return "cancelled";
-	return "processing";
+	if (s === "processing" || s === "submitted" || s === "running") return "processing";
+	if (s === "completed" || s === "complete") return "completed";
+	if (s === "failed" || s === "error" || s === "cancelled") return "error";
+	return "queued";
+}
+
+function statusColor(status: PacificoWidgetStatus): string {
+	if (status === "completed") return "\x1b[38;2;34;197;94m";
+	if (status === "processing") return "\x1b[38;2;234;179;8m";
+	if (status === "error") return "\x1b[38;2;239;68;68m";
+	return "\x1b[38;2;148;163;184m";
+}
+
+function renderStatus(status: PacificoWidgetStatus): string {
+	return `${statusColor(status)}${status}\x1b[39m`;
 }
 
 function formatPacificoWidgetContent(details: PacificoWidgetDetails): string {
@@ -153,13 +165,11 @@ function renderPacificoMessage(message: { content?: unknown; details?: PacificoW
 	const model = theme.bold(`\x1b[38;2;125;137;151m${modelText}\x1b[39m`);
 	const lines = [
 		label,
-		`${key("status")} ${theme.fg("muted", status)}`,
+		`${key("status")} ${renderStatus(status)}`,
 		`${key("job")} ${theme.fg("muted", details.jobId ?? "pending")}`,
 		`${key("model")} ${model}`,
 	];
-	if ((status === "completed" || status === "failed" || status === "cancelled") && (details.output || details.error)) {
-		lines.push("", details.output ?? details.error ?? "");
-	} else if (!message.details && content) {
+	if (!message.details && content) {
 		lines.push("", theme.fg("muted", content));
 	}
 	const cardBg = (text: string) => `\x1b[48;2;50;50;50m${text}\x1b[49m`;
@@ -253,7 +263,7 @@ function isTerminal(status: string): boolean {
 	return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-function pollJob(jobId: string, signal: AbortSignal): Promise<JobDetail> {
+function pollJob(jobId: string, signal: AbortSignal, onUpdate?: (job: JobDetail) => void): Promise<JobDetail> {
 	return new Promise((resolve, reject) => {
 		const ticks: number[] = [];
 		for (const phase of ASYNC_POLL_SCHEDULE) for (let i = 0; i < phase.count; i++) ticks.push(phase.intervalMs);
@@ -272,6 +282,7 @@ function pollJob(jobId: string, signal: AbortSignal): Promise<JobDetail> {
 				try {
 					const job = await getJob(jobId);
 					lastError = undefined;
+					onUpdate?.(job);
 					if (isTerminal(job.status)) {
 						signal.removeEventListener("abort", onAbort);
 						resolve(job);
@@ -357,11 +368,16 @@ function jobCompletionDetails(job: JobDetail): Record<string, unknown> {
 }
 
 function emitJobComplete(pi: ExtensionAPI, job: JobDetail): void {
+	const details = jobCompletionDetails(job);
 	pi.sendMessage({
 		customType: PACIFICO_JOB_COMPLETE_TYPE,
-		content: formatJobOutcome(job),
-		display: true,
-		details: jobCompletionDetails(job),
+		content: formatPacificoWidgetContent({
+			status: job.status,
+			jobId: job.id,
+			model: String(details.model ?? job.model ?? "(default)"),
+		}),
+		display: false,
+		details,
 	}, {
 		triggerTurn: true,
 		deliverAs: "followUp",
@@ -374,8 +390,34 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	pi.registerMessageRenderer(PACIFICO_JOB_COMPLETE_TYPE, renderPacificoMessage);
 	const pollers = new Map<string, Poller>();
 	const pendingCompletions = new Map<string, PendingCompletion>();
+	const widgetStates = new Map<string, PacificoWidgetDetails>();
+	let activeWidgetKey: string | undefined;
+	let activeWidgetDetails: PacificoWidgetDetails | undefined;
+	let widgetCtx: ExtensionContext | undefined;
 	let agentActive = false;
 	let completionFlushTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function registerPacificoStatusWidget(ctx: ExtensionContext): void {
+		if (!ctx.hasUI || !activeWidgetKey) return;
+		widgetCtx = ctx;
+		ctx.ui.setWidget(activeWidgetKey, (_tui: any, theme: any) => renderPacificoMessage({ details: activeWidgetDetails }, undefined, theme), { placement: "aboveEditor" } as any);
+	}
+
+	function setPacificoWidget(ctx: ExtensionContext, key: string, details: PacificoWidgetDetails): void {
+		widgetStates.set(key, details);
+		activeWidgetKey = `pacifico-${key}`;
+		activeWidgetDetails = details;
+		registerPacificoStatusWidget(ctx);
+	}
+
+	function clearPacificoWidget(key: string): void {
+		widgetStates.delete(key);
+		if (activeWidgetKey === `pacifico-${key}`) {
+			widgetCtx?.ui.setWidget(activeWidgetKey, undefined);
+			activeWidgetKey = undefined;
+			activeWidgetDetails = undefined;
+		}
+	}
 
 	function scheduleCompletionFlush(delayMs = COMPLETION_FLUSH_DELAY_MS): void {
 		if (completionFlushTimer) return;
@@ -402,6 +444,11 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	function queueJobCompletion(job: JobDetail, cwd: string): void {
 		markPacificoJobTerminal(cwd, terminalInputFromJob(job));
 		pendingCompletions.set(job.id, { cwd, job });
+		setPacificoWidget(widgetCtx ?? ({ hasUI: false } as ExtensionContext), job.id, {
+			status: job.status,
+			jobId: job.id,
+			model: job.result?.model ?? job.model ?? "(default)",
+		});
 		scheduleCompletionFlush();
 	}
 
@@ -412,7 +459,13 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		pollers.set(jobId, { jobId, cwd, abort: () => controller.abort() });
 		void (async () => {
 			try {
-				const final = await pollJob(jobId, controller.signal);
+				const final = await pollJob(jobId, controller.signal, (job) => {
+					setPacificoWidget(ctx, job.id, {
+						status: job.status,
+						jobId: job.id,
+						model: job.result?.model ?? job.model ?? "(default)",
+					});
+				});
 				queueJobCompletion(final, cwd);
 			} catch (err) {
 				markPacificoJobPollError(cwd, jobId, err instanceof Error ? err.message : String(err));
@@ -447,6 +500,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	}
 
 	async function runInferAndRender(prompt: string, ctx: ExtensionContext): Promise<void> {
+		widgetCtx = ctx;
 		if (!getApiKey()) {
 			ctx.ui.notify("Pacifico API key missing — refusing to send. Use PACIFICO_API_KEY / HARNESS_API_KEY or extensions/.pacifico.env.", "error");
 			return;
@@ -454,7 +508,8 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		const model = resolveModel();
 		const body: InferRequest = { prompt, mode: "auto", metadata: { source: "pi_extension", command: "/pacifico" } };
 		if (model) body.model = model;
-		emitPacificoWidget(pi, { status: "processing", model: model ?? "(default)" });
+		const provisionalKey = `pending-${Date.now()}`;
+		setPacificoWidget(ctx, provisionalKey, { status: "queued", model: model ?? "(default)" });
 		try {
 			const result = await postInfer(body);
 			if (result.kind === "sync") {
@@ -470,7 +525,8 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 					route: r.route,
 					prompt,
 				});
-				emitPacificoWidget(pi, {
+				clearPacificoWidget(provisionalKey);
+				setPacificoWidget(ctx, r.id, {
 					status: r.status,
 					jobId: r.id,
 					model: r.model ?? model ?? "(default)",
