@@ -11,11 +11,12 @@ describe("agent-team Mission Complete replacement", () => {
 	it("checks the global Mission Complete visibility flag only when all tasks are complete", () => {
 		expect(source).toContain("__piMissionCompleteVisible");
 		expect(source).toContain("const allTasksComplete = !!taskList?.tasks?.length && taskList.tasks.every((task) => task.status === \"done\");");
+		expect(source).toContain("const completedTaskUiDismissed = !!(globalThis as any).__piCompletedTaskUiDismissed && allTasksComplete;");
 		expect(source).toContain("const missionCompleteVisible = !!(globalThis as any).__piMissionCompleteVisible && allTasksComplete;");
 	});
 
-	it("clears the regular task widget while Mission Complete is visible", () => {
-		expect(source).toContain('if (missionCompleteVisible) {\n\t\t\twidgetCtx.ui.setWidget("agent-team", undefined);');
+	it("clears the regular task widget while Mission Complete is visible or dismissed", () => {
+		expect(source).toContain('if (missionCompleteVisible || completedTaskUiDismissed) {\n\t\t\twidgetCtx.ui.setWidget("agent-team", undefined);');
 		expect(source).toContain("} else if (taskList && taskList.tasks.length > 0) {");
 	});
 

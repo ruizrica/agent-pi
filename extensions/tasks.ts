@@ -95,6 +95,8 @@ const TasksParams = Type.Object({
 
 // ── Status helpers ─────────────────────────────────────────────────────
 
+const MISSION_COMPLETE_DISMISS_MS = 2_000;
+
 const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", done: "x" };
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprogress: "done", done: "idle" };
 const STATUS_LABEL: Record<TaskStatus, string> = { idle: "idle", inprogress: "in progress", done: "done" };
@@ -321,6 +323,9 @@ export default function (pi: ExtensionAPI) {
 
 		refreshWidget(ctx);
 		ctx.ui.setWidget("tasks-list", undefined);
+		if (tasks.length === 0 || tasks.some((t) => t.status !== "done")) {
+			publishCompletedTaskUiDismissed(false);
+		}
 		if (missionCompleteVisible && (tasks.length === 0 || tasks.some((t) => t.status !== "done"))) {
 			dismissMissionComplete(ctx);
 		}
@@ -329,11 +334,24 @@ export default function (pi: ExtensionAPI) {
 	// ── Mission Complete widget ───────────────────────────────────────
 
 	let missionCompleteVisible = false;
+	let missionCompleteDismissTimer: ReturnType<typeof setTimeout> | undefined;
 	g.__piMissionCompleteVisible = false;
+	g.__piCompletedTaskUiDismissed = false;
 
 	function publishMissionCompleteVisibility(visible: boolean): void {
 		missionCompleteVisible = visible;
 		g.__piMissionCompleteVisible = visible;
+	}
+
+	function publishCompletedTaskUiDismissed(dismissed: boolean): void {
+		g.__piCompletedTaskUiDismissed = dismissed;
+	}
+
+	function clearMissionCompleteDismissTimer(): void {
+		if (missionCompleteDismissTimer) {
+			clearTimeout(missionCompleteDismissTimer);
+			missionCompleteDismissTimer = undefined;
+		}
 	}
 
 	function auditCommanderBoardForMissionComplete(): void {
@@ -409,6 +427,7 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		if ((globalThis as any).__piSummaryModeActive) return;
 
+		publishCompletedTaskUiDismissed(false);
 		auditCommanderBoardForMissionComplete();
 
 		// Build state for the render
@@ -467,9 +486,35 @@ export default function (pi: ExtensionAPI) {
 		publishMissionCompleteVisibility(true);
 		ctx.ui.setWidget("agent-team", undefined);
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
+		scheduleMissionCompleteDismiss(ctx);
+	}
+
+	function clearTransientTaskWidgets(ctx: ExtensionContext, _reason: string): void {
+		clearMissionCompleteDismissTimer();
+		const allDone = tasks.length > 0 && tasks.every((t) => t.status === "done");
+		if (allDone) publishCompletedTaskUiDismissed(true);
+		publishMissionCompleteVisibility(false);
+		if (ctx.hasUI) {
+			ctx.ui.setWidget("mission-complete", undefined);
+			ctx.ui.setWidget("tasks-list", undefined);
+		}
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
+	}
+
+	function scheduleMissionCompleteDismiss(ctx: ExtensionContext): void {
+		clearMissionCompleteDismissTimer();
+		missionCompleteDismissTimer = setTimeout(() => {
+			missionCompleteDismissTimer = undefined;
+			if (tasks.length > 0 && tasks.every((t) => t.status === "done")) {
+				clearTransientTaskWidgets(ctx, "mission_complete_timer");
+			}
+		}, MISSION_COMPLETE_DISMISS_MS);
+		(missionCompleteDismissTimer as any)?.unref?.();
 	}
 
 	function dismissMissionComplete(ctx: ExtensionContext): void {
+		clearMissionCompleteDismissTimer();
+		publishCompletedTaskUiDismissed(false);
 		publishMissionCompleteVisibility(false);
 		if (ctx.hasUI) ctx.ui.setWidget("mission-complete", undefined);
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
@@ -546,7 +591,11 @@ export default function (pi: ExtensionAPI) {
 	// (filesystem alphabetical: security-guard < tasks). Do not rename
 	// this file to sort before security-guard without updating both.
 
-	pi.on("tool_call", async (event, _ctx) => {
+	pi.on("tool_call", async (event, ctx) => {
+		if ((event.toolName || "").startsWith("show_")) {
+			clearTransientTaskWidgets(ctx, "show_tool");
+		}
+
 		// Sub-agents manage their own task discipline — don't gate them
 		if (process.env.PI_SUBAGENT === "1") return { block: false };
 		if (event.toolName === "tasks") return { block: false };

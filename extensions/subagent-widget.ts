@@ -89,6 +89,12 @@ const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 /** Grace period after SIGTERM before escalating to SIGKILL. */
 const TIMEOUT_KILL_GRACE_MS = 30_000;
 
+/** Maximum time a completed subagent widget may remain visible. */
+const SUBAGENT_DISMISS_MS = 2_000;
+
+/** Periodic sweep cadence used to reconcile missed dismiss timers. */
+const SUBAGENT_SWEEP_MS = 750;
+
 /** Resolve the timeout for a subagent based on role name or explicit override. */
 function resolveTimeout(name: string, explicitTimeout?: number): number {
 	if (explicitTimeout !== undefined && explicitTimeout > 0) return explicitTimeout;
@@ -128,6 +134,7 @@ interface SubState {
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
 	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
+	terminalAt?: number;      // Date.now() timestamp for done/error states; used by the stale widget sweeper
 	dismissTimer?: ReturnType<typeof setTimeout>;  // 2s auto-remove timer — cancelled on /subcont, /subrm, /subclear, cleanup, batch reuse
 }
 
@@ -135,6 +142,7 @@ export default function (pi: ExtensionAPI) {
 	const agents: Map<number, SubState> = new Map();
 	let nextId = 1;
 	let widgetCtx: any;
+	let cleanupInterval: ReturnType<typeof setInterval> | undefined;
 	const widgetBoxes = new Map<number, { invalidate: () => void }>();
 
 	// ── Agent definition registry (loaded from .md files + models.json) ───────
@@ -246,6 +254,73 @@ export default function (pi: ExtensionAPI) {
 
 	function invalidateWidget(id: number) {
 		widgetBoxes.get(id)?.invalidate();
+	}
+
+	function isTerminal(state: SubState): boolean {
+		return state.status === "done" || state.status === "error";
+	}
+
+	function clearDismissTimer(state: SubState) {
+		if (state.dismissTimer) {
+			clearTimeout(state.dismissTimer);
+			state.dismissTimer = undefined;
+		}
+	}
+
+	function removeSubagentWidget(id: number, ctx: any, reason: string): boolean {
+		const state = agents.get(id);
+		if (!state) return false;
+		clearDismissTimer(state);
+		logLifecycle(state, ctx, "auto_remove", { status: state.status, reason });
+		ctx?.ui?.setWidget?.(`sub-${id}`, undefined);
+		widgetBoxes.delete(id);
+		agents.delete(id);
+		(globalThis as any).__piRefreshAgentTeamWidget?.();
+		return true;
+	}
+
+	function scheduleTerminalDismiss(state: SubState, ctx: any, reason: string) {
+		if (state.autoRemove === false || !isTerminal(state)) return;
+		if (!state.terminalAt) state.terminalAt = Date.now();
+		clearDismissTimer(state);
+		logLifecycle(state, ctx, "auto_remove_scheduled", { delayMs: SUBAGENT_DISMISS_MS, reason, status: state.status });
+		state.dismissTimer = setTimeout(() => {
+			state.dismissTimer = undefined;
+			const current = agents.get(state.id);
+			if (!current || !isTerminal(current)) return;
+			removeSubagentWidget(state.id, ctx, "timer");
+		}, SUBAGENT_DISMISS_MS);
+		(state.dismissTimer as any)?.unref?.();
+	}
+
+	function sweepTerminalSubagents(ctx: any, reason: string): number {
+		const now = Date.now();
+		let removed = 0;
+		for (const [id, state] of Array.from(agents.entries())) {
+			if (state.autoRemove === false || !isTerminal(state)) continue;
+			if (!state.terminalAt) state.terminalAt = now;
+			if (now - state.terminalAt >= SUBAGENT_DISMISS_MS) {
+				if (removeSubagentWidget(id, ctx, reason)) removed++;
+			} else if (!state.dismissTimer) {
+				scheduleTerminalDismiss(state, ctx, `${reason}:missing_timer`);
+			}
+		}
+		return removed;
+	}
+
+	function stopCleanupSweep() {
+		if (cleanupInterval) {
+			clearInterval(cleanupInterval);
+			cleanupInterval = undefined;
+		}
+	}
+
+	function startCleanupSweep(ctx: any) {
+		stopCleanupSweep();
+		cleanupInterval = setInterval(() => {
+			sweepTerminalSubagents(ctx, "interval");
+		}, SUBAGENT_SWEEP_MS);
+		(cleanupInterval as any)?.unref?.();
 	}
 
 	// ── Streaming helpers ─────────────────────────────────────────────────────
@@ -479,6 +554,7 @@ export default function (pi: ExtensionAPI) {
 				}
 				state.elapsed = Date.now() - startTime;
 				state.status = code === 0 ? "done" : "error";
+				state.terminalAt = Date.now();
 				if (state.status === "error" && !state.failureDetail) {
 					const finalText = state.textChunks.join("").trim();
 					state.failureDetail = finalText.split("\n").map(l => l.trim()).filter(Boolean).pop() || `Agent exited with code ${code ?? "null"}${signal ? ` signal ${signal}` : ""}`;
@@ -557,28 +633,9 @@ export default function (pi: ExtensionAPI) {
 					state.standby = false;
 				}
 
-				// Auto-remove widget ~2s after the agent reaches a terminal state, but keep
-				// failed widgets visible so provider/startup errors are readable.
-				// Tracked on state.dismissTimer so /subcont, /subrm, /subclear, and
-				// subagent_cleanup can cancel it cleanly if the agent gets reused.
-				if (state.autoRemove !== false && state.status !== "error") {
-					logLifecycle(state, ctx, "auto_remove_scheduled", { delayMs: 2_000 });
-					if (state.dismissTimer) {
-						clearTimeout(state.dismissTimer);
-					}
-					state.dismissTimer = setTimeout(() => {
-						state.dismissTimer = undefined;
-						if (agents.has(state.id) && state.status !== "running") {
-							logLifecycle(state, ctx, "auto_remove", { status: state.status });
-							ctx.ui.setWidget(`sub-${state.id}`, undefined);
-							widgetBoxes.delete(state.id);
-							agents.delete(state.id);
-							(globalThis as any).__piRefreshAgentTeamWidget?.();
-						}
-					}, 2_000);
-				} else if (state.status === "error") {
-					logLifecycle(state, ctx, "auto_remove_skipped", { reason: "error_visible_for_diagnostics", logPath: state.lifecycleLogPath });
-				}
+				// Auto-remove every terminal widget within the 2s UI hygiene window.
+				// Diagnostics remain durable through the follow-up message and lifecycle log.
+				scheduleTerminalDismiss(state, ctx, "finish");
 
 				resolve();
 			};
@@ -759,14 +816,8 @@ export default function (pi: ExtensionAPI) {
 
 			// ── Auto-cleanup: remove done/error agents before spawning new batch ──
 			for (const [id, a] of Array.from(agents.entries())) {
-				if (a.status === "done" || a.status === "error") {
-					if (a.dismissTimer) {
-						clearTimeout(a.dismissTimer);
-						a.dismissTimer = undefined;
-					}
-					if (widgetCtx) widgetCtx.ui.setWidget(`sub-${id}`, undefined);
-					widgetBoxes.delete(id);
-					agents.delete(id);
+				if (isTerminal(a)) {
+					removeSubagentWidget(id, widgetCtx || ctx, "batch_precleanup");
 				}
 			}
 
@@ -857,12 +908,10 @@ export default function (pi: ExtensionAPI) {
 
 			// Cancel any pending 2s auto-dismiss timer — the agent is being reused
 			// for another turn, so the widget should stay visible.
-			if (state.dismissTimer) {
-				clearTimeout(state.dismissTimer);
-				state.dismissTimer = undefined;
-			}
+			clearDismissTimer(state);
 
 			state.status = "running";
+			state.terminalAt = undefined;
 			state.task = args.prompt;
 			state.textChunks = [];
 			state.lifecycleEvents = [];
@@ -902,14 +951,7 @@ export default function (pi: ExtensionAPI) {
 			if (state.proc && state.status === "running") {
 				await killGracefully(state.proc);
 			}
-			if (state.dismissTimer) {
-				clearTimeout(state.dismissTimer);
-				state.dismissTimer = undefined;
-			}
-			ctx.ui.setWidget(`sub-${args.id}`, undefined);
-			widgetBoxes.delete(args.id);
-			agents.delete(args.id);
-			(globalThis as any).__piRefreshAgentTeamWidget?.();
+			removeSubagentWidget(args.id, ctx, "explicit_remove");
 
 			return {
 				content: [{ type: "text", text: `SA${args.id} removed.` }],
@@ -953,29 +995,17 @@ export default function (pi: ExtensionAPI) {
 				// Skip the pre-spawned scout — it's managed separately
 				if ((globalThis as any).__piScoutId === id) continue;
 
-				if (state.status === "done" || state.status === "error") {
-					if (state.dismissTimer) {
-						clearTimeout(state.dismissTimer);
-						state.dismissTimer = undefined;
-					}
-					ctx.ui.setWidget(`sub-${id}`, undefined);
-					widgetBoxes.delete(id);
-					agents.delete(id);
-					removedDone++;
+				if (isTerminal(state)) {
+					if (removeSubagentWidget(id, ctx, "manual_cleanup_terminal")) removedDone++;
 				} else if (state.status === "running" && maxAge > 0 && state.elapsed > maxAge) {
 					if (state.proc) {
 						killPromises.push(killGracefully(state.proc));
 					}
-					if (state.dismissTimer) {
-						clearTimeout(state.dismissTimer);
-						state.dismissTimer = undefined;
-					}
+					clearDismissTimer(state);
 					state.status = "error";
+					state.terminalAt = Date.now();
 					state.textChunks.push(`\n[CLEANUP] Killed after ${Math.round(state.elapsed / 1000)}s (stale).`);
-					ctx.ui.setWidget(`sub-${id}`, undefined);
-					widgetBoxes.delete(id);
-					agents.delete(id);
-					killedStale++;
+					if (removeSubagentWidget(id, ctx, "manual_cleanup_stale_running")) killedStale++;
 				}
 			}
 
@@ -1064,7 +1094,9 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// Resume: update state for a new turn
+			clearDismissTimer(state);
 			state.status = "running";
+			state.terminalAt = undefined;
 			state.task = prompt;
 			state.textChunks = [];
 			state.elapsed = 0;
@@ -1110,13 +1142,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(`SA${num} removed.`, "info");
 			}
 
-			if (state.dismissTimer) {
-				clearTimeout(state.dismissTimer);
-				state.dismissTimer = undefined;
-			}
-			ctx.ui.setWidget(`sub-${num}`, undefined);
-			widgetBoxes.delete(num);
-			agents.delete(num);
+			removeSubagentWidget(num, ctx, "slash_subrm");
 		},
 	});
 
@@ -1134,10 +1160,7 @@ export default function (pi: ExtensionAPI) {
 					killPromises.push(killGracefully(state.proc));
 					killed++;
 				}
-				if (state.dismissTimer) {
-					clearTimeout(state.dismissTimer);
-					state.dismissTimer = undefined;
-				}
+				clearDismissTimer(state);
 				ctx.ui.setWidget(`sub-${id}`, undefined);
 			}
 			await Promise.all(killPromises);
@@ -1199,8 +1222,24 @@ export default function (pi: ExtensionAPI) {
 		spawnAgent(state, "You are now on standby. Respond with exactly: Ready.", ctx);
 	}
 
+	pi.on("input", async (_event, ctx) => {
+		widgetCtx = ctx;
+		sweepTerminalSubagents(ctx, "input");
+		return { action: "continue" as const };
+	});
+
+	pi.on("tool_call", async (event, ctx) => {
+		widgetCtx = ctx;
+		const toolName = event?.toolName || "";
+		if (toolName.startsWith("show_")) {
+			sweepTerminalSubagents(ctx, "show_tool");
+		}
+		return { block: false };
+	});
+
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
+		stopCleanupSweep();
 		const sessDir = path.join(os.homedir(), ".pi", "agent", "sessions", "subagents");
 		cleanOldSessionFiles(sessDir, 7);
 		const killPromises: Promise<void>[] = [];
@@ -1208,10 +1247,7 @@ export default function (pi: ExtensionAPI) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
 			}
-			if (state.dismissTimer) {
-				clearTimeout(state.dismissTimer);
-				state.dismissTimer = undefined;
-			}
+			clearDismissTimer(state);
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
 		await Promise.all(killPromises);
@@ -1219,6 +1255,7 @@ export default function (pi: ExtensionAPI) {
 		widgetBoxes.clear();
 		nextId = 1;
 		widgetCtx = ctx;
+		startCleanupSweep(ctx);
 
 		// Clear stale scout state from previous session
 		(globalThis as any).__piScoutId = undefined;
@@ -1259,16 +1296,14 @@ export default function (pi: ExtensionAPI) {
 	// ── /new resets — re-spawn scout for the new session ──────────────────────
 
 	pi.on("session_switch", async (_event, ctx) => {
+		stopCleanupSweep();
 		// Kill running subagents and clear all widgets
 		const killPromises: Promise<void>[] = [];
 		for (const [id, state] of Array.from(agents.entries())) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
 			}
-			if (state.dismissTimer) {
-				clearTimeout(state.dismissTimer);
-				state.dismissTimer = undefined;
-			}
+			clearDismissTimer(state);
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
 		await Promise.all(killPromises);
@@ -1290,6 +1325,7 @@ export default function (pi: ExtensionAPI) {
 		widgetBoxes.clear();
 		nextId = 1;
 		widgetCtx = ctx;
+		startCleanupSweep(ctx);
 
 		// Clear stale scout state
 		(globalThis as any).__piScoutId = undefined;

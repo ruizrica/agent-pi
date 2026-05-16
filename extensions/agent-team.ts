@@ -376,8 +376,9 @@ export default function (pi: ExtensionAPI) {
 		// Task list widget (above editor)
 		const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
 		const allTasksComplete = !!taskList?.tasks?.length && taskList.tasks.every((task) => task.status === "done");
+		const completedTaskUiDismissed = !!(globalThis as any).__piCompletedTaskUiDismissed && allTasksComplete;
 		const missionCompleteVisible = !!(globalThis as any).__piMissionCompleteVisible && allTasksComplete;
-		if (missionCompleteVisible) {
+		if (missionCompleteVisible || completedTaskUiDismissed) {
 			widgetCtx.ui.setWidget("agent-team", undefined);
 		} else if (taskList && taskList.tasks.length > 0) {
 			if ((globalThis as any).__piSummaryModeActive) return;

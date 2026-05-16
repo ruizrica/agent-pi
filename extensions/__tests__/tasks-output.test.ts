@@ -8,10 +8,11 @@ import { join } from "path";
 const tasksSource = readFileSync(join(__dirname, "..", "tasks.ts"), "utf-8");
 
 describe("mission complete lifecycle", () => {
-	it("persists mission complete while tasks remain done", () => {
-		expect(tasksSource).not.toContain("MISSION_COMPLETE_DISMISS_MS");
-		expect(tasksSource).not.toContain("setTimeout(() => {\n\t\t\tctx.ui.setWidget(\"mission-complete\", undefined);");
-		expect(tasksSource).toContain("let missionCompleteVisible = false;");
+	it("auto-dismisses mission complete as transient UI while preserving task state", () => {
+		expect(tasksSource).toContain("const MISSION_COMPLETE_DISMISS_MS = 2_000;");
+		expect(tasksSource).toContain("let missionCompleteDismissTimer: ReturnType<typeof setTimeout> | undefined;");
+		expect(tasksSource).toContain("function scheduleMissionCompleteDismiss(ctx: ExtensionContext)");
+		expect(tasksSource).toContain("clearTransientTaskWidgets(ctx, \"mission_complete_timer\")");
 		expect(tasksSource).toContain("publishMissionCompleteVisibility(true);");
 	});
 
@@ -45,12 +46,22 @@ describe("mission complete lifecycle", () => {
 		expect(checkMissionSection).toContain("showMissionComplete(ctx);");
 	});
 
-	it("does not dismiss mission complete on ordinary user input", () => {
-		const inputSection = tasksSource.slice(
-			tasksSource.indexOf('pi.on("input"'),
-			tasksSource.indexOf("// ── Register tasks tool"),
+	it("clears transient mission/task widgets before viewer tools without deleting task state", () => {
+		const helperSection = tasksSource.slice(
+			tasksSource.indexOf("function clearTransientTaskWidgets"),
+			tasksSource.indexOf("function scheduleMissionCompleteDismiss"),
 		);
-		expect(inputSection).not.toContain("dismissMissionComplete");
+		expect(helperSection).toContain('ctx.ui.setWidget("mission-complete", undefined);');
+		expect(helperSection).toContain('ctx.ui.setWidget("tasks-list", undefined);');
+		expect(helperSection).not.toContain("tasks = []");
+		expect(helperSection).not.toContain("clearMappings");
+
+		const toolCallSection = tasksSource.slice(
+			tasksSource.indexOf('pi.on("tool_call"'),
+			tasksSource.indexOf("// ── Auto-nudge on agent_end"),
+		);
+		expect(toolCallSection).toContain('startsWith("show_")');
+		expect(toolCallSection).toContain('clearTransientTaskWidgets(ctx, "show_tool")');
 	});
 
 	it("clears mission complete when starting a new list or clearing tasks", () => {

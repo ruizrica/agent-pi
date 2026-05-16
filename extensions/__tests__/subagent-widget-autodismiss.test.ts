@@ -11,91 +11,95 @@ const widgetSource = readFileSync(
 );
 
 describe("subagent widget auto-dismiss", () => {
-	it("schedules the 2-second dismiss timer and stores it on state.dismissTimer", () => {
-		// The SubState interface must declare the dismissTimer slot so it's
-		// trackable across the lifecycle (continue / remove / cleanup).
+	it("uses a shared 2-second dismiss constant and tracks terminal timestamps", () => {
+		expect(widgetSource).toContain("const SUBAGENT_DISMISS_MS = 2_000;");
+		expect(widgetSource).toContain("const SUBAGENT_SWEEP_MS");
+		expect(widgetSource).toMatch(/terminalAt\?:\s*number/);
 		expect(widgetSource).toMatch(/dismissTimer\?:\s*ReturnType<typeof setTimeout>/);
-
-		// The finish() block must store the timer handle on the state, not just
-		// fire-and-forget — that's how we make cancellation reliable.
-		expect(widgetSource).toContain("state.dismissTimer = setTimeout(");
-		expect(widgetSource).toMatch(/}\s*,\s*2_000\s*\);/);
 	});
 
-	it("clears the dismiss timer inside the timeout callback once it runs", () => {
-		// After the timeout fires, we null out the field so subsequent reuses
-		// (highly unlikely, but defensive) don't re-clear a dead handle.
+	it("centralizes scheduling and removal through helper functions", () => {
+		expect(widgetSource).toContain("function clearDismissTimer(state: SubState)");
+		expect(widgetSource).toContain("function removeSubagentWidget(id: number, ctx: any, reason: string)");
+		expect(widgetSource).toContain("function scheduleTerminalDismiss(state: SubState, ctx: any, reason: string)");
+		expect(widgetSource).toContain("function sweepTerminalSubagents(ctx: any, reason: string)");
+		expect(widgetSource).toContain("state.dismissTimer = setTimeout(");
+		expect(widgetSource).toContain("}, SUBAGENT_DISMISS_MS);");
+	});
+
+	it("marks terminal states before scheduling dismissal", () => {
 		const finishBlock = widgetSource.slice(
-			widgetSource.indexOf("state.dismissTimer = setTimeout("),
-			widgetSource.indexOf("}, 2_000);"),
+			widgetSource.indexOf("const finish ="),
+			widgetSource.indexOf("resolve();", widgetSource.indexOf("const finish =")),
 		);
-		expect(finishBlock).toContain("state.dismissTimer = undefined;");
+		expect(finishBlock).toContain("state.status = code === 0 ? \"done\" : \"error\";");
+		expect(finishBlock).toContain("state.terminalAt = Date.now();");
+		expect(finishBlock).toContain("scheduleTerminalDismiss(state, ctx, \"finish\");");
+		expect(finishBlock).not.toContain("auto_remove_skipped");
+	});
+
+	it("runs a periodic stale sweep and opportunistic input/show-tool sweeps", () => {
+		expect(widgetSource).toContain("function startCleanupSweep(ctx: any)");
+		expect(widgetSource).toContain("sweepTerminalSubagents(ctx, \"interval\")");
+		expect(widgetSource).toContain("pi.on(\"input\"");
+		expect(widgetSource).toContain("sweepTerminalSubagents(ctx, \"input\")");
+		expect(widgetSource).toContain("pi.on(\"tool_call\"");
+		expect(widgetSource).toContain("toolName.startsWith(\"show_\")");
+		expect(widgetSource).toContain("sweepTerminalSubagents(ctx, \"show_tool\")");
 	});
 
 	it("cancels the pending dismiss timer when subagent_continue reuses an agent", () => {
-		// subagent_continue brings a finished agent back to running. If we let
-		// the original 2s timer fire, it would yank the widget mid-turn.
 		const continueBlock = widgetSource.slice(
 			widgetSource.indexOf('name: "subagent_continue"'),
 			widgetSource.indexOf('name: "subagent_remove"'),
 		);
 		expect(continueBlock.length).toBeGreaterThan(0);
-		expect(continueBlock).toMatch(/if \(state\.dismissTimer\) \{[\s\S]*?clearTimeout\(state\.dismissTimer\)/);
+		expect(continueBlock).toContain("clearDismissTimer(state);");
+		expect(continueBlock).toContain("state.terminalAt = undefined;");
 	});
 
 	it("cancels the pending dismiss timer on explicit teardown paths", () => {
-		// subagent_remove, /subrm, /subclear, and subagent_cleanup all must
-		// clear the timer when removing an agent — otherwise a pending
-		// callback could fire against a no-longer-tracked widget id.
 		const removeBlock = widgetSource.slice(
 			widgetSource.indexOf('name: "subagent_remove"'),
 			widgetSource.indexOf('name: "subagent_list"'),
 		);
-		expect(removeBlock).toContain("clearTimeout(state.dismissTimer)");
+		expect(removeBlock).toContain("removeSubagentWidget(args.id, ctx, \"explicit_remove\")");
 
 		const cleanupBlock = widgetSource.slice(
 			widgetSource.indexOf('name: "subagent_cleanup"'),
 			widgetSource.indexOf('registerCommand("sub"'),
 		);
-		expect(cleanupBlock).toContain("clearTimeout");
-		expect(cleanupBlock).toContain("dismissTimer");
+		expect(cleanupBlock).toContain("removeSubagentWidget(id, ctx, \"manual_cleanup_terminal\")");
+		expect(cleanupBlock).toContain("clearDismissTimer(state)");
 
-		// /subrm command handler
 		const subrmBlock = widgetSource.slice(
 			widgetSource.indexOf('registerCommand("subrm"'),
 			widgetSource.indexOf('registerCommand("subclear"'),
 		);
-		expect(subrmBlock).toContain("clearTimeout(state.dismissTimer)");
+		expect(subrmBlock).toContain("removeSubagentWidget(num, ctx, \"slash_subrm\")");
 
-		// /subclear command handler
 		const subclearBlock = widgetSource.slice(
 			widgetSource.indexOf('registerCommand("subclear"'),
 			widgetSource.indexOf('pi.on("session_start"'),
 		);
-		expect(subclearBlock).toContain("clearTimeout(state.dismissTimer)");
+		expect(subclearBlock).toContain("clearDismissTimer(state)");
 	});
 
-	it("the batch auto-cleanup loop clears dismiss timers for already-done agents", () => {
-		// When a new batch starts, finished agents from the previous batch get
-		// torn down immediately — we must clear any of their pending dismiss
-		// timers so a stale callback doesn't run against a recycled id.
+	it("the batch auto-cleanup loop uses the shared terminal removal helper", () => {
 		const batchCleanupBlock = widgetSource.slice(
 			widgetSource.indexOf("// ── Auto-cleanup: remove done/error agents before spawning new batch ──"),
 			widgetSource.indexOf("// Build states for all agents"),
 		);
-		expect(batchCleanupBlock).toContain("a.dismissTimer");
-		expect(batchCleanupBlock).toContain("clearTimeout(a.dismissTimer)");
+		expect(batchCleanupBlock).toContain("isTerminal(a)");
+		expect(batchCleanupBlock).toContain("removeSubagentWidget(id, widgetCtx || ctx, \"batch_precleanup\")");
 	});
 
 	it("documents the ~2s timing in the tool descriptions", () => {
-		// Both subagent_create and subagent_create_batch advertise the 2s
-		// behavior to the orchestrating agent. If this drifts, the prompts
-		// will mislead the planner.
 		const createDesc = widgetSource.match(
-			/Auto-remove widget[^"]*?after done[^"]*?default: true/,
+			/Auto-remove widget[^\"]*?after done[^\"]*?default: true/,
 		);
 		const batchDesc = widgetSource.match(
-			/Auto-remove widgets[^"]*?after done[^"]*?default: true/,
+			/Auto-remove widgets[^\"]*?after done[^\"]*?default: true/,
 		);
 		expect(createDesc?.[0] ?? "").toContain("2s");
 		expect(batchDesc?.[0] ?? "").toContain("2s");
