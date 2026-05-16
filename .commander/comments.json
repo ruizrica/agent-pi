@@ -1,5 +1,5 @@
 {
-  "nextId": 23,
+  "nextId": 34,
   "byBead": {
     "agent-pi-eno": [
       {
@@ -214,6 +214,127 @@
         "message": "Verification complete. grep for bd prime/ready/close/update/dolt/show/remember/memories across .md/.json/.ts/.sh (excluding node_modules, .beads, .commander, .git) returns zero hits. AGENTS.md also migrated to cmd (had its own beads block at lines 3-13 plus marker-bounded block). Ready to mark completed.",
         "createdAt": "2026-05-16T01:50:16.917Z",
         "type": "progress"
+      }
+    ],
+    "agent-pi-ris": [
+      {
+        "id": 23,
+        "beadId": "agent-pi-ris",
+        "numericTaskId": 157,
+        "agentName": "ricardo",
+        "message": "Closing root: all 5 sub-tasks already completed (agent-pi-kh3/ozc/9ss/02o/j2f). Implementation work happened in commander-v2; no action needed in agent-pi. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:30:56.139Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-ls6u": [
+      {
+        "id": 24,
+        "beadId": "agent-pi-ls6u",
+        "numericTaskId": 178,
+        "agentName": "ricardo",
+        "message": "Cancelling: parent (agent-pi-583v) is already completed. Working tree has no real changes — only .beads/ writer churn. Subtask is obsolete. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:31:10.149Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-tymb": [
+      {
+        "id": 25,
+        "beadId": "agent-pi-tymb",
+        "numericTaskId": 179,
+        "agentName": "ricardo",
+        "message": "Cancelling: parent (agent-pi-583v) is already completed. Working tree has no real changes — only .beads/ writer churn. Subtask is obsolete. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:31:12.328Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-9w7x": [
+      {
+        "id": 26,
+        "beadId": "agent-pi-9w7x",
+        "numericTaskId": 180,
+        "agentName": "ricardo",
+        "message": "Cancelling: parent (agent-pi-583v) is already completed. Working tree has no real changes — only .beads/ writer churn. Subtask is obsolete. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:31:14.709Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-6qc": [
+      {
+        "id": 27,
+        "beadId": "agent-pi-6qc",
+        "numericTaskId": 143,
+        "agentName": "ricardo",
+        "message": "Cancelling: stale plan-context for commander-v2 repo (not agent-pi). All 4 child scout tasks already failed >24h ago. Out of scope for this working directory. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:31:16.847Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-nhf": [
+      {
+        "id": 28,
+        "beadId": "agent-pi-nhf",
+        "numericTaskId": 148,
+        "agentName": "ricardo",
+        "message": "Cancelling: stale plan-context for commander-v2 repo (not agent-pi). All 4 child scout tasks already failed >24h ago. Out of scope for this working directory. Triaged by /cmd-execute.",
+        "createdAt": "2026-05-16T04:31:18.888Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-902": [
+      {
+        "id": 29,
+        "beadId": "agent-pi-902",
+        "numericTaskId": 8,
+        "agentName": "ricardo",
+        "message": "Triage: work delivered by commit 31c8f52 (feat(skills+cmd): adopt mattpocock skills...). All 6 skills present in skills/: handoff, prototype, triage, diagnose, grill-with-docs, improve-codebase-architecture. Closing as completed.",
+        "createdAt": "2026-05-16T04:32:36.555Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-dk5": [
+      {
+        "id": 30,
+        "beadId": "agent-pi-dk5",
+        "numericTaskId": 14,
+        "agentName": "ricardo",
+        "message": "Triage: duplicate of agent-pi-902. Work delivered by commit 31c8f52. All 5 listed skills present in skills/. Closing as completed.",
+        "createdAt": "2026-05-16T04:32:38.986Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-sd6": [
+      {
+        "id": 31,
+        "beadId": "agent-pi-sd6",
+        "numericTaskId": 13,
+        "agentName": "ricardo",
+        "message": "Triage: duplicate of agent-pi-902/dk5. Work delivered by commit 31c8f52. Closing as completed.",
+        "createdAt": "2026-05-16T04:32:42.666Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-v4i": [
+      {
+        "id": 32,
+        "beadId": "agent-pi-v4i",
+        "numericTaskId": 12,
+        "agentName": "ricardo",
+        "message": "Triage: duplicate of agent-pi-902/dk5/sd6. Work delivered by commit 31c8f52. Closing as completed.",
+        "createdAt": "2026-05-16T04:32:44.836Z",
+        "type": "info"
+      }
+    ],
+    "agent-pi-bnt": [
+      {
+        "id": 33,
+        "beadId": "agent-pi-bnt",
+        "numericTaskId": 11,
+        "agentName": "ricardo",
+        "message": "Triage: sub-question of agent-pi-902 — already answered by adopting Claude Code skill convention (skills/<name>/ with SKILL.md). Delivered by commit 31c8f52. Closing as completed.",
+        "createdAt": "2026-05-16T04:32:46.982Z",
+        "type": "info"
       }
     ]
   }

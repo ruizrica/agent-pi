@@ -1,5 +1,5 @@
 {
-  "next": 191,
+  "next": 193,
   "byBead": {
     "agent-pi-m0m": 1,
     "agent-pi-eno": 2,
@@ -190,7 +190,9 @@
     "agent-pi-ufaj": 187,
     "agent-pi-eb3m": 188,
     "agent-pi-xso6": 189,
-    "agent-pi-jlza": 190
+    "agent-pi-jlza": 190,
+    "agent-pi-az53": 191,
+    "agent-pi-z5a6": 192
   },
   "byNumeric": {
     "1": "agent-pi-m0m",
@@ -382,6 +384,8 @@
     "187": "agent-pi-ufaj",
     "188": "agent-pi-eb3m",
     "189": "agent-pi-xso6",
-    "190": "agent-pi-jlza"
+    "190": "agent-pi-jlza",
+    "191": "agent-pi-az53",
+    "192": "agent-pi-z5a6"
   }
 }
