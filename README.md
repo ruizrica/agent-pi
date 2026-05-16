@@ -6,7 +6,7 @@
 
 **An extension suite that turns [Pi](https://github.com/earendil-works/pi) into a multi-agent orchestration platform**
 
-[Install](#install) · [Extensions](#extensions) · [Modes](#operational-modes) · [Orchestration](#multi-agent-orchestration)
+[Install](#install) · [Skills](#skills-library) · [Mission Brief](#mission-brief-enforcement-cmd-guard) · [Extensions](#extensions) · [Modes](#operational-modes) · [Orchestration](#multi-agent-orchestration) · [Migration](#migration-notes)
 
 </div>
 
@@ -14,14 +14,17 @@
 
 ## What is this?
 
-[Pi](https://github.com/earendil-works/pi) is a terminal-based AI coding agent by Earendil Works. Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
+[Pi](https://github.com/earendil-works/pi) is a terminal-based AI coding agent now maintained by **[Earendil Works](https://github.com/earendil-works)** (the project was previously published under the `@mariozechner` scope; see [Migration notes](#migration-notes) below for what changed). Out of the box it's a single-agent assistant with tool use, conversation memory, and a TUI.
 
-**agent** is a Pi package — **60 extensions, 11 themes, and 26 skills** that transform Pi into something more:
+**agent** is a Pi package built on the new Earendil packages (`@earendil-works/pi-agent-core`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`) — **60 extensions, 11 themes, and 26 skills** that transform Pi into something more:
 
 - **7 operational modes** — NORMAL, PLAN, INVESTIGATE, SPEC, PIPELINE, TEAM, CHAIN
 - **Multi-agent orchestration** — dispatch teams, run sequential chains, execute parallel pipelines, or delegate to CLI worker roles
+- **Mission-brief task tracking** — `cmd` (Commander v2) with a shell wrapper that refuses root tasks lacking a 1-3 sentence "what & why"
+- **Bundled skill library** — mattpocock skills (diagnose, grill-with-docs, prototype, tdd, triage, …) plus Pi-specific workflow skills shipped in-tree, auto-discovered by Pi
+- **INVESTIGATE diagnosis loop** — reproduce → minimise → hypothesise → instrument → fix → regression-test, with scout-led context gathering and PIPELINE handoff for approved fixes
 - **Security hardened** — pre-tool-hook guard blocks destructive commands, detects prompt injection, prevents data exfiltration
-- **Browser-based viewers** — interactive plan review, completion reports with rollback, spec approval with inline comments, mobile chat, and searchable reports
+- **Browser-based viewers** — plan review with mermaid diagrams, completion reports with rollback, spec approval with inline change-requests, snapshot-based re-open via `/reports`, mobile chat
 - **11 themes** — Catppuccin, Dracula, Nord, Synthwave, Tokyo Night, and more
 
 Everything is configuration — no forks, no patches. Just extensions, agent definitions, and YAML.
@@ -197,16 +200,19 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 
 ### Viewers & Reports
 
+All viewers share a common factory (`extensions/lib/viewer-server.ts`) and persist their state as **snapshots** under `.context/reports/` so any viewer can be re-rendered or re-opened later from `/reports` — even after the original agent session has ended.
+
 | Extension | Description |
 |-----------|-------------|
-| **plan-viewer** | Browser GUI — plan approval with checkboxes, reordering, inline editing |
-| **completion-report** | Browser GUI — work summary, unified diffs, per-file rollback |
-| **spec-viewer** | Browser GUI — multi-page spec review with comments and visual gallery |
-| **file-viewer** | Browser GUI — syntax-highlighted file viewer with optional editing |
-| **reports-viewer** | Searchable `/reports` browser view for all persisted artifacts |
-| **research-viewer** | Browser view for saved research sessions |
-| **test-viewer** | Gherkin and Playwright test review surface with side-by-side editing |
-| **web-chat** | Mobile-friendly chat UI with tool/subagent visibility and board actions |
+| **plan-viewer** | Plan approval — checkboxes, reordering, inline editing, **architecture mermaid diagrams** (fullscreen + zoom), snapshot capture for `/reports` replay |
+| **completion-report** | Work summary, unified diffs, per-file rollback, mermaid rendering, change-stats panel, snapshot capture |
+| **spec-viewer** | Multi-page spec review — inline comments, visual gallery, **change-request submission back to the agent**, readonly mode for re-open via `/reports`, snapshot capture with payload field |
+| **file-viewer** | Syntax-highlighted file viewer with **markdown-aware rendering** and optional inline editing |
+| **reports-viewer** | Searchable `/reports` browser view — **category-based routing** across plan / spec / completion / research / security artifacts, lazy snapshot synthesizers for older sessions |
+| **research-viewer** | Browser view for saved research sessions with cross-document linking |
+| **test-viewer** | Gherkin and Playwright test review with side-by-side editing |
+| **web-chat** | Mobile-friendly chat UI with tool/subagent visibility, board actions, and Copy/Add-to-Board buttons |
+| **security-report** | Historical trend tracking for security scan results across runs |
 
 <div align="center">
 <img src="docs/screenshots/plan-viewer.png" alt="Plan Viewer — structured plan approval with phases, context, and file action badges" width="720" />
@@ -243,12 +249,52 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **learn** | Delta-aware codebase snapshots into Obsidian raw/wiki memory |
 | **session-recap** | Generate and persist structured session recaps |
 
+## Skills Library
+
+This release bundles a curated set of skills imported from [mattpocock/skills](https://github.com/mattpocock/skills) plus a few hand-ported workflow skills. They live under `skills/` and are discovered automatically by Pi — no install step needed.
+
+| Skill | Purpose |
+|-------|---------|
+| **diagnose** | Disciplined diagnosis loop for hard bugs and performance regressions. Auto-loaded by INVESTIGATE mode. |
+| **grill-with-docs** | Challenge a plan against the existing `CONTEXT.md` + `docs/adr/` before finalizing. Auto-loaded by PLAN mode. |
+| **prototype** | Build a throwaway prototype to flesh out a design before committing — routes between a runnable terminal app (state/logic questions) or radically different UI variations (interaction questions). |
+| **improve-codebase-architecture** | Find deepening opportunities — refactors that improve testability and AI-navigability without changing behavior. |
+| **tdd** | Strict test-driven development with red→green→refactor discipline. Includes deep-modules, interface-design, mocking, and refactoring playbooks. |
+| **triage** | Move issues through a state machine of triage roles. For new bug/feature triage and AFK-agent issue queues. |
+| **to-issues** | Convert raw notes into trackable `cmd` issues with proper mission briefs. |
+| **to-prd** | Convert ad-hoc scope into a structured PRD with acceptance criteria. |
+| **caveman** | Strip a response or codebase down to its essentials. |
+| **grill-me** | Adversarial review — be the harshest critic of your own work. |
+| **handoff** | Compact the current conversation into a handoff document for another agent to pick up. |
+| **zoom-out** | Step back and re-examine the higher-order question instead of grinding on the current sub-task. |
+| **write-a-skill** | Author a new skill following the mattpocock skill conventions. |
+
+Pi-specific workflow skills (also in `skills/`): `agent-viewer`, `cmd-tasks`, `cmd-plan`, `cmd-task`, `cmd-execute`, `commander-plan`, `commander-task`, `commander-execute`, `pi`, plus the toolkit-namespaced extensions.
+
+## Mission-Brief Enforcement (`cmd` Guard)
+
+Every root task created via `cmd task add` (the Commander v2 CLI) **must** include `--mission-brief "1-3 sentence what & why"`. Subtasks (`--parent <id>`) inherit the brief from the parent.
+
+This is enforced by a shell wrapper at [`scripts/cmd`](scripts/cmd) that:
+
+- Intercepts `cmd task add` and exits **127** with a helpful error if `--mission-brief` is missing on a root task
+- Passes every other subcommand straight through to the real `cmd` binary
+- Auto-shadows the real `cmd` because `.claude/settings.json` prepends `scripts/` to `PATH` for new sessions
+- Resolves the real binary portably — honors `CMD_REAL=/path/to/cmd` env override, otherwise searches `PATH` via `type -aP cmd`
+
+The TDD harness at [`scripts/cmd.test.sh`](scripts/cmd.test.sh) covers 13 scenarios (root tasks with/without brief, subtasks, equals-form, builtin fallback, nonexistent paths, etc.). The bypass for tests is `CMD_GUARD=off`.
+
+Why this matters: the mission brief powers the Commander dashboard's "mission card" and gives any agent that picks up a task enough context to know *what* and *why* without re-reading the entire conversation. The brief is mandatory, not advisory.
+
+See `CLAUDE.md` → "MANDATORY Pre-flight Checklist" for the full agent contract.
+
 ## Operational Modes
 
 | Mode | Trigger | Behavior |
 |------|---------|----------|
 | **NORMAL** | Default | Advisor-first orchestration — consult the currently selected model as the main advisor agent, prefer `grok-4.1-fast`, let the advisor choose any mix up to 16 non-advisor agents, and optionally request `red-team` / `gpt-5.4` second opinions for high-impact tasks |
-| **PLAN** | Shift+Tab | Quality-first plan workflow — selected model acts as main advisor, supports up to 16 non-advisor agents, and uses cross-provider second opinions for complex/high-risk work |
+| **PLAN** | Shift+Tab | Quality-first plan workflow — selected model acts as main advisor, supports up to 16 non-advisor agents, and uses cross-provider second opinions for complex/high-risk work. Auto-loads the `grill-with-docs` skill to challenge plans against `CONTEXT.md` and `docs/adr/`. |
+| **INVESTIGATE** | Shift+Tab | Diagnosis loop for bugs, regressions, and hard-to-explain system behavior. Auto-loads the `diagnose` skill (reproduce → minimise → hypothesise → instrument → fix → regression-test). Scout-led context gathering, then a remediation plan that hands off into PIPELINE for execution after approval. |
 | **SPEC** | Shift+Tab | Quality-first spec workflow — selected model acts as main advisor, supports up to 16 non-advisor agents, and uses cross-provider second opinions for really complex multi-step work |
 | **TEAM** | Shift+Tab | Dispatcher mode — primary delegates, specialists execute |
 | **CHAIN** | Shift+Tab | Sequential pipeline — step outputs chain into next step |
@@ -256,13 +302,13 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 
 ### CLAUDE Overlay
 
-Use `/claude` to toggle a provider-specific overlay on top of the current operational mode.
+Use `/claude` to toggle a cosmetic overlay on top of the current operational mode.
 
 - Active modes display as `MODE + CLAUDE`
 - The mode banner changes to dark orange
 - Existing role names stay the same
-- Claude-family execution paths use the Claude CLI integration while the overlay is active
-- Non-Claude models continue to use their normal execution paths
+- The overlay is **cosmetic only** — Claude execution is locked to the direct Anthropic SDK path in this build, regardless of overlay state
+- Non-Claude models are unaffected
 
 ### NORMAL / PLAN / SPEC — Quality-First Advisor Orchestration
 
@@ -296,6 +342,21 @@ The NORMAL mode is the default operating strategy. It uses a **strategic advisor
 - Security or compliance work
 - Ambiguous or conflicting requirements
 - High-impact changes affecting many users or critical paths
+
+### INVESTIGATE Mode — Diagnose Loop
+
+INVESTIGATE is the canonical mode for hard bugs, performance regressions, and any "I don't know why this is happening" problem. The mode prompt auto-loads the **`diagnose`** skill (`skills/diagnose/SKILL.md`), whose six-step loop is the actual investigation contract:
+
+1. **Reproduce** — get a deterministic repro you control (recipe + seed/state, not "sometimes")
+2. **Minimise** — strip until the failure is the smallest possible delta from a passing case
+3. **Hypothesise** — list candidate causes ranked by likelihood; commit to the top one
+4. **Instrument** — add the cheapest instrumentation that distinguishes hypotheses
+5. **Fix** — make the smallest change that addresses the confirmed cause
+6. **Regression-test** — pin the fix with a test that would have caught it pre-fix
+
+The mode-cycler's `complex_problem_loop_*` tools are the state machine that tracks where you are within that loop; the skill defines *what* to do at each step. Scout-led context gathering happens in parallel during steps 1–4 so the advisor isn't blocked on reads. When a fix is approved, the mode hands off into PIPELINE for parallel execution of the remediation plan.
+
+See `skills/diagnose/SKILL.md` for the canonical loop and `skills/diagnose/scripts/hitl-loop.template.sh` for the human-in-the-loop fallback when a person must click through something the agent can't drive directly.
 
 ### PLAN and SPEC Modes
 
