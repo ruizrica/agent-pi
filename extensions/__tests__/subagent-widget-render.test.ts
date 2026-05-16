@@ -70,6 +70,15 @@ describe("renderSubagentWidget", () => {
 		expect(result.lines[1]).toContain("do something");
 	});
 
+	it("does not append task-list or hotkey UI inside the subagent widget", () => {
+		const state = makeState({ status: "running", summary: "Standing by..." });
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines).toHaveLength(2);
+		expect(result.lines.join("\n")).not.toContain("Ctrl+Alt+T");
+		expect(result.lines.join("\n")).not.toContain("remaining");
+	});
+
 	it("reports exactly one border (top divider only)", () => {
 		const state = makeState({ summary: "check this" });
 		const result = renderSubagentWidget(state, 80, theme);
@@ -91,7 +100,7 @@ describe("renderSubagentWidget", () => {
 		expect(result.lines[0]).toContain("AGENT - SA1");
 	});
 
-	it("shows elapsed time and tool count", () => {
+	it("shows elapsed time and tool count for standard agents", () => {
 		const state = makeState({ elapsed: 12000, toolCount: 7 });
 		const result = renderSubagentWidget(state, 80, theme);
 
@@ -99,7 +108,16 @@ describe("renderSubagentWidget", () => {
 		expect(result.lines[0]).toContain("Tools: 7");
 	});
 
-	it("shows model as last component when present", () => {
+	it("omits the tool-count segment when the count is zero", () => {
+		const state = makeState({ elapsed: 12000, toolCount: 0, model: "anthropic/claude-haiku-4-5-20251001" });
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[0]).toContain("12s");
+		expect(result.lines[0]).not.toContain("Tools: 0");
+		expect(result.lines[0]).toContain("anthropic/claude-haiku-4-5-20251001");
+	});
+
+	it("shows model as last component when present for standard agents", () => {
 		const state = makeState({ model: "x-ai/grok-4.1-fast" });
 		const result = renderSubagentWidget(state, 80, theme);
 
@@ -115,6 +133,62 @@ describe("renderSubagentWidget", () => {
 		const toolsIdx = line.indexOf("Tools:");
 		const afterTools = line.slice(toolsIdx);
 		expect(afterTools).not.toContain("|");
+	});
+
+	it("hides tool count and model for external toolkit workers", () => {
+		const state = makeState({
+			name: "cursor-worker",
+			elapsed: 12000,
+			toolCount: 7,
+			model: "anthropic/claude-haiku-4-5-20251001",
+		});
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[0]).toContain("12s");
+		expect(result.lines[0]).not.toContain("Tools:");
+		expect(result.lines[0]).not.toContain("anthropic/claude-haiku-4-5-20251001");
+	});
+
+	it("hides metadata for legacy toolkit aliases too", () => {
+		const state = makeState({
+			name: "codex-agent",
+			toolCount: 4,
+			model: "anthropic/claude-haiku-4-5-20251001",
+		});
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[0]).not.toContain("Tools:");
+		expect(result.lines[0]).not.toContain("anthropic/claude-haiku-4-5-20251001");
+		expect(result.lines).toHaveLength(2);
+	});
+
+	it("keeps newer CLI agent families on the compact two-line animated cell", () => {
+		for (const name of ["qwen-agent", "groq-agent", "crush-agent", "opencode-agent"]) {
+			const state = makeState({
+				name,
+				task: "stream console-like output into widget preview",
+				summary: "stream console-like output into widget preview",
+				toolCount: 4,
+				model: "anthropic/claude-haiku-4-5-20251001",
+			});
+			const result = renderSubagentWidget(state, 80, theme);
+
+			expect(result.lines[0]).toContain(name.toUpperCase());
+			expect(result.lines).toHaveLength(2);
+			expect(result.lines[1]).toContain("...");
+		}
+	});
+
+	it("preserves metadata for Claude roles", () => {
+		const state = makeState({
+			name: "claude-worker",
+			toolCount: 2,
+			model: "anthropic/claude-haiku-4-5",
+		});
+		const result = renderSubagentWidget(state, 80, theme);
+
+		expect(result.lines[0]).toContain("Tools: 2");
+		expect(result.lines[0]).toContain("anthropic/claude-haiku-4-5");
 	});
 });
 

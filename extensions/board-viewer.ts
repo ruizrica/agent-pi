@@ -1,18 +1,16 @@
 // ABOUTME: Task Board Viewer — opens a GUI browser window showing a live Kanban board of agent work.
-// ABOUTME: Polls Commander MCP tools for tasks, agents, messages, and groups. Auto-refreshes every 3 seconds.
+// ABOUTME: Polls Commander CLI-backed tools for tasks, agents, messages, and groups. Auto-refreshes every 3 seconds.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { type Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateBoardViewerHTML } from "./lib/board-viewer-html.ts";
+import { generateBoardViewerHTML } from "./lib/viewers/board-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -36,7 +34,7 @@ interface BoardData {
 // ── Commander Data Helpers ───────────────────────────────────────────
 
 /**
- * Call a Commander MCP tool via the global client set by commander-mcp.ts.
+ * Call a Commander CLI-backed tool via the global client set by commander-mcp.ts.
  * Returns the parsed result or null on failure.
  */
 async function callCommander(toolName: string, params: Record<string, unknown>): Promise<any> {
@@ -46,7 +44,7 @@ async function callCommander(toolName: string, params: Record<string, unknown>):
 
 	try {
 		const result = await client.callTool(toolName, params, 8000);
-		// MCP results come as { content: [{ type: "text", text: "..." }] }
+		// Commander client results come as { content: [{ type: "text", text: "..." }] }
 		if (result?.content?.[0]?.text) {
 			try {
 				return JSON.parse(result.content[0].text);
@@ -82,14 +80,45 @@ function getLocalTasks(): { tasks: any[]; title?: string } {
 }
 
 /**
- * Gather board data — always local-first.
- * Local tasks are the primary data source. Commander data is layered in when available.
+ * Gather board data — tries Commander first, falls back to local tasks.
+ * When Commander is available, returns full data (tasks, agents, messages, groups).
+ * When Commander is unavailable, returns local tasks from the Pi tasks extension.
  */
 async function gatherBoardData(): Promise<BoardData> {
 	const g = globalThis as any;
 	const local = getLocalTasks();
 
-	// Always return local tasks — this is the local-first board
+	// Try Commander if CLI client is available
+	const client = g.__piCommanderClient;
+	if (client) {
+		try {
+			const [taskResult, agentResult, messageResult, readyResult, groupResult] = await Promise.all([
+				callCommander("commander_task", { operation: "list" }),
+				callCommander("commander_orchestration", { operation: "agent:list", active_only: true }),
+				callCommander("commander_mailbox", { operation: "inbox", agent_name: "@all" }),
+				callCommander("commander_dependency", { operation: "ready_tasks" }),
+				callCommander("commander_task", { operation: "group:list" }),
+			]);
+
+			// If we got tasks back, Commander is connected
+			const commanderTasks = Array.isArray(taskResult) ? taskResult : taskResult?.tasks;
+			if (Array.isArray(commanderTasks)) {
+				return {
+					tasks: commanderTasks || [],
+					agents: agentResult?.agents || [],
+					messages: messageResult?.messages || [],
+					groups: groupResult?.groups || [],
+					readyTasks: readyResult?.tasks || [],
+					connected: true,
+					timestamp: new Date().toISOString(),
+				};
+			}
+		} catch {
+			// Commander call failed — fall through to local mode
+		}
+	}
+
+	// Fallback: local tasks only
 	return {
 		tasks: local.tasks,
 		agents: [],
@@ -108,7 +137,7 @@ async function gatherBoardData(): Promise<BoardData> {
 function startBoardServer(
 	title: string,
 ): Promise<{ port: number; server: Server; waitForResult: () => Promise<BoardResult> }> {
-	return new Promise((resolveSetup) => {
+	return new Promise(async (resolveSetup) => {
 		let resolveResult: (result: BoardResult) => void;
 		let settled = false;
 		const settle = (result: BoardResult) => {
@@ -120,107 +149,52 @@ function startBoardServer(
 			resolveResult = res;
 		});
 
-		const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateBoardViewerHTML({ title, port });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo image
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// ── Main data endpoint ──────────────────────────────
-			if (req.method === "GET" && url.pathname === "/api/board-data") {
-				try {
-					const data = await gatherBoardData();
-					res.writeHead(200, {
-						"Content-Type": "application/json",
-						"Cache-Control": "no-cache",
-					});
-					res.end(JSON.stringify(data));
-				} catch (err: any) {
-					res.writeHead(500, { "Content-Type": "application/json" });
-					res.end(JSON.stringify({
-						tasks: [], agents: [], messages: [], groups: [], readyTasks: [],
-						connected: false,
-						timestamp: new Date().toISOString(),
-						error: err.message,
-					}));
-				}
-				return;
-			}
-
-			// ── Close the viewer ────────────────────────────────
-			if (req.method === "POST" && url.pathname === "/result") {
-				let body = "";
-				req.on("data", (chunk: string) => { body += chunk; });
-				req.on("end", () => {
-					res.writeHead(200, { "Content-Type": "application/json" });
-					res.end(JSON.stringify({ ok: true }));
-					settle({ action: "closed" });
-				});
-				return;
-			}
-
-			// 404
-			res.writeHead(404);
-			res.end("Not found");
+		const { port, server, waitForResult } = await createViewerServer({
+			getHtml: (port) => {
+				return generateBoardViewerHTML({ title, port });
+			},
+			routes: [
+				{
+					method: "GET",
+					path: "/api/board-data",
+					handler: async (_req, res) => {
+						try {
+							const data = await gatherBoardData();
+							res.writeHead(200, {
+								"Content-Type": "application/json",
+								"Cache-Control": "no-cache",
+							});
+							res.end(JSON.stringify(data));
+						} catch (err: any) {
+							res.writeHead(500, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({
+								tasks: [], agents: [], messages: [], groups: [], readyTasks: [],
+								connected: false,
+								timestamp: new Date().toISOString(),
+								error: err.message,
+							}));
+						}
+					},
+				},
+			],
+			onResult: () => {
+				settle({ action: "closed" });
+			},
 		});
 
-		server.on("close", () => {
+		// Hook the shared result promise
+		waitForResult().then(() => {
+			settle({ action: "closed" });
+		}).catch(() => {
 			settle({ action: "closed" });
 		});
 
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
-			});
+		resolveSetup({
+			port,
+			server,
+			waitForResult: () => resultPromise,
 		});
 	});
-}
-
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
 }
 
 // ── Tool Parameters ──────────────────────────────────────────────────

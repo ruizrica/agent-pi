@@ -21,7 +21,7 @@ import {
 	updateMappingStatus,
 	type CommanderTaskMapping,
 	type SyncState,
-} from "../lib/commander-sync.ts";
+} from "../lib/commander/commander-sync.ts";
 
 describe("localToCommander", () => {
 	it("should map idle to pending", () => {
@@ -96,6 +96,13 @@ describe("parseCommanderTaskId", () => {
 		};
 		expect(parseCommanderTaskId(result)).toBe(99);
 	});
+
+	it("should extract id from Commander CLI task results", () => {
+		const result = {
+			content: [{ type: "text", text: JSON.stringify({ id: 123, status: "pending" }) }],
+		};
+		expect(parseCommanderTaskId(result)).toBe(123);
+	});
 });
 
 describe("parseGroupId", () => {
@@ -123,6 +130,13 @@ describe("parseGroupId", () => {
 			content: [{ type: "text", text: JSON.stringify({ group_name: "Test" }) }],
 		};
 		expect(parseGroupId(result)).toBeUndefined();
+	});
+
+	it("should extract id from CLI-emulated group parent results", () => {
+		const result = {
+			content: [{ type: "text", text: JSON.stringify({ id: 77, title: "Group" }) }],
+		};
+		expect(parseGroupId(result)).toBe(77);
 	});
 });
 

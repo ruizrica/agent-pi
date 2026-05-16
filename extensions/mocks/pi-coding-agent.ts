@@ -1,4 +1,4 @@
-// Mock implementation of @mariozechner/pi-coding-agent for testing
+// Mock implementation of @earendil-works/pi-coding-agent for testing
 
 export class DynamicBorder {
 	constructor(private renderer: (s: string) => string) {}

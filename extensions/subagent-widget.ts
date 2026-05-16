@@ -14,8 +14,8 @@
  *   /subclear                              — clear all subagent widgets
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 const { spawn } = require("child_process") as any;
 import * as fs from "fs";
@@ -26,11 +26,15 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { renderSubagentWidget, parseSubName } from "./lib/subagent-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
-import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
-import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
-import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
+import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
+import { buildSubagentBatchBrief } from "./lib/commander/subagent-mission-brief.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
-import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
+import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
+import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
+import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
+import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
 
@@ -92,6 +96,18 @@ function resolveTimeout(name: string, explicitTimeout?: number): number {
 	return ROLE_TIMEOUT_MS[name.toUpperCase()] || DEFAULT_TIMEOUT_MS;
 }
 
+/** Roles eligible for local overlay rerouting (implementation workers only). */
+const LOCAL_OVERLAY_ELIGIBLE_ROLES = new Set(["builder", "worker", "claude-worker"]);
+
+/** Check if an agent role should be rerouted to a local model when a local overlay is active. */
+function isGemmaEligibleRole(name: string): boolean {
+	const lower = name.toLowerCase();
+	if (LOCAL_OVERLAY_ELIGIBLE_ROLES.has(lower)) return true;
+	// Dynamic builder variants like builder-kimi-k2-5, builder-gemma4, etc.
+	if (lower.startsWith("builder")) return true;
+	return false;
+}
+
 interface SubState {
 	id: number;
 	status: "running" | "done" | "error";
@@ -105,11 +121,12 @@ interface SubState {
 	summary?: string;      // pre-written summary shown in widget (no markdown)
 	proc?: any;            // active ChildProcess ref (for kill on /subrm)
 	commanderTaskId?: number;  // pre-assigned Commander task ID
-	autoRemove?: boolean;      // auto-remove widget ~30s after done (default: true)
+	autoRemove?: boolean;      // auto-remove widget ~2s after done (default: true)
 	model?: string;            // resolved model string for display
 	standby?: boolean;         // true = warmup spawn, suppress follow-up message
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
 	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
+	dismissTimer?: ReturnType<typeof setTimeout>;  // 2s auto-remove timer — cancelled on /subcont, /subrm, /subclear, cleanup, batch reuse
 }
 
 export default function (pi: ExtensionAPI) {
@@ -149,6 +166,7 @@ export default function (pi: ExtensionAPI) {
 
 	function registerWidget(state: SubState) {
 		if (!widgetCtx) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const key = `sub-${state.id}`;
 		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
 			const bgFn = (text: string): string => {
@@ -186,9 +204,10 @@ export default function (pi: ExtensionAPI) {
 	// ── Streaming helpers ─────────────────────────────────────────────────────
 
 	function processLine(state: SubState, line: string) {
-		if (!line.trim()) return;
+		const trimmed = line.trim();
+		if (!trimmed) return;
 		try {
-			const event = JSON.parse(line);
+			const event = JSON.parse(trimmed);
 			const type = event.type;
 
 			if (type === "message_update") {
@@ -201,7 +220,59 @@ export default function (pi: ExtensionAPI) {
 				state.toolCount++;
 				invalidateWidget(state.id);
 			}
+		} catch {
+			if (shouldUseClaudeCliForAgent(state.name, state.model, !!(globalThis as any).__piClaudeOverlay) && isClaudeDisplayNoise(trimmed)) return;
+			state.textChunks.push(trimmed + "\n");
+			invalidateWidget(state.id);
+		}
+	}
+
+	// ── Build context prefix for subagent orientation ──────────────────────
+	// Gathers working directory, top-level structure, git status, and active
+	// plan so subagents can orient immediately without blind exploration.
+	function buildContextPrefix(cwd: string): string {
+		const lines: string[] = ["## Working Context"];
+		// 1. Working directory
+		lines.push(`Working directory: ${cwd}`);
+		lines.push(`IMPORTANT: Always look in this directory first. Do NOT search, read, or modify files outside it unless explicitly asked.`);
+
+		// 2. Top-level directory listing (fast, sync)
+		try {
+			const entries = fs.readdirSync(cwd, { withFileTypes: true });
+			const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules").map(e => e.name + "/");
+			const files = entries.filter(e => e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".json") || e.name.endsWith(".ts") || e.name === ".env")).map(e => e.name);
+			const topLevel = [...dirs.slice(0, 10), ...files.slice(0, 5)].join(" ");
+			if (topLevel) lines.push(`Top-level: ${topLevel}`);
 		} catch {}
+
+		// 3. Git status (truncated, sync)
+		try {
+			const { execSync } = require("child_process");
+			const status = execSync("git status --short 2>/dev/null", { cwd, encoding: "utf-8", timeout: 3000 }).trim();
+			if (status) {
+				const statusLines = status.split("\n");
+				const modified = statusLines.filter(l => l.startsWith(" M") || l.startsWith("M ")).length;
+				const untracked = statusLines.filter(l => l.startsWith("??")).length;
+				const added = statusLines.filter(l => l.startsWith("A ")).length;
+				const parts: string[] = [];
+				if (modified) parts.push(`${modified} modified`);
+				if (added) parts.push(`${added} added`);
+				if (untracked) parts.push(`${untracked} untracked`);
+				if (parts.length) lines.push(`Git status: ${parts.join(", ")}`);
+			}
+		} catch {}
+
+		// 4. Active plan title (first meaningful line of .context/todo.md)
+		try {
+			const todoPath = path.join(cwd, ".context", "todo.md");
+			if (fs.existsSync(todoPath)) {
+				const content = fs.readFileSync(todoPath, "utf-8");
+				const titleLine = content.split("\n").find(l => l.startsWith("# "));
+				if (titleLine) lines.push(`Active plan: ${titleLine.replace(/^# /, "").trim()}`);
+			}
+		} catch {}
+
+		return lines.join("\n") + "\n";
 	}
 
 	function spawnAgent(
@@ -210,17 +281,33 @@ export default function (pi: ExtensionAPI) {
 		ctx: any,
 		peerNames?: string[],
 	): Promise<void> {
+		// Inject context prefix unless the prompt already has explicit working directory info
+		// or this is a standby/warmup spawn (no real task yet)
+		if (!state.standby && !prompt.includes("Working directory:")) {
+			const prefix = buildContextPrefix(ctx.cwd);
+			prompt = prefix + "\n## Task\n" + prompt;
+		}
+
 		// Model resolution priority:
 		// 1) Caller-specified override (state.model set by tool call)
 		// 2) Agent definition model (from .md file, resolved via models.json)
 		// 3) models.json agent entry (even without .md file)
 		// 4) models.json default entry
-		const agentDef = resolveAgentByName(state.name, knownAgents);
+		const agentDef = resolveAgentByName(state.name, knownAgents, modelsConfig || undefined);
 		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
-		const model = resolveToolkitWorkerModel(
+		let model = resolveToolkitWorkerModel(
 			state.name,
 			state.model || agentDef?.model || configModel || DEFAULT_SUBAGENT_MODEL,
 		);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4.
+		// Only builders are rerouted — scouts, reviewers, planners keep their models.
+		if ((globalThis as any).__piGemmaOverlay && isGemmaEligibleRole(state.name)) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && isGemmaEligibleRole(state.name)) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 		state.model = model;
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
@@ -228,15 +315,21 @@ export default function (pi: ExtensionAPI) {
 		const commanderExtPath = path.join(extDir, "commander-mcp.ts");
 		const footerExtPath = path.join(extDir, "footer.ts");
 		const memoryCycleExtPath = path.join(extDir, "memory-cycle.ts");
+		const claudeAdvisorExtPath = path.join(extDir, "claude-advisor.ts");
 
-		// Commander integration
-		const commanderAvail = isCommanderAvailable();
+		// Commander integration — capture task ID but check availability fresh at each use point
+		const commanderAvailAtSpawn = isCommanderAvailable();
 		const cmdTaskId = state.commanderTaskId;
 
 		// Tools: use agent definition tools if available, else default set
 		let tools = agentDef?.tools || "read,bash,grep,find,ls";
-		const extensions = ["-e", tasksExtPath, "-e", footerExtPath, "-e", memoryCycleExtPath];
-		if (commanderAvail) {
+		const extensions = [
+			"-e", tasksExtPath,
+			"-e", footerExtPath,
+			"-e", memoryCycleExtPath,
+			"-e", claudeAdvisorExtPath,
+		];
+		if (commanderAvailAtSpawn) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
 			// go in --tools (which only accepts built-in names and warns on unknowns).
 			// Loading the extension is sufficient — pi auto-activates all extension tools.
@@ -248,7 +341,7 @@ export default function (pi: ExtensionAPI) {
 		if (agentDef?.systemPrompt) {
 			systemPromptArgs.push("--append-system-prompt", agentDef.systemPrompt);
 		}
-		if (commanderAvail) {
+		if (commanderAvailAtSpawn) {
 			const cmdPrompt = buildCommanderPrompt({
 				agentName: `SA-${state.id}-${state.name}`,
 				taskId: cmdTaskId,
@@ -259,19 +352,31 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Pre-claim: parent claims Commander task on behalf of subagent
-		if (commanderAvail && cmdTaskId !== undefined) {
+		if (commanderAvailAtSpawn && cmdTaskId !== undefined) {
 			const client = getCommanderClient();
 			if (client) {
-				preClaimTask(client, cmdTaskId, `SA-${state.id}-${state.name}`).catch(() => {});
+				preClaimTask(client, cmdTaskId, `SA-${state.id}-${state.name}`).catch((err) => {
+					console.error(`[subagent] preClaimTask failed for task ${cmdTaskId}:`, err?.message || err);
+				});
 			}
 		}
 
 		const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
-		if (commanderAvail && cmdTaskId !== undefined) {
+		if ((globalThis as any).__piClaudeOverlay) {
+			spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
+		}
+		if ((globalThis as any).__piGemmaOverlay) {
+			spawnEnv.PI_GEMMA_OVERLAY_ACTIVE = "1";
+		}
+		if ((globalThis as any).__piQwenOverlay) {
+			spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
+		}
+		if (commanderAvailAtSpawn && cmdTaskId !== undefined) {
 			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
 		}
 
 		return new Promise<void>((resolve) => {
+			let toolkitFinalOutput = "";
 			const startTime = Date.now();
 			const isScout = (globalThis as any).__piScoutId === state.id;
 			const timer = setInterval(() => {
@@ -317,21 +422,41 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				// Post-dispatch: reconcile Commander task to terminal state
-				if (commanderAvail && cmdTaskId !== undefined) {
+				// Re-evaluate Commander availability NOW (not at spawn time) to handle
+				// transient connectivity issues during agent lifetime
+				if (cmdTaskId !== undefined && isCommanderAvailable()) {
 					const client = getCommanderClient();
 					if (client) {
 						const agentLabel = `SA-${state.id}-${state.name}`;
-						const summary = state.textChunks.join("").trim().split("\n").pop() || agentLabel;
+						const normalizedOutput = normalizeAgentFinalOutput({
+							result: toolkitFinalOutput,
+							textChunks: state.textChunks,
+							exitCode: code ?? 1,
+							source: agentLabel,
+						});
+						const finalText = normalizedOutput.displayText;
+						const summary = normalizedOutput.summary || agentLabel;
 						if (state.status === "done") {
-							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch(() => {});
+							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
+								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
+							});
 						} else {
 							const errMsg = summary || "Agent exited with error";
-							postFailTask(client, cmdTaskId, errMsg).catch(() => {});
+							postFailTask(client, cmdTaskId, errMsg).catch((err) => {
+								console.error(`[subagent] postFailTask failed for task ${cmdTaskId}:`, err?.message || err);
+							});
 						}
 					}
+				} else if (cmdTaskId !== undefined) {
+					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
 				}
 
-				const result = state.textChunks.join("");
+				const result = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks: state.textChunks,
+					exitCode: code ?? 1,
+					source: `SA${state.id} (${state.name})`,
+				}).displayText;
 
 				// Standby spawns (warmup) suppress notification and follow-up message
 				if (!state.standby) {
@@ -350,21 +475,28 @@ export default function (pi: ExtensionAPI) {
 					state.standby = false;
 				}
 
-				// Auto-remove widget after 30s (default behavior)
+				// Auto-remove widget ~2s after the agent reaches a terminal state.
+				// Tracked on state.dismissTimer so /subcont, /subrm, /subclear, and
+				// subagent_cleanup can cancel it cleanly if the agent gets reused.
 				if (state.autoRemove !== false) {
-					setTimeout(() => {
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+					}
+					state.dismissTimer = setTimeout(() => {
+						state.dismissTimer = undefined;
 						if (agents.has(state.id) && state.status !== "running") {
 							ctx.ui.setWidget(`sub-${state.id}`, undefined);
 							widgetBoxes.delete(state.id);
 							agents.delete(state.id);
+							(globalThis as any).__piRefreshAgentTeamWidget?.();
 						}
-					}, 30_000);
+					}, 2_000);
 				}
 
 				resolve();
 			};
 
-			if (isToolkitCliAgent(state.name)) {
+			if (isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				spawnToolkitWorker({
 					name: state.name,
 					tools,
@@ -372,15 +504,21 @@ export default function (pi: ExtensionAPI) {
 				}, {
 					task: prompt,
 					sessionFile: state.sessionFile,
+					cwd: ctx.cwd,
 					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { state.proc = proc; },
 					onStdoutLine: (line: string) => processLine(state, line),
 					onStderr: (chunk: string) => {
-						if (chunk.trim()) {
-							state.textChunks.push(chunk);
-							invalidateWidget(state.id);
+						for (const line of chunk.split("\n")) {
+							if (line.trim()) processLine(state, line);
 						}
 					},
-				}).then(({ exitCode }) => {
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					if ((isToolkitCliAgent(state.name) || shouldUseClaudeCliForAgent(state.name, model, !!(globalThis as any).__piClaudeOverlay)) && toolkitFinalOutput.trim()) {
+						state.summary = toolkitFinalOutput.trim().split("\n").pop() || state.summary;
+					}
 					finish(exitCode);
 				});
 				return;
@@ -400,6 +538,7 @@ export default function (pi: ExtensionAPI) {
 			], {
 				stdio: ["ignore", "pipe", "pipe"],
 				env: spawnEnv,
+				cwd: ctx.cwd,
 			});
 
 			state.proc = proc;
@@ -446,7 +585,7 @@ export default function (pi: ExtensionAPI) {
 			summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
 			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
-			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~2s after done (default: true)" })),
 			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
@@ -471,6 +610,7 @@ export default function (pi: ExtensionAPI) {
 			};
 			agents.set(id, state);
 			registerWidget(state);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			// Fire-and-forget
 			spawnAgent(state, args.task, ctx);
@@ -492,7 +632,7 @@ export default function (pi: ExtensionAPI) {
 				model: Type.Optional(Type.String({ description: "Model override. Only set to override the agent definition's default model." })),
 			}), { description: "Array of agent definitions to spawn" }),
 			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
-			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~30s after done (default: true)" })),
+			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~2s after done (default: true)" })),
 			timeout: Type.Optional(Type.Number({ description: "Max runtime in ms for all agents in this batch. Defaults by role." })),
 			force: Type.Optional(Type.Boolean({ description: "Force spawn even if agents are already running (default: false)" })),
 		}),
@@ -517,6 +657,10 @@ export default function (pi: ExtensionAPI) {
 			// ── Auto-cleanup: remove done/error agents before spawning new batch ──
 			for (const [id, a] of Array.from(agents.entries())) {
 				if (a.status === "done" || a.status === "error") {
+					if (a.dismissTimer) {
+						clearTimeout(a.dismissTimer);
+						a.dismissTimer = undefined;
+					}
 					if (widgetCtx) widgetCtx.ui.setWidget(`sub-${id}`, undefined);
 					widgetBoxes.delete(id);
 					agents.delete(id);
@@ -549,9 +693,10 @@ export default function (pi: ExtensionAPI) {
 			if (client && isCommanderAvailable()) {
 				const groupName = args.groupName || `subagent-batch-${Date.now()}`;
 				const taskTexts = defs.map((def: any) => def.task);
+				const missionBrief = buildSubagentBatchBrief(groupName, defs);
 				const payload = buildGroupCreatePayload(
 					groupName,
-					`Batch subagent group: ${groupName}`,
+					missionBrief,
 					taskTexts,
 					process.cwd(),
 				);
@@ -576,6 +721,7 @@ export default function (pi: ExtensionAPI) {
 				agents.set(state.id, state);
 				registerWidget(state);
 			}
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			for (const state of states) {
 				const peers = peerNames.filter(n => n !== `SA-${state.id}-${state.name}`);
@@ -606,6 +752,13 @@ export default function (pi: ExtensionAPI) {
 				return { content: [{ type: "text", text: `Error: SA${args.id} is still running.` }] };
 			}
 
+			// Cancel any pending 2s auto-dismiss timer — the agent is being reused
+			// for another turn, so the widget should stay visible.
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
+
 			state.status = "running";
 			state.task = args.prompt;
 			state.textChunks = [];
@@ -617,6 +770,7 @@ export default function (pi: ExtensionAPI) {
 				registerWidget(state);
 			}
 			invalidateWidget(state.id);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			ctx.ui.notify(`Continuing SA${args.id} (${state.name}) Turn ${state.turnCount}…`, "info");
 			spawnAgent(state, args.prompt, ctx);
@@ -643,9 +797,14 @@ export default function (pi: ExtensionAPI) {
 			if (state.proc && state.status === "running") {
 				await killGracefully(state.proc);
 			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
 			ctx.ui.setWidget(`sub-${args.id}`, undefined);
 			widgetBoxes.delete(args.id);
 			agents.delete(args.id);
+			(globalThis as any).__piRefreshAgentTeamWidget?.();
 
 			return {
 				content: [{ type: "text", text: `SA${args.id} removed.` }],
@@ -690,6 +849,10 @@ export default function (pi: ExtensionAPI) {
 				if ((globalThis as any).__piScoutId === id) continue;
 
 				if (state.status === "done" || state.status === "error") {
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+						state.dismissTimer = undefined;
+					}
 					ctx.ui.setWidget(`sub-${id}`, undefined);
 					widgetBoxes.delete(id);
 					agents.delete(id);
@@ -697,6 +860,10 @@ export default function (pi: ExtensionAPI) {
 				} else if (state.status === "running" && maxAge > 0 && state.elapsed > maxAge) {
 					if (state.proc) {
 						killPromises.push(killGracefully(state.proc));
+					}
+					if (state.dismissTimer) {
+						clearTimeout(state.dismissTimer);
+						state.dismissTimer = undefined;
 					}
 					state.status = "error";
 					state.textChunks.push(`\n[CLEANUP] Killed after ${Math.round(state.elapsed / 1000)}s (stale).`);
@@ -838,6 +1005,10 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify(`SA${num} removed.`, "info");
 			}
 
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
 			ctx.ui.setWidget(`sub-${num}`, undefined);
 			widgetBoxes.delete(num);
 			agents.delete(num);
@@ -857,6 +1028,10 @@ export default function (pi: ExtensionAPI) {
 				if (state.proc && state.status === "running") {
 					killPromises.push(killGracefully(state.proc));
 					killed++;
+				}
+				if (state.dismissTimer) {
+					clearTimeout(state.dismissTimer);
+					state.dismissTimer = undefined;
 				}
 				ctx.ui.setWidget(`sub-${id}`, undefined);
 			}
@@ -889,7 +1064,7 @@ export default function (pi: ExtensionAPI) {
 
 	function preSpawnScout(ctx: any) {
 		// Only pre-spawn if scout agent definition exists
-		const scoutDef = resolveAgentByName("scout", knownAgents);
+		const scoutDef = resolveAgentByName("scout", knownAgents, modelsConfig || undefined);
 		if (!scoutDef) return;
 
 		const id = nextId++;
@@ -927,6 +1102,10 @@ export default function (pi: ExtensionAPI) {
 		for (const [id, state] of Array.from(agents.entries())) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
+			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
 			}
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
@@ -981,9 +1160,27 @@ export default function (pi: ExtensionAPI) {
 			if (state.proc && state.status === "running") {
 				killPromises.push(killGracefully(state.proc));
 			}
+			if (state.dismissTimer) {
+				clearTimeout(state.dismissTimer);
+				state.dismissTimer = undefined;
+			}
 			ctx.ui.setWidget(`sub-${id}`, undefined);
 		}
 		await Promise.all(killPromises);
+
+		// Reconciliation sweep: mark any Commander tasks from killed agents as failed
+		// so they don't stay stuck in "working" on the kanban board forever
+		const client = getCommanderClient();
+		if (client && isCommanderAvailable()) {
+			for (const [id, state] of agents) {
+				if (state.commanderTaskId !== undefined && state.status !== "done") {
+					postFailTask(client, state.commanderTaskId,
+						`Agent SA-${id}-${state.name} killed during session switch`)
+						.catch(() => {});
+				}
+			}
+		}
+
 		agents.clear();
 		widgetBoxes.clear();
 		nextId = 1;

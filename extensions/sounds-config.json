@@ -1,5 +1,30 @@
 {
-  "assignments": {},
+  "assignments": {
+    "agent_end": "custom:soft-chord",
+    "agent_start": "custom:agent-starting"
+  },
   "volume": 0.4,
-  "enabled": true
+  "enabled": true,
+  "customSounds": [
+    {
+      "id": "custom:agent-completion-2",
+      "label": "Agent Completion #2",
+      "url": "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/a_agent_completion_s_%232-1775852957620.mp3?alt=media&token=f519971a-46ad-4e09-affb-1b0217861eab"
+    },
+    {
+      "id": "custom:agent-completion-boop",
+      "label": "Agent Completion Boop",
+      "url": "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/a_agent_completion_s_%233-1775852957620.mp3?alt=media&token=f29f377f-c659-4455-be17-e6b17782963b"
+    },
+    {
+      "id": "custom:soft-chord",
+      "label": "Soft Chord",
+      "url": "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/i_need_a_soft_electr_%231-1775853539780.mp3?alt=media&token=762a5636-a663-4b25-8eca-13469f90bb81"
+    },
+    {
+      "id": "custom:agent-starting",
+      "label": "Agent Starting",
+      "url": "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/i_need_a_soft_electr_%233-1775853642753.mp3?alt=media&token=77e0e6a3-30e4-46a3-a3d0-53ed3367df28"
+    }
+  ]
 }

@@ -1,9 +1,9 @@
-// ABOUTME: Tests for the Commander MCP bridge extension.
-// ABOUTME: Verifies tool registration, MCP client proxying, and error handling.
+// ABOUTME: Tests for the Commander CLI bridge extension.
+// ABOUTME: Verifies tool registration, CLI client proxying, and error handling.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Mock the MCP client ─────────────────────────────────────────────
+// ── Mock the Commander CLI client ───────────────────────────────────
 
 const { mockConnect, mockCallTool, mockDisconnect, mockIsConnected } = vi.hoisted(() => ({
 	mockConnect: vi.fn(),
@@ -12,14 +12,14 @@ const { mockConnect, mockCallTool, mockDisconnect, mockIsConnected } = vi.hoiste
 	mockIsConnected: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("../lib/mcp-client.ts", () => {
-	class MockMcpClient {
+vi.mock("../lib/commander/commander-cli-client.ts", () => {
+	class MockCommanderCliClient {
 		connect = mockConnect;
 		callTool = mockCallTool;
 		disconnect = mockDisconnect;
 		isConnected = mockIsConnected;
 	}
-	return { McpClient: MockMcpClient };
+	return { CommanderCliClient: MockCommanderCliClient };
 });
 
 // ── Mock ExtensionAPI ───────────────────────────────────────────────
@@ -64,9 +64,9 @@ describe("commander-mcp extension", () => {
 		mod.default(pi as any);
 	});
 
-	it("should register all 8 commander tools", () => {
-		expect(pi.registerTool).toHaveBeenCalledTimes(8);
-		const names = pi._tools.map(t => t.name);
+	it("should register all 9 commander tools", () => {
+		expect(pi.registerTool).toHaveBeenCalledTimes(9);
+		const names = pi._tools.map((t) => t.name);
 		expect(names).toContain("commander_task");
 		expect(names).toContain("commander_session");
 		expect(names).toContain("commander_workflow");
@@ -75,6 +75,7 @@ describe("commander-mcp extension", () => {
 		expect(names).toContain("commander_mailbox");
 		expect(names).toContain("commander_orchestration");
 		expect(names).toContain("commander_dependency");
+		expect(names).toContain("commander_agentmail");
 	});
 
 	it("should register tools with operation as required parameter", () => {
@@ -88,7 +89,7 @@ describe("commander-mcp extension", () => {
 		expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
 	});
 
-	it("should proxy tool calls to MCP client", async () => {
+	it("should proxy tool calls to CLI client", async () => {
 		mockIsConnected.mockReturnValue(true);
 		mockCallTool.mockResolvedValue({
 			content: [{ type: "text", text: "result" }],
@@ -166,6 +167,48 @@ describe("commander-mcp extension", () => {
 		}
 	});
 
+	it("commander_task description teaches agents to send mission_brief on root creates", () => {
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		expect(taskTool.description).toMatch(/mission_brief/i);
+		expect(taskTool.description.toLowerCase()).toContain("root");
+	});
+
+	it("commander_task schema exposes mission_brief as an optional field", () => {
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		const props = (taskTool.parameters as any).properties || {};
+		expect(props.mission_brief).toBeDefined();
+		expect(String(props.mission_brief.description || "").toLowerCase())
+			.toContain("mission");
+	});
+
+	it("forwards mission_brief through commander_task create to the CLI client", async () => {
+		mockIsConnected.mockReturnValue(true);
+		mockCallTool.mockResolvedValue({ content: [{ type: "text", text: "{\"id\":1}" }] });
+
+		const taskTool = pi._tools.find(t => t.name === "commander_task")!;
+		await taskTool.execute(
+			"call-1",
+			{
+				operation: "create",
+				description: "OAuth migration",
+				mission_brief: "Migrate JWT to OAuth so we can support SSO.",
+				working_directory: "/project",
+			},
+			new AbortController().signal,
+			vi.fn(),
+			{},
+		);
+
+		expect(mockCallTool).toHaveBeenCalledWith(
+			"commander_task",
+			expect.objectContaining({
+				operation: "create",
+				mission_brief: "Migrate JWT to OAuth so we can support SSO.",
+			}),
+			undefined,
+		);
+	});
+
 	// The probe is fire-and-forget — flush microtasks to let it settle
 	const flush = () => new Promise(r => setTimeout(r, 0));
 
@@ -213,13 +256,11 @@ describe("commander-mcp extension", () => {
 			);
 		});
 
-		it("should set __piCommanderAvailable=false when probe call times out", async () => {
+		it("should set __piCommanderAvailable=false when CLI probe times out", async () => {
 			const g = globalThis as any;
 			delete g.__piCommanderAvailable;
 
-			mockConnect.mockResolvedValue(undefined);
-			mockIsConnected.mockReturnValue(true);
-			mockCallTool.mockRejectedValue(new Error("MCP tool call timeout"));
+			mockConnect.mockRejectedValue(new Error("cmd probe timeout"));
 
 			const ctx = createMockCtx();
 			const startHandler = pi._events["session_start"];

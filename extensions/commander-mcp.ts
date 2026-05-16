@@ -1,21 +1,10 @@
-// ABOUTME: Bridge extension that exposes Commander MCP tools as native Pi tools.
-// ABOUTME: Spawns commander-mcp as a subprocess and proxies JSON-RPC calls over stdio.
+// ABOUTME: Bridge extension that exposes Commander CLI-backed tools as native Pi tools.
+// ABOUTME: Uses the local `cmd` binary while preserving the existing commander_* tool contract.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { McpClient } from "./lib/mcp-client.ts";
-import { createReadyGate, resolveGate, resetGate } from "./lib/commander-ready.ts";
-
-// ── Configuration ───────────────────────────────────────────────────
-
-const SERVER_PATH = "/Users/ricardo/Workshop/Github-Work/commander/services/commander-mcp/dist/server.js";
-const SERVER_ENV: Record<string, string> = {
-	COMMANDER_WS_URL: process.env.COMMANDER_WS_URL || "ws://localhost:9002",
-	JIRA_URL: process.env.JIRA_URL || "",
-	JIRA_EMAIL: process.env.JIRA_EMAIL || "",
-	JIRA_API_TOKEN: process.env.JIRA_API_TOKEN || "",
-	AGENTMAIL_API_KEY: process.env.AGENTMAIL_API_KEY || "",
-};
+import { CommanderCliClient } from "./lib/commander/commander-cli-client.ts";
+import { createReadyGate, resolveGate, resetGate } from "./lib/commander/commander-ready.ts";
 
 // ── Tool definitions ────────────────────────────────────────────────
 
@@ -28,9 +17,12 @@ const TOOLS: { name: string; label: string; description: string }[] = [
 OPERATIONS BY CATEGORY:
 
 TASK CRUD:
-- "create": Start new task (requires description, working_directory)
+- "create": Start new task (requires description, working_directory).
+  For ROOT initiatives (no group_id/parent), ALWAYS pass mission_brief — a 1-3
+  sentence "what & why" that the Commander dashboard shows as the mission card.
+  Children inherit from the parent — omit mission_brief for them.
 - "get": Get task details by task_id
-- "update": Modify task fields
+- "update": Modify task fields (pass mission_brief to refine the brief on a root task)
 - "list": Find tasks with filters (status, agent_id, working_directory)
 
 LIFECYCLE (state transitions):
@@ -57,7 +49,10 @@ TASK WORKFLOW:
 2. Claim task → status='working', validates working_directory
 3. Complete/Fail → status='completed' or 'failed'
 
-EXAMPLE - Create and claim a task:
+EXAMPLE - Create a root initiative with a mission brief:
+{ "operation": "create", "description": "OAuth migration", "mission_brief": "Migrate JWT to OAuth so we can support SSO and refresh tokens across the org.", "working_directory": "/project/src" }
+
+EXAMPLE - Create and claim a child task:
 { "operation": "create", "description": "Fix auth bug in login.ts", "working_directory": "/project/src" }
 { "operation": "claim", "task_id": 123, "agent_name": "claude" }
 
@@ -280,6 +275,9 @@ const TaskParams = Type.Object({
 	operation: Type.String({ description: "Operation to perform" }),
 	// CRUD
 	description: Type.Optional(Type.String({ description: "Task description (for create)" })),
+	mission_brief: Type.Optional(Type.String({ description: "Root-initiative mission brief — 1-3 sentence 'what & why' shown in the Commander dashboard. Required on root creates; omit for children." })),
+	title: Type.Optional(Type.String({ description: "Task title (for create/update)" })),
+	labels: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())], { description: "Comma-separated string or array of labels (for create)" })),
 	working_directory: Type.Optional(Type.String({ description: "Working directory path (for create, list)" })),
 	task_id: Type.Optional(Type.Number({ description: "Task ID (for get, update, claim, complete, fail)" })),
 	status: Type.Optional(Type.String({ description: "Task status: pending, working, completed, failed, cancelled (for update, list)" })),
@@ -418,7 +416,7 @@ const TOOL_PARAMS: Record<string, ReturnType<typeof Type.Object>> = {
 // ── Extension entry point ───────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
-	const client = new McpClient(SERVER_PATH, SERVER_ENV);
+	const client = new CommanderCliClient();
 	const g = globalThis as any;
 	let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -450,7 +448,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	// Register all 8 tools
+	// Register all Commander CLI-backed tools (see TOOLS list)
 	for (const tool of TOOLS) {
 		pi.registerTool({
 			name: tool.name,
@@ -483,12 +481,11 @@ export default function (pi: ExtensionAPI) {
 
 	async function probeCommander(ctx: any) {
 		try {
+			// Lightweight CLI probe — 3s timeout inside connect()
 			await client.connect();
-			// Lightweight probe — 3s timeout
-			await client.callTool("commander_session", { operation: "list" }, 3000);
 			g.__piCommanderAvailable = true;
 			g.__piCommanderClient = client;
-			ctx.ui.setStatus("Commander: connected", "commander");
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: connected", "commander");
 
 			// Resolve gate — drain any ops queued while we were probing
 			const queued = resolveGate(gate, true);
@@ -501,11 +498,10 @@ export default function (pi: ExtensionAPI) {
 					if (!client.isConnected()) {
 						await client.connect();
 					}
-					await client.callTool("commander_session", { operation: "list" }, 3000);
 					if (!g.__piCommanderAvailable) {
 						g.__piCommanderAvailable = true;
 						g.__piCommanderClient = client;
-						ctx.ui.setStatus("Commander: connected", "commander");
+						if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: connected", "commander");
 						// Recovery — resolve gate if it was reset during offline
 						if (gate.state !== "available") {
 							const queued = resolveGate(gate, true);
@@ -515,7 +511,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				} catch {
 					g.__piCommanderAvailable = false;
-					ctx.ui.setStatus("Commander: offline", "commander");
+					if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: offline", "commander");
 					// Reset gate so ops queue again until recovery
 					if (gate.state === "available") {
 						resetGate(gate);
@@ -524,7 +520,7 @@ export default function (pi: ExtensionAPI) {
 			}, 60_000);
 		} catch {
 			g.__piCommanderAvailable = false;
-			ctx.ui.setStatus("Commander: offline", "commander");
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("Commander: offline", "commander");
 			resolveGate(gate, false);
 		}
 	}

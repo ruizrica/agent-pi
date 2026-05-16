@@ -15,7 +15,13 @@ node_modules/
 .context/
 bun.lock
 extensions/coverage/
+extensions/.pi/
+extensions/__tests__/.pi/
+extensions/node_modules/
 extensions/web-test-worker/.env
+extensions/.pacifico.env
+.pacifico.env
+extensions/settings.json
 extensions/web-test-worker/node_modules/
 autoresearch-results.tsv
 
@@ -32,3 +38,24 @@ commands/private/
 
 # Stakpak session files
 .stakpak/session*
+
+# Mako Security
+.mako-security.yml
+.makoignore
+
+# Generated tooling / IDE drafts (not product source)
+.gopher/
+.kiro/
+tests/*.spec.ts
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+
+# Task tracker volatile state (per-session, never push to public)
+.beads/issues.jsonl
+.beads/cmd-writer.log
+.beads/metadata.json
+.commander/
+

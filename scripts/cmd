@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# ABOUTME: cmd wrapper that enforces --mission-brief on root task creation.
+# ABOUTME: Shadows /Users/ricardo/.local/bin/cmd when scripts/ is earlier in PATH; passes everything except `task add` straight through.
+
+set -u
+
+REAL_CMD="${CMD_REAL:-/Users/ricardo/.local/bin/cmd}"
+
+if [[ "${1:-}" == "task" && "${2:-}" == "add" ]]; then
+  has_mission_brief=false
+  has_parent=false
+  for arg in "$@"; do
+    case "$arg" in
+      --mission-brief|--mission-brief=*) has_mission_brief=true ;;
+      --parent|--parent=*) has_parent=true ;;
+    esac
+  done
+
+  if ! $has_mission_brief && ! $has_parent; then
+    cat >&2 <<'EOF'
+🛑 cmd-guard: refusing to create a root task without --mission-brief.
+
+Root tasks (no --parent) MUST include --mission-brief "1-3 sentence what & why".
+This is enforcement of the policy documented in CLAUDE.md → "MANDATORY Pre-flight Checklist".
+
+Either:
+  1. Add a brief, then retry:
+       cmd task add "..." --mission-brief "what & why" --runtime claude-code --model <m>
+  2. Make this a subtask by adding --parent <id>:
+       cmd task add "..." --parent <id> --runtime claude-code --model <m>
+
+To bypass this guard temporarily (e.g. during testing), set CMD_GUARD=off in the env.
+EOF
+    if [[ "${CMD_GUARD:-on}" == "off" ]]; then
+      echo "cmd-guard: CMD_GUARD=off — bypassing enforcement and forwarding to real cmd." >&2
+    else
+      exit 2
+    fi
+  fi
+fi
+
+exec "$REAL_CMD" "$@"

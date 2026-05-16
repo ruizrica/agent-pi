@@ -1,9 +1,9 @@
 // ABOUTME: Agent email sending extension — enables agents to send emails via AgentMail through Commander.
 // ABOUTME: Registers a send_email tool that proxies to commander_agentmail for reports, briefings, and custom emails.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 
 // ── Types ────────────────────────────────────────────────────────────
 

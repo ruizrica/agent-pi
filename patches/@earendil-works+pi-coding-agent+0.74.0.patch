@@ -1,0 +1,56 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js
+index 442ac5a..0c1d273 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js
+@@ -1,6 +1,7 @@
+ import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+ import ignore from "ignore";
+ import { homedir } from "os";
++import { createHash } from "crypto";
+ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path";
+ import { CONFIG_DIR_NAME, getAgentDir } from "../config.js";
+ import { parseFrontmatter } from "../utils/frontmatter.js";
+@@ -314,6 +315,16 @@ export function loadSkills(options) {
+     const realPathSet = new Set();
+     const allDiagnostics = [];
+     const collisionDiagnostics = [];
++    const skillContentMap = new Map(); // Map of skill name -> file content hash
++    function getFileHash(filePath) {
++        try {
++            const content = readFileSync(filePath, "utf-8");
++            return createHash("sha256").update(content).digest("hex");
++        }
++        catch {
++            return null;
++        }
++    }
+     function addSkills(result) {
+         allDiagnostics.push(...result.diagnostics);
+         for (const skill of result.skills) {
+@@ -325,6 +336,14 @@ export function loadSkills(options) {
+             }
+             const existing = skillMap.get(skill.name);
+             if (existing) {
++                // Check if files have identical content
++                const newFileHash = getFileHash(skill.filePath);
++                const existingFileHash = skillContentMap.get(skill.name);
++                if (newFileHash && existingFileHash && newFileHash === existingFileHash) {
++                    // Files are identical, skip silently (don't add to collision diagnostics)
++                    continue;
++                }
++                // Files differ, report collision
+                 collisionDiagnostics.push({
+                     type: "collision",
+                     message: `name "${skill.name}" collision`,
+@@ -340,6 +359,11 @@ export function loadSkills(options) {
+             else {
+                 skillMap.set(skill.name, skill);
+                 realPathSet.add(realPath);
++                // Store file content hash for collision detection
++                const fileHash = getFileHash(skill.filePath);
++                if (fileHash) {
++                    skillContentMap.set(skill.name, fileHash);
++                }
+             }
+         }
+     }

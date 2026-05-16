@@ -1,9 +1,9 @@
 // ABOUTME: Curated security news/advisory retrieval for trusted sources like CISA, NVD, OWASP, and CVE.
 // ABOUTME: Registers a security_news tool that returns trust-ranked, freshness-aware advisory data.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 
 const SOURCE_IDS = ["cisa", "owasp", "nvd", "cve"] as const;
 type SourceId = typeof SOURCE_IDS[number];

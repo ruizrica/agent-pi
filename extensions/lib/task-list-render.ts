@@ -1,5 +1,5 @@
 // ABOUTME: Pure logic functions for the scrollable task list widget.
-// ABOUTME: Provides scroll logic, height adaptation, and nav state for agent-team compact mode.
+// ABOUTME: Provides scroll logic, wrapping, height adaptation, and nav state for active task displays.
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -8,6 +8,7 @@ type TaskStatus = "idle" | "inprogress" | "done";
 export interface TaskListInfo {
 	tasks: { id: number; text: string; status: TaskStatus }[];
 	title?: string;
+	description?: string;
 	remaining: number;
 	total: number;
 }
@@ -25,6 +26,7 @@ export interface HeightMode {
 // ── Constants ────────────────────────────────────────────────────────
 
 export const MAX_VISIBLE_TASKS = 6;
+export const TASK_HOTKEY_HINT = "Ctrl+Alt+T tasks";
 export const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", done: "x" };
 
 // ── Scroll logic ─────────────────────────────────────────────────────
@@ -97,18 +99,45 @@ export function stripLeadingNumber(text: string): string {
 	return text.replace(/^\d+[.)]\s+/, "");
 }
 
+function wrapWords(text: string, maxWidth: number): string[] {
+	const words = text.trim().split(/\s+/).filter(Boolean);
+	if (words.length === 0) return [];
+	const lines: string[] = [];
+	let current = "";
+
+	for (const word of words) {
+		if (current.length === 0) {
+			current = word;
+		} else if (current.length + 1 + word.length <= maxWidth) {
+			current += ` ${word}`;
+		} else {
+			lines.push(current);
+			current = word;
+		}
+
+		while (current.length > maxWidth) {
+			lines.push(current.slice(0, maxWidth));
+			current = current.slice(maxWidth);
+		}
+	}
+
+	if (current.length > 0) lines.push(current);
+	return lines;
+}
+
 // ── Rendering ────────────────────────────────────────────────────────
 // renderTaskList needs TUI functions, so it accepts them as parameters
-// to avoid a hard dependency on @mariozechner/pi-tui.
+// to avoid a hard dependency on @earendil-works/pi-tui.
 
 export interface RenderDeps {
 	truncateToWidth: (s: string, w: number, suffix: string) => string;
 	fg: (color: string, text: string) => string;
+	bold?: (text: string) => string;
 }
 
 export function renderTaskList(
 	taskList: TaskListInfo,
-	state: TaskListState,
+	_state: TaskListState,
 	width: number,
 	availableHeight: number,
 	deps: RenderDeps,
@@ -116,56 +145,33 @@ export function renderTaskList(
 	const { tasks } = taskList;
 	if (tasks.length === 0) return [];
 
-	const heightMode = computeHeightMode(tasks.length, availableHeight);
-	if (heightMode.visibleCount === 0) return [];
-
-	const { above, below } = scrollIndicators(state.scrollOffset, heightMode.visibleCount, tasks.length);
 	const { truncateToWidth: trunc, fg } = deps;
+	const bold = deps.bold ?? ((text: string) => text);
 	const lines: string[] = [];
+	const doneCount = taskList.total - taskList.remaining;
+	const rawSummaryLines = taskList.description
+		? wrapWords(taskList.description, Math.max(20, width - 4))
+		: [];
+	// Chrome when a summary is rendered: header(1) + "Mission Brief:" label(1) + blank(1) + hotkey hint(1) = 4 lines.
+	// When no summary is rendered the chrome is just header(1) + hotkey(1) = 2 lines.
+	// Budget the summary against the with-summary chrome to avoid overflowing the widget.
+	const maxSummaryLines = Math.max(0, availableHeight - 4);
+	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
 
 	// ── Header ────────────────────────────────────────────────────
-	const doneCount = taskList.total - taskList.remaining;
-	const headerLabel = `  Tasks ${doneCount}/${taskList.total}`;
-	const scrollRight = [above, below].filter(Boolean).join(" ");
-	const headerLine = fg("text", headerLabel)
-		+ (scrollRight ? " ".repeat(Math.max(1, width - headerLabel.length - scrollRight.length - 2)) + fg("muted", scrollRight) + "  " : "");
-	lines.push(trunc(headerLine, width, ""));
+	const title = taskList.title || "Tasks";
+	const headerLabel = `  ${title} ${doneCount}/${taskList.total}`;
+	lines.push(trunc(bold(fg("text", headerLabel)), width, ""));
 
-	// ── Task lines ─────────────────────────────────────────────────
-	const visibleTasks = tasks.slice(state.scrollOffset, state.scrollOffset + heightMode.visibleCount);
-
-	for (let i = 0; i < visibleTasks.length; i++) {
-		const task = visibleTasks[i];
-		const globalIndex = state.scrollOffset + i;
-		const isSelected = globalIndex === state.selectedIndex;
-
-		// Status icon
-		const iconStr = task.status === "inprogress"
-			? fg("accent", STATUS_ICON.inprogress)
-			: task.status === "done"
-				? fg("success", STATUS_ICON.done)
-				: fg("dim", STATUS_ICON.idle);
-
-		// Task text color
-		const textColor = task.status === "inprogress" ? "success"
-			: task.status === "done" ? "dim"
-				: "muted";
-
-		// Selection marker
-		const selMark = isSelected ? fg("accent", " \u2190sel") : "";
-		const selMarkLen = isSelected ? 5 : 0;
-
-		// Line: icon + id + text
-		const prefix = `  ${iconStr} `;
-		const idStr = fg("accent", `${task.id}`);
-		const idLen = `${task.id}`.length;
-		const prefixVisLen = 2 + 1 + 1; // "  " + icon(1) + " "
-		const maxTextLen = width - prefixVisLen - idLen - 1 - selMarkLen;
-		const displayText = stripLeadingNumber(task.text);
-		const taskText = fg(textColor, trunc(displayText, Math.max(0, maxTextLen), "\u2026"));
-
-		lines.push(trunc(prefix + idStr + " " + taskText + selMark, width, ""));
+	if (summaryLines.length > 0) {
+		lines.push(`  ${fg("accent", "Mission Brief:")}`);
+		for (const line of summaryLines) {
+			lines.push(trunc(`    ${fg("muted", line)}`, width, ""));
+		}
+		lines.push("");
 	}
+
+	lines.push(trunc(`  ${fg("dim", "ctrl+alt+t or /tasks to view tasks")}`, width, ""));
 
 	return lines;
 }

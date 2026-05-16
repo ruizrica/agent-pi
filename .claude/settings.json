@@ -1,0 +1,32 @@
+{
+  "enabledPlugins": {
+    "codex@openai-codex": true
+  },
+  "env": {
+    "PATH": "/Users/ricardo/Workshop/GitHub/agent-pi/scripts:/Users/ricardo/.nvm/versions/node/v20.19.5/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/ricardo/.local/bin:/Users/ricardo/.cargo/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "cmd guide agent",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "cmd guide agent",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  }
+}

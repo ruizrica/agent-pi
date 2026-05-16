@@ -1,112 +1,57 @@
 // ABOUTME: Interactive Plan Viewer — opens a GUI browser window for markdown plan review.
 // ABOUTME: Supports plan mode (approve/edit/reorder) and questions mode (inline answers). Markdown-driven UI.
+// ABOUTME: Prefers Commander's native viewer when it is healthy, then falls back to the local browser viewer.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
+import type { Server } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
+import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node:fs";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generatePlanViewerHTML } from "./lib/plan-viewer-html.ts";
+import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
-import { upsertPersistedReport } from "./lib/report-index.ts";
+import { upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { getPlanTargetMode } from "./lib/plan-complexity.ts";
+import { getProjectContext } from "./lib/project-context.ts";
+import { buildPlanSnapshot, buildQuestionsSnapshot, validateSnapshot, synthesizeSnapshotFromEntry } from "./lib/viewer-snapshots.ts";
+import type { PlanSnapshot, QuestionsSnapshot } from "./lib/viewer-snapshots.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 type ViewerPurpose = "plan" | "questions";
 
 interface ViewerResult {
-	action: "approved" | "declined" | "submitted";
+	action: "approved" | "changes_requested" | "declined" | "submitted";
 	markdown: string;
 	modified: boolean;
 	answers?: string;
 	answerMap?: Record<string, string>;
+	feedback?: string;
 }
 
 // ── HTTP Server for GUI Window ───────────────────────────────────────
 
-function startViewerServer(
+async function startViewerServer(
 	markdown: string,
 	title: string,
 	purpose: ViewerPurpose,
-): Promise<{ port: number; server: Server; waitForResult: () => Promise<ViewerResult> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: (result: ViewerResult) => void;
-		const resultPromise = new Promise<ViewerResult>((res) => {
-			resolveResult = res;
-		});
-
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			// CORS headers for local dev
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generatePlanViewerHTML({ markdown, title, mode: purpose, port });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo image
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
-			}
-
-			// Handle result submission (approve/decline)
-			if (req.method === "POST" && url.pathname === "/result") {
+	projectContext: ReturnType<typeof getProjectContext>,
+	filePath?: string,
+): Promise<{ port: number; server: Server; waitForResult: () => Promise<any>; waitForFeedback: () => Promise<any> }> {
+	const routes = [
+		{
+			method: "POST" as const,
+			path: "/save",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
-							action: data.action || "declined",
-							markdown: data.markdown || markdown,
-							modified: data.modified || false,
-							answers: data.answers,
-							answerMap: data.answerMap,
-						});
-					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
-					}
-				});
-				return;
-			}
-
-			// Handle save to desktop
-			if (req.method === "POST" && url.pathname === "/save") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -123,12 +68,14 @@ function startViewerServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/export-standalone") {
+			},
+		},
+		{
+			method: "POST" as const,
+			path: "/export-standalone",
+			handler: (req: any, res: any) => {
 				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
+				req.on("data", (chunk: string) => { body += chunk; });
 				req.on("end", () => {
 					try {
 						const data = JSON.parse(body);
@@ -145,43 +92,95 @@ function startViewerServer(
 						res.end(JSON.stringify({ error: err.message }));
 					}
 				});
-				return;
+			},
+		},
+	];
+
+	let roundTripState = {
+		status: "idle",
+		feedback: "",
+		revision: 0,
+		changeSummary: [] as string[],
+		payload: { markdown },
+	};
+	let lastKnownMarkdown = markdown;
+
+	const handle = await createViewerServer({
+		getHtml: (port) => generatePlanViewerHTML({ markdown, title, mode: purpose, port, roundTripEnabled: purpose === "plan", projectContext }),
+		routes,
+		onFeedback: async (body) => {
+			roundTripState = {
+				status: "feedback_submitted",
+				feedback: body?.feedback || "",
+				revision: roundTripState.revision,
+				changeSummary: [],
+				payload: { markdown: lastKnownMarkdown },
+			};
+		},
+		getRoundTripState: () => {
+			if (purpose === "plan" && filePath && existsSync(filePath)) {
+				try {
+					const latestMarkdown = readFileSync(filePath, "utf-8");
+					if (roundTripState.status === "feedback_submitted" && latestMarkdown !== lastKnownMarkdown) {
+						lastKnownMarkdown = latestMarkdown;
+						roundTripState = {
+							status: "updated",
+							feedback: roundTripState.feedback,
+							revision: roundTripState.revision + 1,
+							changeSummary: ["Applied requested plan updates", "Refreshed viewer content"],
+							payload: { markdown: latestMarkdown },
+						};
+					}
+				} catch {}
 			}
-
-			// 404 for everything else
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		// Listen on random port
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
-			});
-		});
+			return roundTripState;
+		},
 	});
+
+	return {
+		port: handle.port,
+		server: handle.server,
+		waitForResult: handle.waitForResult,
+		waitForFeedback: handle.waitForFeedback,
+	};
 }
 
-function openBrowser(url: string): void {
-	try {
-		// macOS
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			// Linux
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			// Windows fallback
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {
-				// Give up silently — URL is logged anyway
-			}
-		}
+// ── Task Parsing ──────────────────────────────────────────────────────────────
+
+interface TaskNode {
+	id: string;
+	level: number;
+	text: string;
+	checked: boolean;
+	children?: TaskNode[];
+}
+
+function parsePlainTasksFromMarkdown(markdown: string): TaskNode[] {
+	const lines = markdown.split('\n');
+	const tasks: TaskNode[] = [];
+	let taskId = 0;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const match = line.match(/^(\s*)- \[([\sxX])\]\s+(.*)/);
+		if (!match) continue;
+
+		const indent = match[1].length;
+		const checked = match[2].toLowerCase() === 'x';
+		const text = match[3].trim();
+		const level = Math.floor(indent / 2);
+
+		const task: TaskNode = {
+			id: `task-${taskId++}`,
+			level,
+			text,
+			checked,
+		};
+
+		tasks.push(task);
 	}
+
+	return tasks;
 }
 
 // ── Tool Parameters ──────────────────────────────────────────────────
@@ -190,6 +189,9 @@ const ShowPlanParams = Type.Object({
 	file_path: Type.String({ description: "Path to the markdown plan file (e.g. .context/todo.md)" }),
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
 	mode: Type.Optional(Type.String({ description: "Viewer mode: 'plan' (default) for plan review/approval, or 'questions' for follow-up questions with inline answers" })),
+	force_browser: Type.Optional(Type.Boolean({ description: "Bypass Commander and open the local browser viewer directly. Useful for testing browser fallback and Needs Changes feedback." })),
+	readonly: Type.Optional(Type.Boolean({ description: "Open the viewer in read-only mode. Hides approve/decline UI; shows a banner with toggle to enter interactive mode." })),
+	payload_id: Type.Optional(Type.String({ description: "ID of a persisted report snapshot to load instead of file_path. Used by the /reports browser to re-open previous viewers." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
@@ -213,6 +215,83 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function saveModifiedMarkdown(filePath: string, result: ViewerResult) {
+		if (!result.modified || !result.markdown) return;
+		try {
+			writeFileSync(filePath, result.markdown, "utf-8");
+		} catch {
+			// Silently fail
+		}
+	}
+
+	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult, markdownContent?: string) {
+		try {
+			const actualMarkdown = markdownContent ?? result.markdown;
+			const parsedTasks = purpose === "plan" ? parsePlainTasksFromMarkdown(actualMarkdown) : [];
+
+			const actionResult = {
+				action: result.action,
+				note: result.modified ? "Plan was modified before closing" : undefined,
+			};
+
+			let payload: unknown;
+			if (purpose === "questions") {
+				const questionsHtml = "";
+				payload = buildQuestionsSnapshot({
+					title,
+					summary: result.answers || actualMarkdown,
+					sourcePath: filePath,
+					markdownContent: actualMarkdown,
+					questionsHtml,
+					actionResult,
+				});
+			} else {
+				payload = buildPlanSnapshot({
+					title,
+					summary: actualMarkdown,
+					sourcePath: filePath,
+					markdownContent: actualMarkdown,
+					parsedTasks,
+					actionResult,
+				});
+			}
+
+			upsertPersistedReport({
+				category: purpose,
+				title,
+				summary: result.answers || actualMarkdown,
+				content: actualMarkdown,
+				sourcePath: filePath,
+				viewerPath: filePath,
+				viewerLabel: title,
+				tags: [purpose, "markdown"],
+				metadata: {
+					action: result.action,
+					modified: result.modified,
+				},
+				payload,
+			});
+		} catch {
+			// Persistence is best-effort; viewer result should still return.
+		}
+	}
+
+	function triggerApprovalModeSwitch(planText: string, ctx: ExtensionContext) {
+		try {
+			const { mode: targetMode, reason } = getPlanTargetMode(planText);
+			// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
+			if (targetMode) {
+				const setModeCallback = (globalThis as any).__piSetModeForApproval;
+				if (typeof setModeCallback === "function") {
+					setModeCallback(targetMode, ctx);
+					ctx.ui.notify(`Mode switched to ${targetMode} on plan approval. ${reason}`, "info");
+				}
+			}
+		} catch {
+			// Never fail the tool because of an auto-mode switch.
+		}
+	}
+
 	// ── Core viewer logic (shared by tool + command) ─────────────────
 
 	async function runViewer(
@@ -222,12 +301,43 @@ export default function (pi: ExtensionAPI) {
 		title: string,
 		purpose: ViewerPurpose,
 		signal?: AbortSignal,
+		options: { forceBrowser?: boolean } = {},
 	): Promise<ViewerResult> {
 		// Clean up any previous server
 		cleanupServer();
 
+		// Try Commander first for plan mode, but only treat it as approved once
+		// Commander reports a real user action. Otherwise fall back to browser.
+		if (purpose === "plan" && !options.forceBrowser) {
+			const commanderResult = await openAndWaitInCommander(
+				{
+					content: markdown,
+					title: title || "Plan Viewer",
+					reportType: "plan",
+					mode: "approve",
+					format: "markdown",
+				},
+				ctx,
+				{ signal, includeContent: true },
+			);
+
+			if (commanderResult.inCommander) {
+				const updatedMarkdown = commanderResult.content || markdown;
+				const result: ViewerResult = {
+					action: commanderResult.action === "approved" ? "approved" : "declined",
+					markdown: updatedMarkdown,
+					modified: updatedMarkdown !== markdown,
+				};
+				saveModifiedMarkdown(filePath, result);
+				persistViewerResult(filePath, title, purpose, result);
+				return result;
+			}
+			// Fall through to browser if Commander is unavailable, unhealthy, or times out.
+		}
+
 		// Start HTTP server
-		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose);
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose, projectContext, filePath);
 		activeServer = server;
 
 		const url = `http://127.0.0.1:${port}`;
@@ -247,7 +357,10 @@ export default function (pi: ExtensionAPI) {
 		openBrowser(url);
 		notifyViewerOpen(ctx, activeSession);
 
-		// Wait for user action in the browser (or abort)
+		// Wait for user action in the browser (or abort). Changes-requested is
+		// returned through the same /result path as approve/decline so the active
+		// show_plan call always unblocks and can revise the plan.
+
 		try {
 			const abortPromise = signal
 				? new Promise<ViewerResult>((_, reject) => {
@@ -256,36 +369,20 @@ export default function (pi: ExtensionAPI) {
 				})
 				: null;
 
-			const result = await (abortPromise
+			const rawResult = await (abortPromise
 				? Promise.race([waitForResult(), abortPromise])
 				: waitForResult());
+			const result: ViewerResult = {
+				action: rawResult?.action || "declined",
+				markdown: rawResult?.markdown || markdown,
+				modified: rawResult?.modified || false,
+				answers: rawResult?.answers,
+				answerMap: rawResult?.answerMap,
+				feedback: rawResult?.feedback,
+			};
 
-			// Auto-save the modified markdown back to the source file
-			if (result.modified && result.markdown) {
-				try {
-					writeFileSync(filePath, result.markdown, "utf-8");
-				} catch {
-					// Silently fail
-				}
-			}
-
-			try {
-				upsertPersistedReport({
-					category: purpose,
-					title,
-					summary: result.answers || result.markdown,
-					sourcePath: filePath,
-					viewerPath: filePath,
-					viewerLabel: title,
-					tags: [purpose, "markdown"],
-					metadata: {
-						action: result.action,
-						modified: result.modified,
-					},
-				});
-			} catch {
-				// Persistence is best-effort; viewer result should still return.
-			}
+			saveModifiedMarkdown(filePath, result);
+			persistViewerResult(filePath, title, purpose, result);
 
 			return result;
 		} finally {
@@ -308,14 +405,16 @@ export default function (pi: ExtensionAPI) {
 			"questions. User can navigate questions, type answers inline, and submit. " +
 			"Questions are auto-detected (lines ending with '?' or containing 'Default:'). " +
 			"Returns formatted answers.\n\n" +
-			"The markdown file IS the UI — update it to change what the user sees.",
+			"The markdown file IS the UI — update it to change what the user sees. " +
+			"Set force_browser=true to bypass Commander and test the local browser feedback flow.",
 		parameters: ShowPlanParams,
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const { file_path, title, mode: modeStr } = params as {
+			const { file_path, title, mode: modeStr, force_browser: forceBrowser } = params as {
 				file_path: string;
 				title?: string;
 				mode?: string;
+				force_browser?: boolean;
 			};
 
 			const purpose: ViewerPurpose = modeStr === "questions" ? "questions" : "plan";
@@ -333,7 +432,19 @@ export default function (pi: ExtensionAPI) {
 			const displayTitle = title || basename(file_path, ".md");
 
 			// Open viewer and wait for result
-			const result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal);
+			let result: ViewerResult;
+			try {
+				result = await runViewer(ctx, markdown, file_path, displayTitle, purpose, signal, { forceBrowser: !!forceBrowser });
+			} catch (err: any) {
+				// Handle user cancellation / abort gracefully
+				if (err?.message === "Aborted" || signal?.aborted) {
+					return {
+						content: [{ type: "text" as const, text: "Plan viewer was cancelled by user. Ask if they want to re-open it or proceed differently." }],
+						details: { action: "declined" as const, purpose, modified: false, filePath: file_path },
+					};
+				}
+				throw err;
+			}
 
 			// ── Questions mode result ────────────────────────────────
 			if (purpose === "questions") {
@@ -381,6 +492,12 @@ export default function (pi: ExtensionAPI) {
 					? " (plan was edited by user — use the updated version)"
 					: "";
 
+				// Auto-switch mode only for complete/multi-phase plans.
+				// Simple plans remain in PLAN mode.
+				triggerApprovalModeSwitch(result.markdown || markdown, ctx);
+
+				// Enqueue an approval follow-up so viewer-driven approval reliably
+				// triggers the next turn and execution continues after the UI closes.
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
@@ -400,6 +517,37 @@ export default function (pi: ExtensionAPI) {
 						purpose: "plan",
 						modified: result.modified,
 						filePath: file_path,
+					},
+				};
+			}
+
+			if (result.action === "changes_requested") {
+				const feedbackText = (result.feedback || "").trim() || "(no change details provided)";
+				const modifiedNote = result.modified
+					? "\n\nNote: The plan was also edited in the viewer — use the updated file contents."
+					: "";
+
+				piRef.sendMessage(
+					{
+						customType: "plan-changes-requested",
+						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}${modifiedNote}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+				ctx.ui.notify("Plan changes requested — reviewing feedback...", "info");
+
+				return {
+					content: [{
+						type: "text" as const,
+						text: `User requested changes to the plan:\n\n${feedbackText}${modifiedNote}\n\nThe latest plan has been saved to ${file_path}.`,
+					}],
+					details: {
+						action: "changes_requested" as const,
+						purpose: "plan",
+						modified: result.modified,
+						filePath: file_path,
+						feedback: feedbackText,
 					},
 				};
 			}
@@ -459,6 +607,13 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 
+			if (details.action === "changes_requested") {
+				return new Text(
+					outputLine(theme, "warning", "Plan changes requested"),
+					0, 0,
+				);
+			}
+
 			return new Text(
 				outputLine(theme, "warning", "Plan viewer closed without approval"),
 				0, 0,
@@ -491,15 +646,46 @@ export default function (pi: ExtensionAPI) {
 			const result = await runViewer(ctx, markdown, filePath, displayTitle, "plan");
 
 			if (result.action === "approved") {
+				try {
+					const planText = result.markdown || markdown;
+					const { mode: targetMode } = getPlanTargetMode(planText);
+
+					// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
+					if (targetMode) {
+						const setModeTool = (piRef as any)?.tools?.get?.("set_mode");
+						if (setModeTool?.execute) {
+							await setModeTool.execute("plan-approval-auto", { mode: targetMode, reason: "Auto-switched on plan approval" }, ctx);
+						} else if ((piRef as any)?.callTool) {
+							await (piRef as any).callTool("set_mode", { mode: targetMode, reason: "Auto-switched on plan approval" }, ctx);
+						}
+					}
+				} catch {
+					// Never fail the /plan command because of an auto-mode switch.
+				}
+
+				const { mode: targetMode } = getPlanTargetMode(result.markdown || markdown);
+				const modeNote = targetMode ? ` Mode switched to ${targetMode}.` : "";
+
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with implementation.${result.modified ? " (plan was edited)" : ""}`,
+						content: `Plan approved! Proceed with implementation.${result.modified ? " (plan was edited)" : ""}${modeNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },
 				);
 				ctx.ui.notify("Plan approved — continuing...", "info");
+			} else if (result.action === "changes_requested") {
+				const feedbackText = (result.feedback || "").trim() || "(no change details provided)";
+				piRef.sendMessage(
+					{
+						customType: "plan-changes-requested",
+						content: `Changes requested on the plan. Here is the requested feedback:\n\n${feedbackText}${result.modified ? "\n\nNote: The plan was also edited in the viewer — use the updated file contents." : ""}`,
+						display: true,
+					},
+					{ deliverAs: "followUp" as any, triggerTurn: true },
+				);
+				ctx.ui.notify("Plan changes requested — reviewing feedback...", "info");
 			} else if (result.modified) {
 				ctx.ui.notify("Plan was modified but not approved.", "info");
 			}

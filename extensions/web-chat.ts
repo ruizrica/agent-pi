@@ -1,14 +1,16 @@
 // ABOUTME: Web Chat Extension — opens a LAN-accessible chat interface that relays to the main Pi session.
 // ABOUTME: Phone acts as a thin client — messages are injected into THIS session via pi.sendUserMessage().
 // ABOUTME: Uses WebSocket for reliable streaming through cloudflared tunnels.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI, ExtensionContext, MessageUpdateEvent, ToolExecutionStartEvent, ToolExecutionEndEvent } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext, MessageUpdateEvent, ToolExecutionStartEvent, ToolExecutionEndEvent } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
+
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { randomInt } from "node:crypto";
@@ -18,6 +20,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateWebChatHTML } from "./lib/web-chat-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { openBrowser } from "./lib/viewer-server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -306,10 +309,9 @@ class SessionBridge {
 	}
 
 	onMessageEnd(message: any): void {
-		// Skip user messages and tool results — only relay assistant responses to the phone.
-		// Without this, the user's own message gets echoed back as a "PI" message,
-		// and tool results get incorrectly displayed as assistant messages.
-		if (message?.role === "user" || message?.role === "toolResult") return;
+		// Skip user messages — only relay assistant responses to the phone.
+		// Without this, the user's own message gets echoed back as a "PI" message.
+		if (message?.role === "user") return;
 
 		// Extract the full text from the completed message
 		let fullText = "";
@@ -565,6 +567,71 @@ function startChatServer(
 				return;
 			}
 
+			// ── Board Data (for inline board panel) ──────────────
+			if (req.method === "GET" && url.pathname === "/api/board-data") {
+				const g = globalThis as any;
+				const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string }[]; title?: string; remaining: number; total: number } | undefined;
+				const now = new Date().toISOString();
+				const statusMap: Record<string, string> = { idle: "pending", inprogress: "working", done: "completed" };
+				const tasks = (taskList?.tasks || []).map((t: any) => ({
+					task_id: t.id,
+					description: t.text,
+					status: statusMap[t.status] || t.status,
+					created_at: now,
+					updated_at: now,
+				}));
+				res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+				res.end(JSON.stringify({
+					tasks,
+					localMode: true,
+					localTitle: taskList?.title,
+					timestamp: now,
+				}));
+				return;
+			}
+
+			// ── Add Task (for Add to Board button) ───────────────
+			if (req.method === "POST" && url.pathname === "/add-task") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", () => {
+					try {
+						const data = JSON.parse(body || "{}");
+						const text = String(data.text || "").trim();
+						if (!text) {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: false, error: "Empty text" }));
+							return;
+						}
+						const g = globalThis as any;
+						const taskList = g.__piTaskList;
+						if (taskList && Array.isArray(taskList.tasks)) {
+							const maxId = taskList.tasks.reduce((max: number, t: any) => Math.max(max, t.id || 0), 0);
+							const newId = maxId + 1;
+							taskList.tasks.push({ id: newId, text, status: "idle" });
+							taskList.remaining = taskList.tasks.filter((t: any) => t.status !== "done").length;
+							taskList.total = taskList.tasks.length;
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, taskId: newId }));
+						} else {
+							// No task list exists yet — create one
+							g.__piTaskList = {
+								tasks: [{ id: 1, text, status: "idle" }],
+								title: "Board",
+								remaining: 1,
+								total: 1,
+							};
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, taskId: 1 }));
+						}
+					} catch (err: any) {
+						res.writeHead(400, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ ok: false, error: err?.message || "Invalid request" }));
+					}
+				});
+				return;
+			}
+
 			// ── Shutdown (explicit close from client) ────────────
 			if (req.method === "POST" && url.pathname === "/shutdown") {
 				res.writeHead(200, { "Content-Type": "application/json" });
@@ -617,14 +684,9 @@ function startChatServer(
 				relay: true,
 			});
 
-			// Send existing history (exclude tool results - they're internal, not chat messages)
+			// Send existing history
 			for (const msg of bridge.getHistory()) {
-				if (msg.role === "user") {
-					sendWS(client, "user_message", msg);
-				} else if (msg.role === "assistant") {
-					sendWS(client, "assistant_message", msg);
-				}
-				// toolResult messages are intentionally not sent to the web chat
+				sendWS(client, msg.role === "user" ? "user_message" : "assistant_message", msg);
 			}
 
 			// Send existing terminal history
@@ -659,21 +721,7 @@ function startChatServer(
 	});
 }
 
-// ── Browser Opener ───────────────────────────────────────────────────
 
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
-}
 
 // ── Tool Parameters ──────────────────────────────────────────────────
 

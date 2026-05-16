@@ -1,9 +1,9 @@
 // ABOUTME: Tool Caller — meta-tool that lets the agent invoke other tools programmatically by name.
 // ABOUTME: Enables dynamic tool composition, pipelines, and conditional tool usage.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { getToolRegistry } from "./tool-registry.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 

@@ -12,11 +12,12 @@
  * doubled/artifact rendering after compaction.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { basename, dirname } from "node:path";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { shouldWarnForCompaction, getProactiveCompactionPhase } from "./lib/context-gate.ts";
+import { getSessionStats, formatElapsed } from "./lib/session-stats.ts";
 
 /** Turn a model name like "Claude 4 Opus" into "opus 4" */
 function shortModelName(name: string | undefined): string {
@@ -73,11 +74,7 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				let usageStr = "–";
 				if (usage?.percent != null) {
 					const pct = `${Math.round(usage.percent)}%`;
-					if (contextWindow > 0) {
-						usageStr = `${pct} / ${formatTokens(contextWindow)}`;
-					} else {
-						usageStr = pct;
-					}
+					usageStr = contextWindow > 0 ? `${pct} / ${formatTokens(contextWindow)}` : pct;
 				}
 
 				const dir = shortDir(ctx.cwd);
@@ -85,13 +82,21 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
 				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", dir);
-				const rightContent = thinking + ` `;
+
+				const stats = getSessionStats();
+				let agentTimeStr = "";
+				if (stats) {
+					const elapsedMs = Date.now() - stats.startedAt;
+					const elapsed = formatElapsed(elapsedMs);
+					const timeColor = elapsedMs > 30 * 60_000 ? "warning" : elapsedMs > 5 * 60_000 ? "accent" : "dim";
+					agentTimeStr = theme.fg(timeColor, elapsed);
+				}
+				const rightContent = (agentTimeStr ? agentTimeStr + sep : "") + thinking + ` `;
 
 				const leftWidth = visibleWidth(leftContent);
 				const rightWidth = visibleWidth(rightContent);
 				const gap = Math.max(1, width - leftWidth - rightWidth);
 				const line = leftContent + " ".repeat(gap) + rightContent;
-
 				return [truncateToWidth(line, width, "")];
 			},
 		};
@@ -106,6 +111,12 @@ export default function (pi: ExtensionAPI) {
 		setupFooter(pi, ctx, (unsub) => {
 			branchUnsub = unsub;
 		});
+		(globalThis as any).__piRefreshFooter = () => {
+			ctx.ui.setFooter(undefined);
+			setupFooter(pi, ctx, (unsub) => {
+				branchUnsub = unsub;
+			});
+		};
 	});
 
 	// No tool_call blocking — core auto-compaction handles compaction properly
@@ -120,5 +131,6 @@ export default function (pi: ExtensionAPI) {
 			branchUnsub();
 			branchUnsub = null;
 		}
+		(globalThis as any).__piRefreshFooter = undefined;
 	});
 }

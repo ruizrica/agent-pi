@@ -1,8 +1,8 @@
 {
-  "name": "user-question-extension",
+  "name": "agent-pi-extensions",
   "private": true,
   "version": "1.0.0",
-  "description": "Tests for user-question extension",
+  "description": "Extension-suite tests and tooling for agent-pi",
   "scripts": {
     "test": "vitest run --config __tests__/vitest.config.ts",
     "test:watch": "vitest watch --config __tests__/vitest.config.ts",

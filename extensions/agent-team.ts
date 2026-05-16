@@ -21,10 +21,10 @@
  * Usage: pi -e extensions/agent-team.ts -e extensions/footer.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { Text, type AutocompleteItem, visibleWidth, truncateToWidth, Container, Spacer, Box, Markdown, matchesKey, Key, type Component } from "@mariozechner/pi-tui";
-import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
+import { Text, type AutocompleteItem, visibleWidth, truncateToWidth, Container, Spacer, Box, Markdown, matchesKey, Key, type Component } from "@earendil-works/pi-tui";
+import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@earendil-works/pi-coding-agent";
 import { spawn } from "child_process";
 import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { dirname, join, resolve } from "path";
@@ -34,13 +34,18 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
-import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
+import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
+import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
+import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
+import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
 import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
-import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
-import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
+import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
+import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
+import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -302,6 +307,7 @@ export default function (pi: ExtensionAPI) {
 	function registerAgentWidget(state: AgentState) {
 		if (!widgetCtx) return;
 		const key = `agent-${state.widgetId}`;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		widgetCtx.ui.setWidget(key, (_tui: any, theme: any) => {
 			const bgFn = (text: string): string => {
 				const bg = STATUS_BG[state.status] || STATUS_BG.running;
@@ -368,7 +374,12 @@ export default function (pi: ExtensionAPI) {
 
 		// Task list widget (above editor)
 		const taskList = (globalThis as any).__piTaskList as TaskListInfo | null;
-		if (taskList && taskList.tasks.length > 0) {
+		const allTasksComplete = !!taskList?.tasks?.length && taskList.tasks.every((task) => task.status === "done");
+		const missionCompleteVisible = !!(globalThis as any).__piMissionCompleteVisible && allTasksComplete;
+		if (missionCompleteVisible) {
+			widgetCtx.ui.setWidget("agent-team", undefined);
+		} else if (taskList && taskList.tasks.length > 0) {
+			if ((globalThis as any).__piSummaryModeActive) return;
 			widgetCtx.ui.setWidget("agent-team", (_tui: any, theme: any) => {
 				const text = new Text("", 0, 0);
 
@@ -381,10 +392,12 @@ export default function (pi: ExtensionAPI) {
 						}
 
 						const termHeight = process.stdout.rows || 24;
-						const availableHeight = Math.max(3, Math.min(termHeight - 10, 14));
+						// Floor of 4 matches the chrome required to render the Mission Brief block
+						// (header + label + blank + hotkey). Lower values silently hide the brief.
+						const availableHeight = Math.max(4, Math.min(termHeight - 10, 14));
 						const taskLines = renderTaskList(
 							tl, taskListState, width, availableHeight,
-							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t) },
+							{ truncateToWidth, fg: (c: string, t: string) => theme.fg(c, t), bold: (t: string) => theme.bold(t) },
 						);
 						const taskBg = "\x1b[48;5;236m";
 						const taskReset = "\x1b[0m";
@@ -411,7 +424,13 @@ export default function (pi: ExtensionAPI) {
 
 		// Re-pin mode bar as the last aboveEditor widget so it stays directly above the editor input.
 		// Without this, the agent-team widget (tasks) would render between the mode bar and the editor.
-		(globalThis as any).__piRefreshModeBlock?.();
+		// Pass our own widgetCtx so mode-cycler doesn't fall back to a stale captured ctx
+		// after session replacement (newSession/fork/switchSession/reload).
+		try {
+			(globalThis as any).__piRefreshModeBlock?.(widgetCtx);
+		} catch {
+			// Ignore stale-ctx errors — the next session event will rebind cleanly.
+		}
 	}
 
 	// ── Dispatch Agent (returns Promise) ─────────
@@ -462,7 +481,15 @@ export default function (pi: ExtensionAPI) {
 		// Use agent's defined model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		const model = resolveToolkitWorkerModel(state.def.name, state.def.model || DEFAULT_SUBAGENT_MODEL);
+		let model = resolveToolkitWorkerModel(state.def.name, state.def.model || DEFAULT_SUBAGENT_MODEL);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		if ((globalThis as any).__piGemmaOverlay && state.def.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && state.def.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 		state.resolvedModel = model;
 
 		// Session file for this agent
@@ -478,18 +505,21 @@ export default function (pi: ExtensionAPI) {
 
 		// Resolve tools — append commander tools when Commander is available
 		const g = globalThis as any;
-		const commanderAvailable = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+		const commanderAvailableAtSpawn = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
 
 		// Commander lifecycle: gate-aware fire-and-forget helper
+		// Re-reads gate state each time so it reflects current availability, not spawn-time
 		function commanderSync(fn: (client: any) => Promise<void>): void {
 			const gate = g.__piCommanderGate;
 			if (!gate || gate.state !== "available" || !g.__piCommanderClient) return;
-			fn(g.__piCommanderClient).catch(() => {});
+			fn(g.__piCommanderClient).catch((err) => {
+				console.error(`[agent-team] commanderSync failed:`, err?.message || err);
+			});
 		}
 
 		// Hoist for use in pre-dispatch claim + post-dispatch reconciliation
 		const canonicalName = state.def.name;
-		const taskId = commanderAvailable ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
+		const taskId = commanderAvailableAtSpawn ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
 
 		let tools = state.def.tools;
 		// Commander tools are extension-registered (not built-in), so they must NOT
@@ -499,7 +529,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
-		if (commanderAvailable) {
+		if (commanderAvailableAtSpawn) {
 			// Gather peer names for inter-agent mailbox communication
 			const peerNames: string[] = [];
 			for (const [name] of agentStates) {
@@ -522,7 +552,7 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			...(commanderAvailable ? ["-e", commanderExtPath] : []),
+			...(commanderAvailableAtSpawn ? ["-e", commanderExtPath] : []),
 			"--model", model,
 			"--tools", tools,
 			"--thinking", "off",
@@ -540,9 +570,19 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolve) => {
+			let toolkitFinalOutput = "";
 			// Build env — include Commander task ID when available
 			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
-			if (commanderAvailable) {
+			if ((globalThis as any).__piClaudeOverlay) {
+				spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
+			}
+			if ((globalThis as any).__piGemmaOverlay) {
+				spawnEnv.PI_GEMMA_OVERLAY_ACTIVE = "1";
+			}
+			if ((globalThis as any).__piQwenOverlay) {
+				spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
+			}
+			if (commanderAvailableAtSpawn) {
 				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
 				if (currentTask?.commanderTaskId !== undefined) {
 					spawnEnv.PI_COMMANDER_TASK_ID = String(currentTask.commanderTaskId);
@@ -550,7 +590,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// Pre-dispatch: claim task in Commander before spawning
-			if (commanderAvailable && taskId !== undefined) {
+			if (commanderAvailableAtSpawn && taskId !== undefined) {
 				commanderSync((client) => preClaimTask(client, taskId, canonicalName));
 			}
 
@@ -564,32 +604,44 @@ export default function (pi: ExtensionAPI) {
 					state.sessionFile = agentSessionFile;
 				}
 
-				let full = textChunks.join("");
+				let normalized = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks,
+					stderr: stderrBuf,
+					exitCode: code ?? 1,
+					source: displayName(state.def.name),
+				});
+				let full = normalized.displayText;
 				if ((code !== 0 && code !== null) && stderrBuf.trim()) {
 					if (isContextLossError(stderrBuf)) {
 						full = "Context overflow: agent session broke tool_use/tool_result pairing. Clear session and re-dispatch.";
 						state.sessionFile = null;
-					} else {
+					} else if (!normalized.diagnostics.includes(stderrBuf.trim())) {
 						full = full.trim() ? `${full}\n\n--- stderr ---\n${stderrBuf.trim()}` : stderrBuf.trim();
 					}
 				}
 				state.lastWork = full.split("\n").filter((l: string) => l.trim()).pop() || "";
-				state.summary = state.lastWork;
+				state.summary = normalized.summary || state.lastWork;
 				state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-3);
 				invalidateAgentWidget(state);
 
 				setTimeout(() => {
 					if (state.status !== "running") removeAgentWidget(state);
-				}, 30_000);
+				}, 2_000);
 
-				if (commanderAvailable && taskId !== undefined) {
-					const summary = textChunks.join("").trim().split("\n").pop() || canonicalName;
+				// Re-evaluate Commander availability at finish time (not spawn time)
+				// to handle transient connectivity issues during agent lifetime
+				const cmdAvailNow = g.__piCommanderGate?.state === "available" && !!g.__piCommanderClient;
+				if (cmdAvailNow && taskId !== undefined) {
+					const summary = full.trim().split("\n").pop() || canonicalName;
 					if (state.status === "done") {
 						commanderSync((client) => postCompleteTask(client, taskId, canonicalName, summary));
 					} else {
 						const errMsg = stderrBuf.trim() || summary || "Agent exited with error";
 						commanderSync((client) => postFailTask(client, taskId, errMsg));
 					}
+				} else if (taskId !== undefined && !cmdAvailNow) {
+					console.error(`[agent-team] Commander unavailable at finish for task ${taskId} (${canonicalName}) — task will remain stuck`);
 				}
 
 				ctx.ui.notify(
@@ -601,8 +653,10 @@ export default function (pi: ExtensionAPI) {
 			};
 
 			const handleStdoutLine = (line: string) => {
+				const trimmed = line.trim();
+				if (!trimmed) return;
 				try {
-					const event = JSON.parse(line);
+					const event = JSON.parse(trimmed);
 					if (event.type === "message_update") {
 						const delta = event.assistantMessageEvent;
 						if (delta?.type === "text_delta") {
@@ -612,7 +666,7 @@ export default function (pi: ExtensionAPI) {
 							const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
 							state.lastWork = last;
 							state.summary = last;
-							state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-3);
+							state.summaryLines = full.split("\n").map((l: string) => l.trim()).filter(Boolean).slice(-4);
 							invalidateAgentWidget(state);
 						}
 					} else if (event.type === "tool_execution_start") {
@@ -640,19 +694,39 @@ export default function (pi: ExtensionAPI) {
 							invalidateAgentWidget(state);
 						}
 					}
-				} catch {}
+				} catch {
+					if (shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay) && isClaudeDisplayNoise(trimmed)) return;
+					textChunks.push(trimmed + "\n");
+					state.textChunks.push(trimmed + "\n");
+					state.lastWork = trimmed;
+					state.summary = trimmed;
+					state.summaryLines = state.summaryLines?.[state.summaryLines.length - 1] === trimmed
+						? state.summaryLines
+						: [...(state.summaryLines || []), trimmed].slice(-4);
+					invalidateAgentWidget(state);
+				}
 			};
 
 			let stderrBuf = "";
-			if (isToolkitCliAgent(state.def.name)) {
+			if (isToolkitCliAgent(state.def.name) || shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				spawnToolkitWorker(state.def, {
 					task,
 					sessionFile: agentSessionFile,
 					cwd: ctx.cwd,
 					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { state.proc = proc; },
 					onStdoutLine: handleStdoutLine,
 					onStderr: (chunk: string) => { stderrBuf += chunk; },
-				}).then(({ exitCode }) => finish(exitCode, stderrBuf));
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					if ((isToolkitCliAgent(state.def.name) || shouldUseClaudeCliForAgent(state.def.name, model, !!(globalThis as any).__piClaudeOverlay)) && toolkitFinalOutput.trim()) {
+						state.lastWork = toolkitFinalOutput.trim().split("\n").pop() || state.lastWork;
+						state.summary = state.lastWork;
+						state.summaryLines = state.summary ? [state.summary] : state.summaryLines;
+					}
+					finish(exitCode, stderrBuf);
+				});
 				return;
 			}
 
@@ -812,7 +886,7 @@ export default function (pi: ExtensionAPI) {
 			const name = teamNames[idx];
 			activateTeam(name);
 			updateWidget();
-			ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
 			ctx.ui.notify(`Team: ${name} — ${Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ")}`, "info");
 		},
 	});
@@ -1173,57 +1247,45 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 		const hasScout = agentStates.has("scout");
 		const scoutSection = hasScout ? `
 
-## Scout Agent (ALWAYS use for context gathering)
-A scout agent is on your team. **ALWAYS dispatch to the scout** for any context-gathering work instead of doing it yourself.
+## Scout Agent on Team
+A scout agent is on your active team. Prefer the scout for context-gathering dispatches; use builders for execution-heavy work.
 
-### What to dispatch to the scout:
-- Reading files, exploring directory structures
-- Searching for patterns, symbols, or text in the codebase (grep, find)
-- Understanding architecture, tracing code paths, mapping dependencies
-- Any investigation or information-gathering task
-
-### How to use the scout:
 \`\`\`
 dispatch_agent { agent: "scout", task: "Read the file at src/index.ts and summarize its exports" }
 \`\`\`
-The scout runs in the background. When it finishes, its findings are returned. Then you synthesize and respond to the user.
+The scout runs in the background. When it finishes, its findings are returned. Then synthesize and respond.` : "";
 
-### What YOU still do directly:
-- Respond to the user (synthesize scout findings, answer questions)
-- Write/edit files, run commands, make code changes
-- Plan, create tasks, manage workflow
-- Any action that modifies the codebase
-
-### Important:
-- Do NOT use Read, grep, find, or ls yourself — dispatch those to the scout
-- You CAN still use Bash for running tests, builds, or commands that modify things
-- If the scout errors, fall back to doing the work directly` : "";
+		const teamDelegateSection = buildDelegateEverythingSection({
+			modeName: "TEAM",
+			dispatchTool: "dispatch_agent",
+			dispatchExample: `dispatch_agent { agent: "${hasScout ? "scout" : "<team-member>"}", task: "Read src/index.ts and summarize its exports" }`,
+			extraRules: [
+				`You can ONLY dispatch to agents listed in the team catalog below. Do not invent agent names.`,
+				`Builders on the team are responsible for code changes, builds, and tests — never run them yourself.`,
+				`You may call the \`tasks\` tool directly for task list bookkeeping (\`tasks new-list\`, \`tasks add\`, \`tasks toggle\`); that is orchestration, not execution.`,
+				`You may call \`ask_user\` directly for user clarification questions.`,
+			],
+		});
 
 		return {
-			systemPrompt: `You coordinate specialist agents and delegate context-gathering to them.
-You dispatch specialist agents for investigation and can work directly for responses and edits.
+			systemPrompt: `You coordinate specialist agents in TEAM mode. You orchestrate, synthesize, and decide; dispatched team members do the reading, searching, building, and testing.
 
 ## Active Team: ${activeTeamName}
 Members: ${teamMembers}
 You can ONLY dispatch to agents listed below. Do not attempt to dispatch to agents outside this team.
 ${scoutSection}
 
-## When to Work Directly
-- Responding to the user with information gathered by agents
-- Writing or editing files, running builds/tests
-- Small edits, answering questions you already know the answer to
-- Task management, planning, workflow decisions
+${teamDelegateSection}
 
 ## When to Dispatch Agents
-- ${hasScout ? "ANY context-gathering: reading files, searching code, exploring structure — ALWAYS dispatch scout" : "Simple lookups: reading a file, checking status, listing contents"}
+- ${hasScout ? "ANY context-gathering: reading files, searching code, exploring structure — dispatch the scout" : "Reads, searches, and lookups — dispatch a team member"}
 - Significant work: new features, refactors, multi-file changes
 - Tasks that benefit from specialist knowledge
-- When you want structured, multi-agent collaboration
+- Structured, multi-agent collaboration
 
 ## Guidelines
-- ${hasScout ? "ALWAYS dispatch scout for reads/searches — do NOT read files yourself" : "Use your judgment — if it's quick, just do it; if it's real work, dispatch"}
-- You can mix direct work and agent dispatches in the same conversation
-- You can chain agents: use scout to explore, then builder to implement
+- ${hasScout ? "Dispatch the scout for reads/searches — do NOT read files yourself" : "Dispatch a team member for any tool-driven work; you orchestrate"}
+- You can chain agents: scout to explore, builder to implement
 - You can dispatch the same agent multiple times with different tasks
 - Keep tasks focused — one clear objective per dispatch
 
@@ -1237,6 +1299,15 @@ ${scoutSection}
 - You have direct access to the \`tasks\` tool — use it yourself, do NOT dispatch agents for task management
 - Use \`tasks new-list\` to start a themed list, \`tasks add\` to add items, \`tasks toggle\` to cycle status
 - Define your plan as tasks BEFORE dispatching agents
+
+${buildWardenTaskConfirmationSection("TEAM", {
+	sliceName: "coordination or dispatched-agent workstream",
+	guardrails: [
+		"Before dispatching meaningful work, confirm the team mission is represented in the existing `tasks` list.",
+		"After each agent result, synthesize the result and mark or update the active task before dispatching more work.",
+		"WARDEN does not replace `dispatch_agent`; it confirms the coordinator's active slice and follow-through.",
+	],
+})}
 
 ## Agents
 
@@ -1280,6 +1351,26 @@ ${agentCatalog}${commanderSection}`,
 			widgetCtx.ui.setWidget("agent-team", undefined);
 		}
 		removeAllAgentWidgets();
+
+		// Reconciliation sweep: mark any Commander tasks from running agents as failed
+		// so they don't stay stuck in "working" on the kanban board forever
+		const g = globalThis as any;
+		const cmdClient = g.__piCommanderGate?.state === "available" && g.__piCommanderClient;
+		if (cmdClient) {
+			for (const [, state] of agentStates) {
+				// If the agent was running and had a Commander task, mark it failed
+				if (state.status === "running") {
+					const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
+					const cmdTaskId = currentTask?.commanderTaskId;
+					if (cmdTaskId !== undefined) {
+						postFailTask(cmdClient, cmdTaskId,
+							`Agent ${state.def.name} killed during session switch`)
+							.catch(() => {});
+					}
+				}
+			}
+		}
+
 		widgetCtx = _ctx;
 		for (const state of agentStates.values()) {
 			resetAgentState(state);
@@ -1319,7 +1410,8 @@ ${agentCatalog}${commanderSection}`,
 
 		// All tools remain visible — dispatcher can use any registered tool directly
 
-		_ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
+		if (!(globalThis as any).__piSummaryModeActive) _ctx.ui.setStatus("agent-team", `Team: ${activeTeamName} (${agentStates.size})`);
+		(globalThis as any).__piRefreshAgentTeamWidget = () => updateWidget();
 		updateWidget();
 
 		// ── Expose global hooks for escape-cancel integration ────────────
@@ -1351,6 +1443,7 @@ ${agentCatalog}${commanderSection}`,
 		// Task list nav provider (first priority when tasks exist)
 		providers.push({
 			isActive: () => {
+				if ((globalThis as any).__piMissionCompleteVisible) return false;
 				const tl = (globalThis as any).__piTaskList as TaskListInfo | null;
 				return !!(tl && tl.tasks.length > 0);
 			},

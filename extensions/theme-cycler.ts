@@ -1,11 +1,11 @@
-// ABOUTME: Cycles through available themes with Ctrl+X/Q shortcuts and /theme command.
+// ABOUTME: Cycles through available themes with Alt+T / Alt+Shift+T shortcuts and /theme command.
 // ABOUTME: Shows color swatch preview on switch and persists selection to settings.json.
 /**
  * Theme Cycler — Keyboard shortcuts to cycle through available themes
  *
  * Shortcuts:
- *   Ctrl+X          — Cycle theme forward
- *   Ctrl+Q          — Cycle theme backward
+ *   Alt+T           — Cycle theme forward
+ *   Alt+Shift+T     — Cycle theme backward
  *
  * Commands:
  *   /theme          — Open select picker to choose a theme
@@ -19,8 +19,8 @@
  * Usage: pi -e extensions/theme-cycler.ts -e extensions/minimal.ts
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { truncateToWidth } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { persistTheme } from "./lib/persist-theme.ts";
 
@@ -30,12 +30,14 @@ export default function (pi: ExtensionAPI) {
 
 	function updateStatus(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const name = ctx.ui.theme.name;
 		ctx.ui.setStatus("theme", name);
 	}
 
 	function showSwatch(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 
 		if (swatchTimer) {
 			clearTimeout(swatchTimer);
@@ -110,7 +112,11 @@ export default function (pi: ExtensionAPI) {
 
 	// --- Shortcuts ---
 
-	pi.registerShortcut("ctrl+x", {
+	// Alt+T / Alt+Shift+T replace the prior Ctrl+X / Ctrl+Q bindings.
+	// Ctrl+X collides with terminal "cut" and Emacs prefix; Ctrl+Q collides with
+	// XON/XOFF flow control in some terminal emulators. Alt-modified letters are
+	// free of those conflicts and the T mnemonic ties to "Theme".
+	pi.registerShortcut("alt+t", {
 		description: "Cycle theme forward",
 		handler: async (ctx) => {
 			currentCtx = ctx;
@@ -118,7 +124,7 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+q", {
+	pi.registerShortcut("alt+shift+t", {
 		description: "Cycle theme backward",
 		handler: async (ctx) => {
 			currentCtx = ctx;
