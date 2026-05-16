@@ -54,17 +54,7 @@ export default function (pi: ExtensionAPI) {
 			const p = params as SendEmailParams;
 			const emailType = (p.type || "generic").toLowerCase();
 
-			// ── Try to call commander_agentmail via the MCP client ──
 			const g = globalThis as any;
-
-			// Check if Commander is available
-			const gate = g.__piCommanderGate;
-			if (!gate || gate.status !== "available") {
-				return {
-					content: [{ type: "text" as const, text: "Email sending failed: Commander is not connected. The send_email tool requires Commander with AgentMail configured." }],
-					details: { success: false, error: "commander_not_available" },
-				};
-			}
 
 			// Build the commander_agentmail call based on email type
 			let agentmailParams: Record<string, string | undefined>;
@@ -118,36 +108,29 @@ export default function (pi: ExtensionAPI) {
 				if (p.to) agentmailParams.to = p.to;
 			}
 
-			// Call commander_agentmail through the tool system
+			// Call commander_agentmail through the tool system.
+			// NOTE: after the commander-mcp teardown, commander_agentmail is no longer
+			// a registered Pi tool. The ctx.callTool / piGlobal.callTool paths only
+			// succeed when an outer tool dispatcher routes the call (e.g. a different
+			// extension provides commander_agentmail). If neither route is available,
+			// the call fails cleanly — the stale MCP-server fallback that used to spawn
+			// commander-mcp/dist/server.js has been removed as part of the teardown.
 			try {
-				// Use ctx.callTool if available, otherwise fall back to finding the tool
 				if (ctx && typeof (ctx as any).callTool === "function") {
 					const result = await (ctx as any).callTool("commander_agentmail", agentmailParams);
 					return result;
 				}
 
-				// Fallback: call via the registered Pi tool directly
 				const piGlobal = g.__piInstance || g.__pi;
 				if (piGlobal && typeof piGlobal.callTool === "function") {
 					const result = await piGlobal.callTool("commander_agentmail", agentmailParams);
 					return result;
 				}
 
-				// Last resort: use the MCP client directly
-				const McpClientModule = await import("./lib/mcp-client.ts");
-				const serverPath = "/Users/ricardo/Workshop/Github-Work/commander/services/commander-mcp/dist/server.js";
-				const client = new McpClientModule.McpClient(serverPath, {
-					COMMANDER_WS_URL: process.env.COMMANDER_WS_URL || "ws://localhost:9002",
-					AGENTMAIL_API_KEY: process.env.AGENTMAIL_API_KEY || "",
-				});
-
-				try {
-					await client.connect();
-					const result = await client.callTool("commander_agentmail", agentmailParams);
-					return result;
-				} finally {
-					try { client.disconnect(); } catch {}
-				}
+				return {
+					content: [{ type: "text" as const, text: "Email sending failed: Commander's commander_agentmail tool is not available. The commander-mcp bridge has been removed; AgentMail integration is pending." }],
+					details: { success: false, error: "commander_agentmail_not_registered" },
+				};
 			} catch (err: any) {
 				return {
 					content: [{ type: "text" as const, text: `Email sending failed: ${err.message}` }],

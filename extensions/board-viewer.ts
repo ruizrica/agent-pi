@@ -11,6 +11,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateBoardViewerHTML } from "./lib/viewers/board-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -34,13 +35,12 @@ interface BoardData {
 // ── Commander Data Helpers ───────────────────────────────────────────
 
 /**
- * Call a Commander CLI-backed tool via the global client set by commander-mcp.ts.
- * Returns the parsed result or null on failure.
+ * Call a Commander CLI-backed tool via the module singleton (which shells
+ * out to the local `cmd` binary). Returns the parsed result or null on failure.
  */
 async function callCommander(toolName: string, params: Record<string, unknown>): Promise<any> {
-	const g = globalThis as any;
-	const client = g.__piCommanderClient;
-	if (!client) return null;
+	if (!isCommanderAvailable()) return null;
+	const client = getCommanderCliClient();
 
 	try {
 		const result = await client.callTool(toolName, params, 8000);
@@ -85,12 +85,10 @@ function getLocalTasks(): { tasks: any[]; title?: string } {
  * When Commander is unavailable, returns local tasks from the Pi tasks extension.
  */
 async function gatherBoardData(): Promise<BoardData> {
-	const g = globalThis as any;
 	const local = getLocalTasks();
 
-	// Try Commander if CLI client is available
-	const client = g.__piCommanderClient;
-	if (client) {
+	// Try Commander if `cmd` CLI is available on PATH
+	if (isCommanderAvailable()) {
 		try {
 			const [taskResult, agentResult, messageResult, readyResult, groupResult] = await Promise.all([
 				callCommander("commander_task", { operation: "list" }),
