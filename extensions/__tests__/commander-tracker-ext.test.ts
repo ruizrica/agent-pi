@@ -17,7 +17,6 @@ function makeGlobalState() {
 
 // Import the pure functions we're testing
 import { createTrackerState, addRetry, popRetries, computeReconcileActions } from "../lib/commander/commander-tracker.ts";
-import { createReadyGate, resolveGate } from "../lib/commander/commander-ready.ts";
 
 describe("commander-tracker extension behavior", () => {
 	let g: ReturnType<typeof makeGlobalState>;
@@ -35,36 +34,11 @@ describe("commander-tracker extension behavior", () => {
 		}
 	});
 
-	describe("activation", () => {
-		it("registers onReady callback when gate is pending", () => {
-			const gate = createReadyGate();
-			(globalThis as any).__piCommanderGate = gate;
-			(globalThis as any).__piCommanderOnReady = [];
-
-			// Simulate what commander-tracker.ts does: push callback when pending
-			const callbacks = (globalThis as any).__piCommanderOnReady;
-			expect(gate.state).toBe("pending");
-			callbacks.push(() => { /* activate */ });
-			expect(callbacks).toHaveLength(1);
-		});
-
-		it("activates immediately when gate is already available", () => {
-			const gate = createReadyGate();
-			resolveGate(gate, true);
-			(globalThis as any).__piCommanderGate = gate;
-
-			expect(gate.state).toBe("available");
-			// When state is already available, extension can activate synchronously
-		});
-
-		it("does not activate when gate resolves as unavailable", () => {
-			const gate = createReadyGate();
-			resolveGate(gate, false);
-			(globalThis as any).__piCommanderGate = gate;
-
-			expect(gate.state).toBe("unavailable");
-		});
-	});
+	// The previous "activation" describe block tested the async ready-gate flow
+	// (createReadyGate + resolveGate). With the commander-mcp teardown the gate
+	// is retired — `cmd` is either on PATH or it isn't — so those tests no
+	// longer model the real activation path and were removed alongside
+	// commander-ready.ts.
 
 	describe("reconcile logic", () => {
 		it("detects unmapped tasks via computeReconcileActions", () => {

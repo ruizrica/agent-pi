@@ -37,6 +37,12 @@ export function _resetCommanderClientForTests(): void {
 	_availability = null;
 }
 
+/** Inject a custom client + availability for tests; pass `null` for client to clear. */
+export function _setCommanderClientForTests(client: any | null, available = true): void {
+	_singleton = client;
+	_availability = available;
+}
+
 export interface CommanderCliClientOptions {
 	bin?: string;
 	cwd?: string;

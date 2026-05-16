@@ -19,6 +19,7 @@ import {
 	resolveAgentType,
 	resolveAgentRole,
 } from "./agent-identity.ts";
+import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 
 export default function (pi: ExtensionAPI) {
 	const g = globalThis as any;
@@ -59,8 +60,8 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function reconcileNow() {
-		const client = g.__piCommanderClient;
-		if (!client) return;
+		if (!isCommanderAvailable()) return;
+		const client = getCommanderCliClient();
 
 		// Drain retry queue
 		const { entries, state: newState } = popRetries(tracker._state);
@@ -123,8 +124,8 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function registerAgent() {
-		const client = g.__piCommanderClient;
-		if (!client) return;
+		if (!isCommanderAvailable()) return;
+		const client = getCommanderCliClient();
 
 		// One-time identity announcement so the board shows a stable name.
 		const name = resolveAgentName();
@@ -142,9 +143,9 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function sendHeartbeat() {
-		const client = g.__piCommanderClient;
 		const currentTask = g.__piCurrentTask;
-		if (!client || !currentTask) return;
+		if (!isCommanderAvailable() || !currentTask) return;
+		const client = getCommanderCliClient();
 
 		client.callTool("commander_orchestration", {
 			operation: "agent:heartbeat",
@@ -155,18 +156,11 @@ export default function (pi: ExtensionAPI) {
 	// ── Lifecycle ────────────────────────────────────────────────────
 
 	pi.on("session_start", async () => {
-		const gate = g.__piCommanderGate;
-		if (!gate) return;
-
-		if (gate.state === "available") {
+		// No async gate anymore — Commander is "available" iff the `cmd` binary
+		// is on PATH. Activate immediately when present; stay dormant otherwise.
+		if (isCommanderAvailable()) {
 			activate();
-		} else if (gate.state === "pending") {
-			// Push callback to fire when Commander probe succeeds
-			const callbacks: Array<() => void> = g.__piCommanderOnReady || [];
-			g.__piCommanderOnReady = callbacks;
-			callbacks.push(() => activate());
 		}
-		// If unavailable, stay dormant
 	});
 
 	pi.on("session_shutdown", async () => {

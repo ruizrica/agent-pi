@@ -3,6 +3,7 @@
 // ABOUTME: published __piTaskList.description so the dashboard has real content.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { _setCommanderClientForTests, _resetCommanderClientForTests } from "../lib/commander/commander-cli-client.ts";
 
 function makeMockClient() {
 	const calls: Array<{ tool: string; params: any }> = [];
@@ -33,19 +34,19 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 		delete g.__piTaskList;
 		delete g.__piCurrentTask;
 		delete g.__piCommanderOnReady;
+		_resetCommanderClientForTests();
 	});
 
 	afterEach(() => {
 		const g = globalThis as any;
 		if (g.__piCommanderTracker?.active) g.__piCommanderTracker = null;
+		_resetCommanderClientForTests();
 	});
 
 	it("attaches mission_brief from listDescription when groupId is undefined", async () => {
 		const { client, calls } = makeMockClient();
 		const g = globalThis as any;
-		g.__piCommanderClient = client;
-		// available gate so activate() runs synchronously on session_start
-		g.__piCommanderGate = { state: "available" };
+		_setCommanderClientForTests(client, true);
 		g.__piTaskList = {
 			title: "OAuth Migration",
 			description: "Migrate JWT to OAuth so we get SSO and refresh tokens.",
@@ -73,8 +74,7 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 	it("falls back to the list title when description is empty", async () => {
 		const { client, calls } = makeMockClient();
 		const g = globalThis as any;
-		g.__piCommanderClient = client;
-		g.__piCommanderGate = { state: "available" };
+		_setCommanderClientForTests(client, true);
 		g.__piTaskList = {
 			title: "Auth Cleanup",
 			description: "",
@@ -96,8 +96,7 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 	it("does NOT attach mission_brief when groupId is set (children inherit)", async () => {
 		const { client, calls } = makeMockClient();
 		const g = globalThis as any;
-		g.__piCommanderClient = client;
-		g.__piCommanderGate = { state: "available" };
+		_setCommanderClientForTests(client, true);
 		g.__piTaskList = {
 			title: "OAuth Migration",
 			description: "Real mission brief that should NOT land on children.",
