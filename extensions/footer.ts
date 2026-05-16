@@ -77,10 +77,11 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 					usageStr = contextWindow > 0 ? `${pct} / ${formatTokens(contextWindow)}` : pct;
 				}
 
+				const dir = shortDir(ctx.cwd);
 				const thinking = thinkingIndicator(pi.getThinkingLevel?.(), theme);
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
-				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr);
+				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", dir);
 
 				const stats = getSessionStats();
 				let agentTimeStr = "";
