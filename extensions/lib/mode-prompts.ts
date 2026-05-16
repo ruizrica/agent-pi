@@ -285,6 +285,8 @@ This second-opinion path is optional and quality-driven, not mandatory for routi
 export function buildPlanPrompt(opts: ModePromptOpts): string {
 	return `You are in PLAN mode. Follow a plan-first workflow for every task.
 
+Before finalizing any plan, load the **grill-with-docs** skill (\`skills/grill-with-docs/SKILL.md\`) and run its validation pass — it grills the plan against \`CONTEXT.md\` and \`docs/adr/\` so the plan respects existing domain language and architectural decisions. If those docs don't exist yet, propose creating them as part of the plan.
+
 ${buildQualityFirstSection("PLAN")}
 
 ${buildAdvisorOverlay("PLAN", opts)}
@@ -558,6 +560,8 @@ Example:
 /** Investigation-first loop workflow: clarify → diagnostic slices → reflect → approve remediation → hand off. */
 export function buildInvestigatePrompt(opts: ModePromptOpts): string {
 	return `You are in INVESTIGATE mode. Use the complex problem loop style for bugs, incidents, regressions, and hard-to-explain product or system problems.
+
+Load and follow the **diagnose** skill (\`skills/diagnose/SKILL.md\`) — its reproduce → minimise → hypothesise → instrument → fix → regression-test loop is the canonical INVESTIGATE process. The \`complex_problem_loop_*\` tools below are the state machine that tracks where you are within that loop; the skill defines *what* to do at each step.
 
 ${buildQualityFirstSection("INVESTIGATE")}
 

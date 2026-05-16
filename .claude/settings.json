@@ -2,12 +2,15 @@
   "enabledPlugins": {
     "codex@openai-codex": true
   },
+  "env": {
+    "PATH": "/Users/ricardo/Workshop/GitHub/agent-pi/scripts:${PATH}"
+  },
   "hooks": {
     "PreCompact": [
       {
         "hooks": [
           {
-            "command": "bd prime",
+            "command": "cmd guide agent",
             "type": "command"
           }
         ],
@@ -18,7 +21,7 @@
       {
         "hooks": [
           {
-            "command": "bd prime",
+            "command": "cmd guide agent",
             "type": "command"
           }
         ],

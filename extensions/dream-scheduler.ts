@@ -1,3 +1,5 @@
+// DELETE-ME (user-approved): Ricardo asked to drop this extension during the
+// 2026-05-15 skills-adoption pass. Safe to `rm` — no other extension imports it.
 // ABOUTME: Global-first dream scheduler for Pi's memory consolidation system.
 // ABOUTME: Tracks dream freshness in ~/.pi/dream/dream-state.json and reminds users when global memory is stale.
 

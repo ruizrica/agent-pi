@@ -7,7 +7,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
-import { checkGemmaHealth, checkQwenHealth } from "./gemma-overlay.ts";
+import { checkGemmaHealth, checkQwenHealth } from "./lmstudio-overlay.ts";
 import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
