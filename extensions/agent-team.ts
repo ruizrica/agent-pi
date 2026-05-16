@@ -499,7 +499,6 @@ export default function (pi: ExtensionAPI) {
 		// Build args — first run creates session, subsequent runs resume
 		const extDir = dirname(fileURLToPath(import.meta.url));
 		const tasksExtPath = join(extDir, "tasks.ts");
-		const commanderExtPath = join(extDir, "commander-mcp.ts");
 		const footerExtPath = join(extDir, "footer.ts");
 		const memoryCycleExtPath = join(extDir, "memory-cycle.ts");
 
@@ -522,10 +521,6 @@ export default function (pi: ExtensionAPI) {
 		const taskId = commanderAvailableAtSpawn ? g.__piCurrentTask?.commanderTaskId as number | undefined : undefined;
 
 		let tools = state.def.tools;
-		// Commander tools are extension-registered (not built-in), so they must NOT
-		// go in --tools (which only accepts built-in names and warns on unknowns).
-		// Loading the commander-mcp extension via -e is sufficient — pi auto-activates
-		// all extension tools via includeAllExtensionTools.
 
 		// Build system prompt — append Commander discipline when available
 		let systemPrompt = state.def.systemPrompt;
@@ -552,7 +547,6 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			...(commanderAvailableAtSpawn ? ["-e", commanderExtPath] : []),
 			"--model", model,
 			"--tools", tools,
 			"--thinking", "off",

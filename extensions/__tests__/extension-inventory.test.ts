@@ -42,7 +42,6 @@ describe("extension inventory guard", () => {
 		const files = rootExtensionFiles();
 		expect(files.length).toBeGreaterThan(40);
 		expect(files).toContain("agent-chain.ts");
-		expect(files).toContain("commander-mcp.ts");
 		expect(files).toContain("tool-registry.ts");
 	});
 
@@ -78,6 +77,6 @@ describe("extension inventory guard", () => {
 	it("pins sorted root adapter fingerprint (update when adapters are intentionally added/removed)", () => {
 		const files = rootExtensionFiles();
 		const digest = createHash("sha256").update(files.join("\n")).digest("hex");
-		expect(digest).toBe("a876367f3fa9284ce0d29b234ac5936dbed6e778ad82a0ad984a80d3670d106c");
+		expect(digest).toBe("3c66325153b1d873e9209051732ac45e09b10f1f0588c9db233650803c3fdaa4");
 	});
 });

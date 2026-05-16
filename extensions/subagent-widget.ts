@@ -371,7 +371,6 @@ export default function (pi: ExtensionAPI) {
 
 		const extDir = path.dirname(fileURLToPath(import.meta.url));
 		const tasksExtPath = path.join(extDir, "tasks.ts");
-		const commanderExtPath = path.join(extDir, "commander-mcp.ts");
 		const footerExtPath = path.join(extDir, "footer.ts");
 		const memoryCycleExtPath = path.join(extDir, "memory-cycle.ts");
 		const claudeAdvisorExtPath = path.join(extDir, "claude-advisor.ts");
@@ -404,13 +403,6 @@ export default function (pi: ExtensionAPI) {
 				dependency: missingClaudeAdvisorDep,
 			});
 		}
-		if (commanderAvailAtSpawn) {
-			// Commander tools are extension-registered (not built-in), so they must NOT
-			// go in --tools (which only accepts built-in names and warns on unknowns).
-			// Loading the extension is sufficient — pi auto-activates all extension tools.
-			extensions.push("-e", commanderExtPath);
-		}
-
 		// Build system prompt: agent definition prompt + Commander discipline
 		const systemPromptArgs: string[] = [];
 		if (agentDef?.systemPrompt) {
