@@ -1,12 +1,12 @@
 ---
 description: "Execute pending tasks from Commander with intelligent orchestration: dependency analysis, work type classification, and execution guards"
-argument-hint: "[task IDs or 'all' or filter like 'pending' or 'backlog']"
-allowed-tools: ["Task", "SlashCommand", "mcp__commander__commander_task", "mcp__commander__commander_task_lifecycle", "mcp__commander__commander_task_group", "mcp__commander__commander_session", "mcp__commander__commander_comment", "mcp__commander__commander_log", "AskUserQuestion", "Bash"]
+argument-hint: "[task IDs or 'all' or filter like 'pending' or 'working']"
+allowed-tools: ["Task", "SlashCommand", "AskUserQuestion", "Bash"]
 ---
 
 # Commander Execute - Intelligent Task Orchestration with Execution Guards
 
-This command executes **existing tasks** from Commander MCP using a **planning agent architecture** with sophisticated orchestration: dependency analysis, work type classification, commit checkpoints, and execution guards.
+This command executes **existing tasks** from Commander CLI-backed tools using a **planning agent architecture** with sophisticated orchestration: dependency analysis, work type classification, commit checkpoints, and execution guards.
 
 ## Planning Agent Architecture for Execution
 
@@ -18,7 +18,7 @@ This command executes **existing tasks** from Commander MCP using a **planning a
                               │
                     ┌─────────┴─────────┐
                     │  Phase 0: Fetch    │
-                    │  Tasks from MCP    │
+                    │ Tasks from Commander  │
                     └─────────┬─────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -108,9 +108,9 @@ This command executes **existing tasks** from Commander MCP using a **planning a
 ## CRITICAL: Execution Only - No Planning
 
 **Commander Execute does NOT create tasks.** It only:
-1. Fetches existing tasks from Commander (backlog or pending)
+1. Fetches existing tasks from Commander (pending or working)
 2. Uses planning agents to analyze dependencies and organize waves
-3. Moves tasks through lifecycle: backlog → pending → working → completed
+3. Moves tasks through lifecycle: pending → in-progress → done (with in-progress alias `working`)
 4. Orchestrates parallel agent execution
 
 **If you need to create new tasks:**
@@ -118,12 +118,13 @@ This command executes **existing tasks** from Commander MCP using a **planning a
 - Commander-execute can DELEGATE to commander-plan when subtasks are discovered
 - Never directly create tasks in commander-execute
 
-**⚠️ CRITICAL: NO AD-HOC TASKS — ALL tasks MUST belong to a group.**
-- NEVER use `commander_task(operation="create")` to create standalone tasks
-- ALWAYS use `commander_task_group(operation="create")` — even for a single task
-- Ad-hoc/ungrouped tasks break the Initiative Progress UI and wave tracking
+**⚠️ CRITICAL: NO AD-HOC TASKS — ALL tasks should belong to an initiative root task tree, not standalone ad-hoc tasks.**
+- `/commander-execute` only runs already-created tasks.
+- If needed tasks are missing, run `/commander-plan` first to provision them.
 
 ---
+
+**⚠️ IMPORTANT: Use current Commander statuses (`pending`, `in-progress`/`working`, `done`/`completed`) when selecting tasks for execution.**
 
 ## Input
 
@@ -131,10 +132,9 @@ Task selection: **$ARGUMENTS**
 
 Options:
 - `all` or empty - Execute all pending tasks
-- `backlog` - Move backlog tasks to pending, then execute
-- Task IDs (comma-separated) - Execute specific tasks: `123, 124, 125`
 - `pending` - All tasks with pending status
-- `working` - Resume tasks that were in progress
+- Task IDs (comma-separated) - Execute specific tasks: `123, 124, 125`
+- `working`/`in-progress` - Resume tasks that were in progress
 
 ---
 
@@ -148,13 +148,12 @@ Options:
 
 1. **Fetch Tasks Based on $ARGUMENTS (Filtered by Current Directory)**
 
-   Use `mcp__commander__commander_task` with `operation: "list"`:
-   - **ALWAYS** include `working_directory` parameter set to the current folder
-   - If `backlog`: `status="backlog"`, `working_directory="[CURRENT_DIR]"`
-   - If `pending`: `status="pending"`, `working_directory="[CURRENT_DIR]"`
-   - If `working`: `status="working"`, `working_directory="[CURRENT_DIR]"`
-   - If specific IDs: Use `operation: "get"` with each `task_id`, then verify `working_directory` matches
-   - If `all` or empty: Fetch all non-completed tasks with `working_directory="[CURRENT_DIR]"`
+   Use `cmd` with current-directory scope:
+   - `cmd task list --status pending --json` (pending tasks)
+   - `cmd task list --status in-progress --json` (currently working tasks)
+   - `cmd task show <id> --json` for each specific task id
+   - Filter by `working_directory` from returned task JSON
+   - If `all` or empty: fetch all non-completed tasks via `cmd task list --json` and focus on this directory
 
    **If no tasks match the current directory:**
    - Display message: "No tasks found for this directory: [CURRENT_DIR]"
@@ -167,22 +166,22 @@ Options:
 
    **Pre-Planned Tasks** (from `/commander-plan`):
    - Have `source` field equal to `"commander-plan"` (check `task.source`, NOT `task.context`)
-   - OR have `groupId` set (belongs to a task group - most reliable indicator)
-   - Have `dependencyOrder` set
+   - OR have `parent_task_id` set (belongs to a planned initiative tree - most reliable indicator)
+   - Have `dependency_order` set
    - Context JSON contains `file_scope`, `assigned_agent`, `implementation_guide`
 
    **Ad-Hoc Tasks** (individual tasks):
    - Have `source` field equal to `"ad-hoc"` or undefined
-   - No `groupId` (null or undefined)
+   - No `parent_task_id` (null or undefined)
    - Missing execution context
 
-   **IMPORTANT:** The `source` field is a dedicated column on the task, NOT inside the context JSON.
-   Use `task.source === 'commander-plan'` or `task.groupId !== undefined` for classification.
+   **IMPORTANT:** The `source` and hierarchy (`parent_task_id`) fields are used for classification.
+   Use `task.source === 'commander-plan'` or `task.parent_task_id` (or any parent-child relation) for classification.
 
 3. **Decision Point: Skip or Analyze**
 
    ```
-   IF all tasks are Pre-Planned (same group or ordered groups):
+   IF all tasks are Pre-Planned (same initiative root and wave order):
      → SKIP to Phase 2.5 (Direct Execution Planning)
      → Use existing context from tasks
 
@@ -590,7 +589,7 @@ AskUserQuestion({
       { label: "Execute All", description: "Begin orchestrated execution of all waves" },
       { label: "Wave 1 Only", description: "Start with foundation tasks first" },
       { label: "Modify Plan", description: "Adjust dependencies or execution guards" },
-      { label: "Cancel", description: "Don't execute, keep tasks in backlog" }
+      { label: "Cancel", description: "Don't execute, keep tasks pending" }
     ],
     multiSelect: false
   }]
@@ -604,7 +603,7 @@ Wait for user response before proceeding to Phase 5.
 **Execute tasks using a continuous claim-loop pattern. Each agent claims ONE task at a time, works on it, then claims the next. This supports multi-agent environments where multiple Claude instances may run in parallel.**
 
 **Key Principles:**
-1. **Atomic claiming**: Use `commander_task_lifecycle(operation="claim")` which prevents race conditions
+1. **Atomic claiming**: Use `cmd task update <id> --status in-progress` as the claim step, which prevents duplicate execution
 2. **Wave boundaries**: Complete Wave N before starting Wave N+1
 3. **No pre-assignment**: Tasks are NOT pre-assigned - agents claim from the available pool
 4. **Self-termination**: Loop ends when no tasks remain and all waves complete
@@ -629,8 +628,8 @@ Wait for user response before proceeding to Phase 5.
               ┌───────────────────────────────┐
               │ 2. Find Available Task        │
               │    in Current Wave            │
-              │    (status=pending|backlog,   │
-              │     dependencyOrder=N)        │
+              │    (status=pending|working,   │
+              │     dependency_order=N)       │
               └───────────────┬───────────────┘
                               │
               ┌───────────────┴───────────────┐
@@ -662,7 +661,7 @@ Wait for user response before proceeding to Phase 5.
                     (loop back to step 2)
 ```
 
-**Critical: This loop runs continuously until ALL waves are complete.**
+**Critical: This loop runs continuously until all waves are complete.**
 
 ---
 
@@ -671,13 +670,10 @@ Wait for user response before proceeding to Phase 5.
 **Before claiming from a new wave, verify the previous wave is 100% complete.**
 
 ```
-FUNCTION: canStartWave(groupId, waveNumber)
+FUNCTION: canStartWave(initiativeRootId, waveNumber)
 
-1. Get group progress:
-   mcp__commander__commander_task_group(
-     operation="get",
-     group_id=[GROUP_ID]
-   )
+1. Get initiative root progress:
+   cmd task show [INITIATIVE_ROOT_ID] --json
 
 2. Check wave_status from response:
    - Find wave N-1 in wave_status array
@@ -691,9 +687,9 @@ FUNCTION: canStartWave(groupId, waveNumber)
 **Wave Transition Logic:**
 
 ```
-IF current_wave tasks exhausted (none pending/backlog):
+IF current_wave tasks exhausted (none pending):
   1. Check if current_wave is complete:
-     - All tasks in current wave have status 'completed' or 'failed'
+     - All tasks in current wave have status 'done' (or 'completed' alias) or 'todo' (blocked)
 
   2. IF complete AND more waves exist:
      - Log: "Wave {N} complete. Starting Wave {N+1}"
@@ -702,7 +698,7 @@ IF current_wave tasks exhausted (none pending/backlog):
      - Move to next wave (increment current_wave)
 
   3. IF NOT complete:
-     - Some tasks still 'working' by other agents
+     - Some tasks still in progress ('working'/'in-progress') by other agents
      - Wait 30 seconds, re-check
 
   4. IF no more waves:
@@ -719,7 +715,7 @@ IF current_wave tasks exhausted (none pending/backlog):
 ```
 INITIALIZE:
   current_wave = 0
-  group_id = [GROUP_ID from task group]
+  initiative_root_id = [INITIATIVE_ROOT_ID]
   working_directory = [CURRENT_WORKING_DIRECTORY]
   max_consecutive_failures = 5
   consecutive_failures = 0
@@ -728,38 +724,31 @@ MAIN_LOOP:
   WHILE TRUE:
 
     // Step 1: Find available task in current wave
-    available_task = findAvailableTask(group_id, current_wave, working_directory)
+    available_task = findAvailableTask(initiative_root_id, current_wave, working_directory)
 
     IF available_task is NULL:
       // No tasks available in current wave
 
       // Check if wave is complete
-      wave_complete = isWaveComplete(group_id, current_wave)
+      wave_complete = isWaveComplete(initiative_root_id, current_wave)
 
       IF wave_complete:
         // Commit checkpoint for this wave
         commitWaveCheckpoint(current_wave)
 
-        // Update group progress
-        mcp__commander__commander_task_group(
-          operation="update",
-          group_id=group_id,
-          completed_waves=current_wave + 1
-        )
+        // Update initiative root progress
+        # Update parent task progress metadata (implementation-specific)
+        cmd task update $initiative_root_id --description "Completed waves: $((current_wave + 1))"
 
         // Check if more waves exist
-        IF hasMoreWaves(group_id, current_wave):
+        IF hasMoreWaves(initiative_root_id, current_wave):
           current_wave = current_wave + 1
           Log: "Moving to Wave {current_wave + 1}"
           consecutive_failures = 0
           CONTINUE  // Try to find task in next wave
         ELSE:
           // All waves complete
-          mcp__commander__commander_task_group(
-            operation="update",
-            group_id=group_id,
-            overall_status="completed"
-          )
+          cmd task update $initiative_root_id --status done
           Log: "All waves complete. Exiting."
           BREAK  // Exit main loop
       ELSE:
@@ -769,19 +758,22 @@ MAIN_LOOP:
         CONTINUE
 
     // Step 2: Attempt to claim the task
-    claim_result = mcp__commander__commander_task_lifecycle(
-      operation="claim",
-      task_id=available_task.id,
-      working_directory=working_directory,
-      agent_id="builder",
-      agent_name="builder"
-    )
-
-    IF claim_result.success:
+    if cmd task update "$available_task.id" --status in-progress; then
+      // Claim succeeded, move to execution
+    else
+      // Claim failed (race condition - another agent claimed it)
+      consecutive_failures = consecutive_failures + 1
+      Log: "[INFO] Task {available_task.id} already claimed by another agent"
+      IF consecutive_failures >= max_consecutive_failures:
+        Log: "Multiple claim failures - refreshing task list..."
+        consecutive_failures = 0
+        WAIT 5 seconds
+      CONTINUE  // Try to find another task
+    fi
       consecutive_failures = 0
 
       // Step 3: Execute the task (see 5.5 for full protocol)
-      executeTask(claim_result.task)
+      executeTask($available_task)  # Work using claimed task context
 
       // Loop continues to claim next task
       CONTINUE
@@ -802,18 +794,15 @@ MAIN_LOOP:
 
 #### 5.4 Helper Functions
 
-**findAvailableTask(groupId, waveNumber, workingDirectory):**
+**findAvailableTask(initiativeRootId, waveNumber, workingDirectory):**
 
 ```
-1. List tasks in group:
-   mcp__commander__commander_task_group(
-     operation="list",
-     group_id=groupId
-   )
+1. List tasks in initiative root:
+   cmd task list --parent $initiativeRootId --json
 
 2. Filter tasks where:
-   - dependencyOrder === waveNumber
-   - status === 'pending' OR status === 'backlog'
+   - dependency_order === waveNumber
+   - status === 'pending'
    - workingDirectory matches (if task has working_directory set)
 
 3. Sort by priority (lower number = higher priority), then createdAt (older first)
@@ -821,14 +810,11 @@ MAIN_LOOP:
 4. Return first matching task, or NULL if none found
 ```
 
-**isWaveComplete(groupId, waveNumber):**
+**isWaveComplete(initiativeRootId, waveNumber):**
 
 ```
-1. Get group progress:
-   progress = mcp__commander__commander_task_group(
-     operation="get",
-     group_id=groupId
-   )
+1. Get root progress:
+   progress = $(cmd task show $initiativeRootId --json)
 
 2. Find wave in wave_status:
    wave_info = progress.wave_status.find(w => w.wave === waveNumber)
@@ -838,17 +824,14 @@ MAIN_LOOP:
 
 4. ELSE:
    // Calculate manually
-   tasks = getAllTasksInWave(groupId, waveNumber)
-   RETURN tasks.every(t => t.status === 'completed' || t.status === 'failed')
+   tasks = getAllTasksInWave(initiativeRootId, waveNumber)
+   RETURN tasks.every(t => t.status === 'done' || t.status === 'completed' || t.status === 'todo')
 ```
 
-**hasMoreWaves(groupId, currentWave):**
+**hasMoreWaves(initiativeRootId, currentWave):**
 
 ```
-progress = mcp__commander__commander_task_group(
-  operation="get",
-  group_id=groupId
-)
+progress = cmd task show $initiativeRootId --json
 
 RETURN currentWave + 1 < progress.total_waves
 ```
@@ -864,7 +847,7 @@ Use the Task tool with:
 - subagent_type: "Code"
 - model: "mercury-2"
 - prompt: |
-    ## CRITICAL: Commander MCP Protocol - Claim-Loop Execution
+    ## CRITICAL: Commander CLI-backed Protocol - Claim-Loop Execution
 
     You are a **builder agent** executing tasks in a **claim-loop pattern**.
 
@@ -882,7 +865,7 @@ Use the Task tool with:
     ONLY claim tasks that match this directory.
 
     ### Group Context
-    Group ID: [GROUP_ID]
+    Initiative Root ID: [INITIATIVE_ROOT_ID]
     Current Wave: [CURRENT_WAVE]
     Total Waves: [TOTAL_WAVES]
 
@@ -894,20 +877,17 @@ Use the Task tool with:
 
     **Before your first claim, take a quick glance** — check your inbox for context:
     ```
-    mcp__commander__commander_mailbox(
-      operation="inbox",
-      agent_name="builder"
-    )
+    cmd mailbox inbox
     ```
     If there are messages with discoveries or context from other agents, use them.
 
     **While you work, you have tools available if you need them:**
     - **Share a discovery** (a pattern, a gotcha, a file location that would help other builders):
-      `mcp__commander__commander_mailbox(operation="send", from_agent="builder", to_agent="@all", body="Found: [discovery]", message_type="status", task_id=[TASK_ID])`
+      `cmd mailbox send @all "Found: [discovery]"`
     - **Ask for help** (stuck after 2+ real attempts — don't spin):
-      `mcp__commander__commander_mailbox(operation="send", from_agent="builder", to_agent="commander", body="Stuck on: [problem]", message_type="error", task_id=[TASK_ID])`
+      `cmd mailbox send commander "Stuck on: [problem]"`
     - **Request a helper** (need specialist work done while you continue):
-      `mcp__commander__commander_mailbox(operation="send", from_agent="builder", to_agent="commander", body="Need help with: [task]", message_type="question", task_id=[TASK_ID])`
+      `cmd mailbox send commander "Need help with: [task]"`
 
     None of these are required. Use them when they would actually help.
 
@@ -918,24 +898,15 @@ Use the Task tool with:
     **To find and claim a task:**
 
     1. List available tasks:
-       mcp__commander__commander_task_group(
-         operation="list",
-         group_id=[GROUP_ID]
-       )
+       cmd task list --parent [GROUP_ID] --json
 
-    2. Find a task where:
-       - dependencyOrder === [CURRENT_WAVE]
-       - status === 'pending' OR 'backlog'
+    2. Filter tasks by:
+       - dependency_order === [CURRENT_WAVE]
+       - status == 'pending' (or in-progress if resuming)
        - working_directory matches yours
 
     3. Claim the task:
-       mcp__commander__commander_task_lifecycle(
-         operation="claim",
-         task_id=[TASK_ID],
-         working_directory="[WORKING_DIRECTORY]",
-         agent_id="builder",
-         agent_name="builder"
-       )
+       cmd task update [TASK_ID] --status in-progress
 
     4. IF claim succeeds: Work on the task
        IF claim fails: Try another task (race condition is NORMAL)
@@ -947,13 +918,7 @@ Use the Task tool with:
     **After successful claim:**
 
     **1. ADD START COMMENT:**
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=[TASK_ID],
-      type="progress",
-      agent_name="builder",
-      message="STARTED: [approach]. Scope: [files]. Escalations remaining: 2"
-    )
+    cmd task comment [TASK_ID] "STARTED: [approach]. Scope: [files]. Escalations remaining: 2"
 
     **2. WORK WITH CONSTANT COMMENTS (MANDATORY - EVERY STEP):**
 
@@ -966,47 +931,21 @@ Use the Task tool with:
     | Running test | `TESTING: [test] - [expected]` | `RESULT: [pass/fail] - [details]` |
     | Decision | `DECISION: [choice] because [reason]` | - |
 
-    **Use mcp__commander__commander_comment for EVERY comment:**
+    **Use `cmd task comment` for EVERY comment:**
     ```
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=[TASK_ID],
-      type="progress",
-      agent_name="builder",
-      message="[PREFIX]: [details]"
-    )
+    cmd task comment [TASK_ID] "[PREFIX]: [details]"
     ```
 
     **Do NOT batch comments. Comment in real-time as you work.**
     **This creates the audit trail for debugging and handoffs.**
 
     **3. ON COMPLETION:**
-    mcp__commander__commander_task_lifecycle(
-      operation="complete",
-      task_id=[TASK_ID],
-      result="[summary]"
-    )
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=[TASK_ID],
-      type="info",
-      agent_name="builder",
-      message="COMPLETED: [summary]. Files: [list]. Escalations used: [0/1/2]"
-    )
+    cmd task comment [TASK_ID] "COMPLETING: [summary]. Files: [list]. Escalations used: [0/1/2]"
+    cmd task update [TASK_ID] --status done
 
     **4. ON FAILURE:**
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=[TASK_ID],
-      type="error",
-      agent_name="builder",
-      message="FAILED: [reason]. Attempted: [approaches]. Blocker: [what stopped progress]"
-    )
-    mcp__commander__commander_task_lifecycle(
-      operation="fail",
-      task_id=[TASK_ID],
-      error_message="[reason]"
-    )
+    cmd task comment [TASK_ID] "FAILED: [reason]. Attempted: [approaches]. Blocker: [what stopped progress]"
+    cmd task update [TASK_ID] --status todo
 
     **5. AFTER TASK COMPLETE - LOOP BACK:**
 
@@ -1014,37 +953,18 @@ Use the Task tool with:
 
     ```
     // Task just completed
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=[COMPLETED_TASK_ID],
-      type="info",
-      agent_name="builder",
-      message="Task complete. Checking for next available task..."
-    )
+    cmd task comment [COMPLETED_TASK_ID] "Task complete. Checking for next available task..."
 
     // Find and claim next task in current wave
-    available_tasks = mcp__commander__commander_task_group(
-      operation="list",
-      group_id=[GROUP_ID]
-    )
+    available_tasks=$(cmd task list --parent [INITIATIVE_ROOT_ID] --json)
+    next_task=$(echo "$available_tasks" | jq -r --argjson current_wave "$current_wave" '.[] | select(.dependency_order == $current_wave and .status == "pending") | .id' | head -n 1)
 
-    // Filter for pending/backlog in current wave
-    next_task = available_tasks.filter(
-      t => t.status in ['pending', 'backlog'] &&
-           t.dependencyOrder === current_wave
-    )[0]
-
-    IF next_task:
-      // Claim and continue
-      GOTO: Claim Protocol step 3
-    ELSE:
-      // Check if wave is complete
-      IF all_tasks_in_wave_completed:
-        Log: "Wave complete. Waiting for main agent to advance."
-      ELSE:
-        Log: "No tasks available. Other agents may be working. Waiting..."
-        WAIT 30 seconds
-        RETRY
+    IF [ -n "$next_task" ]; then
+      cmd task update "$next_task" --status in-progress
+      // Continue to claim protocol
+    ELSE
+      Log: "No immediate pending task in current wave."
+    FI
     ```
 
     ---
@@ -1054,19 +974,13 @@ Use the Task tool with:
     **You are NOT alone.** Other agents may be working in parallel:
 
     - **Expect claim failures** - Another agent got it first. This is NORMAL.
-    - **Do NOT re-claim** tasks you see as 'working' - they belong to other agents
+    - **Do NOT re-claim** tasks you see as 'working'/'in-progress' - they belong to other agents
     - **Trust the atomic claim** mechanism - no coordination needed
     - **Race conditions are healthy** - they mean the system is working
 
     **When claim fails:**
     ```
-    mcp__commander__commander_comment(
-      operation="add",
-      task_id=0,
-      type="info",
-      agent_name="builder",
-      message="CLAIM_FAILED: Task [ID] already claimed. Trying next available."
-    )
+    cmd task comment [TASK_ID] "CLAIM_FAILED: Task [ID] already claimed. Trying next available."
     // Immediately try the next task - don't wait
     ```
 
@@ -1098,7 +1012,7 @@ Use the Task tool with:
     ### Loop Termination
 
     **Stop claiming when:**
-    - No pending/backlog tasks in current wave AND wave is complete
+    - No pending tasks in current wave AND wave is complete
     - Main agent will handle wave transition and commit checkpoint
     - When all waves complete, main agent will signal completion
 
@@ -1175,38 +1089,22 @@ IF consecutive_failures >= 10:
 5. **Update Group Progress (after wave completes)**
    After ALL tasks in a wave complete successfully:
    ```
-   // Get current group progress
-   mcp__commander__commander_task_group(
-     operation="get",
-     group_id=[GROUP_ID]
-   )
+   // Read root/task metadata and optionally store progress notes
+   cmd task show [GROUP_ID] --json
 
-   // Update completed waves count
-   mcp__commander__commander_task_group(
-     operation="update",
-     group_id=[GROUP_ID],
-     completed_waves=[CURRENT_COMPLETED + 1],
-     overall_status="in_progress"
-   )
+   // Optionally annotate root task to reflect wave checkpoint
+   cmd task update [GROUP_ID] --description "Wave completed: $((CURRENT_COMPLETED + 1))"
    ```
 
    When ALL waves complete (completed_waves === total_waves):
    ```
-   mcp__commander__commander_task_group(
-     operation="update",
-     group_id=[GROUP_ID],
-     overall_status="completed"
-   )
+   cmd task update [GROUP_ID] --status done
    ```
 
    **Track Initiative Start:**
-   When first task starts (first wave begins), update status:
+   When first task starts (first wave begins), mark initiative active:
    ```
-   mcp__commander__commander_task_group(
-     operation="update",
-     group_id=[GROUP_ID],
-     overall_status="in_progress"
-   )
+   cmd task update [GROUP_ID] --status in-progress
    ```
 
 ### Phase 7: Progress Display
@@ -1332,15 +1230,16 @@ Mixed Tasks:
 
 ---
 
-## MCP Tools Reference
+## Commander CLI Reference
 
 | Tool | Purpose |
 |------|---------|
-| `mcp__commander__commander_task` | Create/get/update/list tasks |
-| `mcp__commander__commander_task_lifecycle` | Claim, complete, fail tasks |
-| `mcp__commander__commander_task_group` | Create/list task groups |
-| `mcp__commander__commander_comment` | Add progress comments |
-| `mcp__commander__commander_log` | Real-time dashboard updates |
+| `cmd task add` | Create root tasks and children |
+| `cmd task list` | List tasks (pending/in-progress/done) |
+| `cmd task show` | Inspect task + context |
+| `cmd task update` | Update status (`in-progress`, `done`, `todo`) |
+| `cmd task comment` | Add progress comments |
+| `cmd mailbox` | Cross-agent status sharing |
 
 ---
 
@@ -1353,11 +1252,9 @@ Mixed Tasks:
 # Execute specific tasks
 /commander-execute 123, 124, 125
 
-# Move backlog to pending and execute
-/commander-execute backlog
 
-# Resume in-progress work
-/commander-execute working
+# Resume in-progress tasks
+/commander-execute working  # or /commander-execute in-progress
 
 # Execute all pending
 /commander-execute pending

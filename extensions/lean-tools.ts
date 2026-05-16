@@ -1,7 +1,7 @@
 // ABOUTME: Lean Tools Mode — reduces system prompt bloat by deactivating non-essential tools.
 // ABOUTME: Agent uses tool_search + call_tool to discover and invoke tools dynamically.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 // ── Configuration ────────────────────────────────

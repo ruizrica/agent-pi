@@ -1,25 +1,31 @@
 // ABOUTME: Soundcn Extension — Browser-based sound viewer with Pi lifecycle hook notifications.
 // ABOUTME: /sounds command opens browser UI to browse, preview, and assign sounds from soundcn.xyz to Pi events.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
+
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { openBrowser } from "./lib/viewer-server.ts";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateSoundsViewerHTML, type CatalogItem } from "./lib/sounds-viewer-html.ts";
+import { generateSoundsViewerHTML, type CatalogItem } from "./lib/sounds/sounds-viewer-html.ts";
 import {
 	loadConfig, saveConfig, getActiveAssignmentCount, getAssignedSoundNames,
 	type SoundsConfig, type HookName, ALL_HOOKS, HOOK_DISPLAY_NAMES,
-} from "./lib/sounds-config.ts";
+} from "./lib/sounds/sounds-config.ts";
+import {
+	ensureCachedImage,
+	readCachedImageEntry,
+} from "./lib/sounds/sounds-image-cache.ts";
 import {
 	playInstalledSound, installSound, uninstallSound, isSoundInstalled,
-	cleanupAllPlayback,
-} from "./lib/sounds-player.ts";
+	installSoundFromUrl, cleanupAllPlayback,
+} from "./lib/sounds/sounds-player.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -34,6 +40,12 @@ interface SoundsViewerResult {
 // ── Catalog Fetching ─────────────────────────────────────────────────
 
 let cachedCatalog: CatalogItem[] | null = null;
+
+function getCatalogImageUrl(item: any): string | undefined {
+	const direct = item?.imageUrl || item?.image || item?.thumbnail || item?.artwork;
+	if (typeof direct === "string" && /^https?:\/\//.test(direct)) return direct;
+	return undefined;
+}
 
 async function fetchCatalog(): Promise<CatalogItem[]> {
 	if (cachedCatalog) return cachedCatalog;
@@ -52,6 +64,7 @@ async function fetchCatalog(): Promise<CatalogItem[]> {
 			description: item.description || "",
 			categories: item.categories || [],
 			author: item.author,
+			imageUrl: getCatalogImageUrl(item),
 			meta: item.meta,
 		}));
 
@@ -78,6 +91,7 @@ function startSoundsServer(
 			}
 		}, 5_000);
 
+		const catalogByName = new Map(catalog.map((item) => [item.name, item]));
 		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 			res.setHeader("Access-Control-Allow-Origin", "*");
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -112,6 +126,55 @@ function startSoundsServer(
 					res.writeHead(404);
 					res.end();
 				}
+				return;
+			}
+
+			// Serve cached catalog images
+			if (req.method === "GET" && url.pathname.startsWith("/api/image/")) {
+				const key = decodeURIComponent(url.pathname.slice("/api/image/".length));
+				if (!/^[a-f0-9]{24}$/.test(key)) {
+					res.writeHead(400, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Invalid image key" }));
+					return;
+				}
+				const cached = readCachedImageEntry(key);
+				if (!cached || !existsSync(cached.filePath)) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "Image not cached" }));
+					return;
+				}
+				try {
+					const imageData = readFileSync(cached.filePath);
+					res.writeHead(200, {
+						"Content-Type": cached.contentType,
+						"Cache-Control": "public, max-age=604800, immutable",
+					});
+					res.end(imageData);
+				} catch (err: any) {
+					res.writeHead(500, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: err?.message || "Failed to read cached image" }));
+				}
+				return;
+			}
+
+			if (req.method === "GET" && url.pathname.startsWith("/api/image-by-sound/")) {
+				const name = decodeURIComponent(url.pathname.slice("/api/image-by-sound/".length));
+				const item = catalogByName.get(name);
+				if (!item?.imageUrl) {
+					res.writeHead(404, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: "No image configured for sound" }));
+					return;
+				}
+				(async () => {
+					try {
+						const cached = await ensureCachedImage(item.imageUrl!);
+						res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+						res.end(JSON.stringify({ key: cached.key, url: `/api/image/${cached.key}` }));
+					} catch (err: any) {
+						res.writeHead(502, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Failed to cache image" }));
+					}
+				})();
 				return;
 			}
 
@@ -222,6 +285,64 @@ function startSoundsServer(
 				return;
 			}
 
+			// Install sound from URL (for custom sounds)
+			if (req.method === "POST" && url.pathname === "/install-from-url") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", async () => {
+					try {
+						const data = JSON.parse(body);
+						if (data.name && data.url) {
+							await installSoundFromUrl(data.name, data.url);
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true }));
+						} else {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: "Missing name or url" }));
+						}
+					} catch (err: any) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Install from URL failed" }));
+					}
+				});
+				return;
+			}
+
+			// Proxy audio URL (for custom sounds — avoids CORS in browser)
+			if (req.method === "POST" && url.pathname === "/api/proxy-audio") {
+				let body = "";
+				req.on("data", (chunk) => { body += chunk; });
+				req.on("end", async () => {
+					try {
+						const data = JSON.parse(body);
+						if (!data.url) {
+							res.writeHead(400, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: "Missing url" }));
+							return;
+						}
+						const upstream = await fetch(data.url);
+						if (!upstream.ok) {
+							res.writeHead(upstream.status, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: `Upstream returned ${upstream.status}` }));
+							return;
+						}
+						const buf = Buffer.from(await upstream.arrayBuffer());
+						const base64 = buf.toString("base64");
+						const mime = upstream.headers.get("content-type") || "audio/mpeg";
+						const dataUri = `data:${mime};base64,${base64}`;
+						res.writeHead(200, {
+							"Content-Type": "application/json",
+							"Cache-Control": "public, max-age=3600",
+						});
+						res.end(JSON.stringify({ dataUri }));
+					} catch (err: any) {
+						res.writeHead(502, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: err?.message || "Proxy audio failed" }));
+					}
+				});
+				return;
+			}
+
 			res.writeHead(404);
 			res.end("Not found");
 		});
@@ -237,19 +358,7 @@ function startSoundsServer(
 	});
 }
 
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
-}
+
 
 // ── Extension ────────────────────────────────────────────────────────
 
@@ -272,6 +381,7 @@ export default function (pi: ExtensionAPI) {
 
 	function updateStatus(ctx: ExtensionContext) {
 		if (!ctx.hasUI) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 		const count = getActiveAssignmentCount(currentConfig);
 		if (!currentConfig.enabled) {
 			ctx.ui.setStatus("sounds", "🔇 Sounds OFF");
@@ -325,6 +435,7 @@ export default function (pi: ExtensionAPI) {
 					assignments: result.assignments as Partial<Record<HookName, string>>,
 					volume: typeof result.volume === "number" ? result.volume : currentConfig.volume,
 					enabled: typeof result.enabled === "boolean" ? result.enabled : currentConfig.enabled,
+					customSounds: currentConfig.customSounds,
 				};
 				saveConfig(currentConfig);
 				updateStatus(ctx);
@@ -446,8 +557,25 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Lifecycle Hook Sound Playback ────────────────────────────────
 
-	function playHookSound(hookName: HookName): void {
+	const CLAUDE_DUPLICATE_LIFECYCLE_HOOKS = new Set<HookName>([
+		"turn_start",
+		"turn_end",
+		"session_start",
+	]);
+
+	function isClaudeContext(ctx?: ExtensionContext): boolean {
+		const model = ctx?.model;
+		if (!model) return false;
+		return model.provider === "anthropic" && /(^|\/)claude[-\w.]+/i.test(model.id);
+	}
+
+	function shouldSuppressPiSoundForClaude(hookName: HookName, ctx?: ExtensionContext): boolean {
+		return CLAUDE_DUPLICATE_LIFECYCLE_HOOKS.has(hookName) && isClaudeContext(ctx);
+	}
+
+	function playHookSound(hookName: HookName, ctx?: ExtensionContext): void {
 		if (!currentConfig.enabled) return;
+		if (shouldSuppressPiSoundForClaude(hookName, ctx)) return;
 		const soundName = currentConfig.assignments[hookName];
 		if (!soundName) return;
 		if (!isSoundInstalled(soundName)) return;
@@ -455,32 +583,32 @@ export default function (pi: ExtensionAPI) {
 		playInstalledSound(soundName, currentConfig.volume).catch(() => {});
 	}
 
-	pi.on("agent_end", async () => {
-		playHookSound("agent_end");
+	pi.on("agent_end", async (_event, ctx) => {
+		playHookSound("agent_end", ctx);
 	});
 
-	pi.on("agent_start", async () => {
-		playHookSound("agent_start");
+	pi.on("agent_start", async (_event, ctx) => {
+		playHookSound("agent_start", ctx);
 	});
 
-	pi.on("tool_execution_start", async () => {
-		playHookSound("tool_execution_start");
+	pi.on("tool_execution_start", async (_event, ctx) => {
+		playHookSound("tool_execution_start", ctx);
 	});
 
-	pi.on("tool_execution_end", async () => {
-		playHookSound("tool_execution_end");
+	pi.on("tool_execution_end", async (_event, ctx) => {
+		playHookSound("tool_execution_end", ctx);
 	});
 
-	pi.on("turn_start", async () => {
-		playHookSound("turn_start");
+	pi.on("turn_start", async (_event, ctx) => {
+		playHookSound("turn_start", ctx);
 	});
 
-	pi.on("turn_end", async () => {
-		playHookSound("turn_end");
+	pi.on("turn_end", async (_event, ctx) => {
+		playHookSound("turn_end", ctx);
 	});
 
-	pi.on("session_compact", async () => {
-		playHookSound("session_compact");
+	pi.on("session_compact", async (_event, ctx) => {
+		playHookSound("session_compact", ctx);
 	});
 
 	// ── Session Lifecycle ────────────────────────────────────────────
@@ -490,8 +618,9 @@ export default function (pi: ExtensionAPI) {
 		currentConfig = loadConfig();
 		updateStatus(ctx);
 
-		// Play session start sound if assigned
-		playHookSound("session_start");
+		// Play session start sound if assigned. Suppress Pi's duplicate
+		// lifecycle sound for Claude models because Claude Code hooks handle it.
+		playHookSound("session_start", ctx);
 	});
 
 	pi.on("session_shutdown", async () => {

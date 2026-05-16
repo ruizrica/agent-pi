@@ -1,0 +1,60 @@
+# ─── Mako Security Scanner Configuration ─────────────────────────────
+
+exclude:
+  # Intentionally-vulnerable test fixture for PR review / security scan testing
+  - test-review-target/**
+  # Test files with synthetic credentials for security detection tests
+  - extensions/__tests__/secure-engine.test.ts
+  - extensions/__tests__/security-engine.test.ts
+  - extensions/__tests__/secure-installer.test.ts
+  - extensions/__tests__/subagent-model-resolution.test.ts
+  # Vendored minified library — not our code
+  - extensions/lib/marked.min.js
+  # Vulnerability scanner test fixtures — intentionally contain synthetic vulnerable patterns for detection validation
+  - extensions/__tests__/vuln-scanner-engine.test.ts
+  - extensions/__tests__/vuln-scanner-installer.test.ts
+  # Test files that read other files for validation (false positive for LLM context exfiltration)
+  - extensions/__tests__/advisor-strategy.test.ts
+
+ignore:
+  # AI prompt construction — internal system prompt assembly (not user input)
+  - rule: SAST-AI-INJ-002
+    paths: ["extensions/agent-chain.ts", "extensions/lib/commander-prompt.ts", "extensions/system-select.ts", "extensions/private/extensions/qa-rico-viewer.ts", "extensions/lib/security-engine.ts"]
+    reason: "System prompt built from developer-defined agent configs and internal numeric values, not user input"
+
+  # Secret-detection regex definitions and auth flow documentation
+  - rule: SAST-AI-LEAK-001
+    paths: ["extensions/lib/security-engine.ts", "extensions/oauth-provider.ts"]
+    reason: "Regex patterns for detecting secrets and documentation comment describing auth flow — no actual credentials"
+
+  # Report index — SQL uses dynamically-built parameterized placeholders (?, ?, ?)
+  - rule: SAST-INJ-001
+    paths: ["extensions/lib/report-index.ts"]
+    reason: "IN clause built from array.map(() => '?').join(', ') with values bound via .run(...ids) — safe parameterized query"
+
+  # HTML viewer files — all innerHTML assignments use escapeHtml() on dynamic values.
+  # These are local-only UI renderers (localhost HTTP servers), not public-facing.
+  - rule: SAST-XSS-003
+    paths: ["extensions/lib/*-html.ts", "extensions/lib/secure-engine.ts", "extensions/lib/viewer-standalone-export.ts", "extensions/private/lib/*-html.ts", "tex/app.js"]
+    reason: "All dynamic values passed through escapeHtml() before innerHTML assignment — local-only viewer UI"
+
+  # High-entropy strings in security installer config (regex patterns and policy templates)
+  - rule: ENTROPY-DETECT
+    paths: ["extensions/lib/secure-installer.ts"]
+    reason: "Security policy template strings containing regex patterns for credential detection — not actual secrets"
+
+  # Spec scaffold — markdown template literals misidentified as SQL injection (no actual SQL)
+  - rule: SAST-INJ-001
+    paths: ["extensions/lib/spec-scaffold.ts"]
+    reason: "Markdown template literals for requirements document generation — no database queries, false positive"
+
+  # Vulnerability scanner code — pattern detection rules are false positives (scanner detects its own rules)
+  - rule: SAST-XSS-003
+    paths: ["extensions/lib/vuln-scanner-engine.ts"]
+    reason: "Pattern detection rules in vulnerability scanner — regex patterns, not actual innerHTML usage"
+  - rule: SAST-XSS-003
+    paths: ["extensions/test-viewer.ts"]
+    reason: "innerHTML usage with escapeHtml() sanitization — not a real XSS vulnerability"
+  - rule: ENTROPY-DETECT
+    paths: ["extensions/lib/vuln-scanner-installer.ts"]
+    reason: "Regex patterns for detecting API keys (sk-[a-zA-Z0-9]), GitHub tokens, etc. — detection rules, not actual secrets"

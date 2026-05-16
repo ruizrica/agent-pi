@@ -1,4 +1,4 @@
-// Mock implementation of @mariozechner/pi-tui for testing
+// Mock implementation of @earendil-works/pi-tui for testing
 
 export class Container {
 	private children: any[] = [];
@@ -14,12 +14,36 @@ export class Container {
 	}
 }
 
+export class Box {
+	constructor(
+		public _w: number,
+		public _h: number,
+		public _wrap: (text: string) => string,
+	) {}
+
+	private children: any[] = [];
+
+	addChild(child: any): void {
+		this.children.push(child);
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return this.children.flatMap((c) => (c.render ? c.render(width) : []));
+	}
+}
+
 export class Text {
 	constructor(
 		public content: string,
 		public indent: number,
-		public offset: number
+		public offset: number,
 	) {}
+
+	setText(text: string): void {
+		this.content = text;
+	}
 
 	render(width: number): string[] {
 		return [this.content];
@@ -69,6 +93,16 @@ export const Key = {
 
 export function matchesKey(data: string, key: string): boolean {
 	return data === key;
+}
+
+export function fuzzyFilter<T>(items: T[], query: string, toText: (item: T) => string): T[] {
+	const q = query.toLowerCase().trim();
+	if (!q) return items;
+	return items.filter((item) => toText(item).toLowerCase().includes(q));
+}
+
+export function decodeKittyPrintable(_data: string): string | undefined {
+	return undefined;
 }
 
 export function truncateToWidth(

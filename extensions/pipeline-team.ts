@@ -20,13 +20,13 @@
  * Usage: pi -e extensions/pipeline-team.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
 	Box, Text, Container, Spacer, Markdown,
 	matchesKey, Key, truncateToWidth, visibleWidth,
-} from "@mariozechner/pi-tui";
-import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-tui";
+import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@earendil-works/pi-coding-agent";
 import { spawn } from "child_process";
 import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync } from "fs";
 import { join, resolve, basename, dirname } from "path";
@@ -35,9 +35,12 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { outputLine, outputBox, type BarColor } from "./lib/output-box.ts";
 import { renderVerticalTimeline, renderCollapsedTimeline, statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
-import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
+import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
+import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
+import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
+import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -157,14 +160,16 @@ function truncateContext(text: string): string {
 
 function resolveTemplate(
 	template: string,
-	vars: { task: string; context: string; plan: string; input: string; review: string },
+	vars: { task: string; context: string; plan: string; input: string; review: string; microtasks?: string; merge?: string },
 ): string {
 	return template
 		.replace(/\$TASK/g, vars.task)
 		.replace(/\$CONTEXT/g, truncateContext(vars.context))
 		.replace(/\$PLAN/g, vars.plan)
 		.replace(/\$INPUT/g, vars.input)
-		.replace(/\$REVIEW/g, vars.review);
+		.replace(/\$REVIEW/g, vars.review)
+		.replace(/\$MICROTASKS/g, vars.microtasks || "")
+		.replace(/\$MERGE/g, vars.merge || "");
 }
 
 // ── Extension ────────────────────────────────────
@@ -186,6 +191,9 @@ export default function (pi: ExtensionAPI) {
 	let planOutput = "";     // $PLAN — from phase 3
 	let reviewOutput = "";   // $REVIEW — from phase 5 (when looping)
 	let reviewLoopCount = 0;
+	let microTaskOutput = "";
+	let mergeOutput = "";
+	let worktreeAssignments: WorktreeAssignment[] = [];
 
 	// ── Load Config ──────────────────────────────
 
@@ -230,6 +238,9 @@ export default function (pi: ExtensionAPI) {
 		planOutput = "";
 		reviewOutput = "";
 		reviewLoopCount = 0;
+		microTaskOutput = "";
+		mergeOutput = "";
+		worktreeAssignments = [];
 
 		phaseStates = config.phases.map(p => ({
 			def: p,
@@ -266,7 +277,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		const phase = phaseStates[currentPhaseIndex];
 		if (phase) {
-			widgetCtx.ui.setStatus("pipeline-team", phase.def.name.toUpperCase());
+			if (!(globalThis as any).__piSummaryModeActive) widgetCtx.ui.setStatus("pipeline-team", phase.def.name.toUpperCase());
 		}
 	}
 
@@ -286,6 +297,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		updateStatus();
 
+		if ((globalThis as any).__piSummaryModeActive) return;
 		widgetCtx.ui.setWidget("pipeline-team", (_tui: any, theme: any) => {
 			const text = new Text("", 0, 1);
 
@@ -349,7 +361,15 @@ export default function (pi: ExtensionAPI) {
 		// Use agent's defined model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		const model = resolveToolkitWorkerModel(agentDef.name, agentDef.model || DEFAULT_SUBAGENT_MODEL);
+		let model = resolveToolkitWorkerModel(agentDef.name, agentDef.model || DEFAULT_SUBAGENT_MODEL);
+
+		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		if ((globalThis as any).__piGemmaOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/google/gemma-4-26b-a4b";
+		}
+		if ((globalThis as any).__piQwenOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
+			model = "lmstudio/qwen/qwen3.6-27b";
+		}
 
 		const agentKey = `pipeline-${agentDef.name.toLowerCase().replace(/\s+/g, "-")}-${agentState.index}`;
 		const agentSessionFile = join(sessionDir, `${agentKey}.json`);
@@ -376,9 +396,57 @@ export default function (pi: ExtensionAPI) {
 		const textChunks: string[] = [];
 
 		return new Promise((resolvePromise) => {
+			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piGemmaOverlay ? { PI_GEMMA_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piQwenOverlay ? { PI_QWEN_OVERLAY_ACTIVE: "1" } : {}) };
+			if (shouldUseClaudeCliForAgent(agentDef.name, model, !!(globalThis as any).__piClaudeOverlay)) {
+				let toolkitFinalOutput = "";
+				spawnToolkitWorker(agentDef, {
+					task,
+					sessionFile: agentSessionFile,
+					cwd: ctx.cwd,
+					env: spawnEnv,
+					model,
+					onSpawn: (proc: any) => { agentState.proc = proc; },
+					onStdoutLine: (line: string) => {
+						try {
+							const event = JSON.parse(line);
+							if (event.type === "message_update") {
+								const delta = event.assistantMessageEvent;
+								if (delta?.type === "text_delta") {
+									textChunks.push(delta.delta || "");
+									const full = textChunks.join("");
+									const last = full.split("\n").filter((l: string) => l.trim()).pop() || "";
+									agentState.lastWork = last;
+									updateWidget();
+								}
+							}
+						} catch {}
+					},
+					onStderr: () => {},
+				}).then(({ exitCode, output }) => {
+					toolkitFinalOutput = output || toolkitFinalOutput;
+					agentState.proc = null;
+					clearInterval(agentState.timer);
+					agentState.elapsed = Date.now() - startTime;
+					const finalOutput = toolkitFinalOutput || textChunks.join("");
+					agentState.output = finalOutput;
+					agentState.status = exitCode === 0 ? "done" : "error";
+					agentState.lastWork = finalOutput.split("\n").filter((l: string) => l.trim()).pop() || "";
+					updateWidget();
+
+					ctx.ui.notify(
+						`${displayName(agentState.role)} #${agentState.index + 1} ${agentState.status} in ${Math.round(agentState.elapsed / 1000)}s`,
+						agentState.status === "done" ? "success" : "error",
+					);
+
+					resolvePromise({ output: finalOutput, exitCode: exitCode ?? 1, elapsed: agentState.elapsed });
+				});
+				return;
+			}
+
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
+				cwd: ctx.cwd,
 			});
 
 			// Track for escape-cancel integration
@@ -737,6 +805,8 @@ export default function (pi: ExtensionAPI) {
 					plan: planOutput,
 					input: "",
 					review: reviewOutput,
+					microtasks: microTaskOutput,
+					merge: mergeOutput,
 				}),
 			}));
 
@@ -755,10 +825,24 @@ export default function (pi: ExtensionAPI) {
 				planOutput = mergedOutput;
 			}
 
+			if (phase.def.name.toLowerCase() === "refine") {
+				microTaskOutput = mergedOutput;
+				try {
+					const parsed = JSON.parse(mergedOutput) as PipelineMicroTask[];
+					worktreeAssignments = assignWorktrees(ctx.cwd, parsed);
+				} catch {
+					worktreeAssignments = [];
+				}
+			}
+
 			// Store review output if this is the review phase
 			if (phase.def.name.toLowerCase() === "review") {
 				reviewOutput = mergedOutput;
 				reviewLoopCount++;
+			}
+
+			if (phase.def.name.toLowerCase() === "merge") {
+				mergeOutput = mergedOutput;
 			}
 
 			const truncated = mergedOutput.length > 8000
@@ -1038,8 +1122,20 @@ export default function (pi: ExtensionAPI) {
 			? `\n## Implementation Plan\n${truncateContext(planOutput)}`
 			: "";
 
+		const microTaskSection = microTaskOutput
+			? `\n## Refined Micro-Tasks\n${truncateContext(microTaskOutput)}`
+			: "";
+
 		const reviewSection = reviewOutput
 			? `\n## Last Review (loop ${reviewLoopCount}/${activeConfig.review_max_loops})\n${truncateContext(reviewOutput)}`
+			: "";
+
+		const mergeSection = mergeOutput
+			? `\n## Merge Output\n${truncateContext(mergeOutput)}`
+			: "";
+
+		const worktreeSection = worktreeAssignments.length > 0
+			? `\n## Worktree Assignments\n${worktreeAssignments.map((w) => `- ${w.taskId}: ${w.branchName} → ${w.worktreePath}`).join("\n")}`
 			: "";
 
 		// Phase-specific instructions
@@ -1050,7 +1146,8 @@ export default function (pi: ExtensionAPI) {
 You are in the UNDERSTAND phase. Your job is to:
 1. Analyze the task and classify its complexity
 2. Use your codebase tools to verify assumptions
-3. When the task is fully clarified, call \`advance_phase\` with a detailed summary
+3. Confirm WARDEN tasks represent the clarified goal before advancing
+4. When the task is fully clarified, call \`advance_phase\` with a detailed summary
 
 ## Task Complexity Routing
 
@@ -1089,20 +1186,43 @@ You are in the PLAN phase. Dispatch a planner agent to create an implementation 
 Use \`dispatch_agents\` with a planner. The plan will be stored as $PLAN for later phases.
 Call \`advance_phase\` with the plan summary when done.`;
 
+		} else if (phase.def.name === "refine") {
+			phaseInstructions = `## Phase Instructions: REFINE
+You are in the REFINE phase. Do NOT plan again.
+Convert the already-approved plan into structured micro-tasks.
+Each micro-task must include: id, title, description, files, line_ranges, symbols, depends_on, parallel_group, verification.
+Return valid JSON so downstream execution can assign isolated worktrees safely.
+Use \`dispatch_agents\` with a planner, then call \`advance_phase\` when refinement is complete.`;
+
 		} else if (phase.def.name === "execute") {
 			phaseInstructions = `## Phase Instructions: EXECUTE
-You are in the EXECUTE phase. Dispatch builder agents to implement the plan.
+You are in the EXECUTE phase. Dispatch builder agents to implement the refined micro-tasks.
 You can dispatch multiple builders for independent tasks.
+If worktrees are enabled for this phase, each builder must be assigned its own isolated worktree path/branch and should stay within the specified files and line ranges.
 Use \`dispatch_agents\` then call \`advance_phase\` when implementation is complete.`;
 
 		} else if (phase.def.name === "review") {
 			phaseInstructions = `## Phase Instructions: REVIEW
 You are in the REVIEW phase (loop ${reviewLoopCount + 1}/${activeConfig.review_max_loops}).
-Dispatch a reviewer agent to audit the implementation.
+Dispatch a reviewer agent to audit the implementation against the approved plan and refined micro-tasks.
 After reviewing the output:
-- If the reviewer says APPROVED → call \`advance_phase\` to complete the pipeline
-- If issues found and loops remaining → use \`dispatch_agents\` to fix issues, then review again
+- If the reviewer says APPROVED → call \`advance_phase\` to proceed to merge or complete the pipeline
+- If issues found and loops remaining → advance to remediation or dispatch fixes, then review again
 - Max review loops: ${activeConfig.review_max_loops}`;
+
+		} else if (phase.def.name === "remediate") {
+			phaseInstructions = `## Phase Instructions: REMEDIATE
+You are in the REMEDIATE phase.
+Use a stronger reviewer/remediator path to address failed review findings before merge.
+Dispatch the remediator agent with the approved plan, refined micro-tasks, and review findings.
+Call \`advance_phase\` when remediation is complete.`;
+
+		} else if (phase.def.name === "merge") {
+			phaseInstructions = `## Phase Instructions: MERGE
+You are in the MERGE phase.
+Use the designated merge agent to integrate all completed worktree branches, resolve merge conflicts, and produce the final integrated result.
+Do not complete the pipeline until merge conflicts are resolved or explicitly surfaced as a failure.
+Call \`advance_phase\` when merge is complete.`;
 		}
 
 		const commanderAvailable = !!(globalThis as any).__piCommanderAvailable;
@@ -1120,15 +1240,20 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 - Warm, professional, collaborative tone — no emojis anywhere
 - Use file:open to show pipeline plans, phase results, or review reports` : "";
 
+		const pipelineDelegateSection = buildDelegateEverythingSection({
+			modeName: "PIPELINE",
+			dispatchTool: "dispatch_agents",
+			dispatchExample: `dispatch_agents { agents: [{ role: "builder", task: "Read src/index.ts and report its exports" }] }`,
+			extraRules: [
+				"`dispatch_agents` is your execution channel. The main agent never runs Read/Write/Edit/Bash directly — those go to dispatched agents.",
+				"`advance_phase` and `pipeline_status` are orchestration tools you call directly; they do not count as execution.",
+				"Phase 1 conversation (asking the user what they want) is orchestration. Once a phase plan exists, all file/code work is dispatched.",
+			],
+		});
+
 		return {
 			systemPrompt: `You are orchestrating a pipeline called "${activeConfig.name}".
-You have full codebase tools AND pipeline tools (advance_phase, dispatch_agents, pipeline_status).
-
-## When to Work Directly (Skip the Pipeline)
-- Simple one-off commands: reading a file, checking status, listing contents
-- Quick lookups, small edits, answering questions about the codebase
-- Anything you can handle in a single step without needing the pipeline
-Use your judgment — if it's quick, just do it; if it's real work, use the pipeline.
+You drive the pipeline via \`advance_phase\`, \`dispatch_agents\`, and \`pipeline_status\`; dispatched agents do every read, search, build, and edit.
 
 ## Current Phase: ${phaseName}
 ${phase.def.description}
@@ -1143,13 +1268,23 @@ ${agentCatalog}
 
 ## Task
 ${taskSummary || "(Phase 1: Ask the user what they want to accomplish)"}
-${contextSummary}${planSection}${reviewSection}
+${contextSummary}${planSection}${microTaskSection}${worktreeSection}${reviewSection}${mergeSection}
 
-## Tools
+${pipelineDelegateSection}
+
+${buildWardenTaskConfirmationSection("PIPELINE", {
+	sliceName: "pipeline phase or dispatched builder slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm the active phase before `advance_phase`.",
+		"After dispatched agents finish, synthesize results and mark or update the active task before moving phases.",
+		"WARDEN does not replace `advance_phase` or `dispatch_agents`; it confirms phase follow-through.",
+	],
+})}
+
+## Pipeline Tools
 - \`advance_phase\`: Move to next phase (required summary of what was done)
-- \`dispatch_agents\`: Send agents to work (array of {role, task})
-- \`pipeline_status\`: Check current pipeline state
-- Plus all standard codebase tools (read, write, edit, bash, etc.)${commanderSection}`,
+- \`dispatch_agents\`: Send agents to work (array of {role, task}) — your sole execution channel
+- \`pipeline_status\`: Check current pipeline state${commanderSection}`,
 		};
 	});
 

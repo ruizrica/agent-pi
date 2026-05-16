@@ -148,14 +148,14 @@ if command -v pi &>/dev/null; then
     success "Pi CLI found at ${DIM}${PI_PATH}${NC}"
 else
     if [ "$DRY_RUN" -eq 1 ]; then
-        info "[dry-run] Pi CLI not found — would run: ${DIM}npm install -g @mariozechner/pi-coding-agent${NC}"
+        info "[dry-run] Pi CLI not found — would run: ${DIM}npm install -g @earendil-works/pi-coding-agent${NC}"
     else
         info "Pi CLI not found — installing globally..."
-        npm install -g @mariozechner/pi-coding-agent
+        npm install -g @earendil-works/pi-coding-agent
         if command -v pi &>/dev/null; then
             success "Pi CLI installed"
         else
-            fail "Failed to install Pi CLI. Try manually: npm install -g @mariozechner/pi-coding-agent"
+            fail "Failed to install Pi CLI. Try manually: npm install -g @earendil-works/pi-coding-agent"
             exit 1
         fi
     fi
@@ -282,31 +282,36 @@ else
     fi
 fi
 
-# Free Shift+Tab for mode-cycler by unbinding cycleThinkingLevel
+# Free package-owned shortcuts by unbinding built-ins that intentionally yield to extensions.
+# Ctrl+X is reserved for theme-cycler. The default app.models.clearAll binding is
+# picker-scoped and overridable, but leaving it bound creates a startup diagnostic.
 KEYBINDINGS_FILE="$PI_AGENT_DIR/keybindings.json"
 KEYBINDINGS_FILE_WIN="$(to_win_path "$KEYBINDINGS_FILE")"
 
-SHIFT_TAB_FREE=$(node -e "
+PACKAGE_SHORTCUTS_FREE=$(node -e "
     const fs = require('fs');
     if (!fs.existsSync('$KEYBINDINGS_FILE_WIN')) { console.log('no'); process.exit(); }
     const k = JSON.parse(fs.readFileSync('$KEYBINDINGS_FILE_WIN', 'utf-8'));
-    console.log(Array.isArray(k.cycleThinkingLevel) && k.cycleThinkingLevel.length === 0 ? 'yes' : 'no');
+    const empty = (name) => Array.isArray(k[name]) && k[name].length === 0;
+    console.log(empty('app.thinking.cycle') && empty('app.models.clearAll') ? 'yes' : 'no');
 " 2>/dev/null || echo "no")
 
-if [ "$SHIFT_TAB_FREE" = "yes" ]; then
-    success "Shift+Tab already freed for mode cycling"
+if [ "$PACKAGE_SHORTCUTS_FREE" = "yes" ]; then
+    success "Package extension shortcuts already have precedence"
 else
     if [ "$DRY_RUN" -eq 1 ]; then
-        info "[dry-run] Would unbind ${DIM}cycleThinkingLevel${NC} in ${DIM}$KEYBINDINGS_FILE${NC} to free Shift+Tab"
+        info "[dry-run] Would unbind ${DIM}app.thinking.cycle${NC} and ${DIM}app.models.clearAll${NC} in ${DIM}$KEYBINDINGS_FILE${NC}"
     else
         node -e "
         const fs = require('fs');
         const file = '$KEYBINDINGS_FILE_WIN';
         const k = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
-        k.cycleThinkingLevel = [];
+        k['app.thinking.cycle'] = [];
+        k['app.models.clearAll'] = [];
+        delete k.cycleThinkingLevel;
         fs.writeFileSync(file, JSON.stringify(k, null, 2) + '\n');
     "
-        success "Freed Shift+Tab for mode cycling ${DIM}(unbound cycleThinkingLevel)${NC}"
+        success "Package extension shortcuts have precedence ${DIM}(Shift+Tab mode cycle, Ctrl+X theme cycle)${NC}"
     fi
 fi
 
@@ -343,7 +348,7 @@ else
 fi
 
 # Check core agent definitions
-CORE_AGENTS=("builder.md" "reviewer.md" "scout.md" "planner.md" "tester.md")
+CORE_AGENTS=("builders/builder.md" "team/reviewer.md" "team/scout.md" "team/planner.md" "tester/tester.md")
 MISSING_AGENTS=0
 for agent_file in "${CORE_AGENTS[@]}"; do
     if [ ! -f "$CONFIG_DIR/$agent_file" ]; then

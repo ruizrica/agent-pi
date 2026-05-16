@@ -1,5 +1,6 @@
 // ABOUTME: Pre-tool-hook security system — blocks destructive commands, detects prompt injection, prevents data exfiltration.
 // ABOUTME: Three-layer defense: tool_call gate, context content scanner, and system prompt hardening.
+// NOTE: This system protects Pi's own operations. Not to be confused with vuln-scanner.ts which scans external projects.
 /**
  * Security Guard — Multi-layer agent defense system
  *
@@ -24,8 +25,8 @@
  * Usage: Loaded via packages in agent/settings.json
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { existsSync, readFileSync, writeFileSync, renameSync, appendFileSync, statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,8 @@ import {
 	scanContent,
 	scanUrl,
 	stripInjections,
+	classifyContentThreats,
+	annotateUnsafeShell,
 	formatThreat,
 	formatThreatsForBlock,
 	truncateToolResult,
@@ -45,9 +48,10 @@ import {
 	detectSystemPromptLeakage,
 	type SecurityPolicy,
 	type ThreatResult,
+	type ClassifiedThreat,
 	type Severity,
 	type ToolBudget,
-} from "./lib/security-engine.ts";
+} from "./lib/security/security-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Audit Logger
@@ -194,6 +198,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// System prompt fingerprints for leakage detection (OWASP #7)
 	let promptFingerprints: string[] = [];
 
+	/** Dedupe inline cards across repeated `context` invocations (same detections = one card until reset). */
+	let shownContextCardKeys = new Set<string>();
+
 	// ── Security event inline card ───────────────────────────────────────────
 	// Dark gray card that flows with conversation (like memory-cycle cards).
 	// Rendered via sendMessage + registerMessageRenderer.
@@ -201,12 +208,16 @@ export default function securityGuard(pi: ExtensionAPI) {
 	interface GuardCardDetails {
 		action: string;   // e.g. "stripped 2 injection(s)" or "action blocked"
 		detail: string;   // e.g. tool name / reason
+		/** default "warn" — use "muted" for non-blocking content annotations */
+		tone?: "warn" | "muted";
 	}
 
 	function renderGuardCard(message: any, _options: any, theme: any) {
 		const details: GuardCardDetails = message.details || {};
 		const title = theme.fg("muted", "security-guard");
-		const action = theme.bold(theme.fg("warning", details.action || "event"));
+		const tone = details.tone ?? "warn";
+		const actionColor = tone === "muted" ? "muted" : "warning";
+		const action = theme.bold(theme.fg(actionColor, details.action || "event"));
 		const detail = theme.fg("dim", details.detail || "");
 
 		const body = `${title}  │  ${action}  │  ${detail}`;
@@ -219,13 +230,25 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	pi.registerMessageRenderer<GuardCardDetails>("security-guard-event", renderGuardCard);
 
-	function emitGuardCard(action: string, detail: string) {
+	function emitGuardCard(
+		action: string,
+		detail: string,
+		opts?: { tone?: GuardCardDetails["tone"] },
+	) {
 		pi.sendMessage({
 			customType: "security-guard-event",
 			content: `security-guard | ${action} | ${detail}`,
 			display: true,
-			details: { action, detail },
+			details: { action, detail, tone: opts?.tone ?? "warn" },
 		});
+	}
+
+	/** Compact tool label for aggregated context-scan cards */
+	function formatContextToolsDetail(tools: Set<string>): string {
+		if (tools.size === 0) return "tool output";
+		if (tools.size === 1) return [...tools][0];
+		const arr = [...tools].sort();
+		return `${arr[0]} +${tools.size - 1}`;
 	}
 
 	// ================================================================
@@ -251,6 +274,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// LAYER 1: Tool Call Gate (pre-execution)
 	// ================================================================
 
+	// ORDERING: This hook MUST fire before tasks.ts tool_call gate. Currently
+	// guaranteed by filesystem alphabetical order (security-guard < tasks).
+	// If this file is renamed, verify security checks still run first.
 	pi.on("tool_call", async (event, ctx) => {
 		if (!policy.settings.enabled) return { block: false };
 
@@ -430,6 +456,13 @@ export default function securityGuard(pi: ExtensionAPI) {
 		const maxResultChars = (policy.settings as any).max_tool_result_chars ?? 100000;
 
 		let anyModified = false;
+		let contextUnsafeShellRefTotal = 0;
+		const contextUnsafeShellTools = new Set<string>();
+		const contextShellFingerprintParts: string[] = [];
+		let contextInjectionRedactionsTotal = 0;
+		const contextInjectionTools = new Set<string>();
+		const contextInjectionFingerprintParts: string[] = [];
+
 		const repairedMessages = messages.map((msg: any) => {
 			// Only scan toolResult messages — these come from files/commands the agent read
 			if (msg.role !== "toolResult") return msg;
@@ -474,52 +507,92 @@ export default function securityGuard(pi: ExtensionAPI) {
 			const newContent = currentContent.map((block: any) => {
 				if (block.type !== "text" || !block.text) return block;
 
-				const threats = scanContent(block.text, policy);
-				if (threats.length === 0) return block;
+				const classified = classifyContentThreats(block.text, policy);
+				if (classified.length === 0) return block;
 
-				// Found injection — strip it
-				const blockLevelThreats = threats.filter((t) => t.severity === "block");
-				if (blockLevelThreats.length === 0) {
-					// Only warn-level — log but don't strip
-					for (const t of threats) {
+				const toolLabel = msg.toolName || "unknown";
+				const injections = classified.filter((t) => t.category === "prompt_injection");
+				const unsafeShell = classified.filter((t) => t.category === "unsafe_shell_execution");
+
+				let resultText = block.text;
+
+				// Handle prompt injections — strip block-level, log warn-level
+				const blockLevelInjections = injections.filter((t) => t.severity === "block");
+				const warnLevelInjections = injections.filter((t) => t.severity !== "block");
+
+				for (const t of warnLevelInjections) {
+					stats.warned++;
+					stats.threats.push(t);
+					audit.log({
+						timestamp: now(),
+						severity: t.severity,
+						category: t.category,
+						tool: toolLabel,
+						description: `Content injection: ${t.description}`,
+						matched: t.matched,
+						action: "warned",
+					});
+				}
+
+				if (blockLevelInjections.length > 0) {
+					const { cleaned, redactions } = stripInjections(resultText, policy);
+
+					for (const r of redactions) {
+						stats.redacted++;
+						stats.threats.push(r);
+						audit.log({
+							timestamp: now(),
+							severity: r.severity,
+							category: r.category,
+							tool: toolLabel,
+							description: `REDACTED injection: ${r.description}`,
+							matched: r.matched,
+							action: "redacted",
+						});
+					}
+
+					if (cleaned !== resultText) {
+						resultText = cleaned;
+						contextInjectionRedactionsTotal += redactions.length;
+						contextInjectionTools.add(toolLabel);
+						for (const r of redactions) {
+							const pat = r.rulePattern ?? "";
+							contextInjectionFingerprintParts.push(
+								`${toolLabel}:${pat}:${r.matched}`,
+							);
+						}
+					}
+				}
+
+				// Handle unsafe shell — annotate (preserve content with warning)
+				if (unsafeShell.length > 0) {
+					const injectionLines = new Set(blockLevelInjections.map(t => t.lineIndex));
+					resultText = annotateUnsafeShell(resultText, unsafeShell, injectionLines);
+
+					for (const t of unsafeShell) {
 						stats.warned++;
 						stats.threats.push(t);
 						audit.log({
 							timestamp: now(),
 							severity: t.severity,
 							category: t.category,
-							tool: msg.toolName || "unknown",
-							description: `Content injection: ${t.description}`,
+							tool: toolLabel,
+							description: `Unsafe shell: ${t.description}`,
 							matched: t.matched,
 							action: "warned",
 						});
+						const pat = t.rulePattern ?? "";
+						contextShellFingerprintParts.push(`${toolLabel}:${t.lineIndex}:${pat}:${t.matched}`);
 					}
-					return block;
+
+					contextUnsafeShellRefTotal += unsafeShell.length;
+					contextUnsafeShellTools.add(toolLabel);
 				}
 
-				// Block-level injection found — strip it
-				const { cleaned, redactions } = stripInjections(block.text, policy);
-
-				for (const r of redactions) {
-					stats.redacted++;
-					stats.threats.push(r);
-					audit.log({
-						timestamp: now(),
-						severity: r.severity,
-						category: r.category,
-						tool: msg.toolName || "unknown",
-						description: `REDACTED injection: ${r.description}`,
-						matched: r.matched,
-						action: "redacted",
-					});
-				}
-
-				if (cleaned !== block.text) {
+				if (resultText !== block.text) {
 					msgModified = true;
 					anyModified = true;
-					const toolLabel = msg.toolName || "unknown";
-					emitGuardCard(`stripped ${redactions.length} injection(s)`, toolLabel);
-					return { ...block, text: cleaned };
+					return { ...block, text: resultText };
 				}
 
 				return block;
@@ -530,6 +603,27 @@ export default function securityGuard(pi: ExtensionAPI) {
 			}
 			return msg;
 		});
+
+		if (contextInjectionRedactionsTotal > 0) {
+			const injKey = `injection:${[...new Set(contextInjectionFingerprintParts)].sort().join("|")}`;
+			if (!shownContextCardKeys.has(injKey)) {
+				shownContextCardKeys.add(injKey);
+				emitGuardCard(
+					`stripped ${contextInjectionRedactionsTotal} injection(s)`,
+					formatContextToolsDetail(contextInjectionTools),
+				);
+			}
+		}
+		if (contextUnsafeShellRefTotal > 0) {
+			const shellKey = `unsafe_shell:${[...new Set(contextShellFingerprintParts)].sort().join("|")}`;
+			if (!shownContextCardKeys.has(shellKey)) {
+				shownContextCardKeys.add(shellKey);
+				emitGuardCard(
+					`annotated ${contextUnsafeShellRefTotal} unsafe shell ref(s)`,
+					formatContextToolsDetail(contextUnsafeShellTools),
+				);
+			}
+		}
 
 		// ── System prompt leakage detection (OWASP #7) ──────────────
 		if (promptFingerprints.length > 0 && (policy.settings as any).detect_prompt_leakage !== false) {
@@ -669,6 +763,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 	pi.on("input", async (_event, _ctx) => {
 		budgetCounters.turn = 0;
 		budgetCounters.bashTurn = 0;
+		shownContextCardKeys.clear();
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -676,8 +771,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 		initPolicy(cwd);
 		stats = freshStats();
 		budgetCounters = { turn: 0, session: 0, bashTurn: 0 };
+		shownContextCardKeys.clear();
 
-		if (ctx?.ui?.setStatus) {
+		if (ctx?.ui?.setStatus && !(globalThis as any).__piSummaryModeActive) {
 			ctx.ui.setStatus("security", "🛡️ Security Guard");
 		}
 	});
@@ -686,6 +782,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		// Re-init on session switch (cwd might change)
 		const cwd = ctx?.cwd || defaultRoot;
 		initPolicy(cwd);
+		shownContextCardKeys.clear();
 
 		// Keep stats across session switches (they're cumulative)
 		if (ctx?.ui?.setStatus) {
@@ -808,6 +905,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 
 	function updateStatusBar(ctx: any) {
 		if (!ctx?.ui?.setStatus) return;
+		if ((globalThis as any).__piSummaryModeActive) return;
 
 		const total = stats.blocked + stats.warned + stats.redacted;
 		if (total > 0) {

@@ -81,10 +81,20 @@ describe("resolvedModel", () => {
 	});
 
 	it("forces toolkit agents onto the shared toolkit worker model", () => {
-		const state = makeState({ def: { name: "codex-agent", model: "openai/gpt-4o" } });
+		const codex = makeState({ def: { name: "codex-worker", model: "openai/gpt-4o" } });
+		expect(resolveModel(codex, null)).toBe(TOOLKIT_WORKER_MODEL);
+		expect(codex.resolvedModel).toBe(TOOLKIT_WORKER_MODEL);
+
+		const opencode = makeState({ def: { name: "opencode-worker", model: "openai/gpt-4o" } });
+		expect(resolveModel(opencode, null)).toBe(TOOLKIT_WORKER_MODEL);
+		expect(opencode.resolvedModel).toBe(TOOLKIT_WORKER_MODEL);
+	});
+
+	it("preserves Claude profile models", () => {
+		const state = makeState({ def: { name: "claude-advisor", model: "anthropic/claude-opus-4-6" } });
 		const model = resolveModel(state, null);
-		expect(model).toBe(TOOLKIT_WORKER_MODEL);
-		expect(state.resolvedModel).toBe(TOOLKIT_WORKER_MODEL);
+		expect(model).toBe("anthropic/claude-opus-4-6");
+		expect(state.resolvedModel).toBe("anthropic/claude-opus-4-6");
 	});
 
 	it("uses default when no parent model and no agent model", () => {

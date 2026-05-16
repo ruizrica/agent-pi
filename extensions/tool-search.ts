@@ -1,10 +1,10 @@
 // ABOUTME: Tool Search — meta-tool that lets the agent discover and inspect available tools at runtime.
 // ABOUTME: Provides search, list, and inspect operations against the tool registry.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { StringEnum } from "@mariozechner/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "@sinclair/typebox";
-import { Text } from "@mariozechner/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { getToolRegistry, type ToolEntry } from "./tool-registry.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 

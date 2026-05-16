@@ -4,11 +4,23 @@
     "model": "claude-haiku-4-5-20251001"
   },
   "agents": {
+    "gemini-worker": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001"
+    },
     "gemini-agent": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001"
     },
+    "cursor-worker": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001"
+    },
     "cursor-agent": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "codex-worker": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001"
     },
@@ -17,6 +29,10 @@
       "model": "claude-haiku-4-5-20251001"
     },
     "qwen-agent": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "opencode-worker": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001"
     },
@@ -29,6 +45,10 @@
       "model": "claude-haiku-4-5-20251001"
     },
     "crush-agent": {
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5-20251001"
+    },
+    "droid-worker": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5-20251001"
     },

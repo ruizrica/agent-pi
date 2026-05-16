@@ -372,6 +372,125 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   .mode-hint {
     font-weight: 400; opacity: 0.7; font-size: 11px; margin-left: 8px;
   }
+
+  /* ── Message Action Buttons ───────────────────────── */
+  .message-actions {
+    display: flex; gap: 6px; margin-top: 6px; padding-left: 2px;
+  }
+  .action-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 11px; font-weight: 500;
+    font-family: var(--font); cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .action-btn:hover { background: var(--surface3); color: var(--text); border-color: var(--border-light); }
+  .action-btn:active { transform: scale(0.96); }
+  .action-btn.success { color: var(--success); border-color: var(--success); background: var(--success-bg); }
+
+  /* ── Inline Board Panel ───────────────────────────── */
+  #board-panel {
+    display: none; flex-direction: column;
+    height: 50%; min-height: 180px; max-height: 50%;
+    border-bottom: 2px solid var(--accent);
+    background: var(--bg); overflow: hidden;
+    flex-shrink: 0;
+  }
+  #board-panel.visible { display: flex; }
+  #chat-screen.board-open #messages { height: 50%; flex: none; }
+  #chat-screen.board-open #board-panel { display: flex; }
+
+  .board-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .board-header-title {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px; flex: 1;
+  }
+  .board-count {
+    font-size: 11px; color: var(--text-dim); font-family: var(--mono);
+  }
+
+  .board-columns {
+    display: flex; gap: 8px; padding: 8px;
+    flex: 1; overflow: hidden; min-height: 0;
+  }
+  .board-col {
+    flex: 1; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; min-width: 0;
+  }
+  .board-col-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .board-col-header .col-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .board-col-header .col-num {
+    margin-left: auto; font-family: var(--mono);
+    font-size: 10px; color: var(--text-dim);
+  }
+  .col-pending .col-dot { background: var(--text-muted); }
+  .col-pending .board-col-header { color: var(--text-muted); }
+  .col-working .col-dot { background: var(--accent); }
+  .col-working .board-col-header { color: var(--accent); }
+  .col-done .col-dot { background: var(--success); }
+  .col-done .board-col-header { color: var(--success); }
+
+  .board-col-body {
+    flex: 1; overflow-y: auto; padding: 6px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .board-col-body::-webkit-scrollbar { width: 3px; }
+  .board-col-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .board-card {
+    padding: 8px 10px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--text-muted);
+    font-size: 12px; color: var(--text); line-height: 1.4;
+    word-break: break-word;
+    overflow: hidden; display: -webkit-box;
+    -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  }
+  .col-working .board-card { border-left-color: var(--accent); }
+  .col-done .board-card { border-left-color: var(--success); opacity: 0.7; }
+  .board-col-empty {
+    font-size: 11px; color: var(--text-dim); font-style: italic;
+    text-align: center; padding: 12px 6px;
+  }
+
+  .board-add-row {
+    display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface);
+  }
+  .board-add-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 6px 10px; color: var(--text);
+    font-size: 13px; font-family: var(--font); outline: none;
+  }
+  .board-add-input::placeholder { color: var(--text-dim); }
+  .board-add-input:focus { border-color: var(--accent); }
+  .board-add-btn {
+    padding: 6px 12px; border-radius: 4px;
+    background: var(--accent-dim); border: 1px solid var(--accent);
+    color: var(--accent); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .board-add-btn:hover { background: var(--accent); color: #fff; }
+
+  .header-btn-board {
+    font-size: 14px; padding: 7px 10px;
+  }
+  .header-btn-board.active {
+    background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -402,6 +521,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
       <div class="header-right">
         <span class="relay-badge" title="Connected to main Pi session">relay</span>
         <div class="status-dot" id="status-dot" title="Connected"></div>
+        <button class="header-btn header-btn-board" id="board-toggle-btn" onclick="toggleBoard()" title="Toggle board panel">📋</button>
         <button class="header-btn" onclick="resetChat()" title="New conversation">New</button>
         <button class="header-btn header-btn-shutdown" onclick="shutdownChat()" title="Stop server &amp; disconnect">✕</button>
       </div>
@@ -414,6 +534,32 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
 
     <div id="mode-bar"></div>
     <div class="connection-banner" id="conn-banner">Connection lost. Reconnecting...</div>
+
+    <!-- Inline Board Panel (50/50 split) -->
+    <div id="board-panel">
+      <div class="board-header">
+        <span class="board-header-title">Board</span>
+        <span class="board-count" id="board-task-count">0 tasks</span>
+      </div>
+      <div class="board-columns">
+        <div class="board-col col-pending">
+          <div class="board-col-header"><span class="col-dot"></span>Pending<span class="col-num" id="bp-count">0</span></div>
+          <div class="board-col-body" id="bp-cards"></div>
+        </div>
+        <div class="board-col col-working">
+          <div class="board-col-header"><span class="col-dot"></span>Working<span class="col-num" id="bw-count">0</span></div>
+          <div class="board-col-body" id="bw-cards"></div>
+        </div>
+        <div class="board-col col-done">
+          <div class="board-col-header"><span class="col-dot"></span>Done<span class="col-num" id="bd-count">0</span></div>
+          <div class="board-col-body" id="bd-cards"></div>
+        </div>
+      </div>
+      <div class="board-add-row">
+        <input type="text" class="board-add-input" id="board-add-input" placeholder="Add a task..." autocomplete="off">
+        <button class="board-add-btn" id="board-add-btn" onclick="addBoardTask()">Add</button>
+      </div>
+    </div>
 
     <div id="terminal-view">
       <pre id="terminal-output"></pre>
@@ -802,10 +948,12 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   function finalizeStream() {
     if (currentStreamBubble) {
       currentStreamBubble.innerHTML = renderMarkdown(currentStreamText);
+      const msgEl = currentStreamBubble.parentElement;
       const timeDiv = document.createElement('div');
       timeDiv.className = 'message-time';
       timeDiv.textContent = formatTime(new Date().toISOString());
-      currentStreamBubble.parentElement.appendChild(timeDiv);
+      msgEl.appendChild(timeDiv);
+      addMessageActions(msgEl, currentStreamText);
       currentStreamBubble = null;
       currentStreamText = '';
       scrollToBottom(true);
@@ -919,10 +1067,12 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
             hideThinking();
             if (currentStreamBubble) {
               currentStreamBubble.innerHTML = renderMarkdown(data.content);
+              var msgParent = currentStreamBubble.parentElement;
               var timeDiv = document.createElement('div');
               timeDiv.className = 'message-time';
               timeDiv.textContent = formatTime(data.timestamp);
-              currentStreamBubble.parentElement.appendChild(timeDiv);
+              msgParent.appendChild(timeDiv);
+              addMessageActions(msgParent, data.content);
               currentStreamBubble = null; currentStreamText = '';
             } else {
               var div = document.createElement('div'); div.className = 'message';
@@ -930,6 +1080,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
                 '<div class="message-bubble assistant-bubble">' + renderMarkdown(data.content) + '</div>' +
                 '<div class="message-time">' + formatTime(data.timestamp) + '</div>';
               messagesEl.appendChild(div);
+              addMessageActions(div, data.content);
             }
             setBusy(false);
             scrollToBottom(true);
@@ -996,6 +1147,152 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   document.addEventListener('touchend', (e) => {
     const now = Date.now(); if (now - lastTap < 300) e.preventDefault(); lastTap = now;
   }, { passive: false });
+
+  // ── Message Action Buttons (Copy + Add to Board) ────
+  function addMessageActions(msgEl, rawText) {
+    const actions = document.createElement('div');
+    actions.className = 'message-actions';
+
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'action-btn';
+    copyBtn.innerHTML = '📋 Copy';
+    copyBtn.onclick = async function() {
+      try {
+        await navigator.clipboard.writeText(rawText);
+        copyBtn.classList.add('success');
+        copyBtn.innerHTML = '✓ Copied!';
+        setTimeout(() => { copyBtn.classList.remove('success'); copyBtn.innerHTML = '📋 Copy'; }, 2000);
+      } catch { copyBtn.innerHTML = '✗ Failed'; setTimeout(() => { copyBtn.innerHTML = '📋 Copy'; }, 2000); }
+    };
+
+    // Add to Board button
+    const boardBtn = document.createElement('button');
+    boardBtn.className = 'action-btn';
+    boardBtn.innerHTML = '📌 Add to Board';
+    boardBtn.onclick = async function() {
+      try {
+        // Truncate long messages for the task card
+        const taskText = rawText.length > 200 ? rawText.slice(0, 197) + '...' : rawText;
+        const res = await authedFetch('/add-task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: taskText }),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          boardBtn.classList.add('success');
+          boardBtn.innerHTML = '✓ Added!';
+          fetchBoardData(); // refresh inline board
+          setTimeout(() => { boardBtn.classList.remove('success'); boardBtn.innerHTML = '📌 Add to Board'; }, 2000);
+        } else {
+          boardBtn.innerHTML = '✗ ' + (result.error || 'Failed');
+          setTimeout(() => { boardBtn.innerHTML = '📌 Add to Board'; }, 2000);
+        }
+      } catch {
+        boardBtn.innerHTML = '✗ Error';
+        setTimeout(() => { boardBtn.innerHTML = '📌 Add to Board'; }, 2000);
+      }
+    };
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(boardBtn);
+    msgEl.appendChild(actions);
+  }
+
+  // ── Inline Board Panel ──────────────────────────────
+  let boardOpen = false;
+  let boardPollTimer = null;
+  const boardPanel = document.getElementById('board-panel');
+  const boardToggleBtn = document.getElementById('board-toggle-btn');
+  const boardAddInput = document.getElementById('board-add-input');
+  const boardTaskCount = document.getElementById('board-task-count');
+  const bpCards = document.getElementById('bp-cards');
+  const bwCards = document.getElementById('bw-cards');
+  const bdCards = document.getElementById('bd-cards');
+  const bpCount = document.getElementById('bp-count');
+  const bwCount = document.getElementById('bw-count');
+  const bdCount = document.getElementById('bd-count');
+
+  window.toggleBoard = function() {
+    boardOpen = !boardOpen;
+    chatScreen.classList.toggle('board-open', boardOpen);
+    boardPanel.classList.toggle('visible', boardOpen);
+    boardToggleBtn.classList.toggle('active', boardOpen);
+    if (boardOpen) {
+      fetchBoardData();
+      boardPollTimer = setInterval(fetchBoardData, 5000);
+    } else {
+      if (boardPollTimer) { clearInterval(boardPollTimer); boardPollTimer = null; }
+    }
+  };
+
+  async function fetchBoardData() {
+    try {
+      const res = await authedFetch('/api/board-data');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderBoardPanel(data);
+    } catch {}
+  }
+
+  function renderBoardPanel(data) {
+    const tasks = data.tasks || [];
+    const pending = tasks.filter(t => t.status === 'pending');
+    const working = tasks.filter(t => t.status === 'working');
+    const done = tasks.filter(t => t.status === 'completed');
+
+    boardTaskCount.textContent = tasks.length + ' task' + (tasks.length !== 1 ? 's' : '');
+    bpCount.textContent = pending.length;
+    bwCount.textContent = working.length;
+    bdCount.textContent = done.length;
+
+    renderBoardCol(bpCards, pending);
+    renderBoardCol(bwCards, working);
+    renderBoardCol(bdCards, done);
+  }
+
+  function renderBoardCol(container, tasks) {
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="board-col-empty">Empty</div>';
+      return;
+    }
+    container.innerHTML = '';
+    for (const t of tasks.slice(0, 20)) {
+      const card = document.createElement('div');
+      card.className = 'board-card';
+      card.textContent = t.description || t.text || 'Untitled';
+      container.appendChild(card);
+    }
+    if (tasks.length > 20) {
+      const more = document.createElement('div');
+      more.className = 'board-col-empty';
+      more.textContent = '+' + (tasks.length - 20) + ' more';
+      container.appendChild(more);
+    }
+  }
+
+  window.addBoardTask = async function() {
+    const text = boardAddInput.value.trim();
+    if (!text) return;
+    boardAddInput.value = '';
+    try {
+      const res = await authedFetch('/add-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const result = await res.json();
+      if (result.ok) fetchBoardData();
+    } catch {}
+  };
+
+  // Enter key in board input
+  if (boardAddInput) {
+    boardAddInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); addBoardTask(); }
+    });
+  }
 })();
 </script>
 </body>

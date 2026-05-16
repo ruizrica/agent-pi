@@ -4,8 +4,9 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@mariozechner/pi-tui", () => ({
+vi.mock("@earendil-works/pi-tui", () => ({
 	truncateToWidth: (s: string) => s,
+	visibleWidth: (s: string) => s.length,
 }));
 
 vi.mock("node:fs", () => ({
@@ -22,8 +23,37 @@ function createExtension() {
 		on: (event: string, handler: any) => {
 			handlers[event] = handler;
 		},
+		getThinkingLevel: () => "off",
 	};
 	return { handlers, pi };
+}
+
+function createTheme() {
+	return {
+		fg: (_color: string, text: string) => text,
+		bold: (text: string) => text,
+	};
+}
+
+function createCtx() {
+	let footerFactory: ((tui: any, theme: any, footerData: any) => any) | undefined;
+	return {
+		model: { name: "Claude 4 Opus", contextWindow: 200000 },
+		cwd: "/Users/ricardo/Workshop/GitHub/agent-pi",
+		getContextUsage: () => ({ percent: 42 }),
+		ui: {
+			setFooter: (factory: any) => {
+				footerFactory = factory;
+			},
+		},
+		getFooterRenderer: () => {
+			if (!footerFactory) throw new Error("Footer factory not registered");
+			const instance = footerFactory({ requestRender() {} }, createTheme(), {
+				onBranchChange: () => () => {},
+			});
+			return instance.render;
+		},
+	};
 }
 
 describe("footer (post-refactor)", () => {
@@ -54,6 +84,27 @@ describe("footer (post-refactor)", () => {
 
 		expect(handlers["session_start"]).toBeDefined();
 		expect(handlers["session_shutdown"]).toBeDefined();
+	});
+});
+
+describe("footer rendering", () => {
+	beforeEach(() => {
+		vi.resetModules();
+		(globalThis as any).__piRefreshFooter = undefined;
+	});
+
+	it("renders a single line footer", async () => {
+		const { handlers, pi } = createExtension();
+		const extension = await import("../footer.ts");
+		extension.default(pi);
+		const ctx = createCtx();
+		await handlers["session_start"]({}, ctx);
+		const render = ctx.getFooterRenderer();
+
+		const lines = render(120);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toContain("opus 4 | 42% / 200K");
+		expect(lines[0]).toContain("thinking: off");
 	});
 });
 

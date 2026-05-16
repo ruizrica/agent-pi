@@ -245,4 +245,25 @@ pipeline-b:
 		const configs = parsePipelineYaml(yaml);
 		expect(configs[0].phases[0].agents[0].task_template).toBe("$TASK with context: $CONTEXT");
 	});
+
+	it("parses custom post-approval pipeline fields for worktrees and merge agent", () => {
+		const yaml = `approved-plan-execution:
+  description: "Post approval"
+  review_max_loops: 3
+  phases:
+    - name: execute
+      description: "Run builders"
+      mode: parallel
+      uses_worktrees: true
+      agents: []
+    - name: merge
+      description: "Merge branches"
+      mode: sequential
+      merge_agent: paladin
+      agents: []`;
+
+		const configs = parsePipelineYaml(yaml);
+		expect(configs[0].phases[0].uses_worktrees).toBe(true);
+		expect(configs[0].phases[1].merge_agent).toBe("paladin");
+	});
 });

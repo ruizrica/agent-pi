@@ -1,20 +1,29 @@
 // ABOUTME: Disk Cleanup viewer — opens a browser GUI for scanning, analyzing, and deleting junk files.
 // ABOUTME: Provides /cleanup slash command and show_cleanup tool. AI analysis via Claude Agent SDK (OAuth).
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
-import { fileURLToPath } from "node:url";
+import type { Server, IncomingMessage, ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateCleanupViewerHTML } from "./lib/cleanup-viewer-html.ts";
+import { generateCleanupViewerHTML } from "./lib/viewers/cleanup-viewer-html.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
+import { runClaudeRuntime } from "./lib/claude/claude-runtime.ts";
+import {
+	CLEANUP_CATEGORIES as CATEGORIES,
+	categorizeEntry,
+	formatSize,
+	isProtected,
+	summarizeCleanupResults,
+	type ScanFile,
+} from "./lib/cleanup/cleanup-domain.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -25,85 +34,10 @@ interface CleanupResult {
 
 // ── Config ───────────────────────────────────────────────────────────
 
-const PROTECTED_DIRS = new Set([
-	"/System", "/Library", "/usr", "/bin", "/sbin",
-	"/private/var/protected", "/private/etc", "/etc", "/cores",
-]);
-
 const MAX_DEPTH = Infinity;
 const MAX_FILES = Infinity;
 
-const CATEGORIES: Record<string, {
-	label: string;
-	extensions?: Set<string>;
-	names?: Set<string>;
-	directories?: Set<string>;
-}> = {
-	temp: {
-		label: "Temporary Files",
-		extensions: new Set([".tmp", ".temp", ".swp", ".swo", ".bak", ".old", ".log"]),
-		names: new Set([".DS_Store", "Thumbs.db", "desktop.ini"]),
-	},
-	compiled: {
-		label: "Compiled / Build Artifacts",
-		extensions: new Set([".o", ".obj", ".pyc", ".pyo", ".class", ".dSYM"]),
-		directories: new Set([
-			"node_modules", "__pycache__", "dist", "build", ".next",
-			"target", ".cache", ".parcel-cache", ".turbo",
-		]),
-	},
-	archives: {
-		label: "Archives",
-		extensions: new Set([
-			".zip", ".tar", ".tar.gz", ".tgz", ".rar", ".7z",
-			".bz2", ".xz", ".gz", ".dmg", ".iso",
-		]),
-	},
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function formatSize(bytes: number): string {
-	if (bytes === 0) return "0 B";
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + units[i];
-}
-
-function isProtected(dirPath: string): boolean {
-	const resolved = path.resolve(dirPath);
-	for (const p of PROTECTED_DIRS) {
-		if (resolved === p || resolved.startsWith(p + "/")) return true;
-	}
-	return false;
-}
-
-function categorizeEntry(name: string, isDirectory: boolean): string | null {
-	if (isDirectory) {
-		if (CATEGORIES.compiled.directories?.has(name)) return "compiled";
-		return null;
-	}
-	const ext = path.extname(name).toLowerCase();
-	const baseName = path.basename(name);
-	const doubleExt = name.includes(".tar.") ? ".tar" + ext : ext;
-
-	if (CATEGORIES.temp.names?.has(baseName)) return "temp";
-	if (CATEGORIES.temp.extensions?.has(ext)) return "temp";
-	if (CATEGORIES.compiled.extensions?.has(ext)) return "compiled";
-	if (CATEGORIES.archives.extensions?.has(ext) || CATEGORIES.archives.extensions?.has(doubleExt)) return "archives";
-	return null;
-}
-
 // ── Scanner ──────────────────────────────────────────────────────────
-
-interface ScanFile {
-	path: string;
-	name: string;
-	size: number;
-	sizeFormatted: string;
-	modified: string;
-	isDirectory: boolean;
-}
 
 async function scanDirectory(rootDir: string, enabledCategories: string[]) {
 	const results: Record<string, ScanFile[]> = { temp: [], compiled: [], archives: [] };
@@ -199,7 +133,7 @@ async function readDeletionLog(): Promise<Record<string, unknown>[]> {
 	} catch { return []; }
 }
 
-// ── AI Analysis (Agent SDK with OAuth) ───────────────────────────────
+// ── AI Analysis (Claude Code CLI runtime) ───────────────────────────
 
 async function streamAIAnalysis(
 	summary: Record<string, unknown>,
@@ -223,28 +157,28 @@ Respond with:
 
 Keep it concise and practical. No emojis. Use plain text formatting with dashes for lists.`;
 
+	let bufferedText = "";
 	try {
-		const { query } = await import("@anthropic-ai/claude-agent-sdk");
-		const stream = query({
+		const result = await runClaudeRuntime({
+			profile: "claude-advisor",
 			prompt,
-			options: {
-				tools: [],
-				maxTurns: 1,
-				systemPrompt: "You are a concise disk cleanup advisor. Provide practical, safety-conscious recommendations for file deletion. Be direct and clear. No emojis. Use elegant, minimal formatting.",
+			tools: "read,grep,find,ls,bash",
+			systemPrompt: "You are a concise disk cleanup advisor. Provide practical, safety-conscious recommendations for file deletion. Be direct and clear. No emojis. Use elegant, minimal formatting.",
+			onTextDelta: (delta) => {
+				if (!delta) return;
+				bufferedText += delta;
+				res.write(`data: ${JSON.stringify({ text: delta })}\n\n`);
+			},
+			onStderr: (chunk) => {
+				if (!chunk?.trim()) return;
+				res.write(`data: ${JSON.stringify({ status: chunk.trim() })}\n\n`);
 			},
 		});
 
-		for await (const message of stream) {
-			if ((message as any).type === "assistant") {
-				for (const block of (message as any).message.content) {
-					if (block.type === "text") {
-						res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
-					}
-				}
-			} else if ((message as any).type === "result") {
-				res.write(`data: ${JSON.stringify({ done: true, result: (message as any).result })}\n\n`);
-			}
+		if (!bufferedText && result.result) {
+			res.write(`data: ${JSON.stringify({ text: result.result })}\n\n`);
 		}
+		res.write(`data: ${JSON.stringify({ done: true, result: result.result })}\n\n`);
 	} catch (err: any) {
 		res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
 	}
@@ -260,243 +194,191 @@ function startCleanupServer(defaultDir: string): Promise<{
 	server: Server;
 	waitForResult: () => Promise<CleanupResult>;
 }> {
-	return new Promise((resolveSetup) => {
+	return new Promise(async (resolveSetup) => {
 		let resolveResult: (result: CleanupResult) => void;
 		let settled = false;
 		const settle = (result: CleanupResult) => {
 			if (settled) return;
 			settled = true;
-			resolveResult!(result);
+			resolveResult(result);
 		};
 		const resultPromise = new Promise<CleanupResult>((res) => { resolveResult = res; });
 
-		const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-
-			const url = new URL(req.url || "/", "http://localhost");
-
-			// Serve main page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateCleanupViewerHTML({ port, defaultDir });
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Logo
-			if (req.method === "GET" && url.pathname === "/logo.png") {
-				try {
-					const logoPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = fs.readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch { res.writeHead(404); res.end(); }
-				return;
-			}
-
-			// Scan
-			if (req.method === "POST" && url.pathname === "/scan") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", async () => {
-					try {
-						const data = JSON.parse(body);
-						const dir = data.directory || "/Users/";
-						const cats = data.categories || ["temp", "compiled", "archives"];
-
-						try {
-							const realDir = await fsp.realpath(dir);
-							if (isProtected(realDir)) {
-								res.writeHead(400, { "Content-Type": "application/json" });
-								res.end(JSON.stringify({ error: "Cannot scan protected system directory." }));
-								return;
-							}
-							const stat = await fsp.stat(realDir);
-							if (!stat.isDirectory()) {
-								res.writeHead(400, { "Content-Type": "application/json" });
-								res.end(JSON.stringify({ error: "Path is not a directory." }));
-								return;
-							}
-						} catch (err: any) {
-							res.writeHead(400, { "Content-Type": "application/json" });
-							res.end(JSON.stringify({ error: `Invalid path: ${err.message}` }));
-							return;
-						}
-
-						const start = Date.now();
-						const results = await scanDirectory(dir, cats);
-						const elapsed = Date.now() - start;
-
-						const summary: Record<string, any> = {};
-						let totalFiles = 0;
-						let totalSize = 0;
-
-						for (const [cat, files] of Object.entries(results)) {
-							const catSize = files.reduce((s, f) => s + f.size, 0);
-							summary[cat] = { count: files.length, size: catSize, sizeFormatted: formatSize(catSize) };
-							totalFiles += files.length;
-							totalSize += catSize;
-						}
-
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({
-							results, summary, totalFiles, totalSize,
-							totalSizeFormatted: formatSize(totalSize),
-							scanTime: elapsed, directory: dir,
-						}));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			// Delete
-			if (req.method === "POST" && url.pathname === "/delete") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", async () => {
-					try {
-						const data = JSON.parse(body);
-						const files: string[] = data.files || [];
-						if (files.length === 0) {
-							res.writeHead(400, { "Content-Type": "application/json" });
-							res.end(JSON.stringify({ error: "No files specified." }));
-							return;
-						}
-
-						const results: any[] = [];
-						for (const filePath of files) {
+		const handle = await createViewerServer({
+			getHtml: (port) => generateCleanupViewerHTML({ port, defaultDir }),
+			routes: [
+				{
+					method: "POST",
+					path: "/scan",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", async () => {
 							try {
-								const real = await fsp.realpath(filePath);
-								if (isProtected(real)) {
-									results.push({ path: filePath, success: false, error: "Protected path" });
-									continue;
-								}
-								const stat = await fsp.stat(real);
-								const size = stat.isDirectory()
-									? await (async function getSize(d: string): Promise<number> {
-										let t = 0;
-										try {
-											const ents = await fsp.readdir(d, { withFileTypes: true });
-											for (const e of ents) {
-												const fp = path.join(d, e.name);
-												try {
-													const s = await fsp.lstat(fp);
-													if (s.isDirectory()) t += await getSize(fp);
-													else t += s.size;
-												} catch { /* skip */ }
-											}
-										} catch { /* skip */ }
-										return t;
-									})(real)
-									: stat.size;
+								const data = JSON.parse(body);
+								const dir = data.directory || "/Users/";
+								const cats = data.categories || ["temp", "compiled", "archives"];
 
-								if (stat.isDirectory()) {
-									await fsp.rm(real, { recursive: true, force: true });
-								} else {
-									await fsp.unlink(real);
+								try {
+									const realDir = await fsp.realpath(dir);
+									if (isProtected(realDir)) {
+										res.writeHead(400, { "Content-Type": "application/json" });
+										res.end(JSON.stringify({ error: "Cannot scan protected system directory." }));
+										return;
+									}
+									const stat = await fsp.stat(realDir);
+									if (!stat.isDirectory()) {
+										res.writeHead(400, { "Content-Type": "application/json" });
+										res.end(JSON.stringify({ error: "Path is not a directory." }));
+										return;
+									}
+								} catch (err: any) {
+									res.writeHead(400, { "Content-Type": "application/json" });
+									res.end(JSON.stringify({ error: `Invalid path: ${err.message}` }));
+									return;
 								}
 
-								results.push({ path: filePath, success: true, size });
-								await appendDeletionLog({ path: filePath, size, timestamp: new Date().toISOString(), success: true });
+								const start = Date.now();
+								const results = await scanDirectory(dir, cats);
+								const elapsed = Date.now() - start;
+
+								const { summary, totalFiles, totalSize, totalSizeFormatted } = summarizeCleanupResults(results);
+
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({
+									results, summary, totalFiles, totalSize,
+									totalSizeFormatted,
+									scanTime: elapsed, directory: dir,
+								}));
 							} catch (err: any) {
-								results.push({ path: filePath, success: false, error: err.message });
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err.message }));
 							}
-						}
+						});
+					},
+				},
+				{
+					method: "POST",
+					path: "/delete",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", async () => {
+							try {
+								const data = JSON.parse(body);
+								const files: string[] = data.files || [];
+								if (files.length === 0) {
+									res.writeHead(400, { "Content-Type": "application/json" });
+									res.end(JSON.stringify({ error: "No files specified." }));
+									return;
+								}
 
-						const deleted = results.filter((r) => r.success);
-						const freedBytes = deleted.reduce((s: number, r: any) => s + (r.size || 0), 0);
+								const results: any[] = [];
+								for (const filePath of files) {
+									try {
+										const real = await fsp.realpath(filePath);
+										if (isProtected(real)) {
+											results.push({ path: filePath, success: false, error: "Protected path" });
+											continue;
+										}
+										const stat = await fsp.stat(real);
+										const size = stat.isDirectory()
+											? await (async function getSize(d: string): Promise<number> {
+												let t = 0;
+												try {
+													const ents = await fsp.readdir(d, { withFileTypes: true });
+													for (const e of ents) {
+														const fp = path.join(d, e.name);
+														try {
+															const s = await fsp.lstat(fp);
+															if (s.isDirectory()) t += await getSize(fp);
+															else t += s.size;
+														} catch { /* skip */ }
+													}
+												} catch { /* skip */ }
+												return t;
+											})(real)
+											: stat.size;
 
+										if (stat.isDirectory()) {
+											await fsp.rm(real, { recursive: true, force: true });
+										} else {
+											await fsp.unlink(real);
+										}
+
+										results.push({ path: filePath, success: true, size });
+										await appendDeletionLog({ path: filePath, size, timestamp: new Date().toISOString(), success: true });
+									} catch (err: any) {
+										results.push({ path: filePath, success: false, error: err.message });
+									}
+								}
+
+								const deleted = results.filter((r) => r.success);
+								const freedBytes = deleted.reduce((s: number, r: any) => s + (r.size || 0), 0);
+
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({
+									results, deletedCount: deleted.length,
+									failedCount: results.length - deleted.length,
+									freedBytes, freedFormatted: formatSize(freedBytes),
+								}));
+							} catch (err: any) {
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err.message }));
+							}
+						});
+					},
+				},
+				{
+					method: "POST",
+					path: "/analyze",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", async () => {
+							res.setHeader("Content-Type", "text/event-stream");
+							res.setHeader("Cache-Control", "no-cache");
+							res.setHeader("Connection", "keep-alive");
+							res.flushHeaders();
+
+							try {
+								const data = JSON.parse(body);
+								await streamAIAnalysis(data.summary, data.sampleFiles, res);
+							} catch (err: any) {
+								res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+								res.write("data: [DONE]\n\n");
+								res.end();
+							}
+						});
+					},
+				},
+				{
+					method: "GET",
+					path: "/history",
+					handler: async (req, res) => {
+						const entries = await readDeletionLog();
 						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({
-							results, deletedCount: deleted.length,
-							failedCount: results.length - deleted.length,
-							freedBytes, freedFormatted: formatSize(freedBytes),
-						}));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			// AI Analyze
-			if (req.method === "POST" && url.pathname === "/analyze") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", async () => {
-					res.setHeader("Content-Type", "text/event-stream");
-					res.setHeader("Cache-Control", "no-cache");
-					res.setHeader("Connection", "keep-alive");
-					res.flushHeaders();
-
-					try {
-						const data = JSON.parse(body);
-						await streamAIAnalysis(data.summary, data.sampleFiles, res);
-					} catch (err: any) {
-						res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-						res.write("data: [DONE]\n\n");
-						res.end();
-					}
-				});
-				return;
-			}
-
-			// History
-			if (req.method === "GET" && url.pathname === "/history") {
-				const entries = await readDeletionLog();
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify(entries));
-				return;
-			}
-
-			// Result (done/close)
-			if (req.method === "POST" && url.pathname === "/result") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						settle({ action: data.action || "done", deletedCount: data.deletedCount });
-					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
-					}
-				});
-				return;
-			}
-
-			res.writeHead(404); res.end("Not found");
+						res.end(JSON.stringify(entries));
+					},
+				},
+			],
+			onResult: (body) => {
+				const data = body as any;
+				settle({ action: data.action || "done", deletedCount: data.deletedCount });
+			},
 		});
 
-		server.on("close", () => { settle({ action: "closed" }); });
+		// Handle server close as fallback
+		handle.server.on("close", () => {
+			settle({ action: "closed" });
+		});
 
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({ port: addr.port, server, waitForResult: () => resultPromise });
+		resolveSetup({
+			port: handle.port,
+			server: handle.server,
+			waitForResult: () => resultPromise,
 		});
 	});
-}
-
-function openBrowser(url: string): void {
-	try { execSync(`open "${url}"`, { stdio: "ignore" }); }
-	catch {
-		try { execSync(`xdg-open "${url}"`, { stdio: "ignore" }); }
-		catch {
-			try { execSync(`start "${url}"`, { stdio: "ignore" }); }
-			catch { /* no browser */ }
-		}
-	}
 }
 
 // ── Tool Parameters ──────────────────────────────────────────────────
@@ -558,7 +440,7 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Open a disk cleanup viewer in the browser. " +
 			"Scans for temporary files, compiled artifacts, and archives. " +
-			"Includes AI-powered analysis via Claude Agent SDK. " +
+			"Includes AI-powered analysis via the local Claude Code CLI runtime. " +
 			"User can select and delete files with confirmation.",
 		parameters: ShowCleanupParams,
 

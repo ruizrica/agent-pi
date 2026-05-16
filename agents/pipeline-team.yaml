@@ -43,3 +43,41 @@ plan-build:
       agents:
         - role: builder
           task_template: "Implement this plan:\n\n$INPUT"
+
+approved-plan-execution:
+  description: "Post-approval execution pipeline with refinement, isolated worktrees, review, remediation, and merge"
+  review_max_loops: 3
+  phases:
+    - name: refine
+      description: "Convert the approved plan into structured micro-tasks with file scopes and line ranges"
+      mode: interactive
+      agents:
+        - role: planner
+          task_template: "Refine the approved plan into structured micro-tasks. For each micro-task include: id, title, description, files, line_ranges, symbols, depends_on, parallel_group, verification. Approved plan:\n\n$PLAN"
+    - name: execute
+      description: "Dispatch builders in isolated worktrees using the refined micro-task artifact"
+      mode: parallel
+      uses_worktrees: true
+      agents:
+        - role: builder
+          task_template: "Execute the assigned micro-task in your isolated worktree. Stay within the specified files and line ranges. Approved plan:\n\n$PLAN\n\nAccumulated context:\n\n$CONTEXT"
+    - name: review
+      description: "Review the integrated work against the approved plan and micro-task artifact"
+      mode: sequential
+      max_iterations: 3
+      agents:
+        - role: reviewer
+          task_template: "Review the implementation against the approved plan and refined micro-task artifact. Report APPROVED if acceptable, otherwise list issues with file paths and concrete remediation guidance.\n\nPlan:\n$PLAN\n\nContext:\n$CONTEXT"
+    - name: remediate
+      description: "Address failed review findings with a stronger reviewer/remediator path"
+      mode: sequential
+      agents:
+        - role: paladin
+          task_template: "Given the failed review and approved plan, produce remediation guidance and resolve the issues required before merge.\n\nPlan:\n$PLAN\n\nReview:\n$REVIEW\n\nContext:\n$CONTEXT"
+    - name: merge
+      description: "Merge worktree branches, resolve conflicts, and produce the final integrated result"
+      mode: sequential
+      merge_agent: paladin
+      agents:
+        - role: paladin
+          task_template: "Merge the completed worktree branches into a final integrated result. Resolve merge conflicts, preserve approved intent, and summarize the final merged state and commit readiness.\n\nPlan:\n$PLAN\n\nContext:\n$CONTEXT\n\nReview:\n$REVIEW"

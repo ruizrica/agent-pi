@@ -1,20 +1,24 @@
 // ABOUTME: Spec Viewer — opens a multi-page browser GUI for reviewing, commenting, and approving specifications.
 // ABOUTME: Wizard-style navigation between spec docs, inline comment threads, visual asset gallery, markdown editing.
+// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname, resolve, relative } from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
-import { generateSpecViewerHTML, type SpecDocument } from "./lib/spec-viewer-html.ts";
+import { discoverSpecDocuments } from "./lib/spec-documents.ts";
+import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaffold.ts";
+import { generateSpecViewerHTML, type SpecDocument } from "./lib/viewers/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
 import { upsertPersistedReport } from "./lib/report-index.ts";
+import { buildSpecSnapshot, type SpecSnapshot } from "./lib/viewer-snapshots.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
+import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
+import { getProjectContext } from "./lib/project-context.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -32,6 +36,7 @@ interface SpecViewerResult {
 	comments: SpecComment[];
 	markdownChanges: Record<string, string>;
 	modified: boolean;
+	feedback?: string;
 }
 
 // ── MIME Types ────────────────────────────────────────────────────────
@@ -50,106 +55,6 @@ const MIME_TYPES: Record<string, string> = {
 	".js": "application/javascript",
 	".json": "application/json",
 };
-
-// ── Folder Discovery ─────────────────────────────────────────────────
-
-function discoverSpecDocuments(folderPath: string): SpecDocument[] {
-	const docs: SpecDocument[] = [];
-
-	// 1. spec.md — main spec document
-	const specPath = join(folderPath, "spec.md");
-	if (existsSync(specPath)) {
-		docs.push({
-			key: "spec",
-			label: "Spec",
-			markdown: readFileSync(specPath, "utf-8"),
-			filePath: "spec.md",
-		});
-	}
-
-	// 2. planning/requirements.md
-	const reqPath = join(folderPath, "planning", "requirements.md");
-	if (existsSync(reqPath)) {
-		docs.push({
-			key: "requirements",
-			label: "Requirements",
-			markdown: readFileSync(reqPath, "utf-8"),
-			filePath: "planning/requirements.md",
-		});
-	}
-
-	// 3. Tasks — planning/tasks.md or any tasks*.md in folder
-	const tasksPath = join(folderPath, "planning", "tasks.md");
-	if (existsSync(tasksPath)) {
-		docs.push({
-			key: "tasks",
-			label: "Tasks",
-			markdown: readFileSync(tasksPath, "utf-8"),
-			filePath: "planning/tasks.md",
-		});
-	} else {
-		// Check root for tasks*.md
-		try {
-			const rootFiles = readdirSync(folderPath);
-			const taskFile = rootFiles.find((f) => f.startsWith("tasks") && f.endsWith(".md"));
-			if (taskFile) {
-				docs.push({
-					key: "tasks",
-					label: "Tasks",
-					markdown: readFileSync(join(folderPath, taskFile), "utf-8"),
-					filePath: taskFile,
-				});
-			}
-		} catch {}
-	}
-
-	// 4. Visuals — planning/visuals/ folder
-	const visualsDir = join(folderPath, "planning", "visuals");
-	if (existsSync(visualsDir)) {
-		try {
-			const visualFiles = readdirSync(visualsDir)
-				.filter((f) => {
-					const ext = extname(f).toLowerCase();
-					return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".html", ".htm"].includes(ext);
-				})
-				.map((f) => join("planning", "visuals", f));
-
-			if (visualFiles.length > 0) {
-				docs.push({
-					key: "visuals",
-					label: "Visuals",
-					markdown: "",
-					filePath: "planning/visuals/",
-					isVisuals: true,
-					visualFiles,
-				});
-			}
-		} catch {}
-	}
-
-	// 5. Other planning docs (excluding already-added ones)
-	const planningDir = join(folderPath, "planning");
-	if (existsSync(planningDir)) {
-		try {
-			const knownFiles = new Set(["requirements.md", "tasks.md", "initialization.md", "questions.md"]);
-			const planningFiles = readdirSync(planningDir)
-				.filter((f) => f.endsWith(".md") && !knownFiles.has(f))
-				.sort();
-
-			for (const file of planningFiles) {
-				const key = "other-" + file.replace(".md", "");
-				docs.push({
-					key,
-					label: basename(file, ".md").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-					markdown: readFileSync(join(planningDir, file), "utf-8"),
-					filePath: join("planning", file),
-				});
-			}
-		} catch {}
-	}
-
-	return docs;
-}
 
 // ── HTTP Server ──────────────────────────────────────────────────────
 
@@ -176,176 +81,144 @@ function startSpecViewerServer(
 	folderPath: string,
 	documents: SpecDocument[],
 	title: string,
+	projectContext: ReturnType<typeof getProjectContext>,
 	existingComments: SpecComment[],
-): Promise<{ port: number; server: Server; waitForResult: () => Promise<SpecViewerResult> }> {
-	return new Promise((resolveSetup) => {
-		let resolveResult: (result: SpecViewerResult) => void;
-		const resultPromise = new Promise<SpecViewerResult>((res) => {
-			resolveResult = res;
-		});
+): Promise<ViewerServerHandle> {
+	let roundTripState = {
+		status: "idle",
+		feedback: "",
+		revision: 0,
+		changeSummary: [] as string[],
+		payload: {
+			documents: documents.map((doc) => ({ key: doc.key, markdown: doc.markdown })),
+		},
+	};
+	let lastKnownDocuments = documents.map((doc) => ({ key: doc.key, markdown: doc.markdown, filePath: doc.filePath, isVisuals: doc.isVisuals }));
 
-		const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-			res.setHeader("Access-Control-Allow-Origin", "*");
-			res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-			res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-			if (req.method === "OPTIONS") {
-				res.writeHead(204);
-				res.end();
-				return;
-			}
-
-			const url = new URL(req.url || "/", `http://localhost`);
-
-			// Serve the main HTML page
-			if (req.method === "GET" && url.pathname === "/") {
-				const port = (server.address() as any)?.port || 0;
-				const html = generateSpecViewerHTML({
-					documents,
-					title,
-					port,
-					existingComments: JSON.stringify(existingComments),
-				});
-				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(html);
-				return;
-			}
-
-			// Serve the logo
-			if (req.method === "GET" && url.pathname === "/logo.png") {
+	return createViewerServer({
+		getHtml: (port) => generateSpecViewerHTML({
+			documents,
+			title,
+			port,
+			existingComments: JSON.stringify(existingComments),
+			roundTripEnabled: true,
+			projectContext,
+		}),
+		onFeedback: async (body) => {
+			roundTripState = {
+				status: "feedback_submitted",
+				feedback: body?.feedback || "",
+				revision: roundTripState.revision,
+				changeSummary: [],
+				payload: {
+					documents: lastKnownDocuments.map((doc) => ({ key: doc.key, markdown: doc.markdown })),
+				},
+			};
+		},
+		getRoundTripState: () => {
+			if (roundTripState.status === "feedback_submitted") {
 				try {
-					const logoPath = join(dirname(fileURLToPath(import.meta.url)), "assets", "agent-logo.png");
-					const logoData = readFileSync(logoPath);
-					res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=3600" });
-					res.end(logoData);
-				} catch {
-					res.writeHead(404);
-					res.end();
-				}
-				return;
+					const refreshed = documents.map((doc) => {
+						if (doc.isVisuals) return { key: doc.key, markdown: doc.markdown };
+						const latest = readFileSync(resolve(folderPath, doc.filePath), "utf-8");
+						return { key: doc.key, markdown: latest };
+					});
+					const changed = refreshed.some((doc, index) => doc.markdown !== lastKnownDocuments[index]?.markdown);
+					if (changed) {
+						lastKnownDocuments = refreshed.map((doc, index) => ({
+							key: doc.key,
+							markdown: doc.markdown,
+							filePath: documents[index]?.filePath,
+							isVisuals: documents[index]?.isVisuals,
+						}));
+						roundTripState = {
+							status: "updated",
+							feedback: roundTripState.feedback,
+							revision: roundTripState.revision + 1,
+							changeSummary: ["Applied requested spec updates", "Refreshed viewer content"],
+							payload: { documents: refreshed },
+						};
+					}
+				} catch {}
 			}
+			return roundTripState;
+		},
+		routes: [
+			{
+				method: "GET",
+				path: "/file",
+				handler: async (req, res, url) => {
+					const relPath = url.searchParams.get("path");
+					if (!relPath) {
+						res.writeHead(400);
+						res.end("Missing path parameter");
+						return;
+					}
 
-			// Serve files from spec folder (path-restricted)
-			if (req.method === "GET" && url.pathname === "/file") {
-				const relPath = url.searchParams.get("path");
-				if (!relPath) {
-					res.writeHead(400);
-					res.end("Missing path parameter");
-					return;
-				}
+					// Security: prevent directory traversal
+					const absPath = resolve(folderPath, relPath);
+					const normalizedFolder = resolve(folderPath);
+					if (!absPath.startsWith(normalizedFolder)) {
+						res.writeHead(403);
+						res.end("Access denied");
+						return;
+					}
 
-				// Security: prevent directory traversal
-				const absPath = resolve(folderPath, relPath);
-				const normalizedFolder = resolve(folderPath);
-				if (!absPath.startsWith(normalizedFolder)) {
-					res.writeHead(403);
-					res.end("Access denied");
-					return;
-				}
-
-				try {
-					const data = readFileSync(absPath);
-					const ext = extname(absPath).toLowerCase();
-					const contentType = MIME_TYPES[ext] || "application/octet-stream";
-					res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "public, max-age=300" });
-					res.end(data);
-				} catch {
-					res.writeHead(404);
-					res.end("File not found");
-				}
-				return;
-			}
-
-			// Handle result submission
-			if (req.method === "POST" && url.pathname === "/result") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
 					try {
-						const data = JSON.parse(body);
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-						resolveResult!({
-							action: data.action || "declined",
-							comments: data.comments || [],
-							markdownChanges: data.markdownChanges || {},
-							modified: data.modified || false,
-						});
+						const data = readFileSync(absPath);
+						const ext = extname(absPath).toLowerCase();
+						const contentType = MIME_TYPES[ext] || "application/octet-stream";
+						res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "public, max-age=300" });
+						res.end(data);
 					} catch {
-						res.writeHead(400, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: "Invalid JSON" }));
+						res.writeHead(404);
+						res.end("File not found");
 					}
-				});
-				return;
-			}
-
-			// Save comments
-			if (req.method === "POST" && url.pathname === "/save") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body);
-						const commentsPath = join(folderPath, "spec-comments.json");
-						writeFileSync(commentsPath, JSON.stringify({ comments: data.comments || [] }, null, 2), "utf-8");
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true }));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			if (req.method === "POST" && url.pathname === "/export-standalone") {
-				let body = "";
-				req.on("data", (chunk) => { body += chunk; });
-				req.on("end", () => {
-					try {
-						const data = JSON.parse(body || "{}");
-						const exportDocs = buildStandaloneSpecDocuments(folderPath, documents, data.markdownChanges || {});
-						const html = createSpecStandaloneExport({ title, documents: exportDocs });
-						const saved = saveStandaloneExport({ filePrefix: "spec-readonly", html });
-						res.writeHead(200, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
-					} catch (err: any) {
-						res.writeHead(500, { "Content-Type": "application/json" });
-						res.end(JSON.stringify({ error: err.message }));
-					}
-				});
-				return;
-			}
-
-			res.writeHead(404);
-			res.end("Not found");
-		});
-
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as any;
-			resolveSetup({
-				port: addr.port,
-				server,
-				waitForResult: () => resultPromise,
-			});
-		});
+				},
+			},
+			{
+				method: "POST",
+				path: "/save",
+				handler: async (req, res) => {
+					let body = "";
+					req.on("data", (chunk) => { body += chunk; });
+					req.on("end", () => {
+						try {
+							const data = JSON.parse(body);
+							const commentsPath = join(folderPath, "spec-comments.json");
+							writeFileSync(commentsPath, JSON.stringify({ comments: data.comments || [] }, null, 2), "utf-8");
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true }));
+						} catch (err: any) {
+							res.writeHead(500, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: err.message }));
+						}
+					});
+				},
+			},
+			{
+				method: "POST",
+				path: "/export-standalone",
+				handler: async (req, res) => {
+					let body = "";
+					req.on("data", (chunk) => { body += chunk; });
+					req.on("end", () => {
+						try {
+							const data = JSON.parse(body || "{}");
+							const exportDocs = buildStandaloneSpecDocuments(folderPath, documents, data.markdownChanges || {});
+							const html = createSpecStandaloneExport({ title, documents: exportDocs });
+							const saved = saveStandaloneExport({ filePrefix: "spec-readonly", html });
+							res.writeHead(200, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
+						} catch (err: any) {
+							res.writeHead(500, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ error: err.message }));
+						}
+					});
+				},
+			},
+		],
 	});
-}
-
-// ── Browser Helper ───────────────────────────────────────────────────
-
-function openBrowser(url: string): void {
-	try {
-		execSync(`open "${url}"`, { stdio: "ignore" });
-	} catch {
-		try {
-			execSync(`xdg-open "${url}"`, { stdio: "ignore" });
-		} catch {
-			try {
-				execSync(`start "${url}"`, { stdio: "ignore" });
-			} catch {}
-		}
-	}
 }
 
 // ── Comment Formatting ───────────────────────────────────────────────
@@ -363,19 +236,43 @@ function formatCommentsForAgent(comments: SpecComment[]): string {
 	return lines.join("\n").trim();
 }
 
+function formatRequestedChanges(commentSummary: string, feedback?: string): string {
+	const trimmedFeedback = (feedback || "").trim();
+	const sections: string[] = [];
+
+	if (trimmedFeedback) {
+		sections.push(`Requested changes:\n${trimmedFeedback}`);
+	}
+
+	if (commentSummary !== "(no comments)") {
+		sections.push(`Inline comments:\n${commentSummary}`);
+	}
+
+	if (sections.length === 0) return "(no change details provided)";
+	return sections.join("\n\n");
+}
+
+function buildSpecRevisionGuidance(commentSummary: string, feedback?: string): string {
+	const requestedChanges = formatRequestedChanges(commentSummary, feedback);
+	return `Revise the spec based on the requested changes below. Preserve approved sections that were not challenged, update the affected documents, and reopen the spec review flow once the revisions are applied.\n\n${requestedChanges}`;
+}
+
 // ── Tool Parameters ──────────────────────────────────────────────────
 
 const ShowSpecParams = Type.Object({
-	folder_path: Type.String({ description: "Path to the spec folder (e.g. context-os/specs/2025-06-25-feature/)" }),
+	folder_path: Type.String({ description: "Path to the spec folder (e.g. .kiro/specs/feature-name/)" }),
 	title: Type.Optional(Type.String({ description: "Title to display in the viewer header" })),
+	feature_idea: Type.Optional(Type.String({ description: "Optional raw feature idea used to scaffold Kiro spec documents when the folder is empty" })),
+	readonly: Type.Optional(Type.Boolean({ description: "Open the viewer in read-only mode (no edit/approve UI). Used by /reports re-opens." })),
+	payload_id: Type.Optional(Type.String({ description: "ID of a persisted report snapshot to load instead of folder_path. Used by /reports re-opens." })),
 });
 
 // ── Extension ────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
 	let piRef = pi;
-	let activeServer: Server | null = null;
-	let activeSession: { kind: "spec"; title: string; url: string; server: Server; onClose: () => void } | null = null;
+	let activeServer: any = null;
+	let activeSession: { kind: "spec"; title: string; url: string; server: any; onClose: () => void } | null = null;
 
 	function cleanupServer() {
 		const server = activeServer;
@@ -390,6 +287,34 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ── Core viewer logic ────────────────────────────────────────────
+
+	function prepareSpecFolder(
+		folderPath: string,
+		title: string,
+		featureIdea?: string,
+	): SpecScaffoldResult {
+		return ensureKiroSpecScaffold({
+			folderPath,
+			title,
+			featureIdea,
+		});
+	}
+
+	function parseSpecCommandArgs(args: string): { folderPath: string; featureIdea?: string } {
+		const trimmedArgs = args.trim();
+		const ideaFlag = " --idea ";
+		const ideaIndex = trimmedArgs.indexOf(ideaFlag);
+		if (ideaIndex === -1) {
+			return { folderPath: trimmedArgs };
+		}
+
+		const folderPath = trimmedArgs.slice(0, ideaIndex).trim();
+		const featureIdea = trimmedArgs.slice(ideaIndex + ideaFlag.length).trim();
+		return {
+			folderPath,
+			featureIdea: featureIdea || undefined,
+		};
+	}
 
 	async function runSpecViewer(
 		ctx: ExtensionContext,
@@ -414,21 +339,57 @@ export default function (pi: ExtensionAPI) {
 			} catch {}
 		}
 
-		// Start server
-		const { port, server, waitForResult } = await startSpecViewerServer(
+		// Try Commander first (multi-page spec viewer in native UI), but only
+		// treat it as approved/declined after Commander reports a real user action.
+		if (isCommanderAvailable()) {
+			const content = JSON.stringify({
+				folderPath,
+				pages: documents.map((doc) => ({
+					name: doc.label,
+					filePath: doc.filePath,
+					content: doc.markdown,
+				})),
+			});
+
+			const result = await openAndWaitInCommander({
+				content,
+				title: title || "Spec Viewer",
+				reportType: "spec",
+				mode: "approve",
+				format: "markdown",
+			}, ctx, {
+				includeContent: true,
+			});
+
+			if (result.inCommander) {
+				return {
+					action: result.action === "approved" ? "approved" : "declined",
+					comments: existingComments,
+					markdownChanges: {},
+					modified: false,
+					feedback: undefined,
+				};
+			}
+			// Fall through to browser if Commander is unavailable, times out, or disconnects
+		}
+
+		// Start browser-based server
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		const handle = await startSpecViewerServer(
 			folderPath,
 			documents,
 			title,
+			projectContext,
 			existingComments,
 		);
-		activeServer = server;
+		activeServer = handle.server;
 
-		const url = `http://127.0.0.1:${port}`;
+		const url = `http://127.0.0.1:${handle.port}`;
 		activeSession = {
 			kind: "spec",
 			title: "Spec viewer",
 			url,
-			server,
+			server: handle.server,
 			onClose: () => {
 				activeServer = null;
 				activeSession = null;
@@ -439,7 +400,7 @@ export default function (pi: ExtensionAPI) {
 		notifyViewerOpen(ctx, activeSession);
 
 		try {
-			const result = await waitForResult();
+			const result = await handle.waitForResult();
 
 			// Save any markdown changes back to files
 			if (result.modified && result.markdownChanges) {
@@ -463,10 +424,55 @@ export default function (pi: ExtensionAPI) {
 
 			try {
 				const editedDocCount = result.markdownChanges ? Object.keys(result.markdownChanges).length : 0;
+				const specContent = documents.map((doc) => `# ${doc.label}\n\n${doc.markdown}`).join("\n\n");
+
+				// Build a re-renderable snapshot of viewer state so /reports can
+				// re-open this spec in read-only mode without re-scanning the folder.
+				let snapshot: SpecSnapshot | undefined;
+				try {
+					const snapshotDocs = documents
+						.filter((d) => !d.isVisuals)
+						.map((d) => {
+							const lowerKey = (d.key || "").toLowerCase();
+							const kind: "requirements" | "design" | "tasks" =
+								lowerKey.includes("requirement") ? "requirements" :
+								lowerKey.includes("task") ? "tasks" : "design";
+							return { kind, path: d.filePath || "", markdown: d.markdown || "" };
+						});
+					const snapshotVisuals = documents
+						.filter((d) => d.isVisuals && Array.isArray(d.visualFiles))
+						.flatMap((d) =>
+							(d.visualFiles || []).map((vf) => ({
+								fileName: typeof vf === "string" ? basename(vf) : basename(String(vf)),
+								relativePath: typeof vf === "string" ? vf : String(vf),
+							})),
+						);
+					const snapshotComments = (result.comments || []).map((c: any) => ({
+						id: String(c.id ?? ""),
+						section: String(c.sectionId ?? c.section ?? c.document ?? ""),
+						body: String(c.text ?? c.body ?? ""),
+						author: String(c.author ?? "user"),
+						createdAt: String(c.timestamp ?? c.createdAt ?? new Date().toISOString()),
+					}));
+					snapshot = buildSpecSnapshot({
+						title,
+						summary: `${documents.length} document(s) reviewed`,
+						folderPath,
+						documents: snapshotDocs,
+						comments: snapshotComments,
+						visuals: snapshotVisuals,
+						featureIdea: feature_idea,
+						actionResult: result.action ? { action: String(result.action), note: result.feedback } : undefined,
+					});
+				} catch {
+					snapshot = undefined;
+				}
+
 				upsertPersistedReport({
 					category: "spec",
 					title,
 					summary: `${documents.length} document(s) reviewed${result.comments.length ? `, ${result.comments.length} comment(s)` : ""}`,
+					content: specContent,
 					sourcePath: folderPath,
 					viewerPath: folderPath,
 					viewerLabel: title,
@@ -478,10 +484,17 @@ export default function (pi: ExtensionAPI) {
 						editedDocCount,
 						documentCount: documents.length,
 					},
+					payload: snapshot,
 				});
 			} catch {}
 
-			return result;
+			return {
+				action: result.action || "declined",
+				comments: result.comments || [],
+				markdownChanges: result.markdownChanges || {},
+				modified: result.modified || false,
+				feedback: result.feedback,
+			};
 		} finally {
 			cleanupServer();
 		}
@@ -494,8 +507,8 @@ export default function (pi: ExtensionAPI) {
 		label: "Show Spec",
 		description:
 			"Open a multi-page spec viewer in the browser. Displays all spec documents " +
-			"(spec.md, requirements, tasks, visuals) as wizard steps with inline comment " +
-			"threads and markdown editing. Takes a spec folder path and auto-discovers documents.\n\n" +
+			"(Kiro-style requirements.md, design.md, tasks.md, plus visuals and legacy spec layouts) " +
+			"as wizard steps with inline comment threads and markdown editing. Takes a spec folder path, auto-discovers documents, and scaffolds missing Kiro docs for empty spec folders.\n\n" +
 			"The user can:\n" +
 			"- Navigate between documents using wizard steps\n" +
 			"- Add inline comments on any section (Google Docs-style)\n" +
@@ -505,25 +518,28 @@ export default function (pi: ExtensionAPI) {
 		parameters: ShowSpecParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const { folder_path, title: titleParam } = params as {
+			const { folder_path, title: titleParam, feature_idea } = params as {
 				folder_path: string;
 				title?: string;
+				feature_idea?: string;
 			};
 
-			// Resolve folder path
 			const folderPath = resolve(folder_path);
-			if (!existsSync(folderPath) || !statSync(folderPath).isDirectory()) {
+			if (existsSync(folderPath) && !statSync(folderPath).isDirectory()) {
 				return {
-					content: [{ type: "text" as const, text: `Error: folder not found: ${folder_path}` }],
+					content: [{ type: "text" as const, text: `Error: path is not a folder: ${folder_path}` }],
 				};
 			}
 
 			const displayTitle = titleParam || basename(folderPath);
+			const scaffoldResult = prepareSpecFolder(folderPath, displayTitle, feature_idea);
+			const scaffoldedNote = scaffoldResult.createdFiles.length > 0
+				? ` Scaffolded: ${scaffoldResult.createdFiles.join(", ")}.`
+				: "";
 
 			try {
 				const result = await runSpecViewer(ctx, folderPath, displayTitle);
 
-				// Handle approved
 				if (result.action === "approved") {
 					const modifiedNote = result.modified
 						? " (spec was edited by user — use the updated version)"
@@ -541,19 +557,21 @@ export default function (pi: ExtensionAPI) {
 					return {
 						content: [{
 							type: "text" as const,
-							text: `Spec approved by user.${modifiedNote} Modified files have been saved.`,
+							text: `Spec approved by user.${modifiedNote} Modified files have been saved.${scaffoldedNote}`,
 						}],
 						details: {
 							action: "approved" as const,
 							modified: result.modified,
 							folderPath: folder_path,
+							scaffoldedFiles: scaffoldResult.createdFiles,
 						},
 					};
 				}
 
-				// Handle changes requested
 				if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
+					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
+					const revisionGuidance = buildSpecRevisionGuidance(commentSummary, result.feedback);
 					const modifiedNote = result.modified
 						? "\n\nNote: Some documents were also edited inline — check the updated files."
 						: "";
@@ -561,7 +579,7 @@ export default function (pi: ExtensionAPI) {
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested on the spec. Here are the comments:\n\n${commentSummary}${modifiedNote}`,
+							content: `Changes requested on the spec. Here are the requested updates:\n\n${requestedChanges}${modifiedNote}\n\n${revisionGuidance}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -570,26 +588,28 @@ export default function (pi: ExtensionAPI) {
 					return {
 						content: [{
 							type: "text" as const,
-							text: `User requested changes to the spec. Comments:\n\n${commentSummary}${modifiedNote}`,
+							text: `User requested changes to the spec:\n\n${requestedChanges}${modifiedNote}${scaffoldedNote}`,
 						}],
 						details: {
 							action: "changes_requested" as const,
 							comments: result.comments,
 							modified: result.modified,
 							folderPath: folder_path,
+							scaffoldedFiles: scaffoldResult.createdFiles,
+							feedback: result.feedback,
 						},
 					};
 				}
 
-				// Declined / closed
 				return {
 					content: [{
 						type: "text" as const,
-						text: "User closed the spec viewer without approving. Ask if they want changes or have feedback.",
+						text: `User closed the spec viewer without approving. Ask if they want changes or have feedback.${scaffoldedNote}`,
 					}],
 					details: {
 						action: "declined" as const,
 						folderPath: folder_path,
+						scaffoldedFiles: scaffoldResult.createdFiles,
 					},
 				};
 			} catch (err: any) {
@@ -642,26 +662,30 @@ export default function (pi: ExtensionAPI) {
 	// ── /spec command ────────────────────────────────────────────────
 
 	pi.registerCommand("spec", {
-		description: "Open the spec viewer for a spec folder (e.g. /spec context-os/specs/2025-06-25-feature/)",
+		description: "Open the spec viewer for a spec folder (e.g. /spec .kiro/specs/feature-name/ --idea add a checkout flow). Empty folders are scaffolded with Kiro spec documents.",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui.notify("/spec requires interactive mode", "error");
 				return;
 			}
 
-			const folderPath = args.trim();
+			const { folderPath, featureIdea } = parseSpecCommandArgs(args);
 			if (!folderPath) {
-				ctx.ui.notify("Usage: /spec <folder-path>", "error");
+				ctx.ui.notify("Usage: /spec <folder-path> [--idea <feature idea>]", "error");
 				return;
 			}
 
 			const resolved = resolve(folderPath);
-			if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+			if (existsSync(resolved) && !statSync(resolved).isDirectory()) {
 				ctx.ui.notify(`Not a folder: ${folderPath}`, "error");
 				return;
 			}
 
 			const displayTitle = basename(resolved);
+			const scaffoldResult = prepareSpecFolder(resolved, displayTitle, featureIdea);
+			if (scaffoldResult.createdFiles.length > 0) {
+				ctx.ui.notify(`Scaffolded Kiro spec docs: ${scaffoldResult.createdFiles.join(", ")}`, "info");
+			}
 
 			try {
 				const result = await runSpecViewer(ctx, resolved, displayTitle);
@@ -678,15 +702,17 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.notify("Spec approved — continuing...", "info");
 				} else if (result.action === "changes_requested") {
 					const commentSummary = formatCommentsForAgent(result.comments);
+					const requestedChanges = formatRequestedChanges(commentSummary, result.feedback);
+					const revisionGuidance = buildSpecRevisionGuidance(commentSummary, result.feedback);
 					piRef.sendMessage(
 						{
 							customType: "spec-changes-requested",
-							content: `Changes requested:\n\n${commentSummary}`,
+							content: `Changes requested:\n\n${requestedChanges}\n\n${revisionGuidance}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
 					);
-					ctx.ui.notify("Changes requested — reviewing comments...", "info");
+					ctx.ui.notify("Changes requested — reviewing feedback...", "info");
 				} else if (result.modified) {
 					ctx.ui.notify("Spec was modified but no action taken.", "info");
 				}

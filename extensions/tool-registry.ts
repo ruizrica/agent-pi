@@ -1,7 +1,7 @@
 // ABOUTME: Tool Registry — in-memory index of all available tools with categorization and search.
 // ABOUTME: Provides the foundation for tool_search and call_tool extensions.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // ── Types ────────────────────────────────────────
 
@@ -45,8 +45,8 @@ const CATEGORY_RULES: { category: string; names: string[]; keywords: string[] }[
 	},
 	{
 		category: "agents",
-		names: ["dispatch_agent", "subagent_create", "subagent_create_batch", "subagent_continue", "subagent_remove", "subagent_list"],
-		keywords: ["agent", "subagent", "dispatch", "spawn"],
+		names: ["dispatch_agent", "subagent_create", "subagent_create_batch", "subagent_continue", "subagent_remove", "subagent_list", "claude_advisor"],
+		keywords: ["agent", "subagent", "dispatch", "spawn", "advisor", "claude"],
 	},
 	{
 		category: "workflow",

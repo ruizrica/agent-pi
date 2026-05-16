@@ -11,7 +11,7 @@
  * Usage: Add to packages in settings.json
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -38,6 +38,7 @@ function loadArt(): string {
 
 export function showBanner(ctx: ExtensionContext) {
 	if (!ctx.hasUI) return;
+	if ((globalThis as any).__piSummaryModeActive) return;
 
 	const art = loadArt();
 	const split = art.split("\n");
@@ -66,6 +67,9 @@ export function isBannerVisible(): boolean {
 }
 
 export default function (pi: ExtensionAPI) {
+
+
+	// @implement add comments for each line of code
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 		bannerCtx = ctx;

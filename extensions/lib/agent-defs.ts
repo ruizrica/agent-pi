@@ -3,7 +3,8 @@
 
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join, resolve } from "path";
-import { isToolkitCliAgent, TOOLKIT_WORKER_MODEL } from "./toolkit-cli.ts";
+import { isClaudeCliAgent } from "./claude/claude-config.ts";
+import { isToolkitCliAgent, normalizeToolkitAgentName, TOOLKIT_WORKER_MODEL } from "./toolkit-cli.ts";
 
 export interface AgentDef {
 	name: string;
@@ -84,9 +85,13 @@ export function resolveAgentModelString(
 	agentName: string,
 	config: AgentModelsConfig,
 ): string {
-	if (isToolkitCliAgent(agentName)) return TOOLKIT_WORKER_MODEL;
 	const key = agentName.toLowerCase();
 	const entry = config.agents[key];
+	if (isClaudeCliAgent(agentName)) {
+		if (entry) return buildModelString(entry);
+		return buildModelString(config.default);
+	}
+	if (isToolkitCliAgent(agentName)) return TOOLKIT_WORKER_MODEL;
 	if (entry) return buildModelString(entry);
 	return buildModelString(config.default);
 }
@@ -113,9 +118,14 @@ export function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfi
 
 		if (!frontmatter.name) return null;
 
-		// Model resolution: toolkit CLI worker override > models.json > frontmatter fallback > empty
+		// Model resolution: Claude profiles use configured model, generic toolkit CLIs use
+		// the shared worker model, then models.json/frontmatter fallback for everyone else.
 		let model = "";
-		if (isToolkitCliAgent(frontmatter.name)) {
+		if (isClaudeCliAgent(frontmatter.name) && modelsConfig) {
+			const key = frontmatter.name.toLowerCase();
+			const entry = modelsConfig.agents[key];
+			if (entry) model = buildModelString(entry);
+		} else if (isToolkitCliAgent(frontmatter.name)) {
 			model = TOOLKIT_WORKER_MODEL;
 		} else if (modelsConfig) {
 			const key = frontmatter.name.toLowerCase();
@@ -204,11 +214,41 @@ export function scanToolkitAgentDefs(
 /**
  * Resolve an agent definition by name (case-insensitive).
  * Returns the AgentDef if found, undefined otherwise.
+ *
+ * When modelsConfig is provided, supports dynamic builder variant resolution:
+ * if name matches `builder-*` and no .md file exists, generates a def from
+ * the base `builder.md` with the model overridden from models.json.
  */
 export function resolveAgentByName(
 	name: string,
 	agentDefs: Map<string, AgentDef>,
+	modelsConfig?: AgentModelsConfig,
 ): AgentDef | undefined {
 	const key = name.toLowerCase();
-	return agentDefs.get(key);
+	const direct = agentDefs.get(key);
+	if (direct) return direct;
+
+	const normalizedToolkit = normalizeToolkitAgentName(name);
+	if (normalizedToolkit && normalizedToolkit !== key) {
+		const aliased = agentDefs.get(normalizedToolkit);
+		if (aliased) return aliased;
+	}
+
+	// Dynamic builder variant resolution: builder-{model-slug} → base builder.md + model from models.json
+	if (key.startsWith("builder-") && modelsConfig) {
+		const base = agentDefs.get("builder");
+		if (base) {
+			const entry = modelsConfig.agents[key];
+			if (entry) {
+				return {
+					...base,
+					name: key,
+					description: `${key} Builder — dynamic variant using ${buildModelString(entry)}`,
+					model: buildModelString(entry),
+				};
+			}
+		}
+	}
+
+	return undefined;
 }

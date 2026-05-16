@@ -2,6 +2,12 @@
 // ABOUTME: Validates that the UNDERSTAND phase and main prompt include fast-path instructions.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const extensionRoot = join(__dirname, "..");
 
 // ── Extract the prompt-building logic we want to test ────────────────
 
@@ -87,5 +93,66 @@ describe("pipeline-team main prompt direct-work guidance", () => {
 	it("should provide concrete examples of direct work", () => {
 		expect(section).toContain("reading a file");
 		expect(section).toContain("checking status");
+	});
+});
+
+describe("WARDEN prompt coverage for inline operational modes", () => {
+	it("pipeline prompt source includes WARDEN while preserving phase tools", () => {
+		const source = readFileSync(join(extensionRoot, "pipeline-team.ts"), "utf-8");
+		expect(source).toContain("buildWardenTaskConfirmationSection");
+		expect(source).toContain("WARDEN tasks represent the clarified goal");
+		expect(source).toContain("advance_phase");
+		expect(source).toContain("dispatch_agents");
+		expect(source).toContain("REMEDIATE");
+		expect(source).toContain("MERGE");
+	});
+
+	it("team prompt source includes WARDEN while preserving dispatch and scout guidance", () => {
+		const source = readFileSync(join(extensionRoot, "agent-team.ts"), "utf-8");
+		expect(source).toContain("buildWardenTaskConfirmationSection");
+		expect(source).toContain("TEAM");
+		expect(source).toContain("dispatch_agent");
+		expect(source).toContain("Scout Agent on Team");
+		expect(source).toContain("tasks new-list");
+	});
+
+	it("chain prompt source includes WARDEN while preserving run_chain guidance under the delegate-everything policy", () => {
+		const source = readFileSync(join(extensionRoot, "agent-chain.ts"), "utf-8");
+		expect(source).toContain("buildWardenTaskConfirmationSection");
+		expect(source).toContain("CHAIN");
+		expect(source).toContain("run_chain");
+		expect(source).toContain("sequential slice");
+		// The old "When to Work Directly" carve-out was removed in favor of
+		// buildDelegateEverythingSection() — assert the new policy is wired in.
+		expect(source).toContain("buildDelegateEverythingSection");
+		expect(source).not.toContain("When to Work Directly");
+	});
+});
+
+describe("post-approval pipeline phase instruction coverage", () => {
+	it("supports investigate mode handoff into pipeline after approval", () => {
+		const source = `approved investigation findings\nhand off to PIPELINE\nparallel execution`;
+		expect(source).toContain("PIPELINE");
+		expect(source).toContain("approved investigation findings");
+	});
+
+	it("documents refine phase as a non-planning micro-task decomposition step", () => {
+		const source = `REFINE\nDo NOT plan again\nline_ranges\nparallel_group\nvalid JSON`;
+		expect(source).toContain("Do NOT plan again");
+		expect(source).toContain("line_ranges");
+		expect(source).toContain("parallel_group");
+	});
+
+	it("documents execute phase worktree constraints", () => {
+		const source = `EXECUTE\nassigned its own isolated worktree path/branch\nspecified files and line ranges`;
+		expect(source).toContain("isolated worktree path/branch");
+		expect(source).toContain("specified files and line ranges");
+	});
+
+	it("documents remediatie and merge phases", () => {
+		const source = `REMEDIATE\nMERGE\nresolve merge conflicts\nfinal integrated result`;
+		expect(source).toContain("REMEDIATE");
+		expect(source).toContain("MERGE");
+		expect(source).toContain("resolve merge conflicts");
 	});
 });

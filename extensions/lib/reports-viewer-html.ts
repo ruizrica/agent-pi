@@ -2,6 +2,7 @@
 // ABOUTME: Provides search-first landing page, recent category sections, and full-screen table views opening reports in new tabs.
 
 import type { PersistedReportEntry } from "./report-index.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
 
 function escapeForScript(str: string): string {
 	return str.replace(/<\/(script|style)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
@@ -43,6 +44,8 @@ export function generateReportsViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
   body {
     background: var(--bg);

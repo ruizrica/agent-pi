@@ -1,16 +1,20 @@
 ---
 description: "Break down an active plan into CodeRabbit-style microtasks in Commander using deep codebase analysis, then coordinate parallel agent execution"
 argument-hint: "[plan description or horizon plan ID]"
-allowed-tools: ["Task", "mcp__commander__commander_task", "mcp__commander__commander_task_lifecycle", "mcp__commander__commander_task_group", "mcp__commander__commander_session", "mcp__commander__commander_comment", "mcp__commander__commander_log", "AskUserQuestion"]
+allowed-tools: ["Task", "Bash", "AskUserQuestion"]
 ---
 
 # Commander Plan - Multi-Agent Task Orchestration
 
-**⚠️ CRITICAL RULE: NO AD-HOC TASKS — ALL tasks MUST be created inside a task group using `commander_task_group(operation="create")`. NEVER use `commander_task(operation="create")` for standalone tasks. Even single tasks must belong to a group for proper Initiative Progress UI tracking and wave management.**
+**⚠️ COMMANDER CLI RULE: NO AD-HOC TASKS — create a Commander root task, then add microtask children under it using `cmd task add` with `--parent`. Avoid standalone task creation.**
 
-This command breaks down a plan into microtasks using a **planning agent architecture**, creates them in Commander MCP, and coordinates parallel agent execution.
+This command breaks down a plan into microtasks using a **planning agent architecture**, then writes task structure to Commander via the `cmd` CLI (`cmd task add`, `cmd dep add`, comments + status updates). It can also consume approved INVESTIGATE remediation artifacts, as long as those findings already define the intended fix scope clearly enough for execution breakdown.
 
-## Planning Agent Architecture
+## Commander CLI Mapping (for this workflow)
+
+- Create root plan: `cmd task add "<plan>" --type feature --priority high`
+- Add each microtask as a child: `cmd task add "<microtask>" --parent <root_id> --type task`
+- Chain dependencies: `cmd dep add <blocked-task-id> <dependency-task-id>...` (optional)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -106,10 +110,10 @@ Use the Task tool with:
     **You Are Part of a Team**
     You work independently, but other scout agents may be exploring in parallel.
     Quick glance — check your inbox for context from other agents:
-    `mcp__commander__commander_mailbox(operation="inbox", agent_name="scout")`
+    `cmd mailbox inbox`
     If relevant findings already exist, incorporate them rather than redoing the work.
     If you discover something broadly useful, share it:
-    `mcp__commander__commander_mailbox(operation="send", from_agent="scout", to_agent="@all", body="Found: [discovery]", message_type="status")`
+    `cmd mailbox send @all "Found: [discovery]"`
 
     **Your Mission:** Explore the codebase architecture relevant to this feature.
 
@@ -127,14 +131,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="scout"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -191,14 +191,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="scout"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -252,14 +248,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="scout"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -313,14 +305,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="scout"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -375,14 +363,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="scout"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -542,14 +526,10 @@ Use the Task tool with:
 
     **MANDATORY: Comment During Every Step**
 
-    You MUST use Commander MCP to log progress at EVERY step:
+    You MUST use Commander CLI-backed tools to log progress at EVERY step:
 
     ```
-    mcp__commander__commander_log(
-      task_id=0,
-      message="[PREFIX]: [details]",
-      agent_name="planner"
-    )
+    cmd task comment 0 "[PREFIX]: [details]"
     ```
 
     **Required Prefixes (use for EACH operation):**
@@ -710,7 +690,7 @@ AskUserQuestion({
     question: "I've created a plan with X tasks organized into Y waves. How would you like to proceed?",
     header: "Plan Ready",
     options: [
-      { label: "Create Tasks", description: "Create all tasks in Commander backlog and start execution" },
+      { label: "Create Tasks", description: "Create all tasks in Commander and start execution" },
       { label: "Modify Plan", description: "Let me adjust the plan based on your feedback" },
       { label: "Cancel", description: "Don't create tasks, discard the plan" }
     ],
@@ -723,7 +703,7 @@ Wait for user response before proceeding to Phase 6.
 
 ### Phase 6: Create Tasks in Commander (On Approval)
 
-**Create tasks in Commander BACKLOG status with FULL CONTEXT.**
+**Create tasks in Commander pending status with FULL CONTEXT.**
 
 **CRITICAL: Persist all gathered context so execute phase can skip re-analysis.**
 
@@ -739,13 +719,13 @@ Your job as the Main agent is to **PASS THROUGH** what planner provides, NOT con
 
 **⚠️⚠️⚠️ MANDATORY FIELDS FOR INITIATIVE UI ⚠️⚠️⚠️**
 
-The following fields MUST be included in every `mcp__commander__commander_task_group` call:
-- **`initiative_summary`** - WITHOUT this, the Initiative Progress section shows empty!
-- **`total_waves`** - WITHOUT this, wave progress tracking breaks!
+Your created root task and children should include these metadata fields:
+- `initiative_summary` (root task description) - required for progress visibility
+- Keep each microtask's `dependency_order` (0/1/2...) to preserve wave order.
 
 **NEVER omit these fields. ALWAYS include them from the planner agent's response.**
 
-**⚠️ CRITICAL VALIDATION - Before calling mcp__commander__commander_task_group:**
+**⚠️ CRITICAL VALIDATION - Before creating initiative and child tasks:**
 
 **Policy Generation Validation:**
 1. Each microtask has a non-empty `context` field
@@ -763,24 +743,10 @@ The following fields MUST be included in every `mcp__commander__commander_task_g
 **Note:** Policies are auto-generated from `file_scope` in context. Missing `file_scope` will result in fallback policy (less restrictive, working directory scope).
 
 ```
-mcp__commander__commander_task_group(
-  operation="create",
-  group_name="[PLAN_DESCRIPTION]",
-  group_description="[plan_summary from planner]",
-  initiative_summary="[initiative_summary from planner]",  // ⚠️ NEVER OMIT
-  total_waves=[total_waves from planner],                   // ⚠️ NEVER OMIT
-  working_directory="[Current working directory]",
-  tasks=[
-    // For each microtask from planner plan:
-    {
-      description: "[Format microtask.description as nicely formatted markdown for UI]",
-      task_prompt: "[Use microtask.description as CodeRabbit-style prompt for agent execution]",
-      priority: microtask.priority,
-      dependency_order: microtask.wave - 1,  // Wave 1 → 0, Wave 2 → 1, Wave 3 → 2
-      context: JSON.stringify(microtask.context)  // ← PASS THROUGH - Don't construct!
-    }
-  ]
-)
+ROOT_ID=$(cmd task add "[PLAN_DESCRIPTION]" --type feature --priority high --json | jq -r '.id')
+for microtask in "${microtasks[@]}"; do
+  cmd task add "${microtask.desc}" --type task --parent "$ROOT_ID" --json >/dev/null
+done
 ```
 
 **Field Purposes:**
@@ -788,35 +754,28 @@ mcp__commander__commander_task_group(
 - `task_prompt`: Use the microtask description as the CodeRabbit-style prompt for agent execution
 - `context`: **PASS THROUGH** planner-provided context unchanged (already has all scout findings synthesized)
 
-**IMPORTANT: Create ONE task group with ALL tasks:**
+**IMPORTANT: Create ONE root initiative task with ALL microtasks:**
 
-The dashboard's Initiative Progress UI tracks a single group with multiple waves.
+The dashboard's Initiative Progress UI tracks a single root initiative with multiple waves.
 Each task's `dependency_order` field determines which wave it belongs to:
 - `dependency_order: 0` = Wave 1 (foundation/independent tasks)
 - `dependency_order: 1` = Wave 2 (depends on Wave 1)
 - `dependency_order: 2` = Wave 3 (depends on Wave 2)
 
-**Example - Single group with all tasks across waves:**
+**Example - Single initiative with all tasks across waves:**
 
 ```
-// Iterate through ALL microtasks from planner plan and create tasks
-const tasksForMCP = opusPlan.microtasks.map(microtask => ({
-  description: formatAsMarkdown(microtask.description),
-  task_prompt: microtask.description,  // CodeRabbit-style prompt
-  priority: microtask.priority,
-  dependency_order: microtask.wave - 1,  // Convert wave 1/2/3 to order 0/1/2
-  context: JSON.stringify(microtask.context)  // ← PASS THROUGH from planner
-}));
+// Root task for the initiative
+ROOT_ID=$(cmd task add "[PLAN_DESCRIPTION]" --type feature --priority high --json | jq -r '.id')
 
-mcp__commander__commander_task_group(
-  operation="create",
-  group_name="[PLAN_DESCRIPTION]",
-  group_description="[plan_summary from planner]",
-  initiative_summary="[initiative_summary from planner]",  // ⚠️ From planner response
-  total_waves=[total_waves from planner],                  // ⚠️ From planner response
-  working_directory="[Current working directory]",
-  tasks=tasksForMCP  // All tasks with planner-provided context
-)
+# Add each planned microtask as child of ROOT_ID
+for microtask in "${opusPlan[@]}"; do
+  child_id=$(cmd task add "${microtask.description}" --type task --parent "$ROOT_ID" --priority "${microtask.priority}" --json | jq -r '.id')
+  if [[ -n "${microtask.dependency_ids}" ]]; then
+    # optional: preserve planner dependency edges on the task tree
+    cmd dep add "$child_id" ${microtask.dependency_ids}
+  fi
+done
 ```
 
 **Key Points:**
@@ -824,12 +783,12 @@ mcp__commander__commander_task_group(
 - Use `JSON.stringify(microtask.context)` - don't build context object yourself
 - Planner has already synthesized all scout findings into each microtask's context
 
-**DO NOT create separate groups per wave** - this breaks initiative progress tracking.
+**DO NOT create separate initiatives per wave** - this breaks initiative progress tracking.
 
 **Why save all this context?**
 
 When `/commander-execute` runs:
-- Task groups with `dependency_order` already define execution sequence
+- `dependency_order` already defines execution sequence
 - `file_scope` is already computed - no need to re-analyze
 - `assigned_agent` is already determined - no need to re-classify
 - `implementation_guide` has all the details - agents can execute directly
@@ -841,17 +800,17 @@ When `/commander-execute` runs:
 Show created tasks:
 
 ```
-## Tasks Created in Commander (Backlog)
+## Tasks Created in Commander (Pending)
 
 ### Wave 1 (Foundation)
-- [ID:123] BACKLOG - In file.ts:45-52 - Fix auth bug (priority: 1)
-- [ID:124] BACKLOG - In file.ts:100-120 - Add validation (priority: 2)
+- [ID:123] PENDING - In file.ts:45-52 - Fix auth bug (priority: 1)
+- [ID:124] PENDING - In file.ts:100-120 - Add validation (priority: 2)
 
 ### Wave 2 (Implementation)
-- [ID:125] BACKLOG - In module.ts:200-220 - Implement handler (priority: 3)
+- [ID:125] PENDING - In module.ts:200-220 - Implement handler (priority: 3)
 
 ### Wave 3 (Integration)
-- [ID:126] BACKLOG - In test.ts:1-50 - Add tests (priority: 4)
+- [ID:126] PENDING - In test.ts:1-50 - Add tests (priority: 4)
 
 ---
 
@@ -883,7 +842,7 @@ When user chooses "Execute All" or "Execute Wave 1", tasks are executed using th
 - Commit checkpoint created after each wave
 
 **Trigger execution:**
-- `/commander-execute backlog` - Execute all backlog tasks
+- `/commander-execute pending` - Execute all pending tasks
 - `/commander-execute` - Execute pending tasks
 - Run from multiple terminals for parallel execution
 
@@ -947,15 +906,15 @@ INSIGHT: [pattern or learning]
 
 ---
 
-## MCP Tools Reference
+## Commander CLI Reference
 
 | Tool | Purpose |
 |------|---------|
-| `mcp__commander__commander_task` | Create/get/update/list tasks |
-| `mcp__commander__commander_task_lifecycle` | Claim, complete, fail tasks |
-| `mcp__commander__commander_task_group` | Create task groups with ordering |
-| `mcp__commander__commander_comment` | Add progress comments |
-| `mcp__commander__commander_log` | Real-time dashboard updates |
+| `cmd task add` | Create root task and microtasks |
+| `cmd task update` | Update status/comments |
+| `cmd task show` | Inspect tasks + comments |
+| `cmd task comment` | Add structured progress comments |
+| `cmd dep add` | Declare blockers/dependencies |
 
 ---
 

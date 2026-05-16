@@ -1,0 +1,7 @@
+{
+	"name": "pi-agent-orchestrator",
+	"version": "1.0.0",
+	"description": "Cloud Code plugin scaffold — Pi multi-agent orchestration bridge for Claude Code",
+	"keywords": ["orchestration", "pi", "claude-code", "agent-pi"],
+	"commands": ["./commands/pi.md"]
+}

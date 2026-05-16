@@ -25,6 +25,11 @@ const mockDeps: RenderDeps = {
 	fg: (_color, text) => text,
 };
 
+const boldDeps: RenderDeps = {
+	...mockDeps,
+	bold: (text) => `<b>${text}</b>`,
+};
+
 // ── stripLeadingNumber ──────────────────────────────────────────────
 
 describe("stripLeadingNumber", () => {
@@ -247,16 +252,15 @@ describe("renderTaskList", () => {
 		expect(result[0]).not.toContain("\u2500");
 	});
 
-	it("shows task ids and text in the output", () => {
+	it("hides task ids and text from the mission brief widget", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain(" 1 ");
-		expect(joined).toContain(" 2 ");
-		expect(joined).toContain(" 3 ");
-		expect(joined).toContain("Task 1 description");
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).not.toContain(" 1 ");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("strips leading number prefix from task text to avoid duplication with id", () => {
+	it("keeps task text hidden even when task text starts with a number", () => {
 		const info: TaskListInfo = {
 			tasks: [
 				{ id: 1, text: "1. Investigate git history", status: "idle" },
@@ -267,59 +271,98 @@ describe("renderTaskList", () => {
 		};
 		const result = renderTaskList(info, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		// Should NOT contain "1 1." — the id is shown once and the leading "1." is stripped from text
-		expect(joined).not.toMatch(/\b1 1\./);
-		expect(joined).toContain("1 Investigate git history");
+		expect(joined).not.toContain("Investigate git history");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("shows status icons (* for inprogress, x for done, - for idle)", () => {
+	it("hides status icons because details live in the hotkey overlay", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain("*");
-		expect(joined).toContain("x");
-		expect(joined).toContain("-");
+		expect(joined).not.toContain("*");
+		expect(joined).not.toContain("x");
+		expect(joined).not.toContain("-");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("uses one-line mode with enough height", () => {
+	it("uses mission-brief plus hotkey mode with enough height", () => {
 		const tasks = makeTasks(3);
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
-		// 1 line per task (3 tasks) + 1 chrome (header) = 4 lines
-		expect(result.length).toBe(4);
+		expect(result).toHaveLength(2);
+		expect(result[1]).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("uses one-line mode when height is constrained", () => {
+	it("uses mission-brief plus hotkey mode when height is constrained", () => {
 		const tasks = makeTasks(4);
-		// 4 tasks * 1 + 1 chrome = 5 lines
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 8, mockDeps);
-		expect(result.length).toBe(5);
+		expect(result).toHaveLength(2);
+		expect(result[1]).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("shows done/total in header", () => {
-		const tasks = makeTasks(5);
+	it("shows only the title and done/total in a bold header", () => {
+		const tasks = { ...makeTasks(5), title: "Repeated Sample Task List Completion Test" };
 		// makeTasks(5): 1 done out of 5 → "1/5"
-		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, mockDeps);
-		expect(result[0]).toContain("1/5");
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, boldDeps);
+		expect(result[0]).toContain("<b>");
+		expect(result[0]).toContain("Repeated Sample Task List Completion Test 1/5");
+		expect(result[0]).not.toContain("MISSION");
 	});
 
-	it("shows selection marker on selected task", () => {
+	it("shows a wrapped work summary block when a list description exists", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "Update the security page with clearer messaging, safer defaults, and verification coverage.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 20, mockDeps);
+		const joined = result.join("\n");
+		expect(result[1]).toContain("Mission Brief:");
+		expect(result[2]).toContain("Update the security page");
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("wraps long summary lines to terminal width", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "This is a deliberately long work summary that should wrap to the terminal width before the task detail hotkey is rendered.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 42, 20, mockDeps);
+		expect(result[1]).toContain("Mission Brief:");
+		expect(result[2].length).toBeLessThanOrEqual(42);
+		expect(result.slice(1, 5).join("\n")).not.toContain("…");
+	});
+
+	it("keeps task rows hidden when a long mission brief has tiny available height", () => {
+		const tasks = {
+			...makeTasks(2),
+			description: "This mission brief is intentionally very long and should not consume the whole active task widget when the terminal only leaves a few rows available for rendering.",
+		};
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 50, 5, mockDeps);
+		const joined = result.join("\n");
+		expect(result.length).toBeGreaterThan(0);
+		expect(joined).not.toContain("Task 1 description");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("does not show selection marker because task details live in the hotkey overlay", () => {
 		const result = renderTaskList(makeTasks(3), { selectedIndex: 1, scrollOffset: 0 }, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(joined).toContain("\u2190sel");
+		expect(joined).not.toContain("\u2190sel");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("limits visible tasks to MAX_VISIBLE_TASKS", () => {
+	it("does not render task rows in the mission brief widget", () => {
 		const tasks = makeTasks(10);
-		// 6 * 1 + 1 chrome = 7
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 30, mockDeps);
-		expect(result.length).toBe(7);
+		expect(result.join("\n")).not.toContain("Task 1 description");
+		expect(result.join("\n")).toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
-	it("shows scroll indicators in header when tasks overflow", () => {
+	it("omits scroll indicators because detailed task navigation lives in the hotkey overlay", () => {
 		const tasks = makeTasks(10);
 		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 2 }, 80, 30, mockDeps);
 		const header = result[0];
-		expect(header).toContain("\u25B22");
-		expect(header).toContain("\u25BC2");
+		expect(header).not.toContain("\u25B2");
+		expect(header).not.toContain("\u25BC");
 	});
 
 	it("hides widget when zero tasks", () => {
@@ -329,5 +372,53 @@ describe("renderTaskList", () => {
 			80, 20, mockDeps,
 		);
 		expect(result.length).toBe(0);
+	});
+
+	// ── Chrome budget edge cases ────────────────────────────────────
+	// The Mission Brief block costs 4 chrome lines when shown:
+	// header + "Mission Brief:" label + blank + hotkey hint. The summary
+	// budget must fit summary content into `availableHeight - 4` lines.
+
+	it("hides mission brief gracefully when availableHeight=3 (no overflow)", () => {
+		const tasks = { ...makeTasks(3), description: "Some work summary that should be omitted when height is too tight." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 3, mockDeps);
+		const joined = result.join("\n");
+		expect(joined).not.toContain("Mission Brief:");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+		// Output must not exceed the budget.
+		expect(result.length).toBeLessThanOrEqual(3);
+	});
+
+	it("renders mission brief inside the budget when availableHeight=4 with a description", () => {
+		const tasks = { ...makeTasks(3), description: "Tight summary fits in one line." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 4, mockDeps);
+		const joined = result.join("\n");
+		// At availableHeight=4 the chrome budget allows the label but no summary lines.
+		// The block must either include the label without orphan formatting OR drop the brief
+		// entirely — the critical invariant is: never overflow the budget.
+		expect(result.length).toBeLessThanOrEqual(4);
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("renders mission brief with 1 summary line when availableHeight=5 with a description", () => {
+		const tasks = { ...makeTasks(3), description: "Short summary." };
+		const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 80, 5, mockDeps);
+		const joined = result.join("\n");
+		expect(joined).toContain("Mission Brief:");
+		expect(joined).toContain("Short summary.");
+		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+		// Output must not exceed the budget.
+		expect(result.length).toBeLessThanOrEqual(5);
+	});
+
+	it("never overflows the budget for any availableHeight from 3 to 20 with a long description", () => {
+		const tasks = {
+			...makeTasks(3),
+			description: "This is a deliberately verbose work summary that should wrap onto many lines so we can stress the chrome budget across a range of widget heights.",
+		};
+		for (let h = 3; h <= 20; h++) {
+			const result = renderTaskList(tasks, { selectedIndex: -1, scrollOffset: 0 }, 50, h, mockDeps);
+			expect(result.length, `availableHeight=${h} produced ${result.length} lines`).toBeLessThanOrEqual(h);
+		}
 	});
 });

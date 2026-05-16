@@ -1,0 +1,9 @@
+{
+	"name": "agent-pi-marketplace",
+	"plugins": [
+		{
+			"name": "pi-agent-orchestrator",
+			"source": "./"
+		}
+	]
+}

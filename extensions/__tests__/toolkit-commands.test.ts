@@ -37,6 +37,22 @@ describe("scanCommandDirs", () => {
 		expect(cmds[0].name).toBe("review");
 	});
 
+	it("should preserve explicit root command names like commit", async () => {
+		writeMdFile(tmpDir, "commit.md", {
+			description: "Save all current work as local commits",
+			name: "commit",
+			"argument-hint": "[optional hint]",
+		}, "Commit body");
+
+		const { scanCommandDirs } = await import("../toolkit-commands.ts");
+		const cmds = scanCommandDirs(tmpDir);
+
+		expect(cmds).toHaveLength(1);
+		expect(cmds[0].name).toBe("commit");
+		expect(cmds[0].description).toBe("Save all current work as local commits");
+		expect(cmds[0].argumentHint).toBe("[optional hint]");
+	});
+
 	it("should prefix commands in a subdirectory with the dir name", async () => {
 		const subDir = join(tmpDir, "commander");
 		mkdirSync(subDir);
