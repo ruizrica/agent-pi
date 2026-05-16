@@ -1,19 +1,24 @@
 // ABOUTME: Extension that reconciles local tasks with Commander and retries failed sync ops.
-// ABOUTME: Activates when Commander becomes available; runs reconcile (15s) and heartbeat (30s) intervals.
+// ABOUTME: Activates when Commander CLI becomes available; runs reconcile (15s) and heartbeat (30s) intervals.
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	createTrackerState,
 	popRetries,
 	computeReconcileActions,
 	type TrackerState,
-} from "./lib/commander-tracker.ts";
+} from "./lib/commander/commander-tracker.ts";
 import {
 	parseCommanderTaskId,
 	addMapping,
 	updateMappingStatus,
 	type SyncState,
-} from "./lib/commander-sync.ts";
+} from "./lib/commander/commander-sync.ts";
+import {
+	resolveAgentName,
+	resolveAgentType,
+	resolveAgentRole,
+} from "./agent-identity.ts";
 
 export default function (pi: ExtensionAPI) {
 	const g = globalThis as any;
@@ -32,6 +37,9 @@ export default function (pi: ExtensionAPI) {
 	function activate() {
 		if (tracker.active) return;
 		tracker.active = true;
+
+		// Register the agent on Commander before first heartbeat
+		registerAgent();
 
 		// Reconcile every 15s — find unmapped tasks and retry failed ops
 		reconcileTimer = setInterval(() => reconcileNow(), 15_000);
@@ -75,11 +83,22 @@ export default function (pi: ExtensionAPI) {
 		for (const action of actions) {
 			if (action.type === "create") {
 				const groupId = syncState?.groupId;
+				// When we have no group yet, the retry would otherwise land as a bare
+				// root task with no mission brief — then the Commander dashboard's
+				// InitiativeCard can't surface anything meaningful. Use the list's
+				// rich description (1-3 sentence work summary) as the mission brief
+				// for that fallback root so the UI has real content to show.
+				const listDescription = String(taskList.description || "").trim();
+				const listTitleStr = String(taskList.title || "").trim();
+				const missionBrief = groupId === undefined
+					? (listDescription || listTitleStr || undefined)
+					: undefined;
 				client.callTool("commander_task", {
 					operation: "create",
 					description: action.text,
 					working_directory: process.cwd(),
 					...(groupId !== undefined ? { group_id: groupId } : {}),
+					...(missionBrief ? { mission_brief: missionBrief } : {}),
 				}).then((res: any) => {
 					const cid = parseCommanderTaskId(res);
 					if (cid !== undefined && syncState) {
@@ -103,6 +122,25 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function registerAgent() {
+		const client = g.__piCommanderClient;
+		if (!client) return;
+
+		// One-time identity announcement so the board shows a stable name.
+		const name = resolveAgentName();
+		const agent_type = resolveAgentType();
+		const role = resolveAgentRole();
+
+		client.callTool("commander_orchestration", {
+			operation: "agent:register",
+			name,
+			agent_type,
+			role,
+		}).catch(() => {
+			// Registration is best-effort; duplicate-name is fine
+		});
+	}
+
 	function sendHeartbeat() {
 		const client = g.__piCommanderClient;
 		const currentTask = g.__piCurrentTask;
@@ -110,7 +148,7 @@ export default function (pi: ExtensionAPI) {
 
 		client.callTool("commander_orchestration", {
 			operation: "agent:heartbeat",
-			agent_name: process.env.PI_AGENT_NAME || "pi",
+			agent_name: resolveAgentName(),
 		}).catch(() => {});
 	}
 

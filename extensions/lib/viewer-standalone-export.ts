@@ -1,9 +1,11 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { homedir } from "node:os";
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
 
 const BRAND_IMAGE_URL = "https://firebasestorage.googleapis.com/v0/b/ruizrica-io.firebasestorage.app/o/agent.png?alt=media&token=152539b8-8d0c-46e4-950f-190c317ed6c8";
 const MARKED_CDN_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+const MERMAID_CDN_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js";
 
 function timestampForFileName(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -84,6 +86,25 @@ function baseDocument(opts: { title: string; label: string; body: string; script
   .visual-card img { display: block; width: 100%; height: auto; border-radius: 6px; background: #0f1115; }
   .visual-card iframe { width: 100%; min-height: 420px; border: 1px solid var(--border); border-radius: 6px; background: white; }
   .visual-label { margin-bottom: 8px; color: var(--text-muted); font-size: 12px; font-family: var(--mono); word-break: break-all; }
+  .mermaid-container { background: transparent; border: none; border-radius: 6px; padding: 20px; padding-top: 44px; margin: 12px 0; text-align: center; overflow: hidden; position: relative; cursor: grab; }
+  .mermaid-container.dragging { cursor: grabbing; user-select: none; }
+  .mermaid-container svg { max-width: 100%; height: auto; transition: transform 0.2s ease; transform-origin: 0 0; }
+  .mermaid-container.dragging svg { transition: none; }
+
+  .mermaid-toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10; opacity: 0.6; transition: opacity 0.2s; }
+  .mermaid-container:hover .mermaid-toolbar { opacity: 1; }
+  .mermaid-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.15s, color 0.15s; padding: 0; }
+  .mermaid-toolbar button:hover { background: var(--accent); color: var(--text); border-color: var(--accent); }
+  .mermaid-toolbar button svg.tb-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mermaid-fullscreen-overlay { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.92); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .mermaid-fullscreen-overlay .fs-toolbar { position: absolute; top: 16px; right: 16px; display: flex; gap: 6px; z-index: 10001; }
+  .mermaid-fullscreen-overlay .fs-toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; width: 36px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background 0.15s, color 0.15s; padding: 0; }
+  .mermaid-fullscreen-overlay .fs-toolbar button:hover { background: var(--accent); color: var(--text); border-color: var(--accent); }
+  .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mermaid-fullscreen-overlay .fs-content { max-width: 95vw; max-height: 90vh; overflow: hidden; padding: 20px; cursor: grab; position: relative; }
+  .mermaid-fullscreen-overlay .fs-content.dragging { cursor: grabbing; user-select: none; }
+  .mermaid-fullscreen-overlay .fs-content svg { display: block; margin: auto; transition: width 0.2s ease, height 0.2s ease, transform 0.2s ease; transform-origin: 0 0; }
+  .mermaid-fullscreen-overlay .fs-content.dragging svg { transition: none; }
   .footer-note { margin-top: 18px; color: var(--text-dim); font-size: 12px; text-align: center; font-family: var(--mono); }
 </style>
 </head>
@@ -99,6 +120,178 @@ function baseDocument(opts: { title: string; label: string; body: string; script
     <div class="footer-note">This export is standalone and read-only. External assets are limited to approved CDNs and the provided brand image URL.</div>
   </div>
   <script src="${MARKED_CDN_URL}"><\/script>
+  <script src="${MERMAID_CDN_URL}"><\/script>
+  <script>
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#2a2d35', primaryBorderColor: '#5a9fd4',
+        primaryTextColor: '#e2e8f0', lineColor: '#5a9fd4',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontSize: '16px'
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      securityLevel: 'loose'
+    });
+  }
+  ${getMermaidNormalizationBrowserScript()}
+  var TB_ICONS = {
+    zoomIn: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    zoomOut: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    reset: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+    fullscreen: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+    download: '<svg class="tb-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  };
+  function setupDragToPan(container, getZoom, getPan, setPan) {
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var startPanX = 0, startPanY = 0;
+    container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-toolbar') || e.target.closest('.fs-toolbar')) return;
+      if (getZoom() <= 1) return;
+      isDragging = true;
+      startX = e.clientX; startY = e.clientY;
+      var pan = getPan(); startPanX = pan.x; startPanY = pan.y;
+      container.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      setPan(startPanX + (e.clientX - startX), startPanY + (e.clientY - startY));
+      e.preventDefault();
+    });
+    window.addEventListener('mouseup', function() {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('dragging');
+    });
+  }
+  function createMermaidToolbar(wrapper, idx) {
+    var currentZoom = 1;
+    var panX = 0, panY = 0;
+    var toolbar = document.createElement('div');
+    toolbar.className = 'mermaid-toolbar';
+    function makeBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+    function applyTransform() {
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+    }
+    function applyZoom(z) {
+      currentZoom = Math.max(0.25, Math.min(4, z));
+      if (currentZoom <= 1) { panX = 0; panY = 0; }
+      applyTransform();
+    }
+    setupDragToPan(wrapper, function() { return currentZoom; }, function() { return { x: panX, y: panY }; }, function(x, y) { panX = x; panY = y; applyTransform(); });
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { panX = 0; panY = 0; applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
+    wrapper.appendChild(toolbar);
+  }
+  function openMermaidFullscreen(wrapper) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-fullscreen-overlay';
+    var fsZoom = 1;
+    var fsPanX = 0, fsPanY = 0;
+    var fsToolbar = document.createElement('div');
+    fsToolbar.className = 'fs-toolbar';
+    function makeFsBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+    var origWidth = 0;
+    var origHeight = 0;
+    function applyFsTransform() {
+      var fsSvg = overlay.querySelector('.fs-content svg');
+      if (fsSvg && origWidth && origHeight) {
+        fsSvg.style.width = (origWidth * fsZoom) + 'px';
+        fsSvg.style.height = (origHeight * fsZoom) + 'px';
+        fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
+        fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+        fsSvg.style.transform = 'translate(' + fsPanX + 'px, ' + fsPanY + 'px)';
+      }
+    }
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      if (fsZoom <= 1) { fsPanX = 0; fsPanY = 0; }
+      applyFsTransform();
+    }
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { fsPanX = 0; fsPanY = 0; applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
+    overlay.appendChild(fsToolbar);
+    var content = document.createElement('div');
+    content.className = 'fs-content';
+    content.innerHTML = svg.outerHTML;
+    overlay.appendChild(content);
+    setupDragToPan(content, function() { return fsZoom; }, function() { return { x: fsPanX, y: fsPanY }; }, function(x, y) { fsPanX = x; fsPanY = y; applyFsTransform(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', function handler(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); } });
+    document.body.appendChild(overlay);
+    // Capture original SVG dimensions after overlay is in the DOM
+    var fsSvg = content.querySelector('svg');
+    if (fsSvg) {
+      fsSvg.style.maxWidth = 'none';
+      var rect = fsSvg.getBoundingClientRect();
+      origWidth = rect.width || fsSvg.viewBox.baseVal.width || 800;
+      origHeight = rect.height || fsSvg.viewBox.baseVal.height || 600;
+    }
+  }
+  function downloadMermaidSVG(wrapper, idx) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var serializer = new XMLSerializer();
+    var svgStr = serializer.serializeToString(svg);
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram-' + idx + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function renderMermaidDiagrams(container) {
+    if (typeof mermaid === 'undefined') return;
+    var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
+    if (codeBlocks.length === 0) return;
+    var blocks = Array.from(codeBlocks);
+    blocks.forEach(function(codeEl, idx) {
+      var preEl = codeEl.parentElement;
+      var source = normalizeMermaidSource(codeEl.textContent || '');
+      var wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-container';
+      var id = 'mermaid-diagram-' + idx + '-' + Date.now();
+      try {
+        mermaid.render(id, source).then(function(result) {
+          wrapper.innerHTML = result.svg;
+          createMermaidToolbar(wrapper, idx);
+          preEl.parentNode.replaceChild(wrapper, preEl);
+        }).catch(function(err) {
+          console.warn('Mermaid render error for diagram ' + idx + ':', err);
+        });
+      } catch(e) {
+        console.warn('Mermaid render error:', e);
+      }
+    });
+  }
+  <\/script>
   <script>${script}</script>
 </body>
 </html>`;
@@ -112,6 +305,7 @@ export function createPlanStandaloneExport(opts: { title: string; markdown: stri
 const state = ${state};
 marked.setOptions({ gfm: true, breaks: true });
 document.getElementById('content').innerHTML = marked.parse(state.markdown || '');
+renderMermaidDiagrams(document.getElementById('content'));
 document.querySelectorAll('#content input, #content textarea, #content button, #content [contenteditable="true"]').forEach(function(el) {
   el.disabled = true;
   el.setAttribute('readonly', 'readonly');
@@ -170,6 +364,7 @@ document.getElementById('filesMeta').textContent = 'Base ref: ' + (report.baseRe
 if (report.summary && report.summary.trim()) {
   document.getElementById('summarySection').style.display = 'block';
   document.getElementById('summaryContent').innerHTML = renderMarkdownWithTables(report.summary);
+  renderMermaidDiagrams(document.getElementById('summaryContent'));
 }
 if (report.taskMarkdown && report.taskMarkdown.trim()) {
   document.getElementById('tasksSection').style.display = 'block';
@@ -290,6 +485,7 @@ root.innerHTML = docs.map(function(doc) {
   }
   return '<section class="section"><div class="section-header"><div class="section-label">' + escapeHtml(doc.label) + '</div><div class="section-path">' + escapeHtml(doc.filePath) + '</div></div><div class="markdown-body">' + marked.parse(doc.markdown || '') + '</div></section>';
 }).join('');
+renderMermaidDiagrams(root);
 `;
 	return baseDocument({ title: opts.title, label: "Spec", body, script });
 }

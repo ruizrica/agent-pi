@@ -1,12 +1,12 @@
 // ABOUTME: Scrollable session timeline replay via /replay command.
 // ABOUTME: Shows conversation history with user/assistant/tool messages in a full-screen overlay.
-import { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import {
   Box, Text, Markdown, Container, Spacer,
   matchesKey, Key, truncateToWidth, getMarkdownTheme
-} from "@mariozechner/pi-tui";
-import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-tui";
+import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@earendil-works/pi-coding-agent";
 import { extractContent, buildHistoryItems } from "./lib/session-replay-helpers.ts";
 
 function formatTime(date: Date): string {

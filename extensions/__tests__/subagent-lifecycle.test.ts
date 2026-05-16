@@ -96,9 +96,9 @@ describe("timeout render warnings", () => {
 
 describe("PLAN prompt lifecycle guidance", () => {
 	// Import the PLAN_PROMPT to verify lifecycle content is present
-	it("includes scout lifecycle management section", async () => {
+	it("includes agent lifecycle management section", async () => {
 		const { PLAN_PROMPT } = await import("../lib/mode-prompts.ts");
-		expect(PLAN_PROMPT).toContain("Scout lifecycle management");
+		expect(PLAN_PROMPT).toContain("Agent lifecycle management");
 	});
 
 	it("mentions the 10-minute timeout for scouts", async () => {
@@ -106,9 +106,13 @@ describe("PLAN prompt lifecycle guidance", () => {
 		expect(PLAN_PROMPT).toContain("10-minute timeout");
 	});
 
-	it("mentions auto-dismiss behavior", async () => {
+	it("mentions auto-dismiss behavior with the ~2 second value", async () => {
 		const { PLAN_PROMPT } = await import("../lib/mode-prompts.ts");
 		expect(PLAN_PROMPT).toContain("auto-dismiss");
+		// Pin the actual timing so the prompt can't silently drift away from
+		// the runtime behavior in subagent-widget.ts (2 000 ms).
+		expect(PLAN_PROMPT).toMatch(/~?2 ?seconds?/);
+		expect(PLAN_PROMPT).not.toContain("30 seconds after completing work");
 	});
 
 	it("mentions subagent_cleanup tool", async () => {
@@ -121,9 +125,9 @@ describe("PLAN prompt lifecycle guidance", () => {
 		expect(PLAN_PROMPT).toContain("cannot spawn a new batch");
 	});
 
-	it("rules section includes wait-for-scouts guidance", async () => {
+	it("rules section includes wait-for-agents guidance", async () => {
 		const { PLAN_PROMPT } = await import("../lib/mode-prompts.ts");
-		expect(PLAN_PROMPT).toContain("ALWAYS wait for all scouts to finish before spawning new ones");
+		expect(PLAN_PROMPT).toContain("ALWAYS wait for all agents (scouts + builders) to finish before spawning new ones");
 	});
 
 	it("rules section includes subagent_list check guidance", async () => {

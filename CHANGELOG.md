@@ -2,6 +2,32 @@
 
 All notable changes to agent-pi will be documented in this file.
 
+## [Unreleased]
+
+### Reports — Re-renderable Snapshots + Viewer Re-open
+
+Plan, spec, and completion reports now persist a full re-renderable snapshot to `.context/reports/raw/<id>.json` alongside the existing index entry. The `/reports` browser routes clicks to the original rich viewer (`show_plan`, `show_spec`, `show_report`) in read-only mode instead of the generic `pi /show-file` markdown viewer.
+
+**Highlights**
+
+- **Snapshot schemas** (`extensions/lib/viewer-snapshots.ts`): TypeBox schemas + builders + validator for `PlanSnapshot`, `QuestionsSnapshot`, `SpecSnapshot`, `CompletionSnapshot`. Schema version 1.
+- **Raw payload persistence**: `upsertPersistedReport` now accepts an optional `payload`; when present, writes `JSON.stringify(payload)` to `.context/reports/raw/<id>.json`. `readRawPayload(id)` reads it back, with id-sanitization to block path traversal.
+- **Snapshot capture on close**: plan, spec, and completion viewers build the appropriate snapshot from in-memory state and pass it as `payload` to `upsertPersistedReport`. Completion is the highest-value capture — git diffs are now durable across HEAD movement, with `baseRefResolved` capturing the resolved SHA at snapshot time.
+- **Lazy backfill**: `synthesizeSnapshotFromEntry(entry)` reconstructs a usable snapshot from `sourcePath` for legacy entries that lack a raw payload. Completion synth always returns (degraded mode) so historical entries never crash the viewer.
+- **Read-only mode**: `show_plan`, `show_spec`, `show_report` accept optional `readonly` + `payload_id` params. Plan viewer renders a read-only UI (hides approve/decline/edit, shows a banner, and provides an "Enter interactive mode" toggle); spec + completion viewers currently accept the params and load from snapshot but full read-only UI rendering is a follow-up.
+- **Category-based routing**: `/reports` browser dispatches by `entry.category` — `plan/questions → pi /show-plan`, `spec → pi /show-spec`, `completion → pi /show-report`. Other categories (`qa_rico`, `swagbucks`, `pr_review`, unknown) keep the existing `/show-file` fallback. New `extensions/viewer-aliases.ts` registers the `/show-plan`, `/show-spec`, `/show-report` slash commands.
+- **84 new tests** across schema validation, snapshot capture, synthesis, routing, and viewer params.
+
+**Files**
+
+- New: `extensions/lib/viewer-snapshots.ts`, `extensions/viewer-aliases.ts`.
+- Modified: `extensions/lib/report-index.ts`, `extensions/reports-viewer.ts`, `extensions/lib/viewers/reports-viewer-html.ts`, `extensions/plan-viewer.ts`, `extensions/lib/plan-viewer-html.ts`, `extensions/spec-viewer.ts`, `extensions/completion-report.ts`.
+
+**Follow-ups (deferred)**
+
+- Read-only UI rendering for spec + completion viewers (hide comment/edit/rollback buttons, add capture-time banner, add "Enter interactive mode" toggle).
+- Raw-payload pruning when index entries are pruned (existing gap; raw/ files currently outlive their entries).
+
 ## [2.1.0] — 2026-03-25
 
 ### Web Chat — Remote Access from Any Device
@@ -85,7 +111,7 @@ The first public release of agent — a comprehensive extension suite that trans
 
 #### Task Management
 - **tasks** — Task discipline system gating tools until tasks are defined; three-state lifecycle (idle → inprogress → done) with live widget
-- **commander-mcp** — Bridge exposing Commander MCP tools as native Pi tools
+- **commander-mcp** — CLI-backed bridge exposing Commander tools as native Pi tools
 - **commander-tracker** — Reconciles local tasks with Commander and retries failed sync
 
 #### Operational Modes

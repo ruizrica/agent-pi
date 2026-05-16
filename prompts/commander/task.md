@@ -1,12 +1,12 @@
 ---
-description: "Plan and execute a single task with full Commander MCP tracking - uses planning agents for context, then implements directly"
+description: "Plan and execute a single task with full Commander CLI-backed tracking - uses planning agents for context, then implements directly"
 argument-hint: "[task description - what to implement, fix, or build]"
-allowed-tools: ["Task", "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "mcp__commander__commander_task", "mcp__commander__commander_task_lifecycle", "mcp__commander__commander_comment", "mcp__commander__commander_log", "AskUserQuestion"]
+allowed-tools: ["Task", "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "AskUserQuestion"]
 ---
 
 # Commander Task - Planning + Execution with Full Tracking
 
-**⚠️ CRITICAL RULE: NO AD-HOC TASKS — ALL tasks MUST be created inside a task group using `commander_task_group(operation="create")`. NEVER use `commander_task(operation="create")` for standalone tasks. Even single tasks must belong to a group for proper Initiative Progress UI tracking and wave management.**
+**⚠️ COMMANDER CLI RULE: NO AD-HOC TASKS — create one root task, then child tasks with `cmd task add --parent`, and execute only through CLI claim/update/comment flows.**
 
 This command combines **planning agent architecture** with **direct execution** for single-task workflows. Unlike `/commander-plan` (multi-task planning) or `/commander-execute` (batch execution), this command:
 
@@ -347,47 +347,16 @@ Use the Task tool with:
 
 **The main agent creates the task in Commander and presents the plan to the user.**
 
-1. **Create Task Group in Commander (MANDATORY - Never Create Ad-Hoc Tasks)**
+1. **Create a root task and child task in Commander CLI (MANDATORY for tracking).**
 
-   **⚠️ CRITICAL: ALL tasks MUST be created inside a task group. NEVER use `commander_task(operation="create")` to create standalone/ad-hoc tasks. Always use `commander_task_group(operation="create")` even for single tasks.**
+   **⚠️ CRITICAL: ALL work should start with a root task + child task, not standalone ad-hoc task creation.**
 
-   ```
-   mcp__commander__commander_task_group(
-     operation="create",
-     group_name="[TASK_DESCRIPTION - short title]",
-     group_description="[plan_summary from planner]",
-     initiative_summary="[1-2 sentence summary of what this task accomplishes]",
-     total_waves=1,
-     working_directory="[Current working directory]",
-     tasks=[
-       {
-         description: "[Nicely formatted markdown description for UI]",
-         task_prompt: "[CodeRabbit-style prompt: In {file} around lines {X} to {Y}, {problem}; {solution}]",
-         priority: 5,
-         dependency_order: 0,
-         context: JSON.stringify({
-           source: "commander-task",
-           original_prompt: "$ARGUMENTS",
-           wave: 1,
-           work_type: "[backend|frontend|testing|etc]",
-           file_scope: {
-             allowed: ["[files from plan]"],
-             forbidden: ["[files NOT to touch]"]
-           },
-           implementation_guide: "[step-by-step from planner plan]",
-           analysis_context: {
-             architecture: "[from scout findings]",
-             patterns: "[from scout findings]",
-             dependencies: ["[relevant imports]"],
-             reference_implementations: ["[similar code examples]"]
-           }
-         })
-       }
-     ]
-   )
+   ```bash
+   ROOT_TASK_ID=$(cmd task add "[TASK_DESCRIPTION - short title]" --type feature --priority high --json | jq -r '.id')
+   TASK_ID=$(cmd task add "Implementation: [task_summary from planner]" --parent "$ROOT_TASK_ID" --type task --priority high --json | jq -r '.id')
    ```
 
-   Save the returned `group_id` and `task_id` for tracking.
+   Save the returned `ROOT_TASK_ID` and `TASK_ID` for tracking.
 
 2. **Present Plan to User**
 
@@ -420,7 +389,7 @@ Use the Task tool with:
 
    ---
 
-   **Task group created:** [GROUP_NAME] with task #[task_id]
+   **Task created:** `[TASK_ID]` (child of root `ROOT_TASK_ID`)
 
    Ready to execute this plan?
    - **Yes** - Begin implementation with full tracking
@@ -437,39 +406,23 @@ Use the Task tool with:
 You work independently, but other agents may be active in this project. Before starting execution, check your inbox for context:
 
 ```
-mcp__commander__commander_mailbox(
-  operation="inbox",
-  agent_name="pi"
-)
+cmd mailbox inbox
 ```
 
 If there are messages with discoveries or context from other agents, use them — don't redo work that's already been done. If another agent is already working on this exact task, stop and report the conflict.
 
 While you work, you have tools available if you need them:
-- **Share a discovery**: `mcp__commander__commander_mailbox(operation="send", from_agent="pi", to_agent="@all", body="Found: [discovery]", message_type="status")`
-- **Ask for help** (stuck after 2+ attempts): `mcp__commander__commander_mailbox(operation="send", from_agent="pi", to_agent="commander", body="Stuck on: [problem]", message_type="error")`
-- **Request a helper**: `mcp__commander__commander_mailbox(operation="send", from_agent="pi", to_agent="commander", body="Need help with: [task]", message_type="question")`
+- **Share a discovery**: `cmd mailbox send @all "Discovery: [discovery]"`
+- **Ask for help** (stuck after 2+ attempts): `cmd mailbox send commander "Stuck: [problem]"`
+- **Request a helper**: `cmd mailbox send commander "Need help with: [task]"`
 
 None of these are required. Use them when they would actually help.
 
 #### 5.1 Claim and Start
 
 ```
-mcp__commander__commander_task_lifecycle(
-  operation="claim",
-  task_id=[TASK_ID],
-  agent_id="pi",
-  agent_name="pi",
-  working_directory="[Current working directory]"
-)
-
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="STARTED: Beginning implementation. Plan: [brief summary]. First step: [step 1]"
-)
+cmd task update [TASK_ID] --status in-progress
+cmd task comment [TASK_ID] "STARTED: Beginning implementation. Plan: [brief summary]. First step: [step 1]"
 ```
 
 #### 5.2 Execute Each Step with Comments
@@ -478,42 +431,18 @@ mcp__commander__commander_comment(
 
 ```
 # Before starting step
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="STEP [N]: Starting - [description]"
-)
+cmd task comment [TASK_ID] "STEP [N]: Starting - [description]"
 
 # During the step - comment on every action
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="ANALYZING: [file] - [what you're looking for]"
-)
+cmd task comment [TASK_ID] "ANALYZING: [file] - [what you're looking for]"
 
 # Do the actual work (Read, Edit, Write, etc.)
 # ...
 
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="MODIFIED: [file] lines [X-Y] - [what changed]"
-)
+cmd task comment [TASK_ID] "MODIFIED: [file] lines [X-Y] - [what changed]"
 
 # After completing step
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="STEP [N]: Complete - [summary]"
-)
+cmd task comment [TASK_ID] "STEP [N]: Complete - [summary]"
 ```
 
 #### 5.3 Comment Patterns
@@ -539,12 +468,7 @@ INSIGHT: [pattern or learning]
 #### 5.4 Use Logs for Real-Time Dashboard
 
 ```
-mcp__commander__commander_log(
-  task_id=[TASK_ID],
-  message="[Concise progress update]",
-  agent_name="pi",
-  level="info"  // or "warn" for issues, "error" for failures
-)
+cmd task comment [TASK_ID] "[Concise progress update]"
 ```
 
 ### Phase 6: Complete or Fail
@@ -553,73 +477,28 @@ mcp__commander__commander_log(
 
 ```
 # Final verification comment
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="progress",
-  agent_name="pi",
-  message="COMPLETING: Final verification - [what you checked]"
-)
+cmd task comment [TASK_ID] "COMPLETING: Final verification - [what you checked]"
 
 # Complete the task
-mcp__commander__commander_task_lifecycle(
-  operation="complete",
-  task_id=[TASK_ID],
-  result="[1-2 sentence summary: what was done, files changed, tests status]"
-)
+cmd task update [TASK_ID] --status done
 
 # Final summary comment
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="info",
-  agent_name="pi",
-  message="COMPLETED: [detailed summary]. Files: [list]. Tests: [status]. Changes: [brief]"
-)
+cmd task comment [TASK_ID] "COMPLETED: [detailed summary]. Files: [list]. Tests: [status]. Changes: [brief]"
 ```
 
 #### On Failure
 
 ```
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="error",
-  agent_name="pi",
-  message="FAILING: [immediate reason]"
-)
-
-mcp__commander__commander_task_lifecycle(
-  operation="fail",
-  task_id=[TASK_ID],
-  error_message="[Clear, actionable error description]"
-)
-
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="handoff",
-  agent_name="pi",
-  message="FAILED: [root cause]. Attempted: [what tried]. Files touched: [partial changes]. Suggestion: [retry guidance]"
-)
+cmd task comment [TASK_ID] "FAILING: [immediate reason]"
+cmd task update [TASK_ID] --status todo  # failure: [Clear, actionable error description]
+cmd task comment [TASK_ID] "FAILED: [root cause]. Attempted: [what tried]. Files touched: [partial changes]. Suggestion: [retry guidance]"
 ```
 
 #### If Task Needs Review
 
 ```
-mcp__commander__commander_task(
-  operation="update",
-  task_id=[TASK_ID],
-  status="needs_review"
-)
-
-mcp__commander__commander_comment(
-  operation="add",
-  task_id=[TASK_ID],
-  type="handoff",
-  agent_name="pi",
-  message="NEEDS REVIEW: [what needs checking]. Work completed: [list]. Question: [specific question]. Recommendation: [suggestion]"
-)
+cmd task update [TASK_ID] --status todo  // review requested
+cmd task comment [TASK_ID] "NEEDS REVIEW: [what needs checking]. Work completed: [list]. Question: [specific question]. Recommendation: [suggestion]"
 ```
 
 ---
@@ -632,20 +511,8 @@ This enables seamless multi-agent coordination where `/commander-task` can conti
 
 ```
 // After primary task completion, check for more work
-pending_tasks = mcp__commander__commander_task(
-  operation="list",
-  status="pending",
-  working_directory="[CURRENT_WORKING_DIRECTORY]"
-)
-
-// Also check backlog
-backlog_tasks = mcp__commander__commander_task(
-  operation="list",
-  status="backlog",
-  working_directory="[CURRENT_WORKING_DIRECTORY]"
-)
-
-all_available = [...pending_tasks, ...backlog_tasks]
+pending_tasks = cmd task list --status pending --json
+all_available = pending_tasks
 ```
 
 **If tasks found:**
@@ -689,16 +556,10 @@ CLAIM_LOOP:
         CONTINUE
 
     // Claim atomically
-    result = mcp__commander__commander_task_lifecycle(
-      operation="claim",
-      task_id=task.id,
-      agent_id="pi",
-      agent_name="pi"
-    )
-
-    IF result.success:
+    if [ -n "$task_id" ]; then
+      // Claim succeeded (task remains marked in-progress)
       executeTask(task)  // Follow Phase 5 protocol
-    ELSE:
+    else
       // Race condition - another agent claimed it
       Log: "Task claimed by another agent, trying next"
       CONTINUE
@@ -791,14 +652,14 @@ Status: ✅ Completed
 
 ---
 
-## MCP Tools Reference
+## Commander CLI Reference
 
 | Tool | Purpose |
 |------|---------|
-| `mcp__commander__commander_task` | Create task (operation: "create") |
-| `mcp__commander__commander_task_lifecycle` | Claim, complete, fail |
-| `mcp__commander__commander_comment` | Add progress comments |
-| `mcp__commander__commander_log` | Real-time dashboard logs |
+| `cmd task` | Create/list/update tasks |
+| `cmd task update` | Claim/start/complete/reopen |
+| `cmd task comment` | Add progress comments |
+| `cmd mailbox` | Share cross-agent context/status updates |
 
 ---
 
@@ -826,11 +687,11 @@ Status: ✅ Completed
 ## Task Lifecycle
 
 ```
-backlog → pending → working → completed/failed/needs_review
+pending → in-progress → done
 ```
 
-- **backlog → pending → working → completed** - Always follow this flow
-- **Start from backlog** - Tasks created by commander-plan live in backlog
+- **pending → in-progress → done** - Always follow this flow
+- **Start from pending** - Tasks created by `/commander-plan` are listed in the root task tree
 - **Move to pending before execution** - Approve tasks before they're worked on
 - **Comment at every transition** - Comments are mandatory for knowledge capture
 
@@ -838,19 +699,18 @@ backlog → pending → working → completed/failed/needs_review
 
 Since `/commander-task` creates AND executes a single task, the lifecycle is compressed:
 
-1. **Create** → Task starts in `pending` (not backlog, since we're executing immediately)
-2. **Claim** → Move to `working` when execution begins
-3. **Complete/Fail** → Final state based on outcome
+1. **Create** → Task starts in `pending`
+2. **Claim** → Move to `in-progress` when execution begins
+3. **Complete/Fail** → Final state based on outcome (typically `done`, or `todo` for retry/review)
 
 ### State Transitions
 
 | From | To | When | Required Action |
 |------|-----|------|-----------------|
-| (new) | pending | Task group created | `commander_task_group(operation="create")` |
-| pending | working | Agent claims task | `commander_task_lifecycle(operation="claim")` |
-| working | completed | Success | `commander_task_lifecycle(operation="complete")` |
-| working | failed | Error | `commander_task_lifecycle(operation="fail")` |
-| working | needs_review | Human input needed | `commander_task(operation="update", status="needs_review")` |
+| (new) | pending | Task created | `cmd task add ...` |
+| pending | in-progress | Agent starts work | `cmd task update <id> --status in-progress` |
+| in-progress | done | Success | `cmd task update <id> --status done` |
+| in-progress | todo | Blocked / needs review | `cmd task update <id> --status todo` |
 
 ---
 

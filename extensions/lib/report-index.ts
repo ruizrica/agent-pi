@@ -19,13 +19,14 @@ function initSqlite(): boolean {
 	return sqliteAvailable;
 }
 
-export type PersistedReportCategory = "plan" | "questions" | "spec" | "completion";
+export type PersistedReportCategory = "plan" | "questions" | "spec" | "completion" | "tests" | "security" | "qa" | "research" | "generic";
 
 export interface PersistedReportEntry {
 	id: string;
 	category: PersistedReportCategory;
 	title: string;
 	summary: string;
+	content?: string;
 	searchText: string;
 	createdAt: string;
 	updatedAt: string;
@@ -46,6 +47,7 @@ export interface PersistedReportIndex {
 const INDEX_DIR = resolve(".context", "reports");
 const INDEX_PATH = join(INDEX_DIR, "index.json");
 const DB_PATH = join(INDEX_DIR, "reports.db");
+const RAW_REPORTS_DIR = join(INDEX_DIR, "raw");
 const DB_RETENTION_DAYS = parsePositiveInt(process.env.PI_REPORT_RETENTION_DAYS, 30);
 const DB_MAX_ENTRIES = parsePositiveInt(process.env.PI_REPORT_MAX_ENTRIES, 500);
 
@@ -116,6 +118,7 @@ function createDatabase(): any {
 			category TEXT NOT NULL,
 			title TEXT NOT NULL,
 			summary TEXT NOT NULL,
+			content TEXT,
 			search_text TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
@@ -129,6 +132,12 @@ function createDatabase(): any {
 		CREATE INDEX IF NOT EXISTS idx_reports_updated_at ON reports(updated_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_reports_category ON reports(category);
 	`);
+	// Migrate: add content column if missing (existing databases)
+	try {
+		database.exec(`ALTER TABLE reports ADD COLUMN content TEXT`);
+	} catch {
+		// Column already exists — ignore
+	}
 	return database;
 }
 
@@ -149,6 +158,7 @@ function rowToEntry(row: any): PersistedReportEntry {
 		category: row.category as PersistedReportCategory,
 		title: String(row.title || ""),
 		summary: String(row.summary || ""),
+		content: row.content ? String(row.content) : undefined,
 		searchText: String(row.search_text || ""),
 		createdAt: String(row.created_at || nowIso()),
 		updatedAt: String(row.updated_at || nowIso()),
@@ -199,9 +209,9 @@ function migrateJsonIndexIfNeeded(): void {
 
 	const insert = database.prepare(`
 		INSERT OR REPLACE INTO reports (
-			id, category, title, summary, search_text, created_at, updated_at,
+			id, category, title, summary, content, search_text, created_at, updated_at,
 			source_path, source_label, viewer_path, viewer_label, tags_json, metadata_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 
 	const transaction = database.transaction((entries: PersistedReportEntry[]) => {
@@ -212,6 +222,7 @@ function migrateJsonIndexIfNeeded(): void {
 				entry.category,
 				entry.title,
 				entry.summary,
+				entry.content || null,
 				entry.searchText,
 				entry.createdAt,
 				entry.updatedAt,
@@ -233,6 +244,7 @@ function migrateJsonIndexIfNeeded(): void {
 function normalizeEntry(input: Partial<PersistedReportEntry> & { category: PersistedReportCategory; title: string }): PersistedReportEntry {
 	const title = compact(String(input.title || "report"), 160);
 	const summary = compact(String(input.summary || ""), 320);
+	const content = input.content || undefined;
 	const sourcePath = input.sourcePath ? resolve(input.sourcePath) : undefined;
 	const viewerPath = input.viewerPath ? resolve(input.viewerPath) : undefined;
 	const metadata = input.metadata || {};
@@ -244,6 +256,7 @@ function normalizeEntry(input: Partial<PersistedReportEntry> & { category: Persi
 		category: input.category,
 		title,
 		summary,
+		content,
 		searchText: buildReportSearchText({
 			category: input.category,
 			title,
@@ -268,7 +281,7 @@ function loadEntriesFromDb(): PersistedReportEntry[] {
 	const database = getDb();
 	if (!database) return legacyLoadJsonIndex().entries;
 	const rows = database.prepare(`
-		SELECT id, category, title, summary, search_text, created_at, updated_at,
+		SELECT id, category, title, summary, content, search_text, created_at, updated_at,
 			source_path, source_label, viewer_path, viewer_label, tags_json, metadata_json
 		FROM reports
 		ORDER BY updated_at DESC, created_at DESC
@@ -296,9 +309,9 @@ export function saveReportIndex(index: PersistedReportIndex): void {
 	}
 	const replace = database.prepare(`
 		INSERT OR REPLACE INTO reports (
-			id, category, title, summary, search_text, created_at, updated_at,
+			id, category, title, summary, content, search_text, created_at, updated_at,
 			source_path, source_label, viewer_path, viewer_label, tags_json, metadata_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`);
 	const incoming = Array.isArray(index.entries) ? index.entries : [];
 	const ids = incoming.map((entry) => String(entry.id));
@@ -316,6 +329,7 @@ export function saveReportIndex(index: PersistedReportIndex): void {
 				entry.category,
 				entry.title,
 				entry.summary,
+				entry.content || null,
 				entry.searchText,
 				entry.createdAt,
 				entry.updatedAt,
@@ -374,12 +388,19 @@ export function upsertPersistedReport(input: {
 	category: PersistedReportCategory;
 	title: string;
 	summary?: string;
+	content?: string;
 	sourcePath?: string;
 	sourceLabel?: string;
 	viewerPath?: string;
 	viewerLabel?: string;
 	tags?: string[];
 	metadata?: Record<string, any>;
+	/**
+	 * Optional raw payload (e.g. a viewer snapshot) persisted to
+	 * .context/reports/raw/<entry-id>.json so the entry can be re-rendered
+	 * offline without re-reading source files or recomputing git state.
+	 */
+	payload?: unknown;
 }): PersistedReportEntry {
 	const database = getDb();
 	const timestamp = nowIso();
@@ -395,6 +416,9 @@ export function upsertPersistedReport(input: {
 			sourcePath,
 			viewerPath,
 		});
+		if (input.payload !== undefined) {
+			writeRawPayload(entry.id, input.payload);
+		}
 		const idx = legacy.entries.findIndex((e) => e.id === entry.id);
 		if (idx >= 0) legacy.entries[idx] = entry;
 		else legacy.entries.unshift(entry);
@@ -420,14 +444,15 @@ export function upsertPersistedReport(input: {
 
 	database.prepare(`
 		INSERT OR REPLACE INTO reports (
-			id, category, title, summary, search_text, created_at, updated_at,
+			id, category, title, summary, content, search_text, created_at, updated_at,
 			source_path, source_label, viewer_path, viewer_label, tags_json, metadata_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`).run(
 		entry.id,
 		entry.category,
 		entry.title,
 		entry.summary,
+		entry.content || null,
 		entry.searchText,
 		entry.createdAt,
 		entry.updatedAt,
@@ -439,9 +464,26 @@ export function upsertPersistedReport(input: {
 		serializeJson(entry.metadata || {}),
 	);
 
+	if (input.payload !== undefined) {
+		writeRawPayload(entry.id, input.payload);
+	}
+
 	pruneExpiredReports();
 	writeLegacyJsonSnapshot(loadEntriesFromDb());
 	return entry;
+}
+
+/** Writes a raw payload (snapshot JSON) to .context/reports/raw/<id>.json. Best-effort — silently swallows errors. */
+function writeRawPayload(id: string, payload: unknown): void {
+	try {
+		const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+		if (!sanitized) return;
+		if (!existsSync(RAW_REPORTS_DIR)) mkdirSync(RAW_REPORTS_DIR, { recursive: true });
+		const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
+		writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+	} catch {
+		// Best-effort — swallow disk/permission errors so persistence never crashes the viewer.
+	}
 }
 
 export function resetReportStorageForTests(): void {
@@ -458,4 +500,22 @@ export function resetReportStorageForTests(): void {
 /** Returns true if node:sqlite is available on this runtime. */
 export function isSqliteAvailable(): boolean {
 	return initSqlite();
+}
+
+/** Reads a raw payload from .context/reports/raw/<id>.json. Returns parsed JSON or null if missing/invalid. */
+export function readRawPayload(id: string): unknown | null {
+	// Sanitize id to prevent path traversal: alphanumeric, dash, underscore only
+	const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "");
+	if (!sanitized) return null;
+
+	const filePath = join(RAW_REPORTS_DIR, `${sanitized}.json`);
+
+	try {
+		if (!existsSync(filePath)) return null;
+		const content = readFileSync(filePath, "utf-8");
+		return JSON.parse(content);
+	} catch {
+		// File missing, unreadable, or invalid JSON — return null
+		return null;
+	}
 }

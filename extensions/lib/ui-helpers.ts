@@ -1,7 +1,7 @@
 // ABOUTME: Shared TUI helpers — padRight, wordWrap, sideBySide
 // ABOUTME: Used by agent-team.ts and other extensions that need text layout utilities
 
-import { visibleWidth, truncateToWidth } from "@mariozechner/pi-tui";
+import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 
 /** Pad a string with spaces to reach the target visible width, truncating if too long. */
 export function padRight(s: string, width: number): string {

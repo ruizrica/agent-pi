@@ -1,6 +1,10 @@
 // ABOUTME: Self-contained HTML template for the Spec Viewer GUI window.
 // ABOUTME: Multi-page wizard with step navigation, inline comments, markdown editing, visuals gallery, approve/request-changes.
 
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+import type { ProjectContext } from "./project-context.ts";
+
 export interface SpecDocument {
 	/** Unique key (e.g. "spec", "requirements", "tasks", "visuals") */
 	key: string;
@@ -25,12 +29,15 @@ export function generateSpecViewerHTML(opts: {
 	title: string;
 	port: number;
 	existingComments?: string; // JSON string of existing comments
+	roundTripEnabled?: boolean;
+	projectContext?: ProjectContext;
 }): string {
-	const { documents, title, port, existingComments } = opts;
+	const { documents, title, port, existingComments, roundTripEnabled = false, projectContext } = opts;
 	// Escape </ sequences to prevent </script> in content from breaking the script block
 	const escapedDocs = JSON.stringify(documents).replace(/<\//g, '<\\/');
 	const escapedTitle = JSON.stringify(title).replace(/<\//g, '<\\/');
 	const escapedComments = existingComments ? existingComments.replace(/<\//g, '<\\/') : "[]";
+	const escapedProjectContext = JSON.stringify(projectContext ?? null).replace(/<\//g, '<\\/');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -62,6 +69,8 @@ export function generateSpecViewerHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
   body {
     background: var(--bg);
@@ -108,11 +117,24 @@ export function generateSpecViewerHTML(opts: {
     letter-spacing: 1px;
     font-family: var(--mono);
   }
+  .header .title-wrap {
+    flex: 1;
+    min-width: 0;
+  }
   .header .title {
     font-size: 15px;
     font-weight: 600;
     color: var(--text);
-    flex: 1;
+    display: block;
+  }
+  .project-context-inline {
+    margin: 12px 0 18px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .project-context-line {
+    margin: 2px 0;
+    word-break: break-word;
   }
   .header .comment-count {
     font-size: 12px;
@@ -309,6 +331,144 @@ export function generateSpecViewerHTML(opts: {
     color: var(--text-muted);
     font-size: 12px;
     line-height: 1.6;
+  }
+  /* ── Mermaid Diagrams ────────────────── */
+  .mermaid-container {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 20px;
+    padding-top: 44px;
+    margin: 12px 0;
+    text-align: center;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+  }
+  .mermaid-container.dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+    transition: transform 0.2s ease;
+    transform-origin: 0 0;
+  }
+  .mermaid-container.dragging svg {
+    transition: none;
+  }
+
+  .mermaid-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .mermaid-container:hover .mermaid-toolbar {
+    opacity: 1;
+  }
+  .mermaid-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 4px;
+    width: 30px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-toolbar button svg.tb-icon {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.92);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 6px;
+    z-index: 10001;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 36px;
+    height: 34px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay .fs-content {
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow: hidden;
+    padding: 20px;
+    cursor: grab;
+    position: relative;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .mermaid-fullscreen-overlay .fs-content svg {
+    display: block;
+    margin: auto;
+    transition: width 0.2s ease, height 0.2s ease, transform 0.2s ease;
+    transform-origin: 0 0;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging svg {
+    transition: none;
   }
   .markdown-body blockquote {
     border-left: 3px solid var(--accent);
@@ -637,6 +797,54 @@ export function generateSpecViewerHTML(opts: {
   }
   .btn-ghost:hover { color: var(--text-muted); background: var(--surface2); }
 
+  /* ── Change Request Panel ────────────── */
+  .feedback-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px 12px;
+    display: none;
+  }
+  .feedback-panel.open {
+    display: block;
+  }
+  .feedback-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .feedback-panel-title {
+    color: var(--warning);
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .feedback-panel-subtitle {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .feedback-textarea {
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    outline: none;
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .feedback-textarea:focus {
+    border-color: var(--warning);
+    box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.08);
+  }
+
   /* ── Toast ───────────────────────────── */
   .toast {
     position: fixed;
@@ -670,6 +878,7 @@ export function generateSpecViewerHTML(opts: {
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
+    z-index: 100;
   }
   .approved-banner .approved-content {
     min-width: 0;
@@ -685,6 +894,25 @@ export function generateSpecViewerHTML(opts: {
   }
   .approved-banner .approved-actions .btn {
     white-space: nowrap;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--text-dim);
   }
   .approved-banner .approved-icon {
     width: 32px;
@@ -717,18 +945,20 @@ export function generateSpecViewerHTML(opts: {
   }
 
   /* When approved, disable all interactive elements */
+  body.approved-state .commentable:hover {
+    background: transparent;
+    border-left-color: transparent;
+    cursor: default;
+  }
+  body.approved-state .view-toggle { display: none; }
   body.approved-state .footer-wrapper { display: none; }
-  body.approved-state .toggle-bar { display: none; }
   body.approved-state .header .modified-badge { display: none !important; }
-  body.approved-state .header .comment-count { display: none !important; }
-  body.approved-state .comment-sidebar { display: none !important; }
-  body.approved-state .comment-input-popup { display: none !important; }
-  body.approved-state .commentable { cursor: default; pointer-events: none; }
-  body.approved-state .commentable:hover { border-left-color: transparent; background: transparent; }
-  body.approved-state .commentable.has-comment:hover { border-left-color: var(--comment-accent); }
-  body.approved-state .commentable .comment-badge { display: none !important; }
   body.approved-state .content { padding-bottom: 24px; }
-  body.approved-state .step-item { cursor: pointer; }
+  body.approved-state .comment-input-popup { display: none !important; }
+  body.approved-state .comment-sidebar { display: none !important; }
+  body.approved-state .step-item { cursor: default; pointer-events: none; }
+  body.approved-state .step-item.active { cursor: default; }
+  body.approved-state .visual-card { cursor: default; }
 
   /* ── Responsive ──────────────────────── */
   @media (max-width: 700px) {
@@ -746,7 +976,9 @@ export function generateSpecViewerHTML(opts: {
 <!-- Header -->
 <div class="header">
   <span class="badge">SPEC</span>
-  <span class="title" id="titleText">${title}</span>
+  <div class="title-wrap">
+    <span class="title" id="titleText">${title}</span>
+  </div>
   <span class="comment-count" id="commentCount"></span>
   <span class="modified-badge" id="modifiedBadge">modified</span>
   <img src="/logo.png" alt="agent" class="header-logo">
@@ -795,6 +1027,13 @@ export function generateSpecViewerHTML(opts: {
 
 <!-- Footer -->
 <div class="footer-wrapper">
+  <div class="feedback-panel">
+    <div class="feedback-panel-header">
+      <div class="feedback-panel-title">Send Back with Changes</div>
+      <div class="feedback-panel-subtitle">Describe broader revisions or summarize the next round.</div>
+    </div>
+    <textarea id="feedbackInput" class="feedback-textarea" placeholder="Describe the revisions you want here..."></textarea>
+  </div>
   <div class="footer">
     <button class="btn btn-ghost" onclick="copyToClipboard()" title="Copy current document markdown">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
@@ -813,19 +1052,23 @@ export function generateSpecViewerHTML(opts: {
     </button>
     <div class="spacer"></div>
     <button class="btn" onclick="decline()" id="btnDecline">Close</button>
-    <button class="btn btn-warning" onclick="requestChanges()" id="btnChanges">Request Changes</button>
+    <button class="btn btn-warning" onclick="toggleFeedbackPanel()" id="btnChanges">Needs Changes</button>
     <button class="btn btn-success" onclick="approve()" id="btnApprove">Approve Spec</button>
   </div>
 </div>
 
 <!-- marked.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+<!-- mermaid.js (diagram renderer) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
   // ── State ─────────────────────────────────────
   const PORT = ${port};
+  const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
   const documents = ${escapedDocs};
+  const projectContext = ${escapedProjectContext};
   let comments = ${escapedComments};
   let currentStep = 0;
   let currentView = 'rendered';
@@ -834,6 +1077,10 @@ export function generateSpecViewerHTML(opts: {
   let originalMarkdown = {}; // docKey -> original markdown
   let scrollPositions = {};  // docKey -> scrollTop
   let commentPopupTarget = null; // { docKey, sectionId, sectionText, rect }
+  let feedback = '';
+  let feedbackPanelOpen = false;
+  let pollingTimer = null;
+  let lastKnownRevision = 0;
 
   // Init markdown state
   documents.forEach(function(doc) {
@@ -845,6 +1092,230 @@ export function generateSpecViewerHTML(opts: {
   // ── Marked config ─────────────────────────────
   if (typeof marked !== 'undefined') {
     marked.setOptions({ gfm: true, breaks: true });
+  }
+
+  // ── Mermaid config ────────────────────────────
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#2a2d35',
+        primaryBorderColor: '#5a9fd4',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#5a9fd4',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: '16px',
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      securityLevel: 'loose',
+    });
+  }
+
+  ${getMermaidNormalizationBrowserScript()}
+
+  // ── SVG icon helpers for toolbar ──────────────
+  var TB_ICONS = {
+    zoomIn: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    zoomOut: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    reset: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+    fullscreen: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+    download: '<svg class="tb-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  };
+
+  // ── Drag-to-pan helper for any container with an SVG ──
+  function setupDragToPan(container, getZoom, getPan, setPan) {
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var startPanX = 0, startPanY = 0;
+
+    container.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.mermaid-toolbar') || e.target.closest('.fs-toolbar')) return;
+      if (getZoom() <= 1) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var pan = getPan();
+      startPanX = pan.x;
+      startPanY = pan.y;
+      container.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      setPan(startPanX + dx, startPanY + dy);
+      e.preventDefault();
+    });
+
+    window.addEventListener('mouseup', function() {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('dragging');
+    });
+  }
+
+  // ── Mermaid toolbar injection ──────────────────
+  function createMermaidToolbar(wrapper, idx) {
+    var currentZoom = 1;
+    var panX = 0, panY = 0;
+    var toolbar = document.createElement('div');
+    toolbar.className = 'mermaid-toolbar';
+
+    function makeBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    function applyTransform() {
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+    }
+
+    function applyZoom(z) {
+      currentZoom = Math.max(0.25, Math.min(4, z));
+      if (currentZoom <= 1) { panX = 0; panY = 0; }
+      applyTransform();
+    }
+
+    setupDragToPan(
+      wrapper,
+      function() { return currentZoom; },
+      function() { return { x: panX, y: panY }; },
+      function(x, y) { panX = x; panY = y; applyTransform(); }
+    );
+
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { panX = 0; panY = 0; applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
+    wrapper.appendChild(toolbar);
+  }
+
+  // ── Fullscreen overlay ────────────────────────
+  function openMermaidFullscreen(wrapper) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-fullscreen-overlay';
+    var fsZoom = 1;
+    var fsPanX = 0, fsPanY = 0;
+
+    var fsToolbar = document.createElement('div');
+    fsToolbar.className = 'fs-toolbar';
+
+    function makeFsBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    var origWidth = 0;
+    var origHeight = 0;
+
+    function applyFsTransform() {
+      var fsSvg = overlay.querySelector('.fs-content svg');
+      if (fsSvg && origWidth && origHeight) {
+        fsSvg.style.width = (origWidth * fsZoom) + 'px';
+        fsSvg.style.height = (origHeight * fsZoom) + 'px';
+        fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
+        fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+        fsSvg.style.transform = 'translate(' + fsPanX + 'px, ' + fsPanY + 'px)';
+      }
+    }
+
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      if (fsZoom <= 1) { fsPanX = 0; fsPanY = 0; }
+      applyFsTransform();
+    }
+
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { fsPanX = 0; fsPanY = 0; applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
+    overlay.appendChild(fsToolbar);
+
+    var content = document.createElement('div');
+    content.className = 'fs-content';
+    content.innerHTML = svg.outerHTML;
+    overlay.appendChild(content);
+
+    setupDragToPan(
+      content,
+      function() { return fsZoom; },
+      function() { return { x: fsPanX, y: fsPanY }; },
+      function(x, y) { fsPanX = x; fsPanY = y; applyFsTransform(); }
+    );
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
+    });
+    document.body.appendChild(overlay);
+
+    // Capture original SVG dimensions after overlay is in the DOM
+    var fsSvg = content.querySelector('svg');
+    if (fsSvg) {
+      fsSvg.style.maxWidth = 'none';
+      var rect = fsSvg.getBoundingClientRect();
+      origWidth = rect.width || fsSvg.viewBox.baseVal.width || 800;
+      origHeight = rect.height || fsSvg.viewBox.baseVal.height || 600;
+    }
+  }
+
+  // ── Download SVG ──────────────────────────────
+  function downloadMermaidSVG(wrapper, idx) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var serializer = new XMLSerializer();
+    var svgStr = serializer.serializeToString(svg);
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram-' + idx + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Render Mermaid diagrams ───────────────────
+  function renderMermaidDiagrams(container) {
+    if (typeof mermaid === 'undefined') return;
+    var codeBlocks = container.querySelectorAll('pre code.language-mermaid');
+    if (codeBlocks.length === 0) return;
+    var blocks = Array.from(codeBlocks);
+    blocks.forEach(function(codeEl, idx) {
+      var preEl = codeEl.parentElement;
+      var source = normalizeMermaidSource(codeEl.textContent || '');
+      var wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-container';
+      var id = 'mermaid-diagram-' + idx + '-' + Date.now();
+      try {
+        mermaid.render(id, source).then(function(result) {
+          wrapper.innerHTML = result.svg;
+          createMermaidToolbar(wrapper, idx);
+          preEl.parentNode.replaceChild(wrapper, preEl);
+        }).catch(function(err) {
+          console.warn('Mermaid render error for diagram ' + idx + ':', err);
+        });
+      } catch(e) {
+        console.warn('Mermaid render error:', e);
+      }
+    });
   }
 
   // ── Step Bar ──────────────────────────────────
@@ -933,7 +1404,18 @@ export function generateSpecViewerHTML(opts: {
     // Pre-process: escape "N." in checkbox items to prevent nested ordered lists
     md = md.replace(/^(\\s*- \\[[ xX]\\] )(\\d+)\\./gm, '$1$2\\\\.');
     var html = marked.parse(md);
+    if (typeof projectContext !== 'undefined' && projectContext && html.includes('<h2>Context</h2>')) {
+      var metadataHtml = '<div class="project-context-inline" id="projectContext">' +
+        '<div class="project-context-line"><strong>Project:</strong> ' + escapeHtml(projectContext.projectName) + '</div>' +
+        '<div class="project-context-line"><strong>Path:</strong> ' + escapeHtml(projectContext.fullPath) + '</div>' +
+        '<div class="project-context-line"><strong>UUID:</strong> ' + escapeHtml(projectContext.uuid) + '</div>' +
+        '<div class="project-context-line"><strong>Revision:</strong> ' + escapeHtml(String(projectContext.revision)) + '</div>' +
+        '<div class="project-context-line">' + escapeHtml(projectContext.timestamp) + '</div>' +
+      '</div>';
+      html = html.replace('<h2>Context</h2>', metadataHtml + '<h2>Context</h2>');
+    }
     renderedView.innerHTML = html;
+    renderMermaidDiagrams(renderedView);
 
     // Make sections commentable
     makeCommentable(renderedView, doc.key);
@@ -1177,15 +1659,116 @@ export function generateSpecViewerHTML(opts: {
   };
 
   // ── Actions ───────────────────────────────────
+  function syncFeedback() {
+    var input = document.getElementById('feedbackInput');
+    feedback = input ? input.value.trim() : '';
+  }
+
+  function renderWorkflowBanner(label, sub, tone) {
+    var existing = document.getElementById('workflowBanner');
+    if (existing) existing.remove();
+    var banner = document.createElement('div');
+    banner.className = 'approved-banner';
+    banner.id = 'workflowBanner';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    var color = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var borderColor = tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+    var bgColor = tone === 'warning' ? 'rgba(240, 180, 41, 0.08)' : 'var(--surface)';
+    var icon = tone === 'warning' ? '&#8635;' : '&#10003;';
+    banner.style.borderColor = borderColor;
+    banner.style.borderLeftColor = borderColor;
+    banner.style.background = bgColor;
+    banner.innerHTML = '<div class="approved-icon" style="background:' + color + ';">' + icon + '</div>' +
+      '<div class="approved-content"><div class="approved-text" style="color:' + color + ';">' + label + '</div>' +
+      '<div class="approved-sub">' + sub + '</div></div>' +
+      '<div class="approved-actions">' +
+      '<button class="icon-btn" onclick="copyToClipboard()" title="Copy to clipboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+      '<button class="icon-btn" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></button>' +
+      '</div>';
+    var header = document.querySelector('.header');
+    header.parentNode.insertBefore(banner, header.nextSibling);
+  }
+
+  window.toggleFeedbackPanel = function() {
+    if (!ROUND_TRIP_ENABLED) {
+      requestChanges();
+      return;
+    }
+    if (feedbackPanelOpen) {
+      requestChanges();
+      return;
+    }
+    feedbackPanelOpen = true;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.add('open');
+    if (btn) btn.textContent = 'Send Back with Changes';
+    var input = document.getElementById('feedbackInput');
+    if (input) input.focus();
+  };
+
+  function applyUpdatedSpec(state) {
+    if (!state || !state.payload || !Array.isArray(state.payload.documents)) return;
+    state.payload.documents.forEach(function(updatedDoc) {
+      var existing = documents.find(function(doc) { return doc.key === updatedDoc.key; });
+      if (existing) {
+        existing.markdown = updatedDoc.markdown;
+        docMarkdown[existing.key] = updatedDoc.markdown;
+        originalMarkdown[existing.key] = updatedDoc.markdown;
+        modified[existing.key] = false;
+      }
+    });
+    if (typeof state.revision === 'number') lastKnownRevision = state.revision;
+    renderCurrentStep();
+    updateGlobalModifiedState();
+    if (currentView === 'raw') {
+      setView('rendered');
+    }
+    var summary = Array.isArray(state.changeSummary) && state.changeSummary.length > 0
+      ? 'Updated changes: ' + state.changeSummary.join(' • ')
+      : 'The spec was updated with your previous changes.';
+    renderWorkflowBanner('Spec Updated', summary, 'success');
+    document.body.classList.remove('approved-state');
+    var badge = document.querySelector('.header .badge');
+    if (badge) {
+      badge.textContent = 'SPEC';
+      badge.style.color = 'var(--accent)';
+      badge.style.borderColor = 'var(--accent)';
+    }
+    feedbackPanelOpen = false;
+    var panel = document.querySelector('.feedback-panel');
+    var btn = document.getElementById('btnChanges');
+    if (panel) panel.classList.remove('open');
+    if (btn) btn.textContent = 'Needs Changes';
+  }
+
+  function startRoundTripPolling() {
+    if (!ROUND_TRIP_ENABLED) return;
+    if (pollingTimer) clearInterval(pollingTimer);
+    pollingTimer = setInterval(function() {
+      fetch('http://127.0.0.1:' + PORT + '/updated-content')
+        .then(function(r) { return r.json(); })
+        .then(function(state) {
+          if (state && state.status === 'updated' && state.revision !== lastKnownRevision) {
+            applyUpdatedSpec(state);
+          }
+        })
+        .catch(function() {});
+    }, 1500);
+  }
+
   window.approve = function() {
     syncCurrentDoc();
+    syncFeedback();
     sendResult('approved');
   };
 
   window.requestChanges = function() {
     syncCurrentDoc();
-    if (comments.length === 0) {
-      showToast('Add comments before requesting changes');
+    syncFeedback();
+    if (!feedback && comments.length === 0) {
+      showToast('Add change details or comments before requesting changes');
       return;
     }
     sendResult('changes_requested');
@@ -1193,6 +1776,7 @@ export function generateSpecViewerHTML(opts: {
 
   window.decline = function() {
     syncCurrentDoc();
+    syncFeedback();
     sendResult('declined');
   };
 
@@ -1252,24 +1836,33 @@ export function generateSpecViewerHTML(opts: {
       action: action,
       comments: comments,
       markdownChanges: markdownChanges,
-      modified: isAnyModified()
+      modified: isAnyModified(),
+      feedback: feedback
     };
 
-    fetch('http://127.0.0.1:' + PORT + '/result', {
+    // Send changes_requested through /result, matching the plan viewer. This
+    // unblocks the active show_spec call so Pi can receive the feedback and
+    // revise the spec; /feedback is reserved for non-final live refresh loops.
+    var endpoint = '/result';
+    fetch('http://127.0.0.1:' + PORT + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     }).then(function() {
       if (action === 'approved') {
-        // Show approved state: banner + full read-only content
+        // Show approved banner + read-only content (matches plan viewer pattern)
+        var label = 'Spec Approved';
+        var sub = 'The agent will now proceed with implementation.';
+
+        // Insert approved banner after header
         var banner = document.createElement('div');
         banner.className = 'approved-banner';
-        banner.innerHTML = '<div class="approved-icon">✓</div>' +
-          '<div class="approved-content"><div class="approved-text">Spec Approved</div>' +
-          '<div class="approved-sub">The agent will now proceed with implementation.</div></div>' +
+        banner.innerHTML = '<div class="approved-icon">&#10003;</div>' +
+          '<div class="approved-content"><div class="approved-text">' + label + '</div>' +
+          '<div class="approved-sub">' + sub + '</div></div>' +
           '<div class="approved-actions">' +
-          '<button class="btn btn-ghost" onclick="copyToClipboard()">Copy</button>' +
-          '<button class="btn btn-ghost" onclick="downloadStandalone()">Standalone</button>' +
+          '<button class="icon-btn" onclick="copyToClipboard()" title="Copy to clipboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+          '<button class="icon-btn" onclick="downloadStandalone()" title="Download standalone read-only HTML"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></button>' +
           '</div>';
         var header = document.querySelector('.header');
         header.parentNode.insertBefore(banner, header.nextSibling);
@@ -1289,16 +1882,29 @@ export function generateSpecViewerHTML(opts: {
         if (currentView === 'raw') {
           setView('rendered');
         }
-
-        // Close comment sidebar and popup
-        closeCommentPopup();
-        document.getElementById('commentSidebar').classList.remove('visible');
+      } else if (action === 'changes_requested') {
+        renderWorkflowBanner('Changes Sent Back', 'Your feedback was sent to the agent. Waiting for the updated spec...', 'warning');
+        document.body.classList.add('approved-state');
+        var badge = document.querySelector('.header .badge');
+        if (badge) {
+          badge.textContent = 'WAITING';
+          badge.style.color = 'var(--warning)';
+          badge.style.borderColor = 'var(--warning)';
+        }
+        feedbackPanelOpen = false;
+        var panel = document.querySelector('.feedback-panel');
+        var btn = document.getElementById('btnChanges');
+        if (panel) panel.classList.remove('open');
+        if (btn) btn.textContent = 'Needs Changes';
+        if (currentView === 'raw') {
+          setView('rendered');
+        }
+        startRoundTripPolling();
       } else {
-        // Closed/declined/changes_requested — show simple message
-        var msg = action === 'changes_requested' ? 'Changes requested' : 'Closed';
+        // Closed/declined — show simple close message
         document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-muted);font-family:var(--font);">' +
-          '<div style="text-align:center"><p style="font-size:20px;margin-bottom:8px;">' + msg +
-          '</p><p style="color:var(--text-dim);">You can close this tab.</p></div></div>';
+          '<div style="text-align:center"><p style="font-size:20px;margin-bottom:8px;">Closed</p>' +
+          '<p style="color:var(--text-dim);">You can close this tab.</p></div></div>';
       }
     }).catch(function() {
       showToast('Failed to send result');

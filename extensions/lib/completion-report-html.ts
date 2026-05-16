@@ -1,6 +1,9 @@
 // ABOUTME: Self-contained HTML template for the Completion Report viewer GUI window.
 // ABOUTME: Renders work summary, file diffs with syntax highlighting, and per-file rollback controls.
 
+import { getMermaidNormalizationBrowserScript } from "./mermaid-normalization.ts";
+import { VIEWER_SCROLLBAR_STYLES } from "./viewer-scrollbar-styles.ts";
+
 /**
  * Data structure for a single changed file.
  */
@@ -78,6 +81,8 @@ export function generateCompletionReportHTML(opts: {
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+${VIEWER_SCROLLBAR_STYLES}
   html { height: 100%; }
 
   body {
@@ -293,6 +298,159 @@ export function generateCompletionReportHTML(opts: {
   .markdown-body li.task-done::marker { color: var(--success); }
   .markdown-body li.task-pending::marker { color: var(--text-dim); }
 
+  /* ── Mermaid Diagrams ────────────────── */
+  .mermaid-container {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 20px;
+    padding-top: 44px;
+    margin: 12px 0;
+    text-align: center;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+  }
+  .mermaid-container.dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+    transition: transform 0.2s ease;
+    transform-origin: 0 0;
+  }
+  .mermaid-container.dragging svg {
+    transition: none;
+  }
+  .mermaid-container.mermaid-fallback {
+    cursor: default;
+    text-align: left;
+    border: 1px solid var(--warning-bg);
+    background: rgba(240, 180, 41, 0.04);
+  }
+  .mermaid-error {
+    color: var(--warning);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .mermaid-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .mermaid-container:hover .mermaid-toolbar {
+    opacity: 1;
+  }
+  .mermaid-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 4px;
+    width: 30px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-toolbar button svg.tb-icon {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.92);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 6px;
+    z-index: 10001;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 36px;
+    height: 34px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button:hover {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .mermaid-fullscreen-overlay .fs-toolbar button svg.tb-icon {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mermaid-fullscreen-overlay .fs-content {
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow: hidden;
+    padding: 20px;
+    cursor: grab;
+    position: relative;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+  .mermaid-fullscreen-overlay .fs-content svg {
+    display: block;
+    margin: auto;
+    transition: width 0.2s ease, height 0.2s ease, transform 0.2s ease;
+    transform-origin: 0 0;
+  }
+  .mermaid-fullscreen-overlay .fs-content.dragging svg {
+    transition: none;
+  }
+
   /* ── Task Summary ────────────────────── */
   .task-overview {
     display: flex;
@@ -437,27 +595,42 @@ export function generateCompletionReportHTML(opts: {
 
   .file-actions {
     display: flex;
-    gap: 4px;
-    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 104px;
+    margin-left: 8px;
   }
 
   .rollback-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 86px;
     font-size: 11px;
     font-family: var(--mono);
     color: var(--warning);
-    border: 1px solid var(--warning);
-    background: transparent;
-    padding: 3px 10px;
-    border-radius: 3px;
+    border: 1px solid rgba(240, 180, 41, 0.7);
+    background: rgba(240, 180, 41, 0.10);
+    padding: 5px 12px;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-weight: 600;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.08) inset;
   }
-  .rollback-btn:hover { background: var(--warning-bg); }
-  .rollback-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  .rollback-btn.done { color: var(--text-dim); border-color: var(--text-dim); }
+  .rollback-btn:hover {
+    background: rgba(240, 180, 41, 0.18);
+    border-color: var(--warning);
+    color: #ffd166;
+    transform: translateY(-1px);
+  }
+  .rollback-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .rollback-btn.done { color: var(--text-dim); border-color: var(--text-dim); background: transparent; box-shadow: none; }
 
   /* ── Diff View ───────────────────────── */
   .file-diff {
@@ -651,6 +824,18 @@ export function generateCompletionReportHTML(opts: {
   }
   .btn-warning:hover { background: var(--warning-bg); }
   .btn-warning:disabled { opacity: 0.3; cursor: not-allowed; }
+  #rollbackAllBtn {
+    color: var(--warning);
+    border-color: rgba(240, 180, 41, 0.75);
+    background: rgba(240, 180, 41, 0.10);
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.08) inset;
+  }
+  #rollbackAllBtn:hover:not(:disabled) {
+    background: rgba(240, 180, 41, 0.18);
+    border-color: var(--warning);
+    color: #ffd166;
+  }
 
   .btn-success {
     background: transparent;
@@ -815,6 +1000,8 @@ export function generateCompletionReportHTML(opts: {
 
 <!-- marked.js (markdown parser) -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
+<!-- mermaid.js (diagram renderer) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"><\/script>
 
 <script>
 (function() {
@@ -829,6 +1016,26 @@ export function generateCompletionReportHTML(opts: {
     if (typeof marked !== 'undefined') {
       marked.setOptions({ gfm: true, breaks: true });
     }
+
+    // Mermaid config
+    if (typeof mermaid !== 'undefined') {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        themeVariables: {
+          primaryColor: '#2a2d35',
+          primaryBorderColor: '#5a9fd4',
+          primaryTextColor: '#e2e8f0',
+          lineColor: '#5a9fd4',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          fontSize: '16px',
+        },
+        flowchart: { curve: 'basis', padding: 20 },
+        securityLevel: 'loose',
+      });
+    }
+
+    ${getMermaidNormalizationBrowserScript()}
 
     // Title
     document.getElementById('titleText').textContent = report.title;
@@ -847,12 +1054,14 @@ export function generateCompletionReportHTML(opts: {
     if (report.summary && report.summary.trim()) {
       document.getElementById('summarySection').style.display = 'block';
       document.getElementById('summaryContent').innerHTML = renderMarkdownWithTables(report.summary);
+      scheduleMermaidRender(document.getElementById('summaryContent'));
     }
 
     // Task section
     if (report.taskMarkdown && report.taskMarkdown.trim()) {
       document.getElementById('taskSection').style.display = 'block';
       renderTasks(report.taskMarkdown);
+      scheduleMermaidRender(document.getElementById('taskContent'));
     }
 
     // Files
@@ -886,6 +1095,279 @@ export function generateCompletionReportHTML(opts: {
     return html
       .split('<table>').join('<div class="table-wrap"><table class="ui-table">')
       .split('</table>').join('</table></div>');
+  }
+
+  // ── SVG icon helpers for mermaid toolbar ─────
+  var TB_ICONS = {
+    zoomIn: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    zoomOut: '<svg class="tb-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+    reset: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+    fullscreen: '<svg class="tb-icon" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+    download: '<svg class="tb-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    close: '<svg class="tb-icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  };
+
+  // ── Drag-to-pan helper for any container with an SVG ──
+  function setupDragToPan(container, getZoom, getPan, setPan) {
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var startPanX = 0, startPanY = 0;
+
+    container.addEventListener('mousedown', function(e) {
+      // Ignore clicks on toolbar buttons
+      if (e.target.closest('.mermaid-toolbar') || e.target.closest('.fs-toolbar')) return;
+      if (getZoom() <= 1) return; // No drag when not zoomed
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var pan = getPan();
+      startPanX = pan.x;
+      startPanY = pan.y;
+      container.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+      setPan(startPanX + dx, startPanY + dy);
+      e.preventDefault();
+    });
+
+    window.addEventListener('mouseup', function() {
+      if (!isDragging) return;
+      isDragging = false;
+      container.classList.remove('dragging');
+    });
+  }
+
+  // ── Mermaid toolbar injection ──────────────────
+  function createMermaidToolbar(wrapper, idx) {
+    var currentZoom = 1;
+    var panX = 0, panY = 0;
+    var toolbar = document.createElement('div');
+    toolbar.className = 'mermaid-toolbar';
+
+    function makeBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    function applyTransform() {
+      var svg = wrapper.querySelector('svg');
+      if (svg) svg.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+    }
+
+    function applyZoom(z) {
+      currentZoom = Math.max(0.25, Math.min(4, z));
+      if (currentZoom <= 1) { panX = 0; panY = 0; }
+      applyTransform();
+    }
+
+    // Setup drag-to-pan
+    setupDragToPan(
+      wrapper,
+      function() { return currentZoom; },
+      function() { return { x: panX, y: panY }; },
+      function(x, y) { panX = x; panY = y; applyTransform(); }
+    );
+
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyZoom(currentZoom + 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyZoom(currentZoom - 0.25); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.reset, 'Reset zoom', function() { panX = 0; panY = 0; applyZoom(1); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.fullscreen, 'Fullscreen', function() { openMermaidFullscreen(wrapper); }));
+    toolbar.appendChild(makeBtn(TB_ICONS.download, 'Download SVG', function() { downloadMermaidSVG(wrapper, idx); }));
+    wrapper.appendChild(toolbar);
+  }
+
+  // ── Fullscreen overlay ────────────────────────
+  function openMermaidFullscreen(wrapper) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'mermaid-fullscreen-overlay';
+    var fsZoom = 1;
+    var fsPanX = 0, fsPanY = 0;
+
+    var fsToolbar = document.createElement('div');
+    fsToolbar.className = 'fs-toolbar';
+
+    function makeFsBtn(iconHtml, title, onClick) {
+      var btn = document.createElement('button');
+      btn.innerHTML = iconHtml;
+      btn.title = title;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); onClick(); });
+      return btn;
+    }
+
+    var origWidth = 0;
+    var origHeight = 0;
+
+    function applyFsTransform() {
+      var fsSvg = overlay.querySelector('.fs-content svg');
+      if (fsSvg && origWidth && origHeight) {
+        fsSvg.style.width = (origWidth * fsZoom) + 'px';
+        fsSvg.style.height = (origHeight * fsZoom) + 'px';
+        fsSvg.style.minWidth = (origWidth * fsZoom) + 'px';
+        fsSvg.style.minHeight = (origHeight * fsZoom) + 'px';
+        fsSvg.style.transform = 'translate(' + fsPanX + 'px, ' + fsPanY + 'px)';
+      }
+    }
+
+    function applyFsZoom(z) {
+      fsZoom = Math.max(0.25, Math.min(6, z));
+      if (fsZoom <= 1) { fsPanX = 0; fsPanY = 0; }
+      applyFsTransform();
+    }
+
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomIn, 'Zoom in', function() { applyFsZoom(fsZoom + 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.zoomOut, 'Zoom out', function() { applyFsZoom(fsZoom - 0.25); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.reset, 'Reset zoom', function() { fsPanX = 0; fsPanY = 0; applyFsZoom(1); }));
+    fsToolbar.appendChild(makeFsBtn(TB_ICONS.close, 'Close', function() { overlay.remove(); }));
+    overlay.appendChild(fsToolbar);
+
+    var content = document.createElement('div');
+    content.className = 'fs-content';
+    content.innerHTML = svg.outerHTML;
+    overlay.appendChild(content);
+
+    // Setup drag-to-pan for fullscreen content
+    setupDragToPan(
+      content,
+      function() { return fsZoom; },
+      function() { return { x: fsPanX, y: fsPanY }; },
+      function(x, y) { fsPanX = x; fsPanY = y; applyFsTransform(); }
+    );
+
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
+    });
+    document.body.appendChild(overlay);
+
+    // Capture original SVG dimensions after overlay is in the DOM
+    var fsSvg = content.querySelector('svg');
+    if (fsSvg) {
+      fsSvg.style.maxWidth = 'none';
+      var rect = fsSvg.getBoundingClientRect();
+      origWidth = rect.width || fsSvg.viewBox.baseVal.width || 800;
+      origHeight = rect.height || fsSvg.viewBox.baseVal.height || 600;
+    }
+  }
+
+  // ── Download SVG ──────────────────────────────
+  function downloadMermaidSVG(wrapper, idx) {
+    var svg = wrapper.querySelector('svg');
+    if (!svg) return;
+    var serializer = new XMLSerializer();
+    var svgStr = serializer.serializeToString(svg);
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram-' + idx + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function sourceLooksLikeMermaid(source) {
+    var trimmed = String(source || '').trim();
+    return /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|pie|quadrantChart|gitGraph|requirementDiagram|block-beta)\b/i.test(trimmed);
+  }
+
+  function isMermaidCodeBlock(codeEl, preEl) {
+    var className = ((preEl && preEl.className) || '') + ' ' + ((codeEl && codeEl.className) || '');
+    if (/(^|\s)(language-|lang-)?mermaid(\s|$)/i.test(className)) return true;
+    return sourceLooksLikeMermaid((codeEl && codeEl.textContent) || (preEl && preEl.textContent) || '');
+  }
+
+  function getPendingMermaidBlocks(container) {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('pre')).map(function(preEl) {
+      return { preEl: preEl, codeEl: preEl.querySelector('code') };
+    }).filter(function(entry) {
+      if (!entry.preEl || entry.preEl.dataset.mermaidState === 'processing') return false;
+      return isMermaidCodeBlock(entry.codeEl, entry.preEl);
+    });
+  }
+
+  function scheduleMermaidRender(container, attemptsLeft) {
+    var attempts = typeof attemptsLeft === 'number' ? attemptsLeft : 8;
+    window.requestAnimationFrame(function() {
+      renderMermaidDiagrams(container);
+      if (attempts <= 0) return;
+      if (getPendingMermaidBlocks(container).length > 0) {
+        window.setTimeout(function() {
+          scheduleMermaidRender(container, attempts - 1);
+        }, 120);
+      }
+    });
+  }
+
+  function rerunAllMermaidSections() {
+    scheduleMermaidRender(document.getElementById('summaryContent'));
+    scheduleMermaidRender(document.getElementById('taskContent'));
+  }
+
+  function showMermaidFallback(preEl, source, err) {
+    if (!preEl || !preEl.parentNode) return;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'mermaid-container mermaid-fallback';
+    var label = document.createElement('div');
+    label.className = 'mermaid-error';
+    label.textContent = 'Mermaid render failed — showing source';
+    wrapper.appendChild(label);
+    var sourcePre = document.createElement('pre');
+    var sourceCode = document.createElement('code');
+    sourceCode.textContent = source;
+    sourcePre.appendChild(sourceCode);
+    wrapper.appendChild(sourcePre);
+    if (err) wrapper.setAttribute('title', String(err && err.message ? err.message : err));
+    preEl.parentNode.replaceChild(wrapper, preEl);
+  }
+
+  // ── Render Mermaid diagrams ───────────────────
+  function renderMermaidDiagrams(container) {
+    if (!container || typeof mermaid === 'undefined') return;
+    var blocks = getPendingMermaidBlocks(container);
+    if (blocks.length === 0) return;
+    blocks.forEach(function(entry, idx) {
+      var preEl = entry.preEl;
+      var codeEl = entry.codeEl;
+      var source = normalizeMermaidSource((codeEl && codeEl.textContent) || preEl.textContent || '');
+      var wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-container';
+      var id = 'mermaid-diagram-' + idx + '-' + Date.now();
+      preEl.dataset.mermaidState = 'processing';
+      try {
+        mermaid.render(id, source).then(function(result) {
+          if (!preEl || !preEl.parentNode) return;
+          wrapper.innerHTML = result.svg;
+          preEl.parentNode.replaceChild(wrapper, preEl);
+          try {
+            createMermaidToolbar(wrapper, idx);
+          } catch (toolbarErr) {
+            console.warn('Mermaid toolbar setup error for diagram ' + idx + ':', toolbarErr);
+          }
+        }).catch(function(err) {
+          console.warn('Mermaid render error for diagram ' + idx + ':', err);
+          delete preEl.dataset.mermaidState;
+          showMermaidFallback(preEl, source, err);
+        });
+      } catch(e) {
+        console.warn('Mermaid render error:', e);
+        delete preEl.dataset.mermaidState;
+        showMermaidFallback(preEl, source, e);
+      }
+    });
   }
 
   function renderTasks(taskMd) {
@@ -1109,7 +1591,7 @@ export function generateCompletionReportHTML(opts: {
     confirmBtn.textContent = 'Rolling back...';
     confirmBtn.disabled = true;
 
-    fetch('http://localhost:' + PORT + '/rollback', {
+    fetch('http://127.0.0.1:' + PORT + '/rollback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: files, baseRef: report.baseRef }),
@@ -1152,7 +1634,7 @@ export function generateCompletionReportHTML(opts: {
 
   // ── Result Communication ──────────────────────
   function sendResult(action, files) {
-    fetch('http://localhost:' + PORT + '/result', {
+    fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1185,7 +1667,7 @@ export function generateCompletionReportHTML(opts: {
   }
 
   function handleDone() {
-    fetch('http://localhost:' + PORT + '/result', {
+    fetch('http://127.0.0.1:' + PORT + '/result', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1205,7 +1687,7 @@ export function generateCompletionReportHTML(opts: {
 
   window.addEventListener('pagehide', function() {
     try {
-      navigator.sendBeacon('http://localhost:' + PORT + '/result', JSON.stringify({
+      navigator.sendBeacon('http://127.0.0.1:' + PORT + '/result', JSON.stringify({
         action: 'closed',
         rolledBackFiles: Array.from(rolledBackFiles)
       }));
@@ -1224,7 +1706,7 @@ export function generateCompletionReportHTML(opts: {
 
   window.saveReport = function() {
     const text = buildReportText();
-    fetch('http://localhost:' + PORT + '/save', {
+    fetch('http://127.0.0.1:' + PORT + '/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: text }),
@@ -1239,7 +1721,7 @@ export function generateCompletionReportHTML(opts: {
   };
 
   window.downloadStandalone = function() {
-    fetch('http://localhost:' + PORT + '/export-standalone', {
+    fetch('http://127.0.0.1:' + PORT + '/export-standalone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -1288,7 +1770,70 @@ export function generateCompletionReportHTML(opts: {
   }
 
   // ── Boot ──────────────────────────────────────
+  window.__piCompletionReportMermaid = {
+    rerunAllMermaidSections: rerunAllMermaidSections,
+    renderMermaidDiagrams: renderMermaidDiagrams,
+  };
   init();
+  window.addEventListener('load', function() {
+    rerunAllMermaidSections();
+  });
+})();
+<\/script>
+<script>
+(function() {
+  function sourceLooksLikeMermaid(source) {
+    var trimmed = String(source || '').trim();
+    return /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|pie|quadrantChart|gitGraph|requirementDiagram|block-beta)\b/i.test(trimmed);
+  }
+
+  function getFallbackBlocks() {
+    return Array.from(document.querySelectorAll('#summaryContent pre, #taskContent pre')).filter(function(preEl) {
+      if (!preEl || preEl.dataset.piMermaidDone === '1') return false;
+      var codeEl = preEl.querySelector('code');
+      var className = ((preEl.className || '') + ' ' + ((codeEl && codeEl.className) || '')).trim();
+      var source = (codeEl && codeEl.textContent) || preEl.textContent || '';
+      return /(^|\s)(language-|lang-)?mermaid(\s|$)/i.test(className) || sourceLooksLikeMermaid(source);
+    });
+  }
+
+  async function tryRender() {
+    try {
+      var api = window.__piCompletionReportMermaid;
+      if (api && typeof api.rerunAllMermaidSections === 'function') {
+        api.rerunAllMermaidSections();
+      }
+    } catch (e) {}
+
+    if (typeof mermaid === 'undefined') return;
+    var blocks = getFallbackBlocks();
+    for (var i = 0; i < blocks.length; i++) {
+      var preEl = blocks[i];
+      var codeEl = preEl.querySelector('code');
+      var source = (codeEl && codeEl.textContent) || preEl.textContent || '';
+      preEl.dataset.piMermaidDone = '1';
+      try {
+        var result = await mermaid.render('completion-report-fallback-' + Date.now() + '-' + i, source);
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mermaid-container';
+        wrapper.innerHTML = result.svg;
+        if (preEl.parentNode) preEl.parentNode.replaceChild(wrapper, preEl);
+      } catch (err) {
+        preEl.dataset.piMermaidDone = 'error';
+      }
+    }
+  }
+
+  if (document.readyState === 'complete') {
+    setTimeout(tryRender, 0);
+  } else {
+    window.addEventListener('load', function() {
+      setTimeout(tryRender, 0);
+    }, { once: true });
+  }
+
+  setTimeout(tryRender, 300);
+  setTimeout(tryRender, 1200);
 })();
 <\/script>
 </body>

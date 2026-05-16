@@ -35,10 +35,10 @@
  * Usage: pi -e extensions/web-test.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { type AutocompleteItem } from "@mariozechner/pi-tui";
-import { Text } from "@mariozechner/pi-tui";
+import { type AutocompleteItem } from "@earendil-works/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
@@ -515,7 +515,7 @@ export default function (pi: ExtensionAPI) {
 				const msg = result.screenshots?.length
 					? `${action} complete (${Math.round(result.elapsed / 1000)}s). ${result.screenshots.length} file(s) saved.`
 					: `${action} complete (${Math.round(result.elapsed / 1000)}s).`;
-				ctx.ui.notify(msg, "success");
+				ctx.ui.notify(msg, "info");
 			} else {
 				ctx.ui.notify(`${action} failed: ${result.error}`, "error");
 			}

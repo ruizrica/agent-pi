@@ -12,6 +12,8 @@ export interface PhaseDef {
 	mode: "interactive" | "parallel" | "sequential";
 	agents: PhaseAgentDef[];
 	max_iterations?: number;
+	uses_worktrees?: boolean;
+	merge_agent?: string;
 }
 
 export interface PipelineConfig {
@@ -92,6 +94,18 @@ export function parsePipelineYaml(raw: string): PipelineConfig[] {
 		const iterMatch = line.match(/^\s+max_iterations:\s+(\d+)$/);
 		if (iterMatch && !currentAgent) {
 			currentPhase.max_iterations = parseInt(iterMatch[1], 10);
+			continue;
+		}
+
+		const worktreesMatch = line.match(/^\s+uses_worktrees:\s+(true|false)$/);
+		if (worktreesMatch && !currentAgent) {
+			currentPhase.uses_worktrees = worktreesMatch[1] === "true";
+			continue;
+		}
+
+		const mergeAgentMatch = line.match(/^\s+merge_agent:\s+(.+)$/);
+		if (mergeAgentMatch && !currentAgent) {
+			currentPhase.merge_agent = mergeAgentMatch[1].trim();
 			continue;
 		}
 

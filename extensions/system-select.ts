@@ -14,7 +14,7 @@
  * Usage: pi -e extensions/system-select.ts -e extensions/minimal.ts
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,7 +107,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		defaultTools = pi.getActiveTools();
-		ctx.ui.setStatus("system-prompt", "System Prompt: Default");
+		if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("system-prompt", "System Prompt: Default");
 	});
 
 	pi.registerCommand("system", {
@@ -129,7 +129,7 @@ export default function (pi: ExtensionAPI) {
 			if (choice === options[0]) {
 				activeAgent = null;
 				pi.setActiveTools(defaultTools);
-				ctx.ui.setStatus("system-prompt", "System Prompt: Default");
+				if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("system-prompt", "System Prompt: Default");
 				ctx.ui.notify("System Prompt reset to Default", "success");
 				return;
 			}
@@ -144,7 +144,7 @@ export default function (pi: ExtensionAPI) {
 				pi.setActiveTools(defaultTools);
 			}
 
-			ctx.ui.setStatus("system-prompt", `System Prompt: ${displayName(agent.name)}`);
+			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("system-prompt", `System Prompt: ${displayName(agent.name)}`);
 			ctx.ui.notify(`System Prompt switched to: ${displayName(agent.name)}`, "success");
 		},
 	});

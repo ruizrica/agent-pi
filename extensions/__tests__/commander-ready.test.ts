@@ -9,7 +9,7 @@ import {
 	resetGate,
 	type ReadyGate,
 	type QueuedOp,
-} from "../lib/commander-ready.ts";
+} from "../lib/commander/commander-ready.ts";
 
 describe("createReadyGate", () => {
 	it("starts in pending state with empty queue", () => {

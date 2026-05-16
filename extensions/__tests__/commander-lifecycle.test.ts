@@ -1,8 +1,8 @@
 // ABOUTME: Tests for Commander lifecycle helpers — preClaimTask, postCompleteTask, postFailTask.
-// ABOUTME: Validates correct Commander API calls for task claim, completion, and failure.
+// ABOUTME: Validates correct Commander API calls, retry behavior, and return values.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { preClaimTask, postCompleteTask, postFailTask } from "../lib/commander-lifecycle.ts";
+import { preClaimTask, postCompleteTask, postFailTask } from "../lib/commander/commander-lifecycle.ts";
 
 interface MockClient {
 	callTool: ReturnType<typeof vi.fn>;
@@ -15,33 +15,40 @@ describe("preClaimTask", () => {
 		client = { callTool: vi.fn().mockResolvedValue({}) };
 	});
 
-	it("calls claim and sends status mailbox", async () => {
-		await preClaimTask(client, 42, "SCOUT");
+	it("calls claim and sends status mailbox, returns true", async () => {
+		const result = await preClaimTask(client, 42, "SCOUT");
 
+		expect(result).toBe(true);
 		expect(client.callTool).toHaveBeenCalledWith("commander_task", {
 			operation: "claim",
 			task_id: 42,
 			agent_name: "SCOUT",
 		});
-		expect(client.callTool).toHaveBeenCalledWith("commander_mailbox", {
+		// Mailbox is fire-and-forget, but still called
+		expect(client.callTool).toHaveBeenCalledWith("commander_mailbox", expect.objectContaining({
 			operation: "send",
 			from_agent: "SCOUT",
-			to_agent: "commander",
-			body: "Starting task 42",
-			message_type: "status",
-			task_id: 42,
-		});
+		}));
 	});
 
-	it("calls claim before mailbox send", async () => {
-		const callOrder: string[] = [];
-		client.callTool.mockImplementation(async (tool: string) => {
-			callOrder.push(tool);
-			return {};
-		});
+	it("retries once on first failure then succeeds", async () => {
+		client.callTool
+			.mockRejectedValueOnce(new Error("timeout"))
+			.mockResolvedValue({});
 
-		await preClaimTask(client, 10, "AGENT");
-		expect(callOrder).toEqual(["commander_task", "commander_mailbox"]);
+		const result = await preClaimTask(client, 10, "AGENT");
+		expect(result).toBe(true);
+		// First attempt fails, second succeeds, then mailbox
+		expect(client.callTool).toHaveBeenCalledTimes(3);
+	});
+
+	it("returns false after all retries exhausted", async () => {
+		client.callTool.mockRejectedValue(new Error("permanent failure"));
+
+		const result = await preClaimTask(client, 10, "AGENT");
+		expect(result).toBe(false);
+		// 2 attempts for claim (both fail)
+		expect(client.callTool).toHaveBeenCalledTimes(2);
 	});
 });
 
@@ -52,22 +59,36 @@ describe("postCompleteTask", () => {
 		client = { callTool: vi.fn().mockResolvedValue({}) };
 	});
 
-	it("calls complete and sends status mailbox", async () => {
-		await postCompleteTask(client, 42, "BUILDER", "All tests pass");
+	it("calls complete and sends status mailbox, returns true", async () => {
+		const result = await postCompleteTask(client, 42, "BUILDER", "All tests pass");
 
+		expect(result).toBe(true);
 		expect(client.callTool).toHaveBeenCalledWith("commander_task", {
 			operation: "complete",
 			task_id: 42,
 			result: "All tests pass",
 		});
-		expect(client.callTool).toHaveBeenCalledWith("commander_mailbox", {
+		expect(client.callTool).toHaveBeenCalledWith("commander_mailbox", expect.objectContaining({
 			operation: "send",
 			from_agent: "BUILDER",
-			to_agent: "commander",
 			body: "Task complete: All tests pass",
-			message_type: "status",
-			task_id: 42,
-		});
+		}));
+	});
+
+	it("retries once on transient failure", async () => {
+		client.callTool
+			.mockRejectedValueOnce(new Error("connection reset"))
+			.mockResolvedValue({});
+
+		const result = await postCompleteTask(client, 42, "BUILDER", "done");
+		expect(result).toBe(true);
+	});
+
+	it("returns false when all retries fail", async () => {
+		client.callTool.mockRejectedValue(new Error("server down"));
+
+		const result = await postCompleteTask(client, 42, "BUILDER", "done");
+		expect(result).toBe(false);
 	});
 });
 
@@ -78,9 +99,10 @@ describe("postFailTask", () => {
 		client = { callTool: vi.fn().mockResolvedValue({}) };
 	});
 
-	it("calls fail with error message", async () => {
-		await postFailTask(client, 42, "Something broke");
+	it("calls fail with error message, returns true", async () => {
+		const result = await postFailTask(client, 42, "Something broke");
 
+		expect(result).toBe(true);
 		expect(client.callTool).toHaveBeenCalledWith("commander_task", {
 			operation: "fail",
 			task_id: 42,
@@ -89,11 +111,19 @@ describe("postFailTask", () => {
 	});
 
 	it("does not send mailbox on failure (just the fail call)", async () => {
-		await postFailTask(client, 42, "error");
+		const result = await postFailTask(client, 42, "error");
 
+		expect(result).toBe(true);
 		expect(client.callTool).toHaveBeenCalledTimes(1);
 		expect(client.callTool).toHaveBeenCalledWith("commander_task", expect.objectContaining({
 			operation: "fail",
 		}));
+	});
+
+	it("returns false when all retries fail", async () => {
+		client.callTool.mockRejectedValue(new Error("unreachable"));
+
+		const result = await postFailTask(client, 42, "error");
+		expect(result).toBe(false);
 	});
 });

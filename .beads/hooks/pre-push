@@ -1,0 +1,193 @@
+#!/bin/bash
+# ============================================================================
+# PRE-PUSH HOOK — PUBLIC REPO GUARD + PRIVATE CONTENT SCANNER
+# ============================================================================
+# Two layers of protection:
+#   1. Blocks pushes to any PUBLIC GitHub repo
+#   2. Scans commits for private content before pushing to origin (agent-pi)
+#
+# To override (MANUAL USE ONLY): git push --no-verify
+# ============================================================================
+
+set -euo pipefail
+
+REMOTE="$1"
+URL="$2"
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# ── Private content patterns ────────────────────────────────────
+# Files/dirs that must NEVER appear in the public repo (origin).
+# Add new patterns here as needed.
+PRIVATE_PATTERNS=(
+    "skills/private/"
+    "extensions/private/"
+    "commands/private/"
+    ".private-patterns"
+    ".github/workflows/"
+    ".github/actions/"
+    ".env"
+    "*.pem"
+    "*.key"
+    "id_rsa"
+    "id_ed25519"
+    ".aws/"
+    ".ssh/"
+)
+
+# ── Secrets patterns (grep) ─────────────────────────────────────
+# Content patterns that should never appear in committed files.
+SECRET_PATTERNS=(
+    "AKIA[0-9A-Z]{16}"           # AWS access key
+    "sk-[a-zA-Z0-9]{20,}"        # OpenAI / Anthropic API key
+    "ghp_[a-zA-Z0-9]{36}"        # GitHub personal access token
+    "gho_[a-zA-Z0-9]{36}"        # GitHub OAuth token
+    "xoxb-[0-9]+-[a-zA-Z0-9]+"   # Slack bot token
+    "xoxp-[0-9]+-[a-zA-Z0-9]+"   # Slack user token
+    "sk_live_[a-zA-Z0-9]+"       # Stripe live key
+    "-----BEGIN.*PRIVATE KEY"     # Private keys
+    "password\s*[:=]\s*['\"].+"   # Hardcoded passwords
+)
+
+# ── Helper ──────────────────────────────────────────────────────
+
+extract_repo() {
+    echo "$1" | sed -E 's|.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$|\1|'
+}
+
+# ── Layer 1: Public repo check ──────────────────────────────────
+
+if echo "$URL" | grep -qE 'github\.com'; then
+    REPO=$(extract_repo "$URL")
+
+    if [[ -z "$REPO" || "$REPO" == "$URL" ]]; then
+        echo -e "${YELLOW}WARNING: Could not parse repo from URL: $URL${RESET}"
+        echo -e "${YELLOW}Blocking push as a precaution.${RESET}"
+        exit 1
+    fi
+
+    VISIBILITY=$(gh api "repos/$REPO" --jq '.visibility' 2>/dev/null || echo "unknown")
+
+    if [[ "$VISIBILITY" == "public" ]]; then
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        echo -e "${RED}${BOLD}  PUSH BLOCKED — PUBLIC REPOSITORY${RESET}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        echo -e "  Repository:  ${BOLD}$REPO${RESET} — ${RED}PUBLIC${RESET}"
+        echo -e "  Remote:      $REMOTE ($URL)"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        exit 1
+    fi
+
+    if [[ "$VISIBILITY" == "unknown" ]]; then
+        echo -e "${YELLOW}WARNING: Could not verify visibility for $REPO. Blocking push.${RESET}"
+        exit 1
+    fi
+
+    echo -e "${DIM}Pre-push: $REPO is ${BOLD}private${RESET}"
+fi
+
+# ── Layer 2: Private content scan (origin only) ─────────────────
+# Even though origin is currently private, scan anyway so that
+# if it ever goes public again, no private content is in there.
+
+if [[ "$REMOTE" == "origin" ]]; then
+    echo -e "${DIM}Scanning for private content...${RESET}"
+
+    BLOCKED=0
+    BLOCKED_FILES=""
+
+    # Get all files that would be pushed
+    # Compare local ref vs remote ref for each ref being pushed
+    while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+        if [[ "$LOCAL_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            continue  # deletion, skip
+        fi
+
+        # Get file list in the commits being pushed
+        if [[ "$REMOTE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            # New branch — check all files in the branch
+            FILES=$(git ls-tree -r --name-only "$LOCAL_SHA" 2>/dev/null)
+        else
+            # Existing branch — check only new/changed files
+            FILES=$(git diff --name-only "$REMOTE_SHA" "$LOCAL_SHA" 2>/dev/null)
+        fi
+
+        # Check file paths against private patterns
+        for pattern in "${PRIVATE_PATTERNS[@]}"; do
+            MATCHES=$(echo "$FILES" | grep -F "$pattern" 2>/dev/null || true)
+            if [[ -n "$MATCHES" ]]; then
+                BLOCKED=1
+                BLOCKED_FILES+="  $pattern\n"
+                while IFS= read -r f; do
+                    BLOCKED_FILES+="    -> $f\n"
+                done <<< "$MATCHES"
+            fi
+        done
+
+        # Check file contents for secrets
+        for sha_file in $(echo "$FILES" | head -200); do
+            CONTENT=$(git show "$LOCAL_SHA:$sha_file" 2>/dev/null || true)
+            if [[ -z "$CONTENT" ]]; then continue; fi
+
+            for secret_pat in "${SECRET_PATTERNS[@]}"; do
+                if echo "$CONTENT" | grep -qE "$secret_pat" 2>/dev/null; then
+                    BLOCKED=1
+                    BLOCKED_FILES+="  SECRET DETECTED in: $sha_file (pattern: $secret_pat)\n"
+                    break
+                fi
+            done
+        done
+
+    done < <(cat)  # pre-push hook receives refs on stdin
+
+    if [[ $BLOCKED -eq 1 ]]; then
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        echo -e "${RED}${BOLD}  PUSH BLOCKED — PRIVATE CONTENT DETECTED${RESET}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        echo ""
+        echo -e "${YELLOW}  The following private content was found in the push:${RESET}"
+        echo ""
+        echo -e "$BLOCKED_FILES"
+        echo ""
+        echo -e "  Remote: ${BOLD}$REMOTE${RESET} ($URL)"
+        echo -e "  ${RED}Push to origin with private content is forbidden.${RESET}"
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Pre-push: No private content or secrets found. Push allowed.${RESET}"
+fi
+
+exit 0
+
+# --- BEGIN BEADS INTEGRATION v1.0.3 ---
+# This section is managed by beads. Do not remove these markers.
+if command -v bd >/dev/null 2>&1; then
+  export BD_GIT_HOOK=1
+  _bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_bd_timeout" bd hooks run pre-push "$@"
+    _bd_exit=$?
+    if [ $_bd_exit -eq 124 ]; then
+      echo >&2 "beads: hook 'pre-push' timed out after ${_bd_timeout}s — continuing without beads"
+      _bd_exit=0
+    fi
+  else
+    bd hooks run pre-push "$@"
+    _bd_exit=$?
+  fi
+  if [ $_bd_exit -eq 3 ]; then
+    echo >&2 "beads: database not initialized — skipping hook 'pre-push'"
+    _bd_exit=0
+  fi
+  if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
+fi
+# --- END BEADS INTEGRATION v1.0.3 ---

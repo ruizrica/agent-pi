@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent-Pi — Extensions Release Cleanup — Executive Summary</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9aa8bc;
+      --accent: #3d9ee5;
+      --ok: #3ecf8e;
+      --warn: #e5a23d;
+      --border: #2a3545;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.65rem;
+      font-weight: 600;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .meta { color: var(--muted); font-size: 0.9rem; }
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 2rem 0 0.75rem;
+      color: var(--accent);
+    }
+    h3 { font-size: 0.95rem; margin: 1.25rem 0 0.5rem; color: var(--text); }
+    p { margin: 0 0 1rem; color: var(--text); }
+    ul { margin: 0 0 1rem; padding-left: 1.2rem; color: var(--muted); }
+    li { margin-bottom: 0.35rem; }
+    li strong { color: var(--text); }
+    .exec {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.35rem;
+      margin: 1.5rem 0;
+    }
+    .exec ul { color: var(--text); margin-bottom: 0; }
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .badge-done { background: rgba(62, 207, 142, 0.15); color: var(--ok); }
+    .badge-pending { background: rgba(229, 162, 61, 0.15); color: var(--warn); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.75rem 0 1.25rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.65rem;
+      text-align: left;
+    }
+    th { background: var(--panel); color: var(--muted); font-weight: 600; }
+    td { background: rgba(26, 35, 50, 0.5); }
+    code {
+      font-family: ui-monospace, "Cascadia Code", monospace;
+      font-size: 0.84em;
+      background: rgba(61, 158, 229, 0.12);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+    }
+    .note {
+      font-size: 0.88rem;
+      color: var(--muted);
+      border-left: 3px solid var(--accent);
+      padding-left: 1rem;
+      margin: 1rem 0;
+    }
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    @media print {
+      body { background: #fff; color: #111; }
+      .exec, th, td { background: #f5f5f5; border-color: #ccc; }
+      h2 { color: #0a5cad; }
+      code { background: #eee; color: #111; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Extensions release cleanup — executive summary</h1>
+      <p class="meta">
+        Repository: <strong>agent-pi</strong> · Branch: <code>release/cleanup-extensions</code> ·
+        Report date: 6 May 2026
+      </p>
+    </header>
+
+    <section class="exec" aria-labelledby="exec-h">
+      <h2 id="exec-h" style="margin-top:0">At a glance</h2>
+      <ul>
+        <li><strong>Purpose:</strong> Thin, testable extension surface — junk removed from tracking, shared logic grouped under <code>extensions/lib/&lt;domain&gt;/</code>, Pi/Cloud Code test harness aligned, and full Vitest green.</li>
+        <li><strong>Shipped on branch (commit <code>ccfab9f</code>):</strong> Cruft cleanup (.gopher, stray specs), Commander + sounds subfolders, Cloud Code plugin scaffolding, README/package alignment, extension root fingerprint (SHA256) for drift detection, and related test fixes.</li>
+        <li><strong>Follow-on batch (staged / working tree, not yet committed):</strong> Viewer HTML → <code>lib/viewers/</code>, security stack → <code>lib/security/</code>, Claude + advisor modules → <code>lib/claude/</code>, import rewires across extensions + tests, <code>sounds-config</code> extension-root path fix, and architecture doc updates.</li>
+        <li><strong>Quality gate:</strong> <code>cd extensions &amp;&amp; npm test</code> — <strong>121 files, 1500 tests, all passing</strong> after the follow-on batch.</li>
+      </ul>
+    </section>
+
+    <h2>Business outcomes</h2>
+    <ul>
+      <li><strong>Lower maintenance risk:</strong> Fewer flat files in <code>extensions/lib/</code>; domains are discoverable for humans and tooling.</li>
+      <li><strong>Safer releases:</strong> Ignored/generated paths no longer pollute diffs; inventory test guards the sorted set of root extension adapters.</li>
+      <li><strong>Faster onboarding:</strong> <code>docs/architecture/module-boundaries.md</code> documents <code>lib/viewers/</code>, <code>lib/security/</code>, <code>lib/claude/</code> alongside existing areas.</li>
+    </ul>
+
+    <h2>Committed scope (<code>ccfab9f</code>)</h2>
+    <p class="meta" style="margin-top:-0.5rem">Subject: <em>release: cleanup cruft, reorganize lib, restore Cloud Code plugin</em></p>
+    <table>
+      <thead>
+        <tr><th>Theme</th><th>What changed</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Repository hygiene</td>
+          <td>Stop tracking <code>.gopher</code>, root <code>tests/*.spec.ts</code>, and <code>.kiro</code> specs; add ignore rules so they do not return unintentionally.</td>
+        </tr>
+        <tr>
+          <td>Cloud Code / Pi</td>
+          <td>Add <code>.claude-plugin</code> manifest, marketplace metadata, and <code>/pi</code> command wiring for Cloud Code–side tests.</td>
+        </tr>
+        <tr>
+          <td>Library layout (first wave)</td>
+          <td>Move sounds helpers under <code>extensions/lib/sounds/</code> and Commander helpers under <code>extensions/lib/commander/</code>; fix Vitest paths, mocks, and a security bracket fixture.</td>
+        </tr>
+        <tr>
+          <td>Docs &amp; packaging signals</td>
+          <td>Align README / package counts with reality; trim changelog-style noise; describe lib layout.</td>
+        </tr>
+        <tr>
+          <td>Regression guard</td>
+          <td>Pin SHA256 of sorted root extension adapter filenames in <code>extension-inventory.test.ts</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Follow-on reorganization (working tree)</h2>
+    <p><span class="badge badge-pending">Uncommitted</span> Completes the “domain folders” plan for viewers, security, and Claude.</p>
+    <table>
+      <thead>
+        <tr><th>Area</th><th>New location</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Viewer HTML</td>
+          <td><code>extensions/lib/viewers/</code></td>
+          <td>Plan, spec, file, test, research, reports, board, cleanup viewer modules consolidated; consumers and tests updated.</td>
+        </tr>
+        <tr>
+          <td>Security / vuln</td>
+          <td><code>extensions/lib/security/</code></td>
+          <td>Engine, report HTML, history, vuln scanner engine + installer. Stubs <code>secure-engine.ts</code> / <code>secure-installer.ts</code> re-export for compatibility.</td>
+        </tr>
+        <tr>
+          <td>Claude &amp; advisor</td>
+          <td><code>extensions/lib/claude/</code></td>
+          <td>All <code>claude-*.ts</code>, advisor defaults, provider stream; colocated tests under <code>lib/claude/__tests__/</code>. Global imports use <code>./lib/claude/...</code>.</td>
+        </tr>
+        <tr>
+          <td>Sounds paths</td>
+          <td><code>extensions/lib/sounds/sounds-config.ts</code></td>
+          <td>Extension root resolution uses a third <code>dirname</code> so config, <code>sounds/</code> assets, and <code>sounds-image-cache/</code> stay under <code>extensions/</code> after the deeper file path.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Verification</h2>
+    <table>
+      <thead>
+        <tr><th>Check</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Vitest (<code>extensions</code>)</td><td>1500 tests passed (121 files)</td></tr>
+        <tr><td>Import consistency</td>
+          <td>No remaining <code>lib/claude-*</code> or <code>lib/advisor-default*</code> paths outside <code>lib/claude/</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Recommended next actions</h2>
+    <ol style="color: var(--muted); padding-left: 1.2rem;">
+      <li style="margin-bottom:0.4rem">Commit the follow-on batch as one or two coherent commits (reorg vs. sounds path fix) after your usual private-content staging check.</li>
+      <li style="margin-bottom:0.4rem">Re-run <code>extension-inventory</code> if root <code>extensions/*.ts</code> adapters change; lib-only moves should not alter the pinned hash.</li>
+      <li>Merge <code>release/cleanup-extensions</code> when ready, using your standard review for extension-facing behavior.</li>
+    </ol>
+
+    <div class="note">
+      This HTML file is a human-readable summary. It is not executed by the product; open it in a browser or print to PDF for distribution.
+    </div>
+
+    <footer>
+      Generated for stakeholder review · Technical detail: see commit <code>ccfab9f</code> and current <code>git status</code> on <code>release/cleanup-extensions</code>.
+    </footer>
+  </div>
+</body>
+</html>
