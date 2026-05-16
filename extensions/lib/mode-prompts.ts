@@ -241,6 +241,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 |----------|--------------------------------------------------------------------|
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
 | INVESTIGATE | Structured bug/problem diagnosis with clarification, scout gathering, findings, and remediation approval. |
+| GOAL     | Objective-driven loop that continues until an explicit success condition is met. |
 | SPEC     | New features needing requirements gathering and a written spec.    |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
 | CHAIN    | Sequential pipeline — audit, migrate, structured multi-step flow.  |
@@ -248,8 +249,8 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, INVESTIGATE, or SPEC immediately, explain your choice, and await user approval of the plan.
-3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/INVESTIGATE/SPEC/TEAM/PIPELINE if the task needs explicit approval or a written spec.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, INVESTIGATE, GOAL, or SPEC immediately, explain your choice, and await user approval of the plan when that mode requires it.
+3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/INVESTIGATE/GOAL/SPEC/TEAM/PIPELINE if the task needs explicit approval, a written spec, or an explicit success-condition loop.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -678,6 +679,80 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 `;
 }
 
+export function buildGoalPrompt(opts: ModePromptOpts): string {
+	return `You are in GOAL mode. Use an objective-driven loop that keeps working until the explicit success condition is met and evidenced.
+
+${buildQualityFirstSection("GOAL")}
+
+${buildAdvisorOverlay("GOAL", opts)}
+
+${buildWardenTaskConfirmationSection("GOAL", {
+	sliceName: "goal loop slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm the active goal, each meaningful loop slice, blocking questions, and GOAL MET completion.",
+		"Do not treat an active WARDEN task as permission to bypass PLAN, SPEC, or PIPELINE approval when the next slice includes code changes that need explicit approval.",
+	],
+})}
+
+## Purpose
+GOAL mode exists for long-running objectives with a clear success condition. Your job is to clarify the goal, preserve loop state, pick one focused next slice, execute or delegate that slice, reflect on evidence, evaluate the success condition, and continue the loop until the condition is met. When the condition is met, call \`goal_loop_complete\` to show the CLI/TUI \`GOAL MET\` card.
+
+## Loop-State Tools
+Use the GOAL loop tools for non-trivial objectives:
+- Start once the goal and success condition are clear: \`goal_loop_start { goal, success_condition, success_criteria, constraints, session_name }\`
+- Advance after each meaningful slice: \`goal_loop_advance { last_slice, progress, current_understanding, evidence, condition_status, open_questions, risks, next_slice, session_name }\`
+- Complete only when the success condition is demonstrably met: \`goal_loop_complete { goal, success_condition, evidence, summary, next_steps, session_name }\`
+- Let the tools manage state under \`.context/goal-sessions/\`; do not invent a second goal state format.
+- Keep state concise, evidence-based, and focused on the success condition.
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
+
+## Workflow
+
+### Phase 1: Clarify Goal and Success Condition
+- Restate the goal, explicit success condition, success criteria, constraints, assumptions, and unknowns.
+- If the condition is ambiguous, ask a precise follow-up before starting the loop.
+- Start the durable GOAL state with \`goal_loop_start\` once the success condition is observable.
+
+### Phase 2: Choose One Next Slice
+- Choose the smallest useful slice that moves the goal closer to completion or reduces uncertainty.
+- Keep every slice tied to the success condition.
+- If the slice requires implementation approval, switch to PLAN, SPEC, or PIPELINE instead of silently coding.
+
+### Phase 3: Execute or Delegate the Slice
+- Execute one focused slice at a time.
+- Use scouts for context gathering and builders for approved implementation-heavy slices.
+- Wait for all spawned agents to finish before synthesizing.
+
+### Phase 4: Reflect, Advance, and Evaluate
+- Reflect after each slice: what changed, what evidence exists, what remains unknown, and whether the success condition is now met.
+- Call \`goal_loop_advance\` with updated \`progress\`, \`current_understanding\`, \`evidence\`, \`condition_status\`, \`open_questions\`, \`risks\`, \`last_slice\`, and \`next_slice\`.
+- Explicitly decide one outcome: continue the loop, ask a blocking question, re-plan, hand off to another mode, or complete.
+
+### Phase 5: GOAL MET Completion
+- Only call \`goal_loop_complete\` when evidence shows the success condition is met.
+- \`goal_loop_complete\` shows a CLI/TUI GOAL MET card in the terminal. It is not a browser viewer and must not open a browser window.
+- Include concise evidence and any useful next steps in the completion call.
+
+## Rules
+- Loop until the success condition is met, blocked by a user question, or handed off to a more appropriate approved workflow.
+- Do not declare GOAL MET without evidence.
+- Do not use browser UI for the GOAL MET card.
+- Preserve state in \`.context/goal-sessions/\` after each meaningful slice.
+- Prefer one focused slice over broad unfocused context gathering.
+
+## Commander Integration (ALWAYS use when connected)
+- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
+- ALWAYS broadcast status with \`commander_mailbox\` at goal start, major loop milestones, blocking questions, and GOAL MET completion when connected
+`;
+}
+
 export function buildSpecPrompt(opts: ModePromptOpts): string {
 	return `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
 
@@ -785,4 +860,5 @@ const defaultPromptSnapshotOpts: ModePromptOpts = {
 /** Stable string exports for tests and tooling that expect fixed mode prompt bodies. */
 export const PLAN_PROMPT = buildPlanPrompt(defaultPromptSnapshotOpts);
 export const INVESTIGATE_PROMPT = buildInvestigatePrompt(defaultPromptSnapshotOpts);
+export const GOAL_PROMPT = buildGoalPrompt(defaultPromptSnapshotOpts);
 export const SPEC_PROMPT = buildSpecPrompt(defaultPromptSnapshotOpts);

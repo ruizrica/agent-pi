@@ -4,6 +4,10 @@ All notable changes to agent-pi will be documented in this file.
 
 ## [Unreleased]
 
+### GOAL Mode — Success-Condition Loop + Terminal Completion Card
+
+Added first-class GOAL operational mode for objective-driven work that loops until an explicit success condition is met. GOAL sessions persist under `.context/goal-sessions/` with `goal_loop_start`, `goal_loop_advance`, and `goal_loop_complete`, and completion renders a CLI/TUI `✓ GOAL MET` card in the terminal instead of opening a browser viewer.
+
 ### Reports — Re-renderable Snapshots + Viewer Re-open
 
 Plan, spec, and completion reports now persist a full re-renderable snapshot to `.context/reports/raw/<id>.json` alongside the existing index entry. The `/reports` browser routes clicks to the original rich viewer (`show_plan`, `show_spec`, `show_report`) in read-only mode instead of the generic `pi /show-file` markdown viewer.

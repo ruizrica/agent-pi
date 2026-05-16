@@ -1,12 +1,12 @@
 // ABOUTME: Tests for the pure mode-cycling logic (nextMode, prevMode, modeLabel).
-// ABOUTME: Validates cycle order, wrapping, and label formatting.
+// ABOUTME: Validates cycle order, GOAL mode placement, wrapping, and label formatting.
 
 import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 7 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
+	it("has exactly 8 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "INVESTIGATE", "GOAL", "SPEC", "PIPELINE", "TEAM", "CHAIN"]);
 	});
 });
 
@@ -19,8 +19,12 @@ describe("nextMode", () => {
 		expect(nextMode("PLAN")).toBe("INVESTIGATE");
 	});
 
-	it("cycles INVESTIGATE → SPEC", () => {
-		expect(nextMode("INVESTIGATE")).toBe("SPEC");
+	it("cycles INVESTIGATE → GOAL", () => {
+		expect(nextMode("INVESTIGATE")).toBe("GOAL");
+	});
+
+	it("cycles GOAL → SPEC", () => {
+		expect(nextMode("GOAL")).toBe("SPEC");
 	});
 
 	it("cycles SPEC → PIPELINE", () => {
@@ -49,8 +53,12 @@ describe("prevMode", () => {
 		expect(prevMode("INVESTIGATE")).toBe("PLAN");
 	});
 
-	it("cycles SPEC → INVESTIGATE", () => {
-		expect(prevMode("SPEC")).toBe("INVESTIGATE");
+	it("cycles GOAL → INVESTIGATE", () => {
+		expect(prevMode("GOAL")).toBe("INVESTIGATE");
+	});
+
+	it("cycles SPEC → GOAL", () => {
+		expect(prevMode("SPEC")).toBe("GOAL");
 	});
 
 	it("wraps NORMAL → CHAIN", () => {
@@ -74,6 +82,10 @@ describe("modeLabel", () => {
 
 	it("returns [INVESTIGATE] for INVESTIGATE", () => {
 		expect(modeLabel("INVESTIGATE")).toBe("[INVESTIGATE]");
+	});
+
+	it("returns [GOAL] for GOAL", () => {
+		expect(modeLabel("GOAL")).toBe("[GOAL]");
 	});
 
 	it("returns [SPEC] for SPEC", () => {
@@ -105,6 +117,10 @@ describe("modeColor", () => {
 
 	it("returns accent for INVESTIGATE", () => {
 		expect(modeColor("INVESTIGATE")).toBe("accent");
+	});
+
+	it("returns accent for GOAL", () => {
+		expect(modeColor("GOAL")).toBe("accent");
 	});
 
 	it("returns accent for SPEC", () => {
@@ -139,6 +155,12 @@ describe("modeDisplayName", () => {
 	it("appends + QWEN when overlay is active", () => {
 		expect(modeDisplayName("PLAN", { claude: false, gemma: false, qwen: true })).toBe("PLAN + QWEN");
 	});
+
+	it("appends overlays for GOAL when active", () => {
+		expect(modeDisplayName("GOAL", { claude: true, gemma: false, qwen: false })).toBe("GOAL + CLAUDE");
+		expect(modeDisplayName("GOAL", { claude: false, gemma: true, qwen: false })).toBe("GOAL + GEMMA");
+		expect(modeDisplayName("GOAL", { claude: false, gemma: false, qwen: true })).toBe("GOAL + QWEN");
+	});
 });
 
 describe("modeLabel overlay", () => {
@@ -163,6 +185,10 @@ describe("modeBgAnsi overlay", () => {
 	it("uses purple for active modes when Qwen overlay is enabled", () => {
 		expect(modeBgAnsi("PLAN", { claude: false, gemma: false, qwen: true })).toBe("\x1b[48;2;102;51;153m");
 	});
+
+	it("uses active background for GOAL", () => {
+		expect(modeBgAnsi("GOAL")).toBe("\x1b[48;2;30;144;255m");
+	});
 });
 
 describe("modeTextAnsi", () => {
@@ -176,6 +202,10 @@ describe("modeTextAnsi", () => {
 
 	it("returns bold white for INVESTIGATE (blue bg)", () => {
 		expect(modeTextAnsi("INVESTIGATE")).toBe("\x1b[1;97m");
+	});
+
+	it("returns bold white for GOAL (blue bg)", () => {
+		expect(modeTextAnsi("GOAL")).toBe("\x1b[1;97m");
 	});
 
 	it("returns bold white for SPEC (blue bg)", () => {

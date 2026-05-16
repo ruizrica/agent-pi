@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+	GOAL_PROMPT,
 	INVESTIGATE_PROMPT,
 	PLAN_PROMPT,
 	SPEC_PROMPT,
@@ -160,6 +161,37 @@ describe("INVESTIGATE_PROMPT — complex problem loop", () => {
 		expect(INVESTIGATE_PROMPT).toContain("tasks toggle");
 		expect(INVESTIGATE_PROMPT).toContain("diagnostic slice");
 		expect(INVESTIGATE_PROMPT).toContain("Do not implement remediation");
+	});
+});
+
+describe("GOAL_PROMPT — success-condition loop", () => {
+	it("is a non-empty string", () => {
+		expect(typeof GOAL_PROMPT).toBe("string");
+		expect(GOAL_PROMPT.length).toBeGreaterThan(0);
+	});
+
+	it("uses GOAL loop lifecycle tools", () => {
+		expect(GOAL_PROMPT).toContain("goal_loop_start");
+		expect(GOAL_PROMPT).toContain("goal_loop_advance");
+		expect(GOAL_PROMPT).toContain("goal_loop_complete");
+	});
+
+	it("preserves loop state concepts", () => {
+		expect(GOAL_PROMPT).toContain("success condition");
+		expect(GOAL_PROMPT).toContain("GOAL MET");
+		expect(GOAL_PROMPT).toContain("Next Slice");
+		expect(GOAL_PROMPT).toContain("loop until");
+	});
+
+	it("uses terminal UI instead of browser UI for completion", () => {
+		expect(GOAL_PROMPT).toContain("CLI/TUI GOAL MET card");
+		expect(GOAL_PROMPT).toContain("must not open a browser window");
+	});
+
+	it("includes WARDEN and approval handoff guardrails", () => {
+		expect(GOAL_PROMPT).toContain("WARDEN");
+		expect(GOAL_PROMPT).toContain("tasks");
+		expect(GOAL_PROMPT).toContain("PLAN, SPEC, or PIPELINE");
 	});
 });
 
