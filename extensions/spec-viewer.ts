@@ -323,10 +323,14 @@ export default function (pi: ExtensionAPI) {
 
 	function triggerSpecApprovalModeSwitch(ctx: ExtensionContext, materialization: CommanderTaskMaterializationResult) {
 		try {
+			if (!materialization.ok) {
+				ctx.ui.notify(`IMPLEMENT handoff blocked until Commander tasks are created: ${materialization.warning || "task materialization failed"}`, "warning");
+				return;
+			}
 			const setModeCallback = (globalThis as any).__piSetModeForApproval;
 			if (typeof setModeCallback === "function") {
 				setModeCallback("IMPLEMENT", ctx);
-				ctx.ui.notify(`Mode switched to IMPLEMENT on spec approval. ${materialization.ok ? "Commander tasks recorded." : materialization.warning || ""}`, "info");
+				ctx.ui.notify("Mode switched to IMPLEMENT on spec approval. Commander tasks recorded.", "info");
 			}
 		} catch {
 			// Never fail spec approval because of an auto-mode switch.
@@ -655,7 +659,7 @@ export default function (pi: ExtensionAPI) {
 					piRef.sendMessage(
 						{
 							customType: "spec-approved",
-							content: `Spec approved! Proceed with IMPLEMENT mode.${modifiedNote}${commanderNote}`,
+							content: `Spec approved! ${materialization.ok ? "Proceed with IMPLEMENT mode." : "IMPLEMENT handoff is blocked until Commander tasks are created."}${modifiedNote}${commanderNote}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -845,7 +849,7 @@ export default function (pi: ExtensionAPI) {
 					piRef.sendMessage(
 						{
 							customType: "spec-approved",
-							content: `Spec approved! Proceed with IMPLEMENT mode.${result.modified ? " (spec was edited)" : ""}${commanderNote}`,
+							content: `Spec approved! ${materialization.ok ? "Proceed with IMPLEMENT mode." : "IMPLEMENT handoff is blocked until Commander tasks are created."}${result.modified ? " (spec was edited)" : ""}${commanderNote}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },

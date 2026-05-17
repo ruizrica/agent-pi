@@ -60,11 +60,13 @@ describe("plan-viewer implementation", () => {
 		expect(commandSection).toContain('customType: "plan-approved"');
 	});
 
-	it("triggers auto mode switching on approval using plan-complexity module", () => {
+	it("triggers auto mode switching only after Commander task materialization", () => {
 		expect(source).toContain("getPlanTargetMode");
 		expect(source).toContain("triggerApprovalModeSwitch");
 		expect(source).toContain('result.action === "approved"');
-		expect(source).toContain("Only switch if targetMode is not null");
+		expect(source).toContain("Commander source-of-truth tasks were created first");
+		expect(source).toContain("if (!materialization.ok)");
+		expect(source).toContain("IMPLEMENT handoff blocked until Commander tasks are created");
 		expect(source).toContain("materializeApprovedTasksToCommander");
 	});
 

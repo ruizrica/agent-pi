@@ -47,9 +47,11 @@ describe("spec-viewer Commander approval flow", () => {
 		}
 	});
 
-	it("materializes approved spec tasks and switches to IMPLEMENT", () => {
+	it("materializes approved spec tasks before switching to IMPLEMENT", () => {
 		expect(source).toContain("materializeSpecApprovalTasks");
 		expect(source).toContain("readSpecTaskMarkdown");
+		expect(source).toContain("if (!materialization.ok)");
+		expect(source).toContain("IMPLEMENT handoff blocked until Commander tasks are created");
 		expect(source).toContain("__piSetModeForApproval");
 		expect(source).toContain('setModeCallback("IMPLEMENT", ctx)');
 		expect(source).toContain("Commander tasks");

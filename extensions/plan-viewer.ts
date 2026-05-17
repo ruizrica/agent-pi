@@ -277,11 +277,16 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function triggerApprovalModeSwitch(planText: string, ctx: ExtensionContext) {
+	function triggerApprovalModeSwitch(planText: string, ctx: ExtensionContext, materialization: CommanderTaskMaterializationResult) {
 		try {
 			const { mode: targetMode, reason } = getPlanTargetMode(planText);
-			// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
+			// Only switch if targetMode is not null (i.e., plan is complete/multi-phase)
+			// and Commander source-of-truth tasks were created first.
 			if (targetMode) {
+				if (!materialization.ok) {
+					ctx.ui.notify(`IMPLEMENT handoff blocked until Commander tasks are created: ${materialization.warning || "task materialization failed"}`, "warning");
+					return;
+				}
 				const setModeCallback = (globalThis as any).__piSetModeForApproval;
 				if (typeof setModeCallback === "function") {
 					setModeCallback(targetMode, ctx);
@@ -553,16 +558,17 @@ export default function (pi: ExtensionAPI) {
 				const materialization = await materializePlanApprovalTasks(approvedMarkdown, file_path, displayTitle, ctx);
 				const commanderNote = summarizeMaterialization(materialization);
 
-				// Auto-switch mode only for complete/multi-phase plans.
+				// Auto-switch mode only for complete/multi-phase plans after
+				// Commander source-of-truth tasks have been created.
 				// Simple plans remain in PLAN mode.
-				triggerApprovalModeSwitch(approvedMarkdown, ctx);
+				triggerApprovalModeSwitch(approvedMarkdown, ctx, materialization);
 
 				// Enqueue an approval follow-up so viewer-driven approval reliably
 				// triggers the next turn and execution continues after the UI closes.
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with IMPLEMENT mode.${modifiedNote}${commanderNote}`,
+						content: `Plan approved! ${materialization.ok ? "Proceed with IMPLEMENT mode." : "IMPLEMENT handoff is blocked until Commander tasks are created."}${modifiedNote}${commanderNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -749,8 +755,9 @@ export default function (pi: ExtensionAPI) {
 				try {
 					const { mode: targetMode } = getPlanTargetMode(planText);
 
-					// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
-					if (targetMode) {
+					// Only switch if targetMode is not null (i.e., plan is complete/multi-phase)
+					// and Commander source-of-truth tasks were created first.
+					if (targetMode && materialization.ok) {
 						const setModeTool = (piRef as any)?.tools?.get?.("set_mode");
 						if (setModeTool?.execute) {
 							await setModeTool.execute("plan-approval-auto", { mode: targetMode, reason: "Auto-switched on plan approval" }, ctx);
@@ -763,12 +770,16 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				const { mode: targetMode } = getPlanTargetMode(planText);
-				const modeNote = targetMode ? ` Mode switched to ${targetMode}.` : "";
+				const modeNote = targetMode
+					? materialization.ok
+						? ` Mode switched to ${targetMode}.`
+						: " IMPLEMENT handoff is blocked until Commander tasks are created."
+					: "";
 
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with IMPLEMENT mode.${result.modified ? " (plan was edited)" : ""}${modeNote}${commanderNote}`,
+						content: `Plan approved! ${materialization.ok ? "Proceed with IMPLEMENT mode." : "IMPLEMENT handoff is blocked until Commander tasks are created."}${result.modified ? " (plan was edited)" : ""}${modeNote}${commanderNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },
