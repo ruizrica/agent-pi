@@ -1,5 +1,5 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, and PIPELINE prompts plus shared Commander integration helper.
+// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, DEBUG, IMPLEMENT, GOAL, and PIPELINE prompts plus shared Commander integration helper.
 
 import {
 	DEFAULT_ADVISOR_MODEL,
@@ -27,7 +27,7 @@ export interface DelegateEverythingOpts {
  * main frontier model thinks and plans only — all reads, searches, code
  * execution, builds, and tests are delegated to subagents. Used by team,
  * chain, and pipeline orchestrators. The five direct-work operational modes
- * (NORMAL / PLAN / SPEC / INVESTIGATE / GOAL) intentionally do NOT use this helper —
+ * (NORMAL / PLAN / SPEC / INVESTIGATE / DEBUG / GOAL) intentionally do NOT use this helper —
  * they allow the main agent to work directly for simple/medium tasks.
  */
 export function buildDelegateEverythingSection(opts: DelegateEverythingOpts): string {
@@ -143,7 +143,7 @@ ${buildWardenTaskConfirmationSection("NORMAL", {
 	sliceName: "complex direct-work slice",
 	guardrails: [
 		"Use WARDEN for non-trivial work; do not force ceremony for simple answers, quick reads, or one-off status checks.",
-		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE instead of improvising.",
+		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, DEBUG, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE instead of improvising.",
 	],
 })}
 
@@ -244,6 +244,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
 | SPEC     | New features needing requirements gathering and a written spec.    |
 | INVESTIGATE | Bugs, incidents, regressions, or unclear failures needing diagnosis before remediation. |
+| DEBUG | Runtime feedback-loop diagnosis with logging, instrumentation, app execution, and observation. |
 | IMPLEMENT | Autonomous execution loop for existing project-folder task-board work. |
 | GOAL     | Objective-driven loop that continues until an explicit success condition is met. |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
@@ -252,9 +253,9 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, GOAL, or IMPLEMENT immediately, explain your choice, and await user approval of the plan/report/spec when that mode requires it.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, DEBUG, GOAL, or IMPLEMENT immediately, explain your choice, and await user approval of the plan/report/spec when that mode requires it.
 3. **TASK-BOARD IMPLEMENTATION LOOP** — call \`set_mode\` with IMPLEMENT when work is already decomposed into project-folder task-board items and the agent should autonomously drain eligible lanes. Use PLAN/SPEC when work still needs approval or requirements; use GOAL when the success condition is custom rather than task-lane based.
-4. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE if the task needs explicit approval, a written spec, diagnostic investigation, an explicit success-condition loop, or autonomous task-board execution.
+4. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/DEBUG/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE if the task needs explicit approval, a written spec, diagnostic investigation, live runtime debugging, an explicit success-condition loop, or autonomous task-board execution.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -681,6 +682,88 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 `;
 }
 
+export function buildDebugPrompt(opts: ModePromptOpts): string {
+	return `You are in DEBUG mode. Establish a live runtime feedback loop before deeper diagnosis or remediation.
+
+${buildQualityFirstSection("DEBUG")}
+
+${buildAdvisorOverlay("DEBUG", opts)}
+
+${buildWardenTaskConfirmationSection("DEBUG", {
+	sliceName: "runtime debug feedback-loop slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm logging setup, reproduction attempts, observations, report writing, and approved remediation handoff.",
+		"Do not implement broad remediation in DEBUG; write a debug report with implementation-ready checkbox tasks and hand off through Commander tasks into IMPLEMENT.",
+	],
+})}
+
+## Purpose
+DEBUG mode exists to make runtime behavior observable. Immediately inspect existing logging, instrumentation, runtime commands, build/test scripts, dev-server entry points, browser routes, and any user-described reproduction path. Create a tight feedback loop: instrument or select logs, run or attach to the app, reproduce, observe logs/CLI/browser/computer-use evidence, refine the hypothesis, and repeat.
+
+## Mandatory First Gate: Confirm Log Output Visibility
+- Your first priority is logging/instrumentation, not speculative fixes.
+- Inspect whether useful logging already exists. If it does, attach to it and prove you can see relevant output.
+- If logging is missing or too vague, add or enable minimal safe local instrumentation within the debugging scope.
+- Iterate until you can explicitly say: "I can see the relevant log output" and cite where it appears.
+- Do not proceed to deeper reproduction, hypothesis testing, or report-writing until log/output visibility is confirmed, or until you report a precise blocker explaining why it cannot be confirmed.
+
+## CLAUDE Overlay
+
+Use "/claude" to toggle a provider-specific overlay on top of the current mode.
+- Active modes render as \`MODE + CLAUDE\`
+- The mode banner switches to dark orange
+- Claude-family execution paths use the Claude CLI runtime while the overlay is active
+- Non-Claude models continue to use their normal execution paths
+
+## Workflow
+
+### Phase 1: Runtime Entry Points and Logging Hooks
+- Find how to run/build/test/start the application or attach to an already running instance.
+- Identify existing log streams, debug flags, console output, server logs, browser console output, network traces, and test output.
+- Establish the smallest safe logging hook that will prove the reported behavior is visible.
+- Stop here and iterate if the logs are not visible yet.
+
+### Phase 2: Run, Reproduce, Observe
+- Run bounded build/test/dev-server commands when safe.
+- Use CLI output, local browser tools, web content/a11y inspection, screenshots, or computer-use to reproduce the issue.
+- Remote browser rendering cannot access localhost; use local browser/computer-use paths for local apps.
+- Capture concise evidence: command, route/window/action, log line, screenshot path, error text, timestamp, or observed state.
+
+### Phase 3: Instrument, Refine, Repeat
+- Add or adjust minimal temporary instrumentation when evidence is insufficient.
+- Keep instrumentation scoped and reversible; do not add noisy broad logging unless necessary.
+- Repeat until the runtime cause, failing boundary, or remaining blocker is clear.
+
+### Phase 4: Debug Report + Recommendation
+- When evidence is sufficient, write a debug report to \`.context/todo.md\` or another markdown report and call:
+  \`show_plan { file_path: ".context/todo.md", title: "Debug Report & Remediation Plan" }\`
+- The report must include:
+  - \`## Runtime Feedback Loop\` — commands/tools used, app entrypoint, instrumentation/log hooks, and explicit confirmation that relevant log output was visible.
+  - \`## Findings\` — observed behavior and evidence.
+  - \`## Recommendation\` — preferred remediation path and why.
+  - \`## Risks / Open Questions\` — remaining uncertainty.
+  - \`## Remediation / Next Steps\` — unchecked, implementation-ready checkbox tasks.
+
+### Phase 5: Approved Report → Commander Tasks → IMPLEMENT
+- Do not implement remediation directly in DEBUG after report approval.
+- Approved DEBUG reports create Commander tasks first; Commander tasks are the source of truth.
+- If Commander task creation fails or no remediation tasks are found, IMPLEMENT handoff is blocked until tasks are created.
+- After tasks are recorded, transition to IMPLEMENT so the next agent can immediately drain pending board work.
+
+## Rules
+- Logging/output visibility is the first gate; do not skip it.
+- Prefer bounded local commands and authorized local targets.
+- Keep runtime processes bounded and clean up when possible.
+- Avoid destructive commands, credential exposure, and external exfiltration.
+- Keep findings evidence-based; distinguish observed facts from hypotheses.
+- Use DEBUG for runtime feedback-loop diagnosis; use INVESTIGATE for broader unclear failures before runtime instrumentation, PLAN/SPEC for design-heavy remediation, and IMPLEMENT for approved task-board execution.
+
+## Commander Integration (ALWAYS use when connected)
+- ALWAYS track debug slices locally with \`tasks\`; when the Commander CLI is connected, use Commander tasks for approved remediation execution
+- ALWAYS broadcast status with \`commander_mailbox\` at debug start, log-visibility confirmation, major findings, report approval, and completion when connected
+`;
+}
+
 export function buildGoalPrompt(opts: ModePromptOpts): string {
 	return `You are in GOAL mode. Use an objective-driven loop that keeps working until the explicit success condition is met and evidenced.
 
@@ -692,7 +775,7 @@ ${buildWardenTaskConfirmationSection("GOAL", {
 	sliceName: "goal loop slice",
 	guardrails: [
 		"Use WARDEN tasks to confirm the active goal, each meaningful loop slice, blocking questions, and GOAL MET completion.",
-		"Do not treat an active WARDEN task as permission to bypass PLAN, SPEC, INVESTIGATE, or IMPLEMENT handoff approval when the next slice includes code changes that need explicit approval.",
+		"Do not treat an active WARDEN task as permission to bypass PLAN, SPEC, INVESTIGATE, DEBUG, or IMPLEMENT handoff approval when the next slice includes code changes that need explicit approval.",
 	],
 })}
 
@@ -725,7 +808,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 ### Phase 2: Choose One Next Slice
 - Choose the smallest useful slice that moves the goal closer to completion or reduces uncertainty.
 - Keep every slice tied to the success condition.
-- If the slice requires implementation approval, switch to PLAN, SPEC, INVESTIGATE, or prepare Commander tasks for IMPLEMENT instead of silently coding.
+- If the slice requires implementation approval, switch to PLAN, SPEC, INVESTIGATE, DEBUG, or prepare Commander tasks for IMPLEMENT instead of silently coding.
 
 ### Phase 3: Execute or Delegate the Slice
 - Execute one focused slice at a time.
@@ -778,7 +861,7 @@ ${buildWardenTaskConfirmationSection("IMPLEMENT", {
 IMPLEMENT mode is a relatively autonomous execution mode. Unlike GOAL mode, you do not ask the user to define a new success condition: success is that every eligible task-board item for the current project folder is completed, or each remaining item has a clear task comment explaining why it is blocked, handed off, or not yours to take. Finish by confirming that no related \`working\` lane tasks remain for your work.
 
 ## Source of Truth
-- After PLAN, SPEC, or INVESTIGATE approval, Commander board tasks are the source of truth for implementation lifecycle.
+- After PLAN, SPEC, INVESTIGATE, or DEBUG approval, Commander board tasks are the source of truth for implementation lifecycle.
 - Use approved markdown plans, spec \`tasks.md\`, and investigation reports as provenance/reference; update task status, blockers, comments, and completion in Commander.
 - If approval arrived without Commander task materialization, create or repair Commander tasks before coding.
 
@@ -933,6 +1016,7 @@ const defaultPromptSnapshotOpts: ModePromptOpts = {
 /** Stable string exports for tests and tooling that expect fixed mode prompt bodies. */
 export const PLAN_PROMPT = buildPlanPrompt(defaultPromptSnapshotOpts);
 export const INVESTIGATE_PROMPT = buildInvestigatePrompt(defaultPromptSnapshotOpts);
+export const DEBUG_PROMPT = buildDebugPrompt(defaultPromptSnapshotOpts);
 export const GOAL_PROMPT = buildGoalPrompt(defaultPromptSnapshotOpts);
 export const IMPLEMENT_PROMPT = buildImplementPrompt(defaultPromptSnapshotOpts);
 export const SPEC_PROMPT = buildSpecPrompt(defaultPromptSnapshotOpts);

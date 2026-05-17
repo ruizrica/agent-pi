@@ -299,15 +299,16 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	async function materializePlanApprovalTasks(markdown: string, filePath: string, title: string, ctx: ExtensionContext): Promise<CommanderTaskMaterializationResult> {
-		const isInvestigation = /investigation|remediation|root cause|findings/i.test(title) || /##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i.test(markdown);
+		const isDebugReport = /debug/i.test(title) || /##\s+(Runtime Feedback Loop|Recommendation)/i.test(markdown);
+		const isInvestigation = !isDebugReport && (/investigation|remediation|root cause|findings/i.test(title) || /##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i.test(markdown));
 		return materializeApprovedTasksToCommander({
 			title,
-			sourceKind: isInvestigation ? "investigation" : "plan",
+			sourceKind: isDebugReport ? "debug" : isInvestigation ? "investigation" : "plan",
 			sourcePath: filePath,
 			markdown,
 			cwd: ctx.cwd || process.cwd(),
-			labels: isInvestigation ? ["investigation-remediation"] : ["plan-approval"],
-			sectionHint: isInvestigation ? /^##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i : undefined,
+			labels: isDebugReport ? ["debug-remediation"] : isInvestigation ? ["investigation-remediation"] : ["plan-approval"],
+			sectionHint: isDebugReport || isInvestigation ? /^##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i : undefined,
 		});
 	}
 

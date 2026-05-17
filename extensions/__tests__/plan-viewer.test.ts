@@ -70,11 +70,13 @@ describe("plan-viewer implementation", () => {
 		expect(source).toContain("materializeApprovedTasksToCommander");
 	});
 
-	it("materializes investigation report remediation tasks before IMPLEMENT handoff", () => {
-		expect(source).toContain('sourceKind: isInvestigation ? "investigation" : "plan"');
-		expect(source).toContain('labels: isInvestigation ? ["investigation-remediation"] : ["plan-approval"]');
-		expect(source).toContain("sectionHint: isInvestigation");
+	it("materializes investigation and debug report remediation tasks before IMPLEMENT handoff", () => {
+		expect(source).toContain("const isDebugReport");
+		expect(source).toContain('sourceKind: isDebugReport ? "debug" : isInvestigation ? "investigation" : "plan"');
+		expect(source).toContain('labels: isDebugReport ? ["debug-remediation"] : isInvestigation ? ["investigation-remediation"] : ["plan-approval"]');
+		expect(source).toContain("sectionHint: isDebugReport || isInvestigation");
 		expect(source).toContain("Remediation|Next Steps|Remediation \\/ Next Steps");
+		expect(source).toContain("IMPLEMENT handoff blocked until Commander tasks are created");
 		expect(source).toContain("Proceed with IMPLEMENT mode");
 	});
 

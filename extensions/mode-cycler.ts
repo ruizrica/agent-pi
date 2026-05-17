@@ -1,5 +1,5 @@
-// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/INVESTIGATE/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE) via Shift+Tab.
-// ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/SPEC/INVESTIGATE/IMPLEMENT/GOAL prompts.
+// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/INVESTIGATE/DEBUG/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE) via Shift+Tab.
+// ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/SPEC/INVESTIGATE/DEBUG/IMPLEMENT/GOAL prompts.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -8,7 +8,7 @@ import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
 import { checkGemmaHealth, checkQwenHealth } from "./lmstudio-overlay.ts";
-import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt, buildGoalPrompt, buildImplementPrompt } from "./lib/mode-prompts.ts";
+import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt, buildDebugPrompt, buildGoalPrompt, buildImplementPrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { persistModeHintsEnabled, resolveModeHintsEnabled } from "./lib/mode-hints-settings.ts";
 import { wordWrap } from "./lib/ui-helpers.ts";
@@ -436,9 +436,9 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "set_mode",
 		label: "Set Mode",
-		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE based on task classification.",
+		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, SPEC, INVESTIGATE, DEBUG, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE based on task classification.",
 		parameters: Type.Object({
-			mode: Type.String({ description: "Target mode: NORMAL, PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE" }),
+			mode: Type.String({ description: "Target mode: NORMAL, PLAN, SPEC, INVESTIGATE, DEBUG, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE" }),
 			reason: Type.Optional(Type.String({ description: "Why this mode was chosen" })),
 		}),
 
@@ -501,6 +501,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		if (currentMode === "PLAN") return { systemPrompt: buildPlanPrompt(promptOpts) };
 		if (currentMode === "INVESTIGATE") return { systemPrompt: buildInvestigatePrompt(promptOpts) };
+		if (currentMode === "DEBUG") return { systemPrompt: buildDebugPrompt(promptOpts) };
 		if (currentMode === "GOAL") return { systemPrompt: buildGoalPrompt(promptOpts) };
 		if (currentMode === "IMPLEMENT") return { systemPrompt: buildImplementPrompt(promptOpts) };
 		if (currentMode === "SPEC") return { systemPrompt: buildSpecPrompt(promptOpts) };

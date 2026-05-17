@@ -1,7 +1,7 @@
-// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, TEAM, CHAIN, PIPELINE).
+// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, INVESTIGATE, DEBUG, IMPLEMENT, GOAL, TEAM, CHAIN, PIPELINE).
 // ABOUTME: No side effects — used by mode-cycler.ts extension and tested independently.
 
-export const MODES = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"] as const;
+export const MODES = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "DEBUG", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"] as const;
 export type Mode = typeof MODES[number];
 export type ModeOverlay = "CLAUDE" | "GEMMA" | "QWEN";
 
@@ -22,6 +22,7 @@ export const MODE_HINTS: Record<Mode, string> = {
 	PLAN: "Use when the task needs structured planning, context gathering, and approval before implementation.",
 	SPEC: "Use for larger feature work that needs requirements, design, tasks, and review before coding.",
 	INVESTIGATE: "Use for bugs or unclear failures where the agent should diagnose before proposing fixes.",
+	DEBUG: "Use for live runtime debugging: establish logging/instrumentation feedback, run or attach to the app, observe output, and report remediation tasks.",
 	GOAL: "Use when there is an explicit success condition and the agent should loop until it is met.",
 	IMPLEMENT: "Use when the agent should autonomously drain project-folder task-board lanes: pending first, then relevant failed/working tasks, with blocked comments and final lane cleanup.",
 	PIPELINE: "Use for phased orchestration with understand, gather, plan, execute, and review stages.",
@@ -50,6 +51,7 @@ const MODE_COLORS: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: "accent",
 	INVESTIGATE: "accent",
+	DEBUG: "accent",
 	GOAL: "accent",
 	IMPLEMENT: "accent",
 	SPEC: "accent",
@@ -69,8 +71,10 @@ const DIM_WHITE = "\x1b[38;2;220;230;240m";
 const DARK_ORANGE_BG = "\x1b[48;2;180;90;0m";
 const GEMMA_GREEN_BG = "\x1b[48;2;20;140;80m"; // green for local Gemma overlay
 const QWEN_PURPLE_BG = "\x1b[48;2;102;51;153m"; // purple for local Qwen overlay
+const DEBUG_YELLOW_BG = "\x1b[48;2;255;214;10m"; // flat yellow for DEBUG mode
 const NORMAL_HINT_BG = "\x1b[48;2;32;36;44m";
 const DODGER_BLUE_HINT_BG = "\x1b[48;2;20;104;190m";
+const DEBUG_YELLOW_HINT_BG = "\x1b[48;2;166;124;0m";
 const DARK_ORANGE_HINT_BG = "\x1b[48;2;130;65;0m";
 const GEMMA_GREEN_HINT_BG = "\x1b[48;2;14;96;56m";
 const QWEN_PURPLE_HINT_BG = "\x1b[48;2;76;38;116m";
@@ -79,6 +83,7 @@ const MODE_TEXT_ANSI: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: BOLD_WHITE,
 	INVESTIGATE: BOLD_WHITE,
+	DEBUG: BOLD_DARK,
 	GOAL: BOLD_WHITE,
 	IMPLEMENT: BOLD_WHITE,
 	SPEC: BOLD_WHITE,
@@ -99,6 +104,7 @@ const ANSI_BG: Record<Mode, string> = {
 	NORMAL: "",
 	PLAN: DODGER_BLUE_BG,
 	INVESTIGATE: DODGER_BLUE_BG,
+	DEBUG: DEBUG_YELLOW_BG,
 	GOAL: DODGER_BLUE_BG,
 	IMPLEMENT: DODGER_BLUE_BG,
 	SPEC: DODGER_BLUE_BG,
@@ -121,6 +127,7 @@ export function modeHintBgAnsi(mode: Mode, overlay: ModeOverlayState = DEFAULT_M
 	if (overlay.qwen) return QWEN_PURPLE_HINT_BG;
 	if (overlay.gemma) return GEMMA_GREEN_HINT_BG;
 	if (overlay.claude) return DARK_ORANGE_HINT_BG;
+	if (mode === "DEBUG") return DEBUG_YELLOW_HINT_BG;
 	return DODGER_BLUE_HINT_BG;
 }
 

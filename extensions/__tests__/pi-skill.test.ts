@@ -36,7 +36,7 @@ describe("/pi skill", () => {
 	});
 
 	it("references operational mode subcommands", () => {
-		for (const mode of ["plan", "spec", "investigate", "goal", "implement", "team", "pipeline", "chain"]) {
+		for (const mode of ["plan", "spec", "investigate", "debug", "goal", "implement", "team", "pipeline", "chain"]) {
 			expect(body.toLowerCase()).toContain(mode);
 		}
 	});
@@ -47,7 +47,14 @@ describe("/pi skill", () => {
 		expect(body).toContain('mode: "TEAM"');
 		expect(body).toContain('mode: "CHAIN"');
 		expect(body).toContain('mode: "PIPELINE"');
+		expect(body).toContain('mode: "DEBUG"');
 		expect(body).toContain('mode: "IMPLEMENT"');
+	});
+
+	it("documents DEBUG report handoff through Commander tasks", () => {
+		expect(body).toContain("confirm relevant log output is visible");
+		expect(body).toContain("present debug report/recommendation");
+		expect(body).toContain("create Commander/cmd tasks");
 	});
 
 	it("documents prerequisites for modes that need setup", () => {

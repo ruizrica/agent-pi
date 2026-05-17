@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 9 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"]);
+	it("has exactly 10 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "DEBUG", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"]);
 	});
 });
 
@@ -23,8 +23,12 @@ describe("nextMode", () => {
 		expect(nextMode("SPEC")).toBe("INVESTIGATE");
 	});
 
-	it("cycles INVESTIGATE → IMPLEMENT", () => {
-		expect(nextMode("INVESTIGATE")).toBe("IMPLEMENT");
+	it("cycles INVESTIGATE → DEBUG", () => {
+		expect(nextMode("INVESTIGATE")).toBe("DEBUG");
+	});
+
+	it("cycles DEBUG → IMPLEMENT", () => {
+		expect(nextMode("DEBUG")).toBe("IMPLEMENT");
 	});
 
 	it("cycles IMPLEMENT → GOAL", () => {
@@ -61,8 +65,12 @@ describe("prevMode", () => {
 		expect(prevMode("INVESTIGATE")).toBe("SPEC");
 	});
 
-	it("cycles IMPLEMENT → INVESTIGATE", () => {
-		expect(prevMode("IMPLEMENT")).toBe("INVESTIGATE");
+	it("cycles DEBUG → INVESTIGATE", () => {
+		expect(prevMode("DEBUG")).toBe("INVESTIGATE");
+	});
+
+	it("cycles IMPLEMENT → DEBUG", () => {
+		expect(prevMode("IMPLEMENT")).toBe("DEBUG");
 	});
 
 	it("cycles GOAL → IMPLEMENT", () => {
@@ -100,6 +108,10 @@ describe("modeLabel", () => {
 		expect(modeLabel("SPEC")).toBe("[SPEC]");
 	});
 
+	it("returns [DEBUG] for DEBUG", () => {
+		expect(modeLabel("DEBUG")).toBe("[DEBUG]");
+	});
+
 	it("returns [IMPLEMENT] for IMPLEMENT", () => {
 		expect(modeLabel("IMPLEMENT")).toBe("[IMPLEMENT]");
 	});
@@ -133,6 +145,10 @@ describe("modeColor", () => {
 
 	it("returns accent for SPEC", () => {
 		expect(modeColor("SPEC")).toBe("accent");
+	});
+
+	it("returns accent for DEBUG", () => {
+		expect(modeColor("DEBUG")).toBe("accent");
 	});
 
 	it("returns accent for IMPLEMENT", () => {
@@ -203,6 +219,10 @@ describe("modeBgAnsi overlay", () => {
 		expect(modeBgAnsi("GOAL")).toBe("\x1b[48;2;30;144;255m");
 		expect(modeBgAnsi("IMPLEMENT")).toBe("\x1b[48;2;30;144;255m");
 	});
+
+	it("uses flat yellow background for DEBUG", () => {
+		expect(modeBgAnsi("DEBUG")).toBe("\x1b[48;2;255;214;10m");
+	});
 });
 
 describe("modeTextAnsi", () => {
@@ -220,6 +240,10 @@ describe("modeTextAnsi", () => {
 
 	it("returns bold white for SPEC (blue bg)", () => {
 		expect(modeTextAnsi("SPEC")).toBe("\x1b[1;97m");
+	});
+
+	it("returns bold dark for DEBUG (yellow bg)", () => {
+		expect(modeTextAnsi("DEBUG")).toBe("\x1b[1;30m");
 	});
 
 	it("returns bold white for IMPLEMENT (blue bg)", () => {
@@ -253,6 +277,7 @@ describe("mode hints", () => {
 		expect(modeHintText("PLAN").toLowerCase()).toContain("planning");
 		expect(modeHintText("SPEC").toLowerCase()).toContain("requirements");
 		expect(modeHintText("INVESTIGATE").toLowerCase()).toContain("diagnose");
+		expect(modeHintText("DEBUG").toLowerCase()).toContain("logging");
 		expect(modeHintText("GOAL").toLowerCase()).toContain("success condition");
 		expect(modeHintText("IMPLEMENT").toLowerCase()).toContain("task-board");
 		expect(modeHintText("PIPELINE").toLowerCase()).toContain("phased");

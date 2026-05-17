@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+	DEBUG_PROMPT,
 	GOAL_PROMPT,
 	IMPLEMENT_PROMPT,
 	INVESTIGATE_PROMPT,
@@ -167,6 +168,42 @@ describe("INVESTIGATE_PROMPT — complex problem loop", () => {
 	});
 });
 
+describe("DEBUG_PROMPT — runtime feedback loop", () => {
+	it("is a non-empty string", () => {
+		expect(typeof DEBUG_PROMPT).toBe("string");
+		expect(DEBUG_PROMPT.length).toBeGreaterThan(0);
+	});
+
+	it("requires logging and instrumentation visibility before proceeding", () => {
+		expect(DEBUG_PROMPT).toContain("Mandatory First Gate");
+		expect(DEBUG_PROMPT).toContain("logging/instrumentation");
+		expect(DEBUG_PROMPT).toContain("I can see the relevant log output");
+		expect(DEBUG_PROMPT).toContain("Do not proceed to deeper reproduction");
+	});
+
+	it("teaches runtime observation through CLI, browser, and computer-use", () => {
+		expect(DEBUG_PROMPT).toContain("feedback loop");
+		expect(DEBUG_PROMPT).toContain("Run, Reproduce, Observe");
+		expect(DEBUG_PROMPT).toContain("build/test/dev-server");
+		expect(DEBUG_PROMPT).toContain("browser");
+		expect(DEBUG_PROMPT).toContain("computer-use");
+	});
+
+	it("requires a debug report with recommendation and approved IMPLEMENT handoff", () => {
+		expect(DEBUG_PROMPT).toContain("Debug Report & Remediation Plan");
+		expect(DEBUG_PROMPT).toContain("Recommendation");
+		expect(DEBUG_PROMPT).toContain("Remediation / Next Steps");
+		expect(DEBUG_PROMPT).toContain("Commander tasks are the source of truth");
+		expect(DEBUG_PROMPT).toContain("IMPLEMENT handoff is blocked");
+	});
+
+	it("includes WARDEN task confirmation", () => {
+		expect(DEBUG_PROMPT).toContain("WARDEN");
+		expect(DEBUG_PROMPT).toContain("runtime debug feedback-loop slice");
+		expect(DEBUG_PROMPT).toContain("tasks toggle");
+	});
+});
+
 describe("GOAL_PROMPT — success-condition loop", () => {
 	it("is a non-empty string", () => {
 		expect(typeof GOAL_PROMPT).toBe("string");
@@ -195,7 +232,7 @@ describe("GOAL_PROMPT — success-condition loop", () => {
 	it("includes WARDEN and approval handoff guardrails", () => {
 		expect(GOAL_PROMPT).toContain("WARDEN");
 		expect(GOAL_PROMPT).toContain("tasks");
-		expect(GOAL_PROMPT).toContain("PLAN, SPEC, INVESTIGATE, or IMPLEMENT");
+		expect(GOAL_PROMPT).toContain("PLAN, SPEC, INVESTIGATE, DEBUG, or IMPLEMENT");
 	});
 });
 
@@ -232,7 +269,7 @@ describe("IMPLEMENT_PROMPT — autonomous task-board loop", () => {
 	it("uses Commander board tasks as the source of truth", () => {
 		expect(IMPLEMENT_PROMPT).toContain("Source of Truth");
 		expect(IMPLEMENT_PROMPT).toContain("Commander board tasks are the source of truth");
-		expect(IMPLEMENT_PROMPT).toContain("PLAN, SPEC, or INVESTIGATE approval");
+		expect(IMPLEMENT_PROMPT).toContain("PLAN, SPEC, INVESTIGATE, or DEBUG approval");
 	});
 });
 

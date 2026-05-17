@@ -61,6 +61,38 @@ describe("approval task materialization", () => {
 		expect((payload.tasks as any[])[0].labels).toContain("approved-investigation");
 	});
 
+	it("builds debug Commander tasks only from remediation/next steps", () => {
+		const payload = buildCommanderTaskGroupPayload({
+			title: "Debug Report & Remediation Plan",
+			sourceKind: "debug",
+			sourcePath: ".context/todo.md",
+			cwd: "/repo",
+			labels: ["debug-remediation"],
+			markdown: `# Debug Report
+## Runtime Feedback Loop
+- [ ] Log visibility note should not become implementation work
+## Recommendation
+Use the safer runtime path.
+## Remediation / Next Steps
+- [ ] Fix dev-server route handling
+- [ ] Add browser regression coverage`,
+			sectionHint: /^##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i,
+		});
+
+		expect(payload).toMatchObject({
+			operation: "group:create",
+			group_name: "Debug: Debug Report & Remediation Plan",
+		});
+		expect(payload.labels).toContain("approved-debug");
+		expect(payload.labels).toContain("debug-remediation");
+		expect(String(payload.initiative_summary)).toContain("Debug approved for IMPLEMENT mode");
+		expect((payload.tasks as any[]).map((task) => task.description)).toEqual([
+			"Fix dev-server route handling",
+			"Add browser regression coverage",
+		]);
+		expect((payload.tasks as any[])[0].labels).toContain("approved-debug");
+	});
+
 	it("builds a Commander group:create payload with source metadata", () => {
 		const payload = buildCommanderTaskGroupPayload({
 			title: "Approved Plan",

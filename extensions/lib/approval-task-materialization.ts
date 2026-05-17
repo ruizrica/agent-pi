@@ -1,4 +1,4 @@
-// ABOUTME: Converts approved plan/spec/investigation markdown tasks into Commander task groups.
+// ABOUTME: Converts approved plan/spec/investigation/debug markdown tasks into Commander task groups.
 // ABOUTME: Keeps Commander board tasks as the source of truth before IMPLEMENT mode starts.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -18,7 +18,7 @@ export interface ReadSpecTaskMarkdownResult {
 
 export interface CommanderTaskMaterializationInput {
 	title: string;
-	sourceKind: "plan" | "spec" | "investigation";
+	sourceKind: "plan" | "spec" | "investigation" | "debug";
 	sourcePath: string;
 	markdown: string;
 	cwd: string;
@@ -49,6 +49,7 @@ function normalizeTaskText(text: string): string {
 function sourceLabel(kind: CommanderTaskMaterializationInput["sourceKind"]): string {
 	if (kind === "plan") return "approved-plan";
 	if (kind === "spec") return "approved-spec";
+	if (kind === "debug") return "approved-debug";
 	return "approved-investigation";
 }
 
@@ -104,7 +105,7 @@ export function buildCommanderTaskGroupPayload(input: CommanderTaskMaterializati
 			body: `Source: ${input.sourcePath}\nWorking directory: ${input.cwd}`,
 			labels: [sourceLabel(input.sourceKind), "implement-source", ...(input.labels ?? [])],
 		}));
-	const kindLabel = input.sourceKind === "investigation" ? "Investigation" : input.sourceKind === "spec" ? "Spec" : "Plan";
+	const kindLabel = input.sourceKind === "debug" ? "Debug" : input.sourceKind === "investigation" ? "Investigation" : input.sourceKind === "spec" ? "Spec" : "Plan";
 	return {
 		operation: "group:create",
 		group_name: `${kindLabel}: ${input.title}`,
