@@ -104,10 +104,10 @@ describe("computeReconcileActions", () => {
 		const mappings = [{ localId: 1, commanderId: 100 }];
 
 		const actions = computeReconcileActions(localTasks, mappings);
-		// Task 2 is unmapped and not done — needs creation
-		// Task 3 is done — skip
+		// Task 2 is unmapped and not done — needs creation with its desired status.
+		// Task 3 is done with no pending create — skip.
 		expect(actions).toEqual([
-			{ type: "create", localId: 2, text: "Task two" },
+			{ type: "create", localId: 2, text: "Task two", localStatus: "inprogress", commanderStatus: "working" },
 		]);
 	});
 
@@ -126,12 +126,24 @@ describe("computeReconcileActions", () => {
 		expect(actions).toEqual([]);
 	});
 
-	it("skips done tasks even if unmapped", () => {
+	it("skips done tasks only when no pending Commander create is expected", () => {
 		const localTasks = [
 			{ id: 1, text: "Done task", status: "done" as const },
 		];
 		const actions = computeReconcileActions(localTasks, []);
 		expect(actions).toEqual([]);
+	});
+
+	it("creates completed Commander tasks for done local tasks with pending creates", () => {
+		const localTasks = [
+			{ id: 1, text: "Done task", status: "done" as const },
+		];
+		const actions = computeReconcileActions(localTasks, [], [
+			{ localId: 1, text: "Done task", desiredStatus: "done", requestedAt: 1, mode: "group" },
+		]);
+		expect(actions).toEqual([
+			{ type: "create", localId: 1, text: "Done task", localStatus: "done", commanderStatus: "completed" },
+		]);
 	});
 
 	it("returns all unmapped non-done tasks as create actions", () => {
@@ -207,7 +219,7 @@ describe("computeReconcileActions", () => {
 
 		const actions = computeReconcileActions(localTasks, mappings);
 		expect(actions).toHaveLength(2);
-		expect(actions.find(a => a.type === "create")).toEqual({ type: "create", localId: 2, text: "Unmapped" });
+		expect(actions.find(a => a.type === "create")).toEqual({ type: "create", localId: 2, text: "Unmapped", localStatus: "idle", commanderStatus: "pending" });
 		expect(actions.find(a => a.type === "status-update")).toEqual({
 			type: "status-update",
 			localId: 1,

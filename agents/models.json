@@ -5,7 +5,7 @@
   },
   "agents": {
     "scout": {
-      "provider": "openrouter",
+      "provider": "openai-codex",
       "model": "gpt-5.4-mini"
     },
     "builder": {

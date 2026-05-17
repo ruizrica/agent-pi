@@ -48,7 +48,7 @@ describe("commander-tracker extension behavior", () => {
 			];
 			const mappings = [{ localId: 1, commanderId: 100 }];
 			const actions = computeReconcileActions(localTasks, mappings);
-			expect(actions).toEqual([{ type: "create", localId: 2, text: "Task B" }]);
+			expect(actions).toEqual([{ type: "create", localId: 2, text: "Task B", localStatus: "inprogress", commanderStatus: "working" }]);
 		});
 
 		it("returns empty when all tasks mapped", () => {

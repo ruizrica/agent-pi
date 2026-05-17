@@ -83,6 +83,14 @@ describe("mission complete lifecycle", () => {
 		expect(tasksSource).toContain("Don't stop until local tasks and any Commander board updates are complete!");
 	});
 
+	it("tracks pending Commander creates so done local tasks cannot hide unmapped CMD work", () => {
+		expect(tasksSource).toContain("addPendingCreates(syncState, initialTasks, \"group\")");
+		expect(tasksSource).toContain("addPendingCreate(syncState, task");
+		expect(tasksSource).toContain("syncState.pendingCreates || []");
+		expect(tasksSource).toContain("Commander sync still has ${unresolvedIds.length} unresolved local task(s)");
+		expect(tasksSource).not.toContain("tasks are dropped");
+	});
+
 	it("suppresses subagent local-task board sync through the shared ownership policy", () => {
 		expect(tasksSource).toContain("resolveCommanderTaskSyncPolicyFromEnv");
 		expect(tasksSource).toContain("function shouldSyncLocalTasksToCommander()");

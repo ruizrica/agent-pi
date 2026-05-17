@@ -43,6 +43,9 @@ import {
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
 	updateMappingStatus,
+	addPendingCreates,
+	addPendingCreate,
+	unresolvedCommanderLocalIds,
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
@@ -399,6 +402,7 @@ export default function (pi: ExtensionAPI) {
 		commanderAvailable: boolean;
 		commanderNeedsAttention: boolean;
 		commanderMessage: string;
+		unresolvedCommanderLocalIds: number[];
 	}
 
 	function isCommanderAvailableForPreStopAudit(): boolean {
@@ -409,14 +413,23 @@ export default function (pi: ExtensionAPI) {
 	function getPreStopTaskAudit(): PreStopTaskAudit {
 		const incomplete = Array.isArray(tasks) ? tasks.filter((t) => t.status !== "done") : [];
 		const commanderAvailable = isCommanderAvailableForPreStopAudit();
+		const localTasks = tasks.map(t => ({ id: t.id, text: t.text, status: t.status }));
+		const unresolvedIds = unresolvedCommanderLocalIds(localTasks, syncState);
 		const commanderNeedsAttention = commanderAvailable
-			&& syncState.mappings.length > 0
-			&& !isFullySynced(tasks, syncState.mappings);
+			&& (
+				syncState.groupCreationInFlight
+				|| (syncState.pendingCreates || []).length > 0
+				|| syncState.mappings.length > 0
+			)
+			&& !isFullySynced(localTasks, syncState.mappings, syncState.pendingCreates || []);
+		const unresolvedLine = unresolvedIds.length > 0
+			? ` Commander sync still has ${unresolvedIds.length} unresolved local task(s): ${unresolvedIds.map(id => `#${id}`).join(", ")}.`
+			: "";
 		const commanderMessage = commanderAvailable
-			? "Before stopping, verify/update the Commander board for this work so every related Commander task is completed, cancelled, failed, handed off, or accurately reflects the remaining status. Every Commander board task you create or claim is your responsibility; use mailbox/comments for coordination instead of leaving placeholder tasks."
+			? `${unresolvedLine} Before stopping, verify/update the Commander board for this work so every related Commander task is completed, cancelled, failed, handed off, or accurately reflects the remaining status. Every Commander board task you create or claim is your responsibility; use mailbox/comments for coordination instead of leaving placeholder tasks.`.trim()
 			: "";
 
-		return { incomplete, commanderAvailable, commanderNeedsAttention, commanderMessage };
+		return { incomplete, commanderAvailable, commanderNeedsAttention, commanderMessage, unresolvedCommanderLocalIds: unresolvedIds };
 	}
 
 	function shouldGuardSelfCleanup(event: any): boolean {
@@ -855,6 +868,7 @@ export default function (pi: ExtensionAPI) {
 
 					// Sync initial tasks to Commander if any were provided
 					if (initialTasks.length > 0 && shouldSyncLocalTasksToCommander()) {
+						syncState = addPendingCreates(syncState, initialTasks, "group");
 						if (shouldCreateGroup(syncState)) {
 							syncState = markGroupCreationInFlight(syncState);
 							const localIds = initialTasks.map((t) => t.id);
@@ -934,6 +948,7 @@ export default function (pi: ExtensionAPI) {
 
 					// Sync: create Commander tasks only when this session owns local task-board sync.
 					if (shouldSyncLocalTasksToCommander()) {
+						syncState = addPendingCreates(syncState, added, syncState.groupId === undefined ? "group" : "single");
 						if (shouldCreateGroup(syncState)) {
 							// Path A: no group yet — batch all tasks into a single group:create
 							syncState = markGroupCreationInFlight(syncState);
@@ -973,9 +988,10 @@ export default function (pi: ExtensionAPI) {
 									}
 								});
 							}
+						} else if (syncState.groupCreationInFlight && syncState.groupId === undefined) {
+							// Queued in pendingCreates above. Reconciliation will create/update once
+							// the in-flight group has resolved or Commander becomes available.
 						}
-						// If groupCreationInFlight but no groupId yet, tasks are dropped
-						// (race window — the group:create hasn't returned yet)
 					}
 
 					let msg = added.length === 1
@@ -1010,6 +1026,10 @@ export default function (pi: ExtensionAPI) {
 					task.status = NEXT_STATUS[task.status];
 					task.lastUpdatedAt = nowIso();
 					task.lastUpdatedBy = currentActor();
+					if (shouldSyncLocalTasksToCommander()) {
+						syncState = addPendingCreate(syncState, task, syncState.groupId === undefined ? "group" : "single");
+						syncState = updateMappingStatus(syncState, task.id, task.status);
+					}
 
 					// Enforce single inprogress — demote any other active task
 					const demoted: Task[] = [];
@@ -1065,6 +1085,7 @@ export default function (pi: ExtensionAPI) {
 								const synced = isFullySynced(
 									tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
 									syncState.mappings,
+									syncState.pendingCreates || [],
 								);
 								if (!synced) {
 									const tracker = g.__piCommanderTracker;

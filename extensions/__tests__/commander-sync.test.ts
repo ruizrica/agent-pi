@@ -19,6 +19,11 @@ import {
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
 	updateMappingStatus,
+	addPendingCreate,
+	addPendingCreates,
+	removePendingCreate,
+	pendingCreateLocalIds,
+	unresolvedCommanderLocalIds,
 	type CommanderTaskMapping,
 	type SyncState,
 } from "../lib/commander/commander-sync.ts";
@@ -186,6 +191,45 @@ describe("emptySyncState", () => {
 		expect(state.groupId).toBeUndefined();
 		expect(state.groupCreationInFlight).toBe(false);
 		expect(state.mappings).toEqual([]);
+		expect(state.pendingCreates).toEqual([]);
+	});
+});
+
+describe("pending create helpers", () => {
+	it("tracks expected Commander creates before mappings exist", () => {
+		const state = addPendingCreate(emptySyncState(), { id: 1, text: "Task", status: "idle" }, "group", 123);
+		expect(state.pendingCreates).toEqual([
+			{ localId: 1, text: "Task", desiredStatus: "idle", requestedAt: 123, mode: "group" },
+		]);
+		expect(pendingCreateLocalIds(state)).toEqual([1]);
+	});
+
+	it("updates pending desired status instead of duplicating entries", () => {
+		let state = addPendingCreate(emptySyncState(), { id: 1, text: "Task", status: "idle" }, "group", 123);
+		state = addPendingCreate(state, { id: 1, text: "Task", status: "done" }, "single", 456);
+		expect(state.pendingCreates).toHaveLength(1);
+		expect(state.pendingCreates?.[0]).toMatchObject({ localId: 1, desiredStatus: "done", mode: "single" });
+	});
+
+	it("removes pending create once a mapping is known", () => {
+		let state = addPendingCreates(emptySyncState(), [
+			{ id: 1, text: "A", status: "idle" },
+			{ id: 2, text: "B", status: "done" },
+		], "group", 1);
+		state = addMapping(state, 1, 101);
+		expect(pendingCreateLocalIds(state)).toEqual([2]);
+		state = removePendingCreate(state, 2);
+		expect(state.pendingCreates).toEqual([]);
+	});
+
+	it("reports unresolved mapped drift and pending creates", () => {
+		let state = addPendingCreate(emptySyncState(), { id: 2, text: "B", status: "done" }, "group", 1);
+		state = addMapping(state, 1, 101);
+		state = updateMappingStatus(state, 1, "idle");
+		expect(unresolvedCommanderLocalIds([
+			{ id: 1, status: "done" },
+			{ id: 2, status: "done" },
+		], state)).toEqual([1, 2]);
 	});
 });
 
