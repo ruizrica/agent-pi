@@ -594,21 +594,22 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 
+				const agentLabel = `SA-${state.id}-${state.name}`;
+				const normalizedOutput = normalizeAgentFinalOutput({
+					result: toolkitFinalOutput,
+					textChunks: state.textChunks,
+					exitCode: code ?? 1,
+					source: agentLabel,
+				});
+				const result = normalizedOutput.displayText;
+				const summary = normalizedOutput.summary || agentLabel;
+
 				// Post-dispatch: reconcile Commander task to terminal state
 				// Re-evaluate Commander availability NOW (not at spawn time) to handle
 				// transient connectivity issues during agent lifetime
 				if (cmdTaskId !== undefined && isCommanderAvailable()) {
 					const client = getCommanderClient();
 					if (client) {
-						const agentLabel = `SA-${state.id}-${state.name}`;
-						const normalizedOutput = normalizeAgentFinalOutput({
-							result: toolkitFinalOutput,
-							textChunks: state.textChunks,
-							exitCode: code ?? 1,
-							source: agentLabel,
-						});
-						const finalText = normalizedOutput.displayText;
-						const summary = normalizedOutput.summary || agentLabel;
 						if (state.status === "done") {
 							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
 								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
@@ -624,14 +625,7 @@ export default function (pi: ExtensionAPI) {
 					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
 				}
 
-				const result = normalizeAgentFinalOutput({
-					result: toolkitFinalOutput,
-					textChunks: state.textChunks,
-					exitCode: code ?? 1,
-					source: `SA${state.id} (${state.name})`,
-				}).displayText;
-
-				// Standby spawns (warmup) suppress notification and follow-up message
+				// Standby spawns (warmup) suppress notification and follow-up message.
 				if (!state.standby) {
 					ctx.ui.notify(
 						`SA${state.id} (${state.name}) ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
