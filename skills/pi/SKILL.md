@@ -25,7 +25,7 @@ Read the first word of the user's arguments and call `set_mode` with the matchin
 |------------|--------|----------|
 | `plan` | `set_mode { mode: "PLAN", reason: "/pi plan" }` | Scout gather context -> write structured plan -> user approves via show_plan -> implement in phases |
 | `spec` | `set_mode { mode: "SPEC", reason: "/pi spec" }` | Initialize spec folder -> shape requirements with clarifying questions -> write design doc -> create tasks -> present via show_spec -> implement |
-| `investigate` | `set_mode { mode: "INVESTIGATE", reason: "/pi investigate" }` | Clarify the problem -> gather context with scouts -> synthesize findings/hypotheses -> present remediation for approval -> hand off to PIPELINE |
+| `investigate` | `set_mode { mode: "INVESTIGATE", reason: "/pi investigate" }` | Clarify the problem -> gather context with scouts -> synthesize findings/hypotheses -> present remediation for approval -> create Commander/cmd tasks -> hand off to IMPLEMENT |
 | `goal` / `go` | `set_mode { mode: "GOAL", reason: "/pi goal" }` | Objective-driven loop that continues until an explicit success condition is met |
 | `implement` / `impl` | `set_mode { mode: "IMPLEMENT", reason: "/pi implement" }` | Autonomous project-folder task-board lane drain: pending first, then relevant failed/working cleanup |
 | `pipeline` | `set_mode { mode: "PIPELINE", reason: "/pi pipeline" }` | Phased orchestration: UNDERSTAND -> GATHER -> PLAN -> EXECUTE -> REVIEW |
