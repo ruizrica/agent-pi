@@ -3,7 +3,6 @@
 
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join, resolve } from "path";
-import { isClaudeCliAgent } from "./claude/claude-config.ts";
 import { isToolkitCliAgent, normalizeToolkitAgentName, TOOLKIT_WORKER_MODEL } from "./toolkit-cli.ts";
 
 export interface AgentDef {
@@ -150,10 +149,6 @@ export function resolveAgentModelString(
 ): string {
 	const key = agentName.toLowerCase();
 	const entry = config.agents[key];
-	if (isClaudeCliAgent(agentName)) {
-		if (entry) return buildModelString(entry);
-		return buildModelString(config.default);
-	}
 	if (isToolkitCliAgent(agentName)) return TOOLKIT_WORKER_MODEL;
 	if (entry) return buildModelString(entry);
 	return buildModelString(config.default);
@@ -181,20 +176,12 @@ export function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfi
 
 		if (!frontmatter.name) return null;
 
-		// Model resolution: Claude profiles use configured model, generic toolkit CLIs use
-		// the shared worker model, then models.json/frontmatter fallback for everyone else.
+		// Model resolution: generic toolkit CLIs use the shared worker model, then
+		// models.json/frontmatter fallback for everyone else.
 		let model = "";
 		let modelProvider: string | undefined;
 		let modelId: string | undefined;
-		if (isClaudeCliAgent(frontmatter.name) && modelsConfig) {
-			const key = frontmatter.name.toLowerCase();
-			const entry = modelsConfig.agents[key];
-			if (entry) {
-				model = buildModelString(entry);
-				modelProvider = entry.provider || undefined;
-				modelId = entry.model;
-			}
-		} else if (isToolkitCliAgent(frontmatter.name)) {
+		if (isToolkitCliAgent(frontmatter.name)) {
 			model = TOOLKIT_WORKER_MODEL;
 		} else if (modelsConfig) {
 			const key = frontmatter.name.toLowerCase();

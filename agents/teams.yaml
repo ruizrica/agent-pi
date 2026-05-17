@@ -14,7 +14,6 @@ all:
   - cursor-worker
   - codex-worker
   - gemini-worker
-  - copilot-agent
   - qwen-agent
   - opencode-worker
   - groq-agent
@@ -27,7 +26,6 @@ toolkit:
   - cursor-worker
   - codex-worker
   - gemini-worker
-  - copilot-agent
   - qwen-agent
   - opencode-worker
   - groq-agent

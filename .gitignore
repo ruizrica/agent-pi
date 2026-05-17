@@ -55,15 +55,22 @@ tests/*.spec.ts
 .beads-credential-key
 
 # Task tracker volatile state (per-session, never push to public)
+# `**/<name>` covers root + any nested depth; trailing-slash variants are kept
+# for explicitness so directories are unambiguously matched. Existing tracked
+# files under `.beads/` (config.yaml, hooks, README) are unaffected — gitignore
+# only applies to untracked paths.
+.beads
+.beads/
+**/.beads
+**/.beads/
+.commander
+.commander/
+**/.commander
+**/.commander/
+
+# Specific volatile files within the root `.beads/` (redundant given the
+# globs above, but kept as documentation of which files are per-session).
 .beads/issues.jsonl
 .beads/cmd-writer.log
 .beads/metadata.json
-.commander/
-
-# Catch nested .beads/ and .commander/ folders — `cmd` initialises these in
-# whatever cwd it's invoked from (e.g. extensions/.beads/ when tests run cmd).
-# The root-anchored lines above won't match nested directories because they
-# contain a middle slash; this glob does.
-**/.beads/
-**/.commander/
 

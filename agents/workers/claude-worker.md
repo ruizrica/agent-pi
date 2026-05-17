@@ -1,6 +1,6 @@
 ---
 name: claude-worker
-description: Claude Code CLI execution worker — autonomous codebase work with live streamed output
+description: Anthropic account/API worker — autonomous Claude-family codebase work with live streamed output
 tools: read,write,edit,bash,grep,find,ls
 ---
 
