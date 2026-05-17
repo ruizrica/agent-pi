@@ -750,6 +750,12 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 - If Commander task creation fails or no remediation tasks are found, IMPLEMENT handoff is blocked until tasks are created.
 - After tasks are recorded, transition to IMPLEMENT so the next agent can immediately drain pending board work.
 
+### Phase 6: Cleanup Temporary Instrumentation
+- After the issue has been fixed and verified, remove temporary debug logs, ad-hoc probes, extra instrumentation, temporary flags, and diagnostic scaffolding added during DEBUG.
+- Keep only production-safe logging that is part of the approved remediation or explicitly justified by the user/task.
+- Rerun the relevant repro, test, build, or runtime check after cleanup to confirm the fix still holds and debug noise is gone.
+- Include cleanup evidence in the final summary or completion report.
+
 ## Rules
 - Logging/output visibility is the first gate; do not skip it.
 - Prefer bounded local commands and authorized local targets.

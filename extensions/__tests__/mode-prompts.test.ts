@@ -197,6 +197,13 @@ describe("DEBUG_PROMPT — runtime feedback loop", () => {
 		expect(DEBUG_PROMPT).toContain("IMPLEMENT handoff is blocked");
 	});
 
+	it("requires cleanup of temporary instrumentation after the fix", () => {
+		expect(DEBUG_PROMPT).toContain("Cleanup Temporary Instrumentation");
+		expect(DEBUG_PROMPT).toContain("remove temporary debug logs");
+		expect(DEBUG_PROMPT).toContain("diagnostic scaffolding");
+		expect(DEBUG_PROMPT).toContain("Rerun the relevant repro, test, build, or runtime check after cleanup");
+	});
+
 	it("includes WARDEN task confirmation", () => {
 		expect(DEBUG_PROMPT).toContain("WARDEN");
 		expect(DEBUG_PROMPT).toContain("runtime debug feedback-loop slice");
