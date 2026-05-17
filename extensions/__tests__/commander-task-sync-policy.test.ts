@@ -9,8 +9,15 @@ import {
 } from "../lib/commander/task-ownership-policy.ts";
 
 describe("resolveCommanderTaskSyncPolicy", () => {
-	it("syncs parent-session local tasks to Commander by default", () => {
+	it("keeps parent-session local WARDEN tasks local-only by default", () => {
 		const policy = resolveCommanderTaskSyncPolicy({});
+		expect(policy.shouldSyncLocalTasksToCommander).toBe(false);
+		expect(policy.mode).toBe("local-only");
+		expect(policy.suppressedMessage).toContain("not promoted to Commander");
+	});
+
+	it("allows explicit durable Commander sync opt-in for local tasks", () => {
+		const policy = resolveCommanderTaskSyncPolicy({ syncMode: "auto" });
 		expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
 		expect(policy.mode).toBe("auto");
 	});

@@ -118,9 +118,9 @@ function currentActor(): string {
 	return resolveAgentName();
 }
 
-function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, description?: string) {
+function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, description?: string, commanderSyncEnabled = false) {
 	const cur = tasks.find(t => t.status === "inprogress");
-	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: lookupMapping(sync, cur.id) } as CurrentTaskInfo : null;
+	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: commanderSyncEnabled ? lookupMapping(sync, cur.id) : undefined } as CurrentTaskInfo : null;
 
 	const fallbackSummary = description
 		|| (() => {
@@ -136,7 +136,8 @@ function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, desc
 		remaining,
 		total: tasks.length,
 		__syncState: sync,
-	} as TaskListInfo;
+		__commanderSyncEnabled: commanderSyncEnabled,
+	} as TaskListInfo & { __syncState: SyncState; __commanderSyncEnabled: boolean };
 }
 
 // ── /tasks overlay component ───────────────────────────────────────────
@@ -316,7 +317,7 @@ export default function (pi: ExtensionAPI) {
 	// ── UI refresh ─────────────────────────────────────────────────────
 
 	const refreshWidget = (_ctx: ExtensionContext) => {
-		publishCurrentTask(tasks, syncState, listTitle, listDescription);
+		publishCurrentTask(tasks, syncState, listTitle, listDescription, shouldSyncLocalTasksToCommander());
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
 	};
 

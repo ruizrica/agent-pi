@@ -28,6 +28,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { cleanOldSessionFiles } from "./lib/subagent-cleanup.ts";
 import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { recordLifecycleIntent } from "./lib/commander/lifecycle-intents.ts";
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
 import { buildSubagentBatchBrief } from "./lib/commander/subagent-mission-brief.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
@@ -622,7 +623,14 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 				} else if (cmdTaskId !== undefined) {
-					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — task will remain stuck`);
+					const action = state.status === "done" ? "complete" : "fail";
+					recordLifecycleIntent({
+						taskId: cmdTaskId,
+						action,
+						owner: agentLabel,
+						message: state.status === "done" ? summary : (summary || "Agent exited with error"),
+					});
+					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — recorded recoverable lifecycle intent`);
 				}
 
 				// Standby spawns (warmup) suppress notification and follow-up message.
@@ -1326,6 +1334,17 @@ export default function (pi: ExtensionAPI) {
 					postFailTask(client, state.commanderTaskId,
 						`Agent SA-${id}-${state.name} killed during session switch`)
 						.catch(() => {});
+				}
+			}
+		} else {
+			for (const [id, state] of agents) {
+				if (state.commanderTaskId !== undefined && state.status !== "done") {
+					recordLifecycleIntent({
+						taskId: state.commanderTaskId,
+						action: "fail",
+						owner: `SA-${id}-${state.name}`,
+						message: `Agent SA-${id}-${state.name} killed during session switch`,
+					});
 				}
 			}
 		}

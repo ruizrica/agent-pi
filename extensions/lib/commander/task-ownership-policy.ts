@@ -1,7 +1,7 @@
 // ABOUTME: Shared Commander task ownership policy for prompts and local-task sync gating.
 // ABOUTME: Keeps status/coordination in mailbox/comments and prevents subagent task-board sprawl.
 
-export type CommanderTaskSyncMode = "auto" | "assigned-only" | "disabled" | "external";
+export type CommanderTaskSyncMode = "auto" | "local-only" | "assigned-only" | "disabled" | "external";
 
 export interface CommanderTaskSyncPolicyInput {
 	isSubagent?: boolean;
@@ -41,6 +41,15 @@ export function resolveCommanderTaskSyncPolicy(input: CommanderTaskSyncPolicyInp
 		};
 	}
 
+	if (["local-only", "local", "warden", "warden-only"].includes(requested)) {
+		return {
+			mode: "local-only",
+			shouldSyncLocalTasksToCommander: false,
+			reason: "Local WARDEN task lists are bookkeeping and are not Commander board cards.",
+			suppressedMessage: "Local WARDEN task list not promoted to Commander; create durable Commander cards explicitly with cmd task add and lifecycle ownership.",
+		};
+	}
+
 	if (["assigned-only", "assigned", "parent", "parent-managed"].includes(requested)) {
 		return {
 			mode: "assigned-only",
@@ -68,9 +77,10 @@ export function resolveCommanderTaskSyncPolicy(input: CommanderTaskSyncPolicyInp
 	}
 
 	return {
-		mode: "auto",
-		shouldSyncLocalTasksToCommander: true,
-		reason: "Local tasks sync to Commander automatically.",
+		mode: "local-only",
+		shouldSyncLocalTasksToCommander: false,
+		reason: "Local WARDEN task lists are bookkeeping and are not Commander board cards by default.",
+		suppressedMessage: "Local WARDEN task list not promoted to Commander; create durable Commander cards explicitly with cmd task add and lifecycle ownership.",
 	};
 }
 

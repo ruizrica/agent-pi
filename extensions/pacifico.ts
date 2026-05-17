@@ -37,6 +37,8 @@ const PACIFICO_JOB_COMPLETE_TYPE = "pacifico_job_complete";
 const DEFAULT_BASE_URL = "https://pacifico.ruizrica2.workers.dev";
 const COMPLETION_FLUSH_DELAY_MS = 500;
 const COMPLETION_RETRY_DELAY_MS = 5_000;
+const PACIFICO_MAX_ATTEMPTS = 3;
+const PACIFICO_RETRY_BACKOFF_MS = [1_000, 2_000];
 const PACIFICO_JOB_PRUNE_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const PACIFICO_WIDGET_KEY = "pacifico-status";
 const BRIEF_WIDGET_BG = "\x1b[48;5;236m";
@@ -154,12 +156,16 @@ interface PacificoWidgetDetails {
 	error?: string | null;
 	prompt?: string | null;
 	sentPrompt?: string | null;
+	retryAttempt?: number | null;
+	maxRetries?: number | null;
+	retryReason?: string | null;
 }
 
-type PacificoWidgetStatus = "queued" | "processing" | "completed" | "error";
+type PacificoWidgetStatus = "queued" | "processing" | "retrying" | "completed" | "error";
 
 function normalizeWidgetStatus(status: string | null | undefined): PacificoWidgetStatus {
 	const s = status?.trim().toLowerCase();
+	if (s === "retrying" || s === "retry") return "retrying";
 	if (s === "processing" || s === "submitted" || s === "running") return "processing";
 	if (s === "completed" || s === "complete") return "completed";
 	if (s === "failed" || s === "error" || s === "cancelled") return "error";
@@ -169,15 +175,24 @@ function normalizeWidgetStatus(status: string | null | undefined): PacificoWidge
 const PACIFICO_SPINNER_FRAMES = ["-", "\\", "|", "/"];
 
 function isActiveWidgetStatus(status: PacificoWidgetStatus): boolean {
-	return status === "queued" || status === "processing";
+	return status === "queued" || status === "processing" || status === "retrying";
+}
+
+function pacificoRetryLabel(details: PacificoWidgetDetails): string | undefined {
+	const attempt = typeof details.retryAttempt === "number" ? details.retryAttempt : undefined;
+	const max = typeof details.maxRetries === "number" ? details.maxRetries : PACIFICO_MAX_ATTEMPTS;
+	if (!attempt) return undefined;
+	return `${attempt}/${max}`;
 }
 
 function pacificoProgressText(details: PacificoWidgetDetails | undefined): string | undefined {
 	if (!details) return undefined;
 	const status = normalizeWidgetStatus(details.status);
+	const retryLabel = pacificoRetryLabel(details);
 	if (status === "completed") return "complete";
-	if (status === "error") return "failed";
-	const frame = PACIFICO_SPINNER_FRAMES[Math.floor(Date.now() / 120) % PACIFICO_SPINNER_FRAMES.length];
+	if (status === "error") return retryLabel ? `failed after ${retryLabel}` : "failed";
+	const frame = PACIFICO_SPINNER_FRAMES[Math.floor(Date.now() / 120) % 4];
+	if (status === "retrying") return `${frame} retrying ${retryLabel ?? ""}`.trim();
 	return status === "processing" ? `${frame} running` : `${frame} awaiting`;
 }
 
@@ -191,6 +206,9 @@ function formatPacificoWidgetContent(details: PacificoWidgetDetails): string {
 	const lines = [`status: ${normalizeWidgetStatus(details.status)}`];
 	if (details.jobId) lines.push(`job ID: ${shortJobId(details.jobId)}`);
 	if (details.model) lines.push(`model: ${details.model}`);
+	const retryLabel = pacificoRetryLabel(details);
+	if (retryLabel) lines.push(`retry: ${retryLabel}`);
+	if (details.retryReason) lines.push(`retry reason: ${details.retryReason}`);
 	return lines.join("\n");
 }
 
@@ -321,6 +339,9 @@ class PacificoQueryOverlayComponent {
 		lines.push(truncateToWidth(`  ${th.fg("accent", "Status:")} ${th.fg("muted", status)}`, width, ""));
 		if (details?.jobId) lines.push(truncateToWidth(`  ${th.fg("accent", "Job:")} ${th.fg("muted", details.jobId)}`, width, ""));
 		if (details?.model) lines.push(truncateToWidth(`  ${th.fg("accent", "Model:")} ${th.fg("muted", details.model)}`, width, ""));
+		const retryLabel = details ? pacificoRetryLabel(details) : undefined;
+		if (retryLabel) lines.push(truncateToWidth(`  ${th.fg("accent", "Retry:")} ${th.fg("muted", retryLabel)}`, width, ""));
+		if (details?.retryReason) lines.push(truncateToWidth(`  ${th.fg("accent", "Retry reason:")} ${th.fg("muted", details.retryReason)}`, width, ""));
 		lines.push("");
 		lines.push(`  ${th.fg("accent", "Prompt sent:")}`);
 		for (const line of wrapPacificoOverlayText(prompt, width)) lines.push(truncateToWidth(`    ${th.fg("muted", line)}`, width, ""));
@@ -476,6 +497,123 @@ async function postCancel(id: string): Promise<{ id: string; cancelled: boolean;
 	const response = await pacificoFetch(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
 	if (response.status !== 200) throw new Error(`/api/jobs/${id}/cancel ${response.status}: ${await readErrorBody(response)}`);
 	return (await response.json()) as { id: string; cancelled: boolean; previousStatus?: string };
+}
+
+type PacificoRetryableFailure = Error | JobDetail;
+
+type PacificoInferAttemptResult =
+	| { kind: "sync"; data: InferSyncResponse; attempts: number }
+	| { kind: "async"; data: InferAsyncResponse; job: JobDetail; attempts: number };
+
+interface PacificoInferRetryOptions {
+	ctx?: ExtensionContext;
+	widgetKey: string;
+	prompt?: string;
+	sentPrompt?: string;
+	model?: string | null;
+	signal?: AbortSignal;
+	onUpdate?: (update: any) => void;
+	updateWidget?: (key: string, details: PacificoWidgetDetails) => void;
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof Error && /\baborted\b/i.test(error.message);
+}
+
+function isRetryablePacificoError(errorOrJob: PacificoRetryableFailure): boolean {
+	if ("status" in errorOrJob && typeof errorOrJob.status === "string") return errorOrJob.status === "failed";
+	if (isAbortError(errorOrJob)) return false;
+	const message = errorOrJob instanceof Error ? errorOrJob.message : String(errorOrJob);
+	if (/HTTP\s+(408|409|425|429|5\d\d)\b/.test(message)) return true;
+	if (/Polling timed out|fetch failed|network|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket|timeout/i.test(message)) return true;
+	return false;
+}
+
+function formatRetryReason(errorOrJob: PacificoRetryableFailure): string {
+	if ("status" in errorOrJob && typeof errorOrJob.status === "string") {
+		return errorOrJob.error ? `job failed: ${errorOrJob.error}` : `job ended ${errorOrJob.status}`;
+	}
+	return errorOrJob instanceof Error ? errorOrJob.message : String(errorOrJob);
+}
+
+function waitForPacificoRetry(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) { reject(new Error("aborted")); return; }
+		const timer = setTimeout(() => {
+			if (signal) signal.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(new Error("aborted"));
+		};
+		if (signal) signal.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
+function retryWidgetDetails(options: PacificoInferRetryOptions, attempt: number, reason: string): PacificoWidgetDetails {
+	return {
+		status: "retrying",
+		jobId: undefined,
+		model: options.model ?? "(default)",
+		prompt: options.prompt,
+		sentPrompt: options.sentPrompt,
+		retryAttempt: attempt,
+		maxRetries: PACIFICO_MAX_ATTEMPTS,
+		retryReason: reason,
+		error: reason,
+	};
+}
+
+async function runPacificoInferWithRetry(body: InferRequest, options: PacificoInferRetryOptions): Promise<PacificoInferAttemptResult> {
+	let lastFailure: PacificoRetryableFailure | undefined;
+	for (let attempt = 1; attempt <= PACIFICO_MAX_ATTEMPTS; attempt++) {
+		if (options.signal?.aborted) throw new Error("aborted");
+		try {
+			const result = await postInfer(body);
+			if (result.kind === "sync") return { kind: "sync", data: result.data, attempts: attempt };
+			const accepted = result.data;
+			options.onUpdate?.({ content: [{ type: "text", text: `Pacifico job ${accepted.id} accepted (attempt ${attempt}/${PACIFICO_MAX_ATTEMPTS}); waiting for result.` }] });
+			const ctrl = new AbortController();
+			const onParentAbort = () => ctrl.abort();
+			if (options.signal) {
+				if (options.signal.aborted) ctrl.abort();
+				else options.signal.addEventListener("abort", onParentAbort);
+			}
+			try {
+				const job = await pollJob(accepted.id, ctrl.signal, (jobUpdate) => {
+					options.updateWidget?.(jobUpdate.id, {
+						status: jobUpdate.status,
+						jobId: jobUpdate.id,
+						model: jobUpdate.result?.model ?? jobUpdate.model ?? accepted.model ?? options.model ?? "(default)",
+						prompt: options.prompt ?? jobUpdate.input,
+						sentPrompt: options.sentPrompt,
+						output: jobUpdate.result?.output ?? null,
+						error: jobUpdate.error ?? null,
+						retryAttempt: attempt > 1 ? attempt : undefined,
+						maxRetries: PACIFICO_MAX_ATTEMPTS,
+					});
+				});
+				if (job.status === "failed" && attempt < PACIFICO_MAX_ATTEMPTS && isRetryablePacificoError(job)) {
+					lastFailure = job;
+					throw job;
+				}
+				return { kind: "async", data: accepted, job, attempts: attempt };
+			} finally {
+				if (options.signal) options.signal.removeEventListener("abort", onParentAbort);
+			}
+		} catch (err) {
+			const failure = err && typeof err === "object" && "status" in err ? err as JobDetail : (err instanceof Error ? err : new Error(String(err)));
+			lastFailure = failure;
+			if (attempt >= PACIFICO_MAX_ATTEMPTS || !isRetryablePacificoError(failure)) throw failure instanceof Error ? failure : new Error(formatRetryReason(failure));
+			const nextAttempt = attempt + 1;
+			const reason = formatRetryReason(lastFailure);
+			options.updateWidget?.(options.widgetKey, retryWidgetDetails(options, nextAttempt, reason));
+			options.onUpdate?.({ content: [{ type: "text", text: `Pacifico attempt ${attempt}/${PACIFICO_MAX_ATTEMPTS} failed; retrying ${nextAttempt}/${PACIFICO_MAX_ATTEMPTS}: ${reason}` }] });
+			await waitForPacificoRetry(PACIFICO_RETRY_BACKOFF_MS[Math.min(attempt - 1, PACIFICO_RETRY_BACKOFF_MS.length - 1)] ?? 1_000, options.signal);
+		}
+	}
+	throw lastFailure instanceof Error ? lastFailure : new Error(lastFailure ? formatRetryReason(lastFailure) : "Pacifico failed");
 }
 
 interface Poller {
@@ -701,6 +839,9 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				sentPrompt: activeWidgetDetails?.sentPrompt,
 				output: details.output ?? activeWidgetDetails?.output,
 				error: details.error ?? activeWidgetDetails?.error,
+				retryAttempt: details.retryAttempt ?? activeWidgetDetails?.retryAttempt,
+				maxRetries: details.maxRetries ?? activeWidgetDetails?.maxRetries,
+				retryReason: details.retryReason ?? activeWidgetDetails?.retryReason,
 			};
 		const status = normalizeWidgetStatus(activeWidgetDetails.status);
 		if (status === "completed") {
@@ -1155,7 +1296,14 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		const provisionalKey = `pending-${Date.now()}`;
 		setPacificoWidget(ctx, provisionalKey, { status: "queued", model: model ?? "(default)", prompt, sentPrompt: prompt });
 		try {
-			const result = await postInfer(body);
+			const result = await runPacificoInferWithRetry(body, {
+				ctx,
+				widgetKey: provisionalKey,
+				model: model ?? "(default)",
+				prompt,
+				sentPrompt: prompt,
+				updateWidget: (key, details) => setPacificoWidget(ctx, key, details),
+			});
 			if (result.kind === "sync") {
 				const r = result.data;
 				const meta = `_${r.provider} · ${r.model} · route ${r.route}_`;
@@ -1163,25 +1311,21 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				emitMessage(pi, `${meta}\n\n${r.output}`);
 			} else {
 				const r = result.data;
+				const job = result.job;
 				saveSubmittedPacificoJob(ctx.cwd, {
 					jobId: r.id,
-					status: r.status || "queued",
-					model: r.model ?? model,
-					route: r.route,
+					status: job.status || r.status || "queued",
+					model: job.result?.model ?? job.model ?? r.model ?? model,
+					route: job.result?.route ?? job.route ?? r.route,
 					prompt,
 				});
 				clearPacificoWidget(provisionalKey);
-				setPacificoWidget(ctx, r.id, {
-					status: r.status,
-					jobId: r.id,
-					model: r.model ?? model ?? "(default)",
-					prompt,
-					sentPrompt: prompt,
-				});
-				registerPoller(r.id, ctx);
+				queueJobCompletion(job, ctx.cwd);
 			}
 		} catch (err) {
-			ctx.ui.notify(`/api/infer failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+			const message = err instanceof Error ? err.message : String(err);
+			setPacificoWidget(ctx, provisionalKey, { status: "error", model: model ?? "(default)", prompt, sentPrompt: prompt, error: message, retryAttempt: PACIFICO_MAX_ATTEMPTS, maxRetries: PACIFICO_MAX_ATTEMPTS });
+			ctx.ui.notify(`/api/infer failed after ${PACIFICO_MAX_ATTEMPTS} attempts: ${message}`, "error");
 		}
 	}
 
@@ -1467,9 +1611,18 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		if (chosen) body.model = chosen;
 		setPacificoWidget(ctx, `advisor-${Date.now()}`, { status: "queued", model: chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt });
 		try {
-			const result = await postInfer(body);
+			const result = await runPacificoInferWithRetry(body, {
+				ctx,
+				widgetKey: `advisor-${Date.now()}`,
+				model: chosen ?? "(default)",
+				prompt: args.question,
+				sentPrompt: packet.prompt,
+				signal,
+				onUpdate,
+				updateWidget: (key, details) => setPacificoWidget(ctx, key, details),
+			});
 			let raw = "";
-			let meta: Record<string, unknown> = { contextDiagnostics: packet.diagnostics, promptBytes: packet.promptBytes, includedFiles: packet.includedFiles, complexity };
+			let meta: Record<string, unknown> = { contextDiagnostics: packet.diagnostics, promptBytes: packet.promptBytes, includedFiles: packet.includedFiles, complexity, attempts: result.attempts };
 			if (result.kind === "sync") {
 				const r = result.data;
 				raw = r.output;
@@ -1477,24 +1630,10 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				setPacificoWidget(ctx, r.requestId, { status: "completed", model: r.model, prompt: args.question, sentPrompt: packet.prompt, output: r.output });
 			} else {
 				const r = result.data;
-				setPacificoWidget(ctx, r.id, { status: r.status, jobId: r.id, model: r.model ?? chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt });
-				onUpdate?.({ content: [{ type: "text", text: `Pacifico advisor job ${r.id} accepted; waiting for result.` }] });
-				const ctrl = new AbortController();
-				const onParentAbort = () => ctrl.abort();
-				if (signal) {
-					if (signal.aborted) ctrl.abort();
-					else signal.addEventListener("abort", onParentAbort);
-				}
-				try {
-					const job = await pollJob(r.id, ctrl.signal, (jobUpdate) => {
-						setPacificoWidget(ctx, jobUpdate.id, { status: jobUpdate.status, jobId: jobUpdate.id, model: jobUpdate.result?.model ?? jobUpdate.model ?? r.model ?? chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt, output: jobUpdate.result?.output ?? null, error: jobUpdate.error ?? null });
-					});
-					meta = { ...meta, jobId: job.id, status: job.status, route: job.result?.route ?? job.route ?? null, provider: job.result?.provider ?? null, model: job.result?.model ?? job.model ?? r.model ?? null };
-					if (job.status === "completed" && job.result?.output) raw = job.result.output;
-					else raw = `Pacifico advisor job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : " without output."}`;
-				} finally {
-					if (signal) signal.removeEventListener("abort", onParentAbort);
-				}
+				const job = result.job;
+				meta = { ...meta, jobId: job.id, status: job.status, route: job.result?.route ?? job.route ?? null, provider: job.result?.provider ?? null, model: job.result?.model ?? job.model ?? r.model ?? null };
+				if (job.status === "completed" && job.result?.output) raw = job.result.output;
+				else raw = `Pacifico advisor job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : " without output."}`;
 			}
 			const normalized = normalizeAdvisorResponse(raw);
 			const text = formatPacificoAdvisorResult(normalized, {
@@ -1505,10 +1644,11 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			});
 			return { content: [{ type: "text" as const, text }], details: { ...normalized, ...meta } };
 		} catch (err) {
-			setPacificoWidget(ctx, "advisor-error", { status: "error", model: chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt, error: err instanceof Error ? err.message : String(err) });
+			const message = err instanceof Error ? err.message : String(err);
+			setPacificoWidget(ctx, "advisor-error", { status: "error", model: chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt, error: message, retryAttempt: PACIFICO_MAX_ATTEMPTS, maxRetries: PACIFICO_MAX_ATTEMPTS });
 			return {
-				content: [{ type: "text" as const, text: `pacifico_advisor failed: ${err instanceof Error ? err.message : String(err)}` }],
-				details: { error: err instanceof Error ? err.message : String(err), contextDiagnostics: packet.diagnostics },
+				content: [{ type: "text" as const, text: `pacifico_advisor failed after ${PACIFICO_MAX_ATTEMPTS} attempts: ${message}` }],
+				details: { error: message, attempts: PACIFICO_MAX_ATTEMPTS, contextDiagnostics: packet.diagnostics },
 			};
 		}
 	}
@@ -1594,7 +1734,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			model: Type.Optional(Type.String({ description: "Optional pacifico model override (e.g. claude-haiku-4-5). Falls back to PACIFICO_MODEL / persisted setting / backend default." })),
 			mode: Type.Optional(Type.Union([Type.Literal("sync"), Type.Literal("async"), Type.Literal("auto")], { description: "Routing hint; defaults to auto" })),
 		}) as any,
-		async execute(_id, params, signal, _onUpdate, _ctx) {
+		async execute(_id, params, signal, onUpdate, ctx) {
 			const apiKey = getApiKey();
 			if (!apiKey) {
 				return {
@@ -1607,39 +1747,40 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			const chosen = p.model ?? resolveModel();
 			if (chosen) body.model = chosen;
 			try {
-				const result = await postInfer(body);
+				const result = await runPacificoInferWithRetry(body, {
+					ctx,
+					widgetKey: `infer-${Date.now()}`,
+					model: chosen ?? "(default)",
+					prompt: p.prompt,
+					sentPrompt: p.prompt,
+					signal,
+					onUpdate,
+					updateWidget: (key, details) => setPacificoWidget(ctx, key, details),
+				});
 				if (result.kind === "sync") {
 					const r = result.data;
 					return {
 						content: [{ type: "text", text: r.output }],
-						details: { route: r.route, provider: r.provider, model: r.model, mode: r.mode, requestId: r.requestId },
+						details: { route: r.route, provider: r.provider, model: r.model, mode: r.mode, requestId: r.requestId, attempts: result.attempts },
 					};
 				}
-				const ctrl = new AbortController();
-				const onParentAbort = () => ctrl.abort();
-				if (signal) {
-					if (signal.aborted) ctrl.abort();
-					else signal.addEventListener("abort", onParentAbort);
-				}
-				try {
-					const job = await pollJob(result.data.id, ctrl.signal);
-					if (job.status === "completed" && job.result?.output) {
-						return {
-							content: [{ type: "text", text: job.result.output }],
-							details: { jobId: job.id, route: job.result.route, provider: job.result.provider, model: job.result.model, status: job.status },
-						};
-					}
+				const job = result.job;
+				if (job.status === "completed" && job.result?.output) {
 					return {
-						content: [{ type: "text", text: `Job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : "."}` }],
-						details: { jobId: job.id, status: job.status, error: job.error ?? null },
+						content: [{ type: "text", text: job.result.output }],
+						details: { jobId: job.id, route: job.result.route, provider: job.result.provider, model: job.result.model, status: job.status, attempts: result.attempts },
 					};
-				} finally {
-					if (signal) signal.removeEventListener("abort", onParentAbort);
 				}
-			} catch (err) {
 				return {
-					content: [{ type: "text", text: `pacifico_infer failed: ${err instanceof Error ? err.message : String(err)}` }],
-					details: { error: err instanceof Error ? err.message : String(err) },
+					content: [{ type: "text", text: `Job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : "."}` }],
+					details: { jobId: job.id, status: job.status, error: job.error ?? null, attempts: result.attempts },
+				};
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				setPacificoWidget(ctx, "infer-error", { status: "error", model: chosen ?? "(default)", prompt: p.prompt, sentPrompt: p.prompt, error: message, retryAttempt: PACIFICO_MAX_ATTEMPTS, maxRetries: PACIFICO_MAX_ATTEMPTS });
+				return {
+					content: [{ type: "text", text: `pacifico_infer failed after ${PACIFICO_MAX_ATTEMPTS} attempts: ${message}` }],
+					details: { error: message, attempts: PACIFICO_MAX_ATTEMPTS },
 				};
 			}
 		},

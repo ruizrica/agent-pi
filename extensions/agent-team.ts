@@ -42,6 +42,7 @@ import { padRight, wordWrap, sideBySide } from "./lib/ui-helpers.ts";
 import { contextBudgetLevel, isContextLossError } from "./lib/context-budget.ts";
 import { buildCommanderPrompt } from "./lib/commander/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/commander-lifecycle.ts";
+import { recordLifecycleIntent } from "./lib/commander/lifecycle-intents.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
@@ -660,7 +661,14 @@ export default function (pi: ExtensionAPI) {
 						commanderSync((client) => postFailTask(client, taskId, errMsg));
 					}
 				} else if (taskId !== undefined && !cmdAvailNow) {
-					console.error(`[agent-team] Commander unavailable at finish for task ${taskId} (${canonicalName}) — task will remain stuck`);
+					const action = state.status === "done" ? "complete" : "fail";
+					recordLifecycleIntent({
+						taskId,
+						action,
+						owner: canonicalName,
+						message: state.status === "done" ? (state.summary || canonicalName) : (stderrBuf.trim() || state.summary || "Agent exited with error"),
+					});
+					console.error(`[agent-team] Commander unavailable at finish for task ${taskId} (${canonicalName}) — recorded recoverable lifecycle intent`);
 				}
 
 				ctx.ui.notify(

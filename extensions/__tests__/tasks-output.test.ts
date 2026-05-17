@@ -67,10 +67,11 @@ describe("removed completion summary widget", () => {
 		expect(tasksSource).toContain("throw err;");
 	});
 
-	it("suppresses subagent local-task board sync through the shared ownership policy", () => {
+	it("suppresses local WARDEN board sync through the shared ownership policy", () => {
 		expect(tasksSource).toContain("resolveCommanderTaskSyncPolicyFromEnv");
 		expect(tasksSource).toContain("function shouldSyncLocalTasksToCommander()");
 		expect(tasksSource).toContain("function commanderSyncSuppressedMessage()");
+		expect(tasksSource).toContain("__commanderSyncEnabled");
 		expect(tasksSource).toContain("Every Commander board task you create or claim is your responsibility");
 	});
 

@@ -76,6 +76,7 @@ export default function (pi: ExtensionAPI) {
 		const taskList = g.__piTaskList;
 		const syncState: SyncState | undefined = g.__piTaskList?.__syncState;
 		if (!taskList?.tasks) return;
+		if (taskList.__commanderSyncEnabled !== true) return;
 
 		// Get current sync mappings from tasks extension's published state
 		// (tasks.ts publishes syncState inside details, but we read the globalThis snapshot)

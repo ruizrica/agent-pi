@@ -163,6 +163,32 @@ describe("CommanderCliClient", () => {
 		);
 	});
 
+	it("maps commander_task comment:add to cmd task comment", async () => {
+		mockExec({ ok: true });
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		const result = await client.callTool("commander_task", { operation: "comment:add", task_id: 9, body: "done", type: "progress" });
+		expect(execFileMock).toHaveBeenCalledWith(
+			"cmd-test",
+			["task", "comment", "--runtime", "pi", "--model", "unknown", "9", "done", "--type", "progress"],
+			expect.any(Object),
+			expect.any(Function),
+		);
+		expect(JSON.parse(text(result))).toMatchObject({ task_id: 9, commented: true });
+	});
+
+	it("maps commander_housekeep doctor without identity injection", async () => {
+		mockExec("1 finding:\n\n  orphaned children (1)\n    agent-pi-test  parent=#1 (cancelled)\n    → either reopen the parent or close the child\n");
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		const result = await client.callTool("commander_housekeep", { operation: "doctor" });
+		expect(execFileMock).toHaveBeenCalledWith(
+			"cmd-test",
+			["housekeep", "--doctor", "--no-color"],
+			expect.any(Object),
+			expect.any(Function),
+		);
+		expect(JSON.parse(text(result)).findings[0]).toMatchObject({ category: "orphaned children", taskId: "agent-pi-test" });
+	});
+
 	it("returns structured unsupported responses without identity injection", async () => {
 		const client = new CommanderCliClient({ bin: "cmd-test" });
 		const result = await client.callTool("commander_orchestration", { operation: "agent:list" });

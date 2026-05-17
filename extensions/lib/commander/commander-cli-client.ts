@@ -5,6 +5,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveRuntimeLabel, resolveModelName } from "../../agent-identity.js";
+import { parseHousekeepDoctorOutput } from "./commander-housekeep.ts";
 
 /**
  * Walks up from `cwd` looking for `scripts/cmd` (the project-local wrapper that
@@ -117,6 +118,9 @@ export class CommanderCliClient {
 			case "commander_task":
 				payload = await this.callTask(params, effectiveTimeout);
 				break;
+			case "commander_housekeep":
+				payload = await this.callHousekeep(params, effectiveTimeout);
+				break;
 			case "commander_session":
 				payload = await this.callSession(params, effectiveTimeout);
 				break;
@@ -196,10 +200,24 @@ export class CommanderCliClient {
 				return this.createTaskGroup(params, timeoutMs);
 			case "group:list":
 				return { groups: [] };
-			case "comment:add":
-			case "comment:list":
-			case "log":
-				return { unsupported: true, tool: "commander_task", operation, error: `${operation} is not supported by cmd yet` };
+			case "comment:add": {
+				const id = required(params.task_id, "task_id");
+				const body = String(params.body ?? params.message ?? required(params.comment, "comment"));
+				const type = String(params.type || "progress");
+				await this.run(["task", "comment", String(id), body, "--type", type], timeoutMs);
+				return { task_id: id, commented: true, type };
+			}
+			case "comment:list": {
+				const id = required(params.task_id, "task_id");
+				const comments = await this.runJson(["task", "comments", String(id), "--json", "--no-color"], timeoutMs, []);
+				return { task_id: id, comments };
+			}
+			case "log": {
+				const id = required(params.task_id, "task_id");
+				const body = String(params.message ?? params.body ?? required(params.comment, "comment"));
+				await this.run(["task", "comment", String(id), body, "--type", "progress"], timeoutMs);
+				return { task_id: id, logged: true };
+			}
 			default:
 				return { unsupported: true, tool: "commander_task", operation, error: `Unsupported commander_task operation: ${operation}` };
 		}
@@ -260,6 +278,28 @@ export class CommanderCliClient {
 		return { unsupported: true, tool: "commander_mailbox", operation, error: `Unsupported commander_mailbox operation: ${operation}` };
 	}
 
+	private async callHousekeep(params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+		const operation = String(params.operation || "doctor");
+		if (operation === "doctor") {
+			const res = await this.runPlain(["housekeep", "--doctor", "--no-color"], timeoutMs).catch((err: any) => ({ stdout: err?.cmdStdout || "", stderr: err?.cmdStderr || String(err) }));
+			const raw = `${res.stdout || ""}\n${res.stderr || ""}`.trim();
+			return parseHousekeepDoctorOutput(raw);
+		}
+		if (operation === "reap:stale-claims") {
+			const args = ["housekeep", "--reap-stale-claims", "--no-color"];
+			if (params.dry_run !== false && params.dryRun !== false) args.push("--dry-run");
+			const res = await this.runPlain(args, timeoutMs).catch((err: any) => ({ stdout: err?.cmdStdout || "", stderr: err?.cmdStderr || String(err) }));
+			return { raw: `${res.stdout || ""}\n${res.stderr || ""}`.trim() };
+		}
+		if (operation === "reap:orphan-writers") {
+			const args = ["housekeep", "--reap-orphan-writers", "--no-color"];
+			if (params.dry_run !== false && params.dryRun !== false) args.push("--dry-run");
+			const res = await this.runPlain(args, timeoutMs).catch((err: any) => ({ stdout: err?.cmdStdout || "", stderr: err?.cmdStderr || String(err) }));
+			return { raw: `${res.stdout || ""}\n${res.stderr || ""}`.trim() };
+		}
+		return { unsupported: true, tool: "commander_housekeep", operation, error: `Unsupported commander_housekeep operation: ${operation}` };
+	}
+
 	private async callDependency(params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
 		const operation = String(params.operation || "list");
 		if (operation === "blockers") {
@@ -292,7 +332,14 @@ export class CommanderCliClient {
 	}
 
 	private run(args: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
-		const finalArgs = this.withIdentity(args);
+		return this.runCommand(this.withIdentity(args), timeoutMs);
+	}
+
+	private runPlain(args: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
+		return this.runCommand(args, timeoutMs);
+	}
+
+	private runCommand(finalArgs: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
 		return new Promise((resolve, reject) => {
 			execFile(this.bin, finalArgs, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
 				if (error) {
