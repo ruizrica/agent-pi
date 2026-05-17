@@ -23,35 +23,29 @@ describe("pacifico async completion notifier", () => {
 		expect(source).not.toContain("intervalMs: 5_000");
 	});
 
-	it("renders one updating widget with an operational-mode-style PACIFICO header and emphasized model", () => {
-		expect(source).toContain('import { Box, Text } from "@earendil-works/pi-tui"');
+	it("renders one updating widget with the shared Task Brief-style Pacifico brief", () => {
+		expect(source).toContain('import { Box, Text, truncateToWidth } from "@earendil-works/pi-tui"');
+		expect(source).toContain('import { renderBriefWidget } from "./lib/task-list-render.ts"');
+		expect(source).toContain('import { padRight } from "./lib/ui-helpers.ts"');
 		expect(source).toContain("pi.registerMessageRenderer(PACIFICO_MESSAGE_TYPE, renderPacificoMessage)");
 		expect(source).toContain("pi.registerMessageRenderer(PACIFICO_JOB_COMPLETE_TYPE, renderPacificoMessage)");
 		expect(source).toContain("ctx.ui.setWidget(PACIFICO_WIDGET_KEY");
 		expect(source).toContain("setPacificoWidget(ctx, r.id");
 		expect(source).toContain("setPacificoWidget(ctx, job.id");
-		expect(source).toContain("setInterval(() => pacificoWidgetInvalidate?.(), 120)");
 		expect(source).toContain('return renderPacificoRows(activeWidgetDetails, theme, "", width, true)');
 		expect(source).not.toContain("content.setText(renderPacificoRows(activeWidgetDetails, theme");
 		expect(source).toContain("display: false");
 		expect(source).toContain("content: formatJobOutcome(job)");
-		expect(source).toContain('const PACIFICO_PENDING_BG = "\\x1b[48;2;50;50;50m"');
-		expect(source).toContain('const PACIFICO_COMPLETED_BG = "\\x1b[48;2;30;144;255m"');
-		expect(source).toContain('const PACIFICO_OPERATIONAL_MODE_BG = "\\x1b[48;2;30;144;255m"');
-		expect(source).toContain("const PACIFICO_HEADER_BG = PACIFICO_OPERATIONAL_MODE_BG");
-		expect(source).toContain('const PACIFICO_HEADER_TEXT = "\\x1b[1;97m"');
-		expect(source).toContain("const PACIFICO_HEADER_VERTICAL_PADDING_ROWS = 0");
-		expect(source).toContain("const PACIFICO_HEADER_HORIZONTAL_PADDING = 1");
-		expect(source).toContain("const PACIFICO_DETAIL_TOP_VERTICAL_PADDING_ROWS = 1");
-		expect(source).toContain("const PACIFICO_DETAIL_BOTTOM_VERTICAL_PADDING_ROWS = 1");
-		expect(source).toContain("const PACIFICO_DETAIL_HORIZONTAL_PADDING = 2");
-		expect(source).toContain("function pacificoBgAnsi");
-		expect(source).toContain("return PACIFICO_PENDING_BG");
-		expect(source).toContain("bg: PACIFICO_HEADER_BG, text: PACIFICO_HEADER_TEXT");
-		expect(source).toContain('value: `${headerPad}PACIFICO${headerPad}`');
-		expect(source).toContain("38;2;125;137;151m");
+		expect(source).toContain('const BRIEF_WIDGET_BG = "\\x1b[48;5;236m"');
+		expect(source).toContain("renderBriefWidget({");
+		expect(source).toContain('title: "Pacifico"');
+		expect(source).toContain('briefLabel: "Pacifico Brief:"');
+		expect(source).toContain('"/pacifico-jobs to view jobs"');
+		expect(source).toContain('"/pacifico-job <id> for details"');
 		expect(source).toContain("new Box(0, 0)");
-		expect(source).toContain("48;2;50;50;50m");
+		expect(source).not.toContain("const PACIFICO_OPERATIONAL_MODE_BG");
+		expect(source).not.toContain("const PACIFICO_HEADER_BG");
+		expect(source).not.toContain('value: `${headerPad}PACIFICO${headerPad}`');
 		expect(source).not.toContain("theme.bold(`${spinner}pacifico`)");
 		expect(source).not.toContain("[pacifico_message]");
 		expect(source).not.toContain("[pacifico_job_complete]");
@@ -59,24 +53,25 @@ describe("pacifico async completion notifier", () => {
 		expect(source).not.toContain("I'll stay quiet while Pacifico works and continue when the result is ready.");
 	});
 
-	it("supports color-coded queued, processing, completed, and error widget states without queue policy text", () => {
+	it("supports queued, processing, completed, and error widget states without old color-table chrome", () => {
 		expect(source).toContain("function normalizeWidgetStatus");
 		expect(source).toContain('return "queued"');
 		expect(source).toContain('return "processing"');
 		expect(source).toContain('return "completed"');
 		expect(source).toContain('return "error"');
-		expect(source).toContain('38;2;148;163;184m');
-		expect(source).toContain('38;2;234;179;8m');
-		expect(source).toContain('38;2;34;197;94m');
-		expect(source).toContain('38;2;239;68;68m');
 		expect(source).toContain('setPacificoWidget(ctx, provisionalKey, { status: "queued"');
-		expect(source).toContain("BRAILLE_FRAMES");
 		expect(source).toContain("function shortJobId");
+		expect(source).toContain("function pacificoBriefDescription");
 		expect(source).toContain("formatPacificoWidgetContent");
 		expect(source).toContain("job ID:");
 		expect(source).toContain("model:");
 		expect(source).toContain("status:");
 		expect(source).toContain("formatPacificoWidgetContent({");
+		expect(source).not.toContain("38;2;148;163;184m");
+		expect(source).not.toContain("38;2;234;179;8m");
+		expect(source).not.toContain("38;2;34;197;94m");
+		expect(source).not.toContain("38;2;239;68;68m");
+		expect(source).not.toContain("BRAILLE_FRAMES");
 		expect(source).not.toContain("response.reason");
 	});
 
@@ -129,9 +124,17 @@ describe("pacifico async completion notifier", () => {
 
 	it("renders Pacifico results through the existing Plan Viewer round-trip UI", () => {
 		expect(source).toContain("generatePlanViewerHTML");
+		expect(source).toContain("openPacificoLiveViewer");
+		expect(source).toContain("buildPacificoLoadingMarkdown");
 		expect(source).toContain("pacificoResultToMarkdown");
 		expect(source).toContain("roundTripEnabled: true");
+		expect(source).toContain("onEveryResult");
 		expect(source).toContain('result?.action === "changes_requested"');
+		expect(source).toContain("live.updateMarkdown");
+		expect(source).toContain('bannerLabel: "Pacifico Queued"');
+		expect(source).toContain('bannerTone: "warning"');
+		expect(source).toContain('badgeLabel: "QUEUED"');
+		expect(source).toContain('bannerLabel: "Pacifico Complete"');
 		expect(source).not.toContain("generatePacificoResultHTML");
 	});
 

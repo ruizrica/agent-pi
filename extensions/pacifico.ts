@@ -2,7 +2,7 @@
 // ABOUTME: Registers /pacifico, /pacifico-model, /pacifico-api-key, /pacifico-jobs/-job/-cancel and pacifico_infer tool.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Box, Text } from "@earendil-works/pi-tui";
+import { Box, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import type { Server } from "node:http";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -29,6 +29,8 @@ import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { readRawPayload, upsertPersistedReport } from "./lib/report-index.ts";
 import { outputLine } from "./lib/output-box.ts";
+import { renderBriefWidget } from "./lib/task-list-render.ts";
+import { padRight } from "./lib/ui-helpers.ts";
 
 const PACIFICO_MESSAGE_TYPE = "pacifico_message";
 const PACIFICO_JOB_COMPLETE_TYPE = "pacifico_job_complete";
@@ -37,20 +39,8 @@ const COMPLETION_FLUSH_DELAY_MS = 500;
 const COMPLETION_RETRY_DELAY_MS = 5_000;
 const PACIFICO_JOB_PRUNE_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const PACIFICO_WIDGET_KEY = "pacifico-status";
-const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const ANSI_RESET = "\x1b[0m";
-const PACIFICO_PENDING_BG = "\x1b[48;2;50;50;50m";
-const PACIFICO_COMPLETED_BG = "\x1b[48;2;30;144;255m";
-// Copied from the operational mode active header blue in mode-cycler-logic.ts.
-const PACIFICO_OPERATIONAL_MODE_BG = "\x1b[48;2;30;144;255m";
-const PACIFICO_HEADER_BG = PACIFICO_OPERATIONAL_MODE_BG;
-const PACIFICO_HEADER_TEXT = "\x1b[1;97m";
-const PACIFICO_HEADER_VERTICAL_PADDING_ROWS = 0;
-const PACIFICO_HEADER_HORIZONTAL_PADDING = 1;
-const PACIFICO_DETAIL_TOP_VERTICAL_PADDING_ROWS = 1;
-const PACIFICO_DETAIL_BOTTOM_VERTICAL_PADDING_ROWS = 1;
-const PACIFICO_DETAIL_HORIZONTAL_PADDING = 2;
-const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+const BRIEF_WIDGET_BG = "\x1b[48;5;236m";
+const BRIEF_WIDGET_RESET = "\x1b[0m";
 
 type TaskStatus = "idle" | "inprogress" | "done";
 
@@ -174,39 +164,8 @@ function normalizeWidgetStatus(status: string | null | undefined): PacificoWidge
 	return "queued";
 }
 
-function statusColor(status: PacificoWidgetStatus): string {
-	if (status === "completed") return "\x1b[38;2;34;197;94m";
-	if (status === "processing") return "\x1b[38;2;234;179;8m";
-	if (status === "error") return "\x1b[38;2;239;68;68m";
-	return "\x1b[38;2;148;163;184m";
-}
-
-function renderStatus(status: PacificoWidgetStatus): string {
-	return `${statusColor(status)}${status}\x1b[39m`;
-}
-
-function pacificoBgAnsi(_status: PacificoWidgetStatus): string {
-	return PACIFICO_PENDING_BG;
-}
-
-function visibleAnsiLength(text: string): number {
-	return text.replace(ANSI_PATTERN, "").length;
-}
-
-function padAnsiRow(bg: string, text: string, rawLabel: string, width?: number): string {
-	if (!width || width <= 0) return bg + text + rawLabel + ANSI_RESET;
-	const safeWidth = Math.max(0, width);
-	const visibleLength = visibleAnsiLength(rawLabel);
-	const pad = " ".repeat(Math.max(0, safeWidth - visibleLength));
-	return bg + text + rawLabel + pad + ANSI_RESET;
-}
-
-function spinnerFrame(now = Date.now()): string {
-	return BRAILLE_FRAMES[Math.floor(now / 80) % BRAILLE_FRAMES.length];
-}
-
-function isActiveWidgetStatus(status: PacificoWidgetStatus): boolean {
-	return status === "queued" || status === "processing";
+function isActiveWidgetStatus(_status: PacificoWidgetStatus): boolean {
+	return false;
 }
 
 function shortJobId(jobId: string | null | undefined): string {
@@ -231,42 +190,45 @@ function emitPacificoWidget(pi: ExtensionAPI, details: PacificoWidgetDetails): v
 	});
 }
 
+function normalizePacificoContent(content: string): string | undefined {
+	const normalized = content.replace(/\s+/g, " ").trim();
+	return normalized.length > 0 ? normalized : undefined;
+}
+
+function pacificoBriefDescription(details: PacificoWidgetDetails | undefined, content: string): string | undefined {
+	if (!details) return normalizePacificoContent(content);
+	const status = normalizeWidgetStatus(details.status);
+	const model = details.model ?? "(default)";
+	const job = shortJobId(details.jobId);
+	if (details.error) return `Pacifico ${status} on ${model}. Job ${job}. Error: ${details.error}`;
+	if (details.output) return `Pacifico ${status} on ${model}. Job ${job}. Result is ready.`;
+	return `Pacifico ${status} on ${model}. Job ${job}.`;
+}
+
 function renderPacificoRows(details: PacificoWidgetDetails | undefined, theme: any, content = "", width?: number, paintBackground = true): string[] {
-	const d = details ?? {};
-	const status = normalizeWidgetStatus(d.status);
-	const detailBg = pacificoBgAnsi(status);
-	const spinner = isActiveWidgetStatus(status) ? `${spinnerFrame()} ` : "";
-	const key = (text: string) => theme.fg("dim", text.padEnd(7));
-	const modelText = d.model ?? "(default)";
-	const model = theme.bold(`\x1b[38;2;125;137;151m${modelText}\x1b[39m`);
-	const headerPad = " ".repeat(PACIFICO_HEADER_HORIZONTAL_PADDING);
-	const detailPad = " ".repeat(PACIFICO_DETAIL_HORIZONTAL_PADDING);
-	const lines: Array<{ bg: string; text: string; value: string }> = [];
-	for (let i = 0; i < PACIFICO_HEADER_VERTICAL_PADDING_ROWS; i++) {
-		lines.push({ bg: PACIFICO_HEADER_BG, text: "", value: "" });
-	}
-	lines.push({ bg: PACIFICO_HEADER_BG, text: PACIFICO_HEADER_TEXT, value: `${headerPad}PACIFICO${headerPad}` });
-	for (let i = 0; i < PACIFICO_HEADER_VERTICAL_PADDING_ROWS; i++) {
-		lines.push({ bg: PACIFICO_HEADER_BG, text: "", value: "" });
-	}
-	for (let i = 0; i < PACIFICO_DETAIL_TOP_VERTICAL_PADDING_ROWS; i++) {
-		lines.push({ bg: detailBg, text: "", value: "" });
-	}
-	lines.push(
-		{ bg: detailBg, text: "", value: `${detailPad}${key("status")} ${spinner}${renderStatus(status)}` },
-		{ bg: detailBg, text: "", value: `${detailPad}${key("job ID")} ${theme.fg("muted", shortJobId(d.jobId))}` },
-		{ bg: detailBg, text: "", value: `${detailPad}${key("model")} ${model}` },
-	);
-	for (let i = 0; i < PACIFICO_DETAIL_BOTTOM_VERTICAL_PADDING_ROWS; i++) {
-		lines.push({ bg: detailBg, text: "", value: "" });
-	}
-	if (!details && content) {
-		lines.push({ bg: detailBg, text: "", value: "" });
-		for (const line of content.split("\n")) {
-			lines.push({ bg: detailBg, text: "", value: `${detailPad}${theme.fg("muted", line)}` });
-		}
-	}
-	return lines.map((line) => paintBackground ? padAnsiRow(line.bg, line.text, line.value, width) : line.text + line.value + (line.text ? "\x1b[22;39m" : ""));
+	const status = details ? normalizeWidgetStatus(details.status) : "message";
+	const jobSuffix = details?.jobId ? ` #${shortJobId(details.jobId)}` : "";
+	const safeWidth = width && width > 0 ? width : 80;
+	const availableHeight = Math.max(4, Math.min((process.stdout.rows || 24) - 10, 14));
+	const briefLines = renderBriefWidget({
+		title: "Pacifico",
+		progressText: `${status}${jobSuffix}`,
+		description: pacificoBriefDescription(details, content),
+		briefLabel: "Pacifico Brief:",
+		hint: details?.jobId ? "/pacifico-job <id> for details" : "/pacifico-jobs to view jobs",
+	}, safeWidth, availableHeight, {
+		truncateToWidth,
+		fg: (color: string, text: string) => theme.fg(color, text),
+		bold: (text: string) => theme.bold(text),
+	});
+
+	if (!paintBackground) return briefLines;
+	const emptyPad = BRIEF_WIDGET_BG + padRight("", safeWidth) + BRIEF_WIDGET_RESET;
+	return [
+		emptyPad,
+		...briefLines.map((line) => BRIEF_WIDGET_BG + padRight(line, safeWidth) + BRIEF_WIDGET_RESET),
+		emptyPad,
+	];
 }
 
 function renderPacificoMessage(message: { content?: unknown; details?: PacificoWidgetDetails }, _options: unknown, theme: any): Box {
@@ -749,6 +711,164 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		} catch {}
 	}
 
+	function buildPacificoLoadingMarkdown(question: string, complexity: PacificoComplexity, status: string, ancestry: PacificoResultData["followUpAncestry"] = []): string {
+		return [
+			"# Pacifico Result",
+			"",
+			"## Question",
+			"",
+			question,
+			"",
+			"## Status",
+			"",
+			`- **State:** ${status}`,
+			`- **Complexity:** ${complexity}`,
+			"- **UI:** This Plan Viewer stays open while Pacifico works. Use **Needs Changes** to send a follow-up back to Pacifico.",
+			"",
+			ancestry.length ? "## Follow-up Thread" : "",
+			ancestry.length ? "" : "",
+			...ancestry.flatMap((item, index) => [`${index + 1}. **Question:** ${item.question}`, `   - Summary: ${item.summary}`]),
+			ancestry.length ? "" : "",
+			"## Result",
+			"",
+			"Pacifico is working asynchronously. This view will refresh automatically when status or results change.",
+			"",
+		].filter((line, index, arr) => line !== "" || arr[index - 1] !== "").join("\n");
+	}
+
+	type PacificoLiveViewerUpdate = {
+		changeSummary?: string[];
+		bannerLabel?: string;
+		bannerTone?: "success" | "warning";
+		badgeLabel?: string;
+		locked?: boolean;
+	};
+
+	type PacificoLiveViewer = {
+		updateMarkdown(markdown: string, update?: string[] | PacificoLiveViewerUpdate): void;
+		waitForAction(): Promise<PacificoResultAction>;
+		close(): void;
+	};
+
+	async function openPacificoLiveViewer(ctx: ExtensionContext, initialMarkdown: string, signal?: AbortSignal): Promise<PacificoLiveViewer> {
+		cleanupPacificoResultServer();
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		let latestMarkdown = initialMarkdown;
+		let revision = 0;
+		let roundTripState = {
+			status: "idle",
+			feedback: "",
+			revision,
+			changeSummary: [] as string[],
+			bannerLabel: "Pacifico Ready",
+			bannerTone: "success" as const,
+			badgeLabel: "PACIFICO",
+			locked: false,
+			payload: { markdown: latestMarkdown },
+		};
+		let resolveAction: ((action: PacificoResultAction) => void) | undefined;
+		const nextAction = () => new Promise<PacificoResultAction>((resolve, reject) => {
+			resolveAction = resolve;
+			if (signal?.aborted) reject(new Error("Aborted"));
+			signal?.addEventListener("abort", () => reject(new Error("Aborted")), { once: true });
+		});
+		const handle = await createViewerServer({
+			getHtml: (port) => generatePlanViewerHTML({
+				markdown: latestMarkdown,
+				title: "Pacifico Result",
+				mode: "plan",
+				port,
+				roundTripEnabled: true,
+				projectContext,
+			}),
+			routes: [
+				{
+					method: "POST",
+					path: "/save",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", () => {
+							try {
+								const parsed = JSON.parse(body || "{}");
+								const desktop = join(homedir(), "Desktop");
+								if (!existsSync(desktop)) mkdirSync(desktop, { recursive: true });
+								const fileName = `pacifico-result-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.md`;
+								writeFileSync(join(desktop, fileName), String(parsed.markdown || latestMarkdown), "utf-8");
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: true, message: `Saved to ~/Desktop/${fileName}` }));
+							} catch (err: any) {
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err?.message || "Save failed" }));
+							}
+						});
+					},
+				},
+				{
+					method: "POST",
+					path: "/export-standalone",
+					handler: async (req, res) => {
+						let body = "";
+						req.on("data", (chunk) => { body += chunk; });
+						req.on("end", () => {
+							try {
+								const parsed = JSON.parse(body || "{}");
+								const html = createPlanStandaloneExport({ title: "Pacifico Result", markdown: String(parsed.markdown || latestMarkdown), mode: "plan" });
+								const saved = saveStandaloneExport({ filePrefix: "pacifico-result", html });
+								res.writeHead(200, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ ok: true, message: `Standalone export saved to ~/Desktop/${saved.fileName}` }));
+							} catch (err: any) {
+								res.writeHead(500, { "Content-Type": "application/json" });
+								res.end(JSON.stringify({ error: err?.message || "Standalone export failed" }));
+							}
+						});
+					},
+				},
+			],
+			onEveryResult: (result) => {
+				const feedback = typeof result?.feedback === "string" ? result.feedback.trim() : "";
+				if (result?.action === "changes_requested" && feedback) resolveAction?.({ action: "follow_up", question: feedback });
+				else if (result?.action === "approved" || result?.action === "declined") resolveAction?.({ action: "closed" });
+			},
+			getRoundTripState: () => roundTripState,
+		});
+		void handle.waitForResult().then((result) => {
+			if (!result) resolveAction?.({ action: "closed" });
+		}).catch(() => resolveAction?.({ action: "closed" }));
+		activeResultServer = handle.server;
+		const url = `http://127.0.0.1:${handle.port}`;
+		activeResultSession = {
+			kind: "report",
+			title: "Pacifico Result",
+			url,
+			server: handle.server,
+			onClose: () => { activeResultServer = null; activeResultSession = null; },
+		};
+		registerActiveViewer(activeResultSession);
+		openBrowser(url);
+		notifyViewerOpen(ctx, activeResultSession);
+		return {
+			updateMarkdown(markdown, update = ["Pacifico status updated"]) {
+				const options = Array.isArray(update) ? { changeSummary: update } : update;
+				latestMarkdown = markdown;
+				revision += 1;
+				roundTripState = {
+					status: "updated",
+					feedback: "",
+					revision,
+					changeSummary: options.changeSummary ?? ["Pacifico status updated"],
+					bannerLabel: options.bannerLabel ?? "Pacifico Updated",
+					bannerTone: options.bannerTone ?? "success",
+					badgeLabel: options.badgeLabel ?? "PACIFICO",
+					locked: options.locked === true,
+					payload: { markdown: latestMarkdown },
+				};
+			},
+			waitForAction: nextAction,
+			close: cleanupPacificoResultServer,
+		};
+	}
+
 	async function showPacificoResult(ctx: ExtensionContext, data: PacificoResultData, signal?: AbortSignal): Promise<PacificoResultAction> {
 		persistPacificoResult(ctx, data);
 		cleanupPacificoResultServer();
@@ -967,24 +1087,60 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			let question = parsed.question;
 			const complexity = parsed.complexity ?? "standard";
 			const ancestry: PacificoResultData["followUpAncestry"] = [];
-			for (let turn = 0; turn < 5; turn++) {
-				const priorContext = ancestry.length
-					? `Previous Pacifico advisor turns:\n${ancestry.map((item, i) => `${i + 1}. Question: ${item.question}\nSummary: ${item.summary}`).join("\n\n")}`
-					: "";
-				const taskContext = [
-					"The user invoked /pacifico for on-demand advisor guidance. Pacifico cannot access the filesystem, so reason only from this supplied current task/session context and any embedded files.",
-					currentTaskContext(),
-					priorContext,
-				].filter(Boolean).join("\n\n");
-				ctx.ui.notify(`Consulting Pacifico advisor (${complexity})…`, "info");
-				const result = await runPacificoAdvisor({ question, task_context: taskContext, agent_role: "pacifico-command", complexity, max_output_tokens: parsed.maxOutputTokens }, undefined, undefined, ctx);
-				const data = buildPacificoResultData(question, result, complexity, [...ancestry]);
-				const action = await showPacificoResult(ctx, data);
-				if (action.action !== "follow_up" || !action.question?.trim()) return;
-				ancestry.push({ question, summary: data.advisor.summary });
-				question = action.question.trim();
+			const live = await openPacificoLiveViewer(ctx, buildPacificoLoadingMarkdown(question, complexity, "Opening Pacifico advisor session…", ancestry));
+			try {
+				for (let turn = 0; turn < 5; turn++) {
+					live.updateMarkdown(buildPacificoLoadingMarkdown(question, complexity, "Queued — waiting for Pacifico…", ancestry), {
+						changeSummary: ["Pacifico request queued", "Waiting for async result"],
+						bannerLabel: "Pacifico Queued",
+						bannerTone: "warning",
+						badgeLabel: "QUEUED",
+						locked: true,
+					});
+					const priorContext = ancestry.length
+						? `Previous Pacifico advisor turns:\n${ancestry.map((item, i) => `${i + 1}. Question: ${item.question}\nSummary: ${item.summary}`).join("\n\n")}`
+						: "";
+					const taskContext = [
+						"The user invoked /pacifico for on-demand advisor guidance. Pacifico cannot access the filesystem, so reason only from this supplied current task/session context and any embedded files.",
+						currentTaskContext(),
+						priorContext,
+					].filter(Boolean).join("\n\n");
+					ctx.ui.notify(`Consulting Pacifico advisor (${complexity})…`, "info");
+					const result = await runPacificoAdvisor(
+						{ question, task_context: taskContext, agent_role: "pacifico-command", complexity, max_output_tokens: parsed.maxOutputTokens },
+						undefined,
+						(update) => {
+							const text = update?.content?.[0]?.text;
+							if (typeof text === "string" && text.trim()) {
+								live.updateMarkdown(buildPacificoLoadingMarkdown(question, complexity, text.trim(), ancestry), {
+									changeSummary: ["Pacifico async status updated", text.trim()],
+									bannerLabel: "Pacifico Queued",
+									bannerTone: "warning",
+									badgeLabel: "QUEUED",
+									locked: true,
+								});
+							}
+						},
+						ctx,
+					);
+					const data = buildPacificoResultData(question, result, complexity, [...ancestry]);
+					persistPacificoResult(ctx, data);
+					live.updateMarkdown(pacificoResultToMarkdown(data), {
+						changeSummary: ["Pacifico result ready", "Use Needs Changes to send a follow-up"],
+						bannerLabel: "Pacifico Complete",
+						bannerTone: "success",
+						badgeLabel: "COMPLETE",
+						locked: false,
+					});
+					const action = await live.waitForAction();
+					if (action.action !== "follow_up" || !action.question?.trim()) return;
+					ancestry.push({ question, summary: data.advisor.summary });
+					question = action.question.trim();
+				}
+				ctx.ui.notify("Pacifico follow-up limit reached; run /pacifico again to continue.", "warning");
+			} finally {
+				live.close();
 			}
-			ctx.ui.notify("Pacifico follow-up limit reached; run /pacifico again to continue.", "warning");
 		},
 	});
 

@@ -6,7 +6,7 @@
   "agents": {
     "scout": {
       "provider": "openrouter",
-      "model": "openai/gpt-5-nano"
+      "model": "gpt-5.4-mini"
     },
     "builder": {
       "provider": "openai-codex",
@@ -29,8 +29,8 @@
       "model": "gpt-5.4-mini"
     },
     "test-scout": {
-      "provider": "openrouter",
-      "model": "openai/gpt-5-nano"
+      "provider": "openai-codex",
+      "model": "gpt-5.4-mini"
     },
     "test-reviewer": {
       "provider": "anthropic",
@@ -45,8 +45,8 @@
       "model": "claude-opus-4-7"
     },
     "tool-advisor": {
-      "provider": "openrouter",
-      "model": "openai/gpt-5-nano"
+      "provider": "openai-codex",
+      "model": "gpt-5.4-mini"
     }
   }
 }

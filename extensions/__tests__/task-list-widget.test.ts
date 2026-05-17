@@ -11,6 +11,7 @@ import {
 	navExit,
 	navEnter,
 	renderTaskList,
+	renderBriefWidget,
 	stripLeadingNumber,
 	MAX_VISIBLE_TASKS,
 	type TaskListInfo,
@@ -318,6 +319,23 @@ describe("renderTaskList", () => {
 		expect(result[2]).toContain("Update the security page");
 		expect(joined).not.toContain("Task 1 description");
 		expect(joined).toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("renders generic brief widgets with custom label and hint", () => {
+		const result = renderBriefWidget({
+			title: "Pacifico",
+			progressText: "queued #abc123",
+			description: "Pacifico queued on claude-haiku. Job abc123.",
+			briefLabel: "Pacifico Brief:",
+			hint: "/pacifico-jobs to view jobs",
+		}, 80, 20, mockDeps);
+		const joined = result.join("\n");
+		expect(result[0]).toContain("Pacifico queued #abc123");
+		expect(joined).toContain("Pacifico Brief:");
+		expect(joined).toContain("Pacifico queued on claude-haiku");
+		expect(joined).toContain("/pacifico-jobs to view jobs");
+		expect(joined).not.toContain("Mission Brief:");
+		expect(joined).not.toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
 	it("wraps long summary lines to terminal width", () => {

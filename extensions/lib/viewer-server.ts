@@ -25,8 +25,10 @@ export interface ViewerServerConfig {
 	getHtml: (port: number) => string;
 	/** Additional custom routes beyond / and /logo.png */
 	routes?: ViewerRoute[];
-	/** Called when POST /result is received or server closes */
+	/** Called once when the first POST /result is received or server closes */
 	onResult?: (body: any) => void;
+	/** Called for every POST /result, including repeated round-trip submissions from a still-open viewer. */
+	onEveryResult?: (body: any) => void;
 	/** Optional round-trip state provider for live refresh viewers */
 	getRoundTripState?: () => ViewerRoundTripState;
 	/** Called when POST /feedback is received for live refresh viewers */
@@ -50,6 +52,14 @@ export interface ViewerRoundTripState {
 	revision?: number;
 	updatedAt?: string;
 	changeSummary?: string[];
+	/** Optional live-viewer banner label for round-trip updates (e.g. Pacifico Queued / Result Ready). */
+	bannerLabel?: string;
+	/** Optional live-viewer banner tone. Defaults to success for normal plan updates. */
+	bannerTone?: "success" | "warning";
+	/** Optional badge text to show in the plan viewer header after a live update. */
+	badgeLabel?: string;
+	/** When true, keep the viewer in waiting/read-only state while background work runs. */
+	locked?: boolean;
 	payload?: any;
 }
 
@@ -177,6 +187,7 @@ export function createViewerServer(config: ViewerServerConfig): Promise<ViewerSe
 						res.writeHead(200, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ ok: true }));
 
+						config.onEveryResult?.(data);
 						if (!resultResolved) {
 							resultResolved = true;
 							if (config.onResult) {

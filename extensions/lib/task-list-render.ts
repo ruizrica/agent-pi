@@ -135,6 +135,49 @@ export interface RenderDeps {
 	bold?: (text: string) => string;
 }
 
+export interface BriefWidgetInfo {
+	title: string;
+	progressText?: string;
+	description?: string;
+	briefLabel?: string;
+	hint?: string;
+}
+
+export function renderBriefWidget(
+	info: BriefWidgetInfo,
+	width: number,
+	availableHeight: number,
+	deps: RenderDeps,
+): string[] {
+	const { truncateToWidth: trunc, fg } = deps;
+	const bold = deps.bold ?? ((text: string) => text);
+	const lines: string[] = [];
+	const rawSummaryLines = info.description
+		? wrapWords(info.description, Math.max(20, width - 4))
+		: [];
+	// Chrome when a summary is rendered: header(1) + brief label(1) + blank(1) + hotkey hint(1) = 4 lines.
+	// When no summary is rendered the chrome is just header(1) + hotkey(1) = 2 lines.
+	// Budget the summary against the with-summary chrome to avoid overflowing the widget.
+	const maxSummaryLines = Math.max(0, availableHeight - 4);
+	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
+
+	// ── Header ────────────────────────────────────────────────────
+	const headerLabel = `  ${info.title}${info.progressText ? ` ${info.progressText}` : ""}`;
+	lines.push(trunc(bold(fg("text", headerLabel)), width, ""));
+
+	if (summaryLines.length > 0) {
+		lines.push(`  ${fg("accent", info.briefLabel ?? "Mission Brief:")}`);
+		for (const line of summaryLines) {
+			lines.push(trunc(`    ${fg("muted", line)}`, width, ""));
+		}
+		lines.push("");
+	}
+
+	lines.push(trunc(`  ${fg("dim", info.hint ?? "ctrl+alt+t or /tasks to view tasks")}`, width, ""));
+
+	return lines;
+}
+
 export function renderTaskList(
 	taskList: TaskListInfo,
 	_state: TaskListState,
@@ -145,33 +188,12 @@ export function renderTaskList(
 	const { tasks } = taskList;
 	if (tasks.length === 0) return [];
 
-	const { truncateToWidth: trunc, fg } = deps;
-	const bold = deps.bold ?? ((text: string) => text);
-	const lines: string[] = [];
 	const doneCount = taskList.total - taskList.remaining;
-	const rawSummaryLines = taskList.description
-		? wrapWords(taskList.description, Math.max(20, width - 4))
-		: [];
-	// Chrome when a summary is rendered: header(1) + "Mission Brief:" label(1) + blank(1) + hotkey hint(1) = 4 lines.
-	// When no summary is rendered the chrome is just header(1) + hotkey(1) = 2 lines.
-	// Budget the summary against the with-summary chrome to avoid overflowing the widget.
-	const maxSummaryLines = Math.max(0, availableHeight - 4);
-	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
-
-	// ── Header ────────────────────────────────────────────────────
-	const title = taskList.title || "Tasks";
-	const headerLabel = `  ${title} ${doneCount}/${taskList.total}`;
-	lines.push(trunc(bold(fg("text", headerLabel)), width, ""));
-
-	if (summaryLines.length > 0) {
-		lines.push(`  ${fg("accent", "Mission Brief:")}`);
-		for (const line of summaryLines) {
-			lines.push(trunc(`    ${fg("muted", line)}`, width, ""));
-		}
-		lines.push("");
-	}
-
-	lines.push(trunc(`  ${fg("dim", "ctrl+alt+t or /tasks to view tasks")}`, width, ""));
-
-	return lines;
+	return renderBriefWidget({
+		title: taskList.title || "Tasks",
+		progressText: `${doneCount}/${taskList.total}`,
+		description: taskList.description,
+		briefLabel: "Mission Brief:",
+		hint: "ctrl+alt+t or /tasks to view tasks",
+	}, width, availableHeight, deps);
 }

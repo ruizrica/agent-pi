@@ -1988,17 +1988,20 @@ ${VIEWER_SCROLLBAR_STYLES}
     var summary = Array.isArray(state.changeSummary) && state.changeSummary.length > 0
       ? 'Updated changes: ' + state.changeSummary.join(' • ')
       : 'The plan was updated with your previous changes.';
-    renderWorkflowBanner('Plan Updated', summary, 'success');
-    document.body.classList.remove('approved-state');
+    var tone = state.bannerTone === 'warning' ? 'warning' : 'success';
+    var label = state.bannerLabel || (tone === 'warning' ? 'Queued' : 'Plan Updated');
+    renderWorkflowBanner(label, summary, tone);
+    if (state.locked) document.body.classList.add('approved-state');
+    else document.body.classList.remove('approved-state');
     var header = document.querySelector('.header');
     if (header) {
-      header.style.borderLeftColor = 'var(--accent)';
+      header.style.borderLeftColor = tone === 'warning' ? 'var(--warning)' : 'var(--accent)';
     }
     var badge = document.getElementById('modeBadge');
     if (badge) {
-      badge.textContent = 'PLAN';
-      badge.style.color = 'var(--accent)';
-      badge.style.borderColor = 'var(--accent)';
+      badge.textContent = state.badgeLabel || (tone === 'warning' ? 'QUEUED' : 'PLAN');
+      badge.style.color = tone === 'warning' ? 'var(--warning)' : 'var(--accent)';
+      badge.style.borderColor = tone === 'warning' ? 'var(--warning)' : 'var(--accent)';
     }
     feedbackPanelOpen = false;
     var panel = document.querySelector('.feedback-panel');
@@ -2207,6 +2210,7 @@ ${VIEWER_SCROLLBAR_STYLES}
 
   // ── Init ──────────────────────────────────────
   render();
+  startRoundTripPolling();
 
   // Focus first answer input in questions mode
   if (MODE === 'questions') {
