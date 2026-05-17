@@ -17,6 +17,7 @@ export interface PacificoAdvisorArgs {
 	max_output_tokens?: number;
 	max_file_bytes?: number;
 	max_context_bytes?: number;
+	allow_truncation?: boolean;
 }
 
 export interface PacificoAdvisorContext {
@@ -35,6 +36,7 @@ export interface PacificoAdvisorPacket {
 	diagnostics: PacificoContextDiagnostic[];
 	includedFiles: number;
 	promptBytes: number;
+	blocked: boolean;
 }
 
 const DEFAULT_MAX_FILE_BYTES = 12_000;
@@ -66,7 +68,7 @@ function labelPath(cwd: string, filePath: string): string {
 	return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel : filePath;
 }
 
-function readContextFile(cwd: string, file: string, maxFileBytes: number): { heading: string; body: string; diagnostic: PacificoContextDiagnostic } {
+function readContextFile(cwd: string, file: string, maxFileBytes: number, allowTruncation: boolean): { heading: string; body: string; diagnostic: PacificoContextDiagnostic } {
 	const resolved = resolveRequestedFile(cwd, file);
 	const label = labelPath(cwd, resolved);
 	if (!existsSync(resolved)) {
@@ -74,11 +76,24 @@ function readContextFile(cwd: string, file: string, maxFileBytes: number): { hea
 	}
 	try {
 		const raw = readFileSync(resolved, "utf-8");
-		const truncated = truncateText(raw, maxFileBytes);
+		const rawBytes = bytes(raw);
+		if (rawBytes > maxFileBytes && !allowTruncation) {
+			return {
+				heading: label,
+				body: "",
+				diagnostic: {
+					path: label,
+					status: "omitted",
+					bytes: rawBytes,
+					message: `File exceeds max_file_bytes (${rawBytes} > ${maxFileBytes}) and truncation is disabled.`,
+				},
+			};
+		}
+		const truncated = allowTruncation ? truncateText(raw, maxFileBytes) : { text: raw, truncated: false };
 		return {
 			heading: label,
 			body: truncated.text,
-			diagnostic: { path: label, status: truncated.truncated ? "truncated" : "included", bytes: bytes(raw) },
+			diagnostic: { path: label, status: truncated.truncated ? "truncated" : "included", bytes: rawBytes },
 		};
 	} catch (err) {
 		return { heading: label, body: "", diagnostic: { path: label, status: "unreadable", message: err instanceof Error ? err.message : String(err) } };
@@ -88,8 +103,10 @@ function readContextFile(cwd: string, file: string, maxFileBytes: number): { hea
 export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: PacificoAdvisorContext): PacificoAdvisorPacket {
 	const maxFileBytes = Math.max(1_000, args.max_file_bytes ?? DEFAULT_MAX_FILE_BYTES);
 	const maxContextBytes = Math.max(8_000, args.max_context_bytes ?? DEFAULT_MAX_CONTEXT_BYTES);
+	const allowTruncation = args.allow_truncation === true;
 	const diagnostics: PacificoContextDiagnostic[] = [];
 	const sections: string[] = [];
+	let blocked = false;
 
 	sections.push("## Pacifico Advisor Context Contract");
 	sections.push("Pacifico has no access to the local filesystem, shell, tools, browser, git state, or hidden session context.");
@@ -99,7 +116,7 @@ export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: Pa
 	sections.push(ctx.cwd);
 
 	for (const hint of PROJECT_HINT_FILES) {
-		const read = readContextFile(ctx.cwd, hint, Math.min(maxFileBytes, 8_000));
+		const read = readContextFile(ctx.cwd, hint, Math.min(maxFileBytes, 8_000), allowTruncation);
 		if (read.diagnostic.status === "included" || read.diagnostic.status === "truncated") {
 			sections.push("");
 			sections.push(`## Project Context: ${read.heading}`);
@@ -118,8 +135,9 @@ export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: Pa
 
 	const uniqueFiles = [...new Set((args.files ?? []).map((f) => f.trim()).filter(Boolean))];
 	for (const file of uniqueFiles) {
-		const read = readContextFile(ctx.cwd, file, maxFileBytes);
+		const read = readContextFile(ctx.cwd, file, maxFileBytes, allowTruncation);
 		diagnostics.push(read.diagnostic);
+		if (read.diagnostic.status === "omitted") blocked = true;
 		if (read.diagnostic.status === "included" || read.diagnostic.status === "truncated") {
 			sections.push("");
 			sections.push(`## File: ${read.heading}`);
@@ -147,9 +165,14 @@ export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: Pa
 	let prompt = sections.join("\n");
 	const beforeLimitBytes = bytes(prompt);
 	if (beforeLimitBytes > maxContextBytes) {
-		const truncated = truncateText(prompt, maxContextBytes);
-		prompt = truncated.text;
-		diagnostics.push({ path: "<entire-prompt>", status: "truncated", bytes: beforeLimitBytes, message: `Prompt truncated to ${maxContextBytes} bytes.` });
+		if (allowTruncation) {
+			const truncated = truncateText(prompt, maxContextBytes);
+			prompt = truncated.text;
+			diagnostics.push({ path: "<entire-prompt>", status: "truncated", bytes: beforeLimitBytes, message: `Prompt truncated to ${maxContextBytes} bytes.` });
+		} else {
+			blocked = true;
+			diagnostics.push({ path: "<entire-prompt>", status: "omitted", bytes: beforeLimitBytes, message: `Prompt exceeds max_context_bytes (${beforeLimitBytes} > ${maxContextBytes}) and truncation is disabled.` });
+		}
 	}
 
 	return {
@@ -157,6 +180,7 @@ export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: Pa
 		diagnostics,
 		includedFiles: diagnostics.filter((d) => d.status === "included" || d.status === "truncated").length,
 		promptBytes: bytes(prompt),
+		blocked,
 	};
 }
 

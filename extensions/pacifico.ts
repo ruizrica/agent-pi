@@ -21,7 +21,7 @@ import {
 } from "./lib/pacifico-job-state.ts";
 import { collectPacificoAdvisorContext, formatPacificoAdvisorResult, normalizeAdvisorResponse, type PacificoAdvisorArgs } from "./lib/pacifico-advisor.ts";
 import { loadPacificoApiKey, loadPacificoModel, persistPacificoApiKey, persistPacificoModel } from "./lib/persist-pacifico.ts";
-import { pacificoResultToMarkdown, type PacificoComplexity, type PacificoResultAction, type PacificoResultData } from "./lib/pacifico-result-html.ts";
+import { pacificoResultCardTitle, pacificoResultToMarkdown, type PacificoComplexity, type PacificoResultAction, type PacificoResultData } from "./lib/pacifico-result-html.ts";
 import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
 import { getProjectContext } from "./lib/project-context.ts";
@@ -672,7 +672,8 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		ctx.ui.setWidget(PACIFICO_WIDGET_KEY, (_tui: any, theme: any) => {
 			const widget = {
 				render(width: number): string[] {
-					return renderPacificoRows(activeWidgetDetails, theme, "", width, true);
+					const rows = renderPacificoRows(activeWidgetDetails, theme, "", width, true);
+					return rows.length > 0 ? [...rows, ""] : rows;
 				},
 				invalidate() {
 					return undefined;
@@ -681,6 +682,13 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			pacificoWidgetInvalidate = () => widget.invalidate();
 			return widget;
 		}, { placement: "aboveEditor" } as any);
+	}
+
+	function hidePacificoStatusWidget(): void {
+		stopPacificoAnimation();
+		pacificoWidgetInvalidate = undefined;
+		widgetCtx?.ui.setWidget(PACIFICO_WIDGET_KEY, undefined);
+		widgetRegistered = false;
 	}
 
 	function setPacificoWidget(ctx: ExtensionContext | undefined, _key: string, details: PacificoWidgetDetails): void {
@@ -694,6 +702,11 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				output: details.output ?? activeWidgetDetails?.output,
 				error: details.error ?? activeWidgetDetails?.error,
 			};
+		const status = normalizeWidgetStatus(activeWidgetDetails.status);
+		if (status === "completed") {
+			hidePacificoStatusWidget();
+			return;
+		}
 		if (ctx?.hasUI) registerPacificoStatusWidget(ctx);
 		else if (widgetCtx?.hasUI) registerPacificoStatusWidget(widgetCtx);
 		refreshPacificoWidget();
@@ -847,7 +860,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		try {
 			upsertPersistedReport({
 				category: "pacifico",
-				title: `${data.title} — ${data.question.slice(0, 80)}`,
+				title: `Pacifico — ${pacificoResultCardTitle(data.question)}`,
 				summary: data.advisor.summary,
 				content: data.formattedText,
 				sourcePath: join(ctx.cwd || process.cwd(), ".context", "todo.md"),
@@ -871,7 +884,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		return [
 			"# Pacifico Result",
 			"",
-			"## Question",
+			"## Task Prompt",
 			"",
 			question,
 			"",
@@ -1435,6 +1448,14 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		const complexity = normalizePacificoComplexity(args.complexity) ?? "standard";
 		const packet = collectPacificoAdvisorContext({ ...args, complexity }, { cwd: ctx.cwd });
 		const chosen = args.model ?? resolveModel();
+		if (packet.blocked) {
+			const blockingDiagnostics = packet.diagnostics.filter((d) => d.status === "omitted");
+			const detail = blockingDiagnostics.map((d) => `- ${d.path}: ${d.message ?? "context omitted"}`).join("\n");
+			return {
+				content: [{ type: "text" as const, text: `pacifico_advisor refused to send incomplete context because truncation is disabled.\n\n${detail}\n\nReduce the supplied context, raise the explicit limits only if the backend can accept the payload, or pass allow_truncation: true to opt in to lossy clipping.` }],
+				details: { error: "context_too_large", contextDiagnostics: packet.diagnostics, promptBytes: packet.promptBytes, includedFiles: packet.includedFiles, complexity },
+			};
+		}
 		const body: InferRequest = {
 			prompt: packet.prompt,
 			mode: args.mode ?? "auto",
@@ -1555,6 +1576,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			max_output_tokens: Type.Optional(Type.Number({ description: "Explicit max output token override for Pacifico backend; use complexity unless you need a precise budget." })),
 			max_file_bytes: Type.Optional(Type.Number({ description: "Maximum bytes per embedded file" })),
 			max_context_bytes: Type.Optional(Type.Number({ description: "Maximum total advisor prompt bytes" })),
+			allow_truncation: Type.Optional(Type.Boolean({ description: "Explicitly allow lossy context truncation. Defaults to false so oversized context is refused instead of silently clipped." })),
 		}) as any,
 		async execute(_id, params, signal, onUpdate, ctx) {
 			return runPacificoAdvisor(params as PacificoAdvisorArgs, signal, onUpdate, ctx);

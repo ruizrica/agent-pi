@@ -32,7 +32,8 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("ctx.ui.setWidget(PACIFICO_WIDGET_KEY");
 		expect(source).toContain("setPacificoWidget(ctx, r.id");
 		expect(source).toContain("setPacificoWidget(ctx, job.id");
-		expect(source).toContain('return renderPacificoRows(activeWidgetDetails, theme, "", width, true)');
+		expect(source).toContain('const rows = renderPacificoRows(activeWidgetDetails, theme, "", width, true);');
+		expect(source).toContain('return rows.length > 0 ? [...rows, ""] : rows;');
 		expect(source).not.toContain("content.setText(renderPacificoRows(activeWidgetDetails, theme");
 		expect(source).toContain("display: false");
 		expect(source).toContain("content: formatJobOutcome(job)");
@@ -75,6 +76,10 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain('return status === "queued" || status === "processing"');
 		expect(source).toContain('return status === "processing" ? `${frame} running` : `${frame} awaiting`;');
 		expect(source).toContain('const status = activeWidgetDetails ? normalizeWidgetStatus(activeWidgetDetails.status) : "completed"');
+		expect(source).toContain("function hidePacificoStatusWidget");
+		expect(source).toContain('if (status === "completed") {');
+		expect(source).toContain("hidePacificoStatusWidget();");
+		expect(source).toContain("widgetCtx?.ui.setWidget(PACIFICO_WIDGET_KEY, undefined)");
 		expect(source).not.toContain("38;2;148;163;184m");
 		expect(source).not.toContain("38;2;234;179;8m");
 		expect(source).not.toContain("38;2;34;197;94m");
@@ -135,6 +140,8 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("collectPacificoAdvisorContext");
 		expect(source).toContain("formatPacificoAdvisorResult");
 		expect(source).toContain("normalizeAdvisorResponse");
+		expect(source).toContain("allow_truncation");
+		expect(source).toContain("pacifico_advisor refused to send incomplete context because truncation is disabled");
 		expect(source).toContain('tool: "pacifico_advisor"');
 		expect(source).toContain('kind: "advisor_review"');
 		expect(source).toContain('executionClass: "planning"');
@@ -146,7 +153,10 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("generatePlanViewerHTML");
 		expect(source).toContain("openPacificoLiveViewer");
 		expect(source).toContain("buildPacificoLoadingMarkdown");
+		expect(source).toContain("pacificoResultCardTitle");
 		expect(source).toContain("pacificoResultToMarkdown");
+		expect(source).toContain("Pacifico — ${pacificoResultCardTitle(data.question)}");
+		expect(source).toContain("## Task Prompt");
 		expect(source).toContain("roundTripEnabled: true");
 		expect(source).toContain("onEveryResult");
 		expect(source).toContain('result?.action === "changes_requested"');

@@ -8,10 +8,12 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions"
+      "./extensions",
+      "./pi-computer-use/extensions"
     ],
     "skills": [
-      "./skills"
+      "./skills",
+      "./pi-computer-use/skills"
     ],
     "themes": [
       "./themes"

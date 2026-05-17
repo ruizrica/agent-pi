@@ -2,7 +2,7 @@
 // ABOUTME: Pacifico results intentionally reuse the existing Plan Viewer instead of bespoke HTML.
 
 import { describe, expect, it } from "vitest";
-import { pacificoResultToMarkdown, type PacificoResultData } from "../lib/pacifico-result-html.ts";
+import { pacificoResultCardTitle, pacificoResultToMarkdown, type PacificoResultData } from "../lib/pacifico-result-html.ts";
 
 function sample(overrides: Partial<PacificoResultData> = {}): PacificoResultData {
 	return {
@@ -28,7 +28,7 @@ describe("Pacifico Result Markdown adapter", () => {
 	it("produces plan-viewer-ready Markdown with advisor sections and metadata", () => {
 		const markdown = pacificoResultToMarkdown(sample());
 		expect(markdown).toContain("# Pacifico Result");
-		expect(markdown).toContain("## Question");
+		expect(markdown).toContain("## Task Prompt");
 		expect(markdown).toContain("What should we do next?");
 		expect(markdown).toContain("## Metadata");
 		expect(markdown).toContain("**Complexity:** complex");
@@ -39,6 +39,12 @@ describe("Pacifico Result Markdown adapter", () => {
 		expect(markdown).toContain("- Command drift");
 		expect(markdown).toContain("## Context Diagnostics");
 		expect(markdown).toContain("**CLAUDE.md** — included");
+	});
+
+	it("builds card titles from the actual task prompt instead of advisor boilerplate", () => {
+		expect(pacificoResultCardTitle("Fix the Pacifico truncation bug and preserve full context")).toBe("Fix the Pacifico truncation bug and preserve full context");
+		expect(pacificoResultCardTitle("Review the shared context and answer as an advisor, not the main executor.\nQuestion: Fix title", 32)).toBe("Fix title");
+		expect(pacificoResultCardTitle("   ")).toBe("Pacifico request");
 	});
 
 	it("keeps model-supplied HTML as escaped Markdown text", () => {

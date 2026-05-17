@@ -58,7 +58,7 @@ describe("pacifico advisor context packet", () => {
 		expect(prompt).toContain("Caller-selected max output tokens: 100000");
 	});
 
-	it("records explicit diagnostics for missing and truncated context", () => {
+	it("records explicit diagnostics for missing and oversized context without truncating by default", () => {
 		writeFileSync(join(cwd, "large.ts"), "x".repeat(2000));
 		const packet = collectPacificoAdvisorContext({
 			question: "Review context.",
@@ -68,8 +68,36 @@ describe("pacifico advisor context packet", () => {
 		}, { cwd });
 
 		expect(packet.diagnostics.some((d) => d.path === "missing.ts" && d.status === "missing")).toBe(true);
+		expect(packet.diagnostics.some((d) => d.path === "large.ts" && d.status === "omitted" && d.message?.includes("exceeds max_file_bytes"))).toBe(true);
+		expect(packet.prompt).not.toContain("[TRUNCATED to 1000 bytes]");
+		expect(packet.prompt).not.toContain("## File: large.ts");
+	});
+
+	it("only truncates advisor context when explicitly allowed", () => {
+		writeFileSync(join(cwd, "large.ts"), "x".repeat(2000));
+		const packet = collectPacificoAdvisorContext({
+			question: "Review context.",
+			files: ["large.ts"],
+			max_file_bytes: 1000,
+			max_context_bytes: 20_000,
+			allow_truncation: true,
+		}, { cwd });
+
+		expect(packet.blocked).toBe(false);
 		expect(packet.diagnostics.some((d) => d.path === "large.ts" && d.status === "truncated")).toBe(true);
 		expect(packet.prompt).toContain("[TRUNCATED to 1000 bytes]");
+	});
+
+	it("blocks oversized full prompts instead of truncating them by default", () => {
+		const packet = collectPacificoAdvisorContext({
+			question: "Review context.",
+			task_context: "x".repeat(30_000),
+			max_context_bytes: 20_000,
+		}, { cwd });
+
+		expect(packet.blocked).toBe(true);
+		expect(packet.diagnostics.some((d) => d.path === "<entire-prompt>" && d.status === "omitted" && d.message?.includes("exceeds max_context_bytes"))).toBe(true);
+		expect(packet.prompt).not.toContain("[TRUNCATED to 20000 bytes]");
 	});
 
 	it("formats normalized advice in claude_advisor-compatible sections", () => {

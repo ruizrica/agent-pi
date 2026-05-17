@@ -34,6 +34,13 @@ function md(value: unknown): string {
 	return String(value ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
 }
 
+export function pacificoResultCardTitle(question: string, maxChars = 80): string {
+	const raw = String(question || "");
+	const explicitQuestion = raw.match(/(?:^|\n)Question:\s*([^\n]+)/i)?.[1];
+	const cleaned = String(explicitQuestion || raw || "Pacifico request").replace(/\s+/g, " ").trim() || "Pacifico request";
+	return cleaned.length <= maxChars ? cleaned : `${cleaned.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
+}
+
 function bulletList(items: string[] | undefined, fallback: string): string {
 	if (!items?.length) return `- ${fallback}`;
 	return items.map((item) => `- ${md(item).replace(/\n/g, "\n  ")}`).join("\n");
@@ -83,7 +90,7 @@ export function pacificoResultToMarkdown(data: PacificoResultData): string {
 	return [
 		`# ${md(data.title || "Pacifico Result")}`,
 		"",
-		"## Question",
+		"## Task Prompt",
 		"",
 		md(data.question),
 		"",

@@ -165,7 +165,7 @@ function scenarioTasks(captureDir: string, ts: string, opts: CaptureOptions, abs
 # Simulated Pi task list widget — must match renderTaskList output
 BG="\\033[48;5;236m"
 RST="\\033[0m"
-ACCENT="\\033[38;5;117m"
+ACCENT="\\033[38;5;31m"
 BOLD="\\033[1m"
 MUTED="\\033[38;5;245m"
 DIM="\\033[38;5;243m"
@@ -269,7 +269,7 @@ function scenarioFooter(captureDir: string, ts: string, opts: CaptureOptions, ab
 	// Write a helper script that renders a footer bar
 	const script = `#!/bin/bash
 DIM="\\033[90m"
-ACCENT="\\033[38;5;117m\\033[1m"
+ACCENT="\\033[38;5;31m\\033[1m"
 RST="\\033[0m"
 
 clear
