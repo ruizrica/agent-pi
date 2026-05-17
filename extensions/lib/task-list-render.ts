@@ -141,6 +141,7 @@ export interface BriefWidgetInfo {
 	description?: string;
 	briefLabel?: string;
 	hint?: string;
+	maxDescriptionLines?: number;
 }
 
 export function renderBriefWidget(
@@ -159,7 +160,10 @@ export function renderBriefWidget(
 	// When no summary is rendered the chrome is just header(1) + hotkey(1) = 2 lines.
 	// Budget the summary against the with-summary chrome to avoid overflowing the widget.
 	const maxSummaryLines = Math.max(0, availableHeight - 4);
-	const summaryLines = rawSummaryLines.slice(0, maxSummaryLines);
+	const descriptionLineLimit = info.maxDescriptionLines === undefined
+		? maxSummaryLines
+		: Math.min(maxSummaryLines, Math.max(0, info.maxDescriptionLines));
+	const summaryLines = rawSummaryLines.slice(0, descriptionLineLimit);
 
 	// ── Header ────────────────────────────────────────────────────
 	const headerLabel = `  ${info.title}${info.progressText ? ` ${info.progressText}` : ""}`;

@@ -66,8 +66,8 @@ const MODEL_CHOICES: ModelChoice[] = [
 	{ id: null, label: "(default)", note: "let pacifico pick — sync uses INSTANT_MODEL, async uses BASE_BACKGROUND_MODEL" },
 	{ id: "openai/gpt-5.4-nano", label: "openai/gpt-5.4-nano", note: "sync, cheap (current INSTANT_MODEL default)" },
 	{ id: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "async, balanced (current BASE_BACKGROUND_MODEL default)" },
-	{ id: "claude-opus-4-6", label: "claude-opus-4-6", note: "async, expensive — forces queue/batch" },
-	{ id: "gpt-5.5", label: "gpt-5.5", note: "async, expensive" },
+	{ id: "claude-opus-4-7", label: "claude-opus-4-6", note: "async, expensive — forces queue/batch" },
+	{ id: "openai/gpt-5.5", label: "openai/gpt-5.5", note: "async, expensive — forces queue/batch" },
 	{ id: "__custom__", label: "Custom…", note: "type any model string accepted by /api/infer" },
 ];
 

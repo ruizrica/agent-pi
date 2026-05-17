@@ -36,6 +36,10 @@
       "provider": "anthropic",
       "model": "qwen/qwen3.6-plus"
     },
+    "documenter": {
+      "provider": "openai-codex",
+      "model": "gpt-5.5"
+    },
     "claude-worker": {
       "provider": "anthropic",
       "model": "claude-haiku-4-5"

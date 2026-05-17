@@ -324,18 +324,33 @@ describe("renderTaskList", () => {
 	it("renders generic brief widgets with custom label and hint", () => {
 		const result = renderBriefWidget({
 			title: "Pacifico",
-			progressText: "queued #abc123",
-			description: "Pacifico queued on claude-haiku. Job abc123.",
-			briefLabel: "Pacifico Brief:",
-			hint: "/pacifico-jobs to view jobs",
+			description: "Explain the current implementation plan and likely risks.",
+			briefLabel: "Query:",
+			hint: "ctrl+alt+q to view query/output",
 		}, 80, 20, mockDeps);
 		const joined = result.join("\n");
-		expect(result[0]).toContain("Pacifico queued #abc123");
-		expect(joined).toContain("Pacifico Brief:");
-		expect(joined).toContain("Pacifico queued on claude-haiku");
-		expect(joined).toContain("/pacifico-jobs to view jobs");
+		expect(result[0]).toContain("Pacifico");
+		expect(result[0]).not.toContain("queued");
+		expect(joined).toContain("Query:");
+		expect(joined).toContain("Explain the current implementation plan");
+		expect(joined).toContain("ctrl+alt+q to view query/output");
 		expect(joined).not.toContain("Mission Brief:");
 		expect(joined).not.toContain("ctrl+alt+t or /tasks to view tasks");
+	});
+
+	it("limits generic brief description lines when requested", () => {
+		const result = renderBriefWidget({
+			title: "Pacifico",
+			description: "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty",
+			briefLabel: "Query:",
+			hint: "ctrl+alt+q to view query/output",
+			maxDescriptionLines: 2,
+		}, 80, 20, mockDeps);
+		const joined = result.join("\n");
+		expect(joined).toContain("Query:");
+		expect(joined).toContain("ctrl+alt+q to view query/output");
+		// Header + label + 2 description lines + blank + hint.
+		expect(result).toHaveLength(6);
 	});
 
 	it("wraps long summary lines to terminal width", () => {

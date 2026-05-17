@@ -12,11 +12,20 @@ export interface CommanderTaskMapping {
 	lastSyncedStatus?: LocalStatus;
 }
 
+export interface PendingCommanderCreate {
+	localId: number;
+	text: string;
+	desiredStatus: LocalStatus;
+	requestedAt: number;
+	mode: "group" | "single";
+}
+
 export interface SyncState {
 	available: boolean;
 	groupId: number | undefined;
 	groupCreationInFlight: boolean;
 	mappings: CommanderTaskMapping[];
+	pendingCreates?: PendingCommanderCreate[];
 	parentClosedAt?: number;
 }
 
@@ -75,7 +84,7 @@ export function parseGroupId(result: any): number | undefined {
 // ── SyncState helpers ───────────────────────────────────────────────
 
 export function emptySyncState(): SyncState {
-	return { available: false, groupId: undefined, groupCreationInFlight: false, mappings: [] };
+	return { available: false, groupId: undefined, groupCreationInFlight: false, mappings: [], pendingCreates: [] };
 }
 
 export function lookupMapping(state: SyncState, localId: number): number | undefined {
@@ -86,6 +95,7 @@ export function addMapping(state: SyncState, localId: number, commanderId: numbe
 	return {
 		...state,
 		mappings: [...state.mappings, { localId, commanderId }],
+		pendingCreates: (state.pendingCreates || []).filter(p => p.localId !== localId),
 	};
 }
 
@@ -97,7 +107,7 @@ export function removeMapping(state: SyncState, localId: number): SyncState {
 }
 
 export function clearMappings(state: SyncState): SyncState {
-	return { ...state, mappings: [], groupId: undefined, groupCreationInFlight: false };
+	return { ...state, mappings: [], pendingCreates: [], groupId: undefined, groupCreationInFlight: false };
 }
 
 export function updateMappingStatus(state: SyncState, localId: number, status: LocalStatus): SyncState {
@@ -106,7 +116,68 @@ export function updateMappingStatus(state: SyncState, localId: number, status: L
 		mappings: state.mappings.map(m =>
 			m.localId === localId ? { ...m, lastSyncedStatus: status } : m,
 		),
+		pendingCreates: (state.pendingCreates || []).map(p =>
+			p.localId === localId ? { ...p, desiredStatus: status } : p,
+		),
 	};
+}
+
+export function addPendingCreate(
+	state: SyncState,
+	task: { id: number; text: string; status: LocalStatus },
+	mode: "group" | "single",
+	now = Date.now(),
+): SyncState {
+	if (lookupMapping(state, task.id) !== undefined) return state;
+	const pending = state.pendingCreates || [];
+	const entry: PendingCommanderCreate = {
+		localId: task.id,
+		text: task.text,
+		desiredStatus: task.status,
+		requestedAt: now,
+		mode,
+	};
+	return {
+		...state,
+		pendingCreates: pending.some(p => p.localId === task.id)
+			? pending.map(p => p.localId === task.id ? { ...p, text: task.text, desiredStatus: task.status, mode } : p)
+			: [...pending, entry],
+	};
+}
+
+export function addPendingCreates(
+	state: SyncState,
+	tasks: { id: number; text: string; status: LocalStatus }[],
+	mode: "group" | "single",
+	now = Date.now(),
+): SyncState {
+	return tasks.reduce((next, task) => addPendingCreate(next, task, mode, now), state);
+}
+
+export function removePendingCreate(state: SyncState, localId: number): SyncState {
+	return {
+		...state,
+		pendingCreates: (state.pendingCreates || []).filter(p => p.localId !== localId),
+	};
+}
+
+export function pendingCreateLocalIds(state: SyncState): number[] {
+	return (state.pendingCreates || []).map(p => p.localId);
+}
+
+export function unresolvedCommanderLocalIds(
+	localTasks: { id: number; status: string }[],
+	state: SyncState,
+): number[] {
+	const byLocalId = new Map(state.mappings.map(m => [m.localId, m]));
+	const pendingIds = new Set(pendingCreateLocalIds(state));
+	const unresolved = new Set<number>();
+	for (const task of localTasks) {
+		const mapping = byLocalId.get(task.id);
+		if (!mapping && pendingIds.has(task.id)) unresolved.add(task.id);
+		if (mapping && localToCommander(task.status as LocalStatus) !== localToCommander(mapping.lastSyncedStatus ?? "idle")) unresolved.add(task.id);
+	}
+	return [...unresolved].sort((a, b) => a - b);
 }
 
 // ── Idempotency guards ──────────────────────────────────────────────
@@ -178,11 +249,13 @@ export function applyGroupCreateResult(
 		localId: localIds[i],
 		commanderId: result.taskIds[i],
 	}));
+	const mappedLocalIds = new Set(newMappings.map(m => m.localId));
 	return {
 		...state,
 		groupId: result.groupId,
 		groupCreationInFlight: false,
 		mappings: [...state.mappings, ...newMappings],
+		pendingCreates: (state.pendingCreates || []).filter(p => !mappedLocalIds.has(p.localId)),
 	};
 }
 
