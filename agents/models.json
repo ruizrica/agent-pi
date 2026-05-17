@@ -34,7 +34,7 @@
     },
     "test-reviewer": {
       "provider": "anthropic",
-      "model": "qwen/qwen3.6-plus"
+      "model": "claude-opus-4-7"
     },
     "documenter": {
       "provider": "openai-codex",
