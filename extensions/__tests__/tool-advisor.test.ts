@@ -20,6 +20,7 @@ import {
 	type OpenRouterClient,
 	type ReviewVerdict,
 } from "../lib/tool-advisor/tool-advisor-runner.ts";
+import { buildModelString, resolveAgentModelString, type AgentModelsConfig } from "../lib/agent-defs.ts";
 
 // ── Scope policy: discerning, argument-aware ────────────────────────────────
 //
@@ -276,6 +277,26 @@ describe("parseVerdict", () => {
 	it("rejects JSON with an invalid decision value", () => {
 		const v = parseVerdict('{"decision":"maybe","confidence":0.5,"reason":"ok"}');
 		expect(v.ok).toBe(false);
+	});
+});
+
+// ── Model config resolution ─────────────────────────────────────────────────
+
+describe("tool-advisor model config", () => {
+	it("resolves the configured openai-codex model from agents/models.json shape", () => {
+		const config: AgentModelsConfig = {
+			default: { provider: "openai-codex", model: "gpt-5.4-mini" },
+			agents: {
+				"tool-advisor": { provider: "openai-codex", model: "gpt-5.3-codex-spark" },
+			},
+		};
+		expect(resolveAgentModelString("tool-advisor", config)).toBe("openai-codex/gpt-5.3-codex-spark");
+		const entry = config.agents["tool-advisor"];
+		expect(buildModelString(entry)).toBe("openai-codex/gpt-5.3-codex-spark");
+	});
+
+	it("keeps OpenRouter entries explicit for the OpenRouter HTTP client", () => {
+		expect(buildModelString({ provider: "openrouter", model: "openai/gpt-5-nano" })).toBe("openrouter/openai/gpt-5-nano");
 	});
 });
 

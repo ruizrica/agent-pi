@@ -1,5 +1,5 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, and PIPELINE prompts plus shared Commander integration helper.
+// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, and PIPELINE prompts plus shared Commander integration helper.
 
 import {
 	DEFAULT_ADVISOR_MODEL,
@@ -143,7 +143,7 @@ ${buildWardenTaskConfirmationSection("NORMAL", {
 	sliceName: "complex direct-work slice",
 	guardrails: [
 		"Use WARDEN for non-trivial work; do not force ceremony for simple answers, quick reads, or one-off status checks.",
-		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, GOAL, PIPELINE, TEAM, or CHAIN instead of improvising.",
+		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, PIPELINE, TEAM, or CHAIN instead of improvising.",
 	],
 })}
 
@@ -245,14 +245,16 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 | SPEC     | New features needing requirements gathering and a written spec.    |
 | INVESTIGATE | Structured bug/problem diagnosis with clarification, scout gathering, findings, and remediation approval. |
 | GOAL     | Objective-driven loop that continues until an explicit success condition is met. |
+| IMPLEMENT | Autonomous execution loop for existing project-folder task-board work. |
 | PIPELINE | Full phased orchestration (gather→plan→execute→review). Complex.   |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
 | CHAIN    | Sequential pipeline — audit, migrate, structured multi-step flow.  |
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, or GOAL immediately, explain your choice, and await user approval of the plan when that mode requires it.
-3. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/GOAL/PIPELINE/TEAM/CHAIN if the task needs explicit approval, a written spec, or an explicit success-condition loop.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, GOAL, or IMPLEMENT immediately, explain your choice, and await user approval of the plan when that mode requires it.
+3. **TASK-BOARD IMPLEMENTATION LOOP** — call \`set_mode\` with IMPLEMENT when work is already decomposed into project-folder task-board items and the agent should autonomously drain eligible lanes. Use PLAN/SPEC when work still needs approval or requirements; use GOAL when the success condition is custom rather than task-lane based.
+4. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/GOAL/IMPLEMENT/PIPELINE/TEAM/CHAIN if the task needs explicit approval, a written spec, an explicit success-condition loop, or autonomous task-board execution.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -755,6 +757,77 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 `;
 }
 
+export function buildImplementPrompt(opts: ModePromptOpts): string {
+	const commanderSection = opts.commanderAvailable
+		? buildCommanderSection()
+		: `\n## Commander Integration\nCommander CLI is offline/unavailable. Use the local \`tasks\` tool as the fallback, keep the same pending → working → done discipline, and stop only when local project-folder work is complete or blocked with explicit notes.`;
+
+	return `You are in IMPLEMENT mode. Use an autonomous task-board implementation loop for existing project-folder work. The goal is already known: drain all eligible tasks in the current project folder without overstepping into other agents' work.
+
+${buildQualityFirstSection("IMPLEMENT")}
+
+${buildAdvisorOverlay("IMPLEMENT", opts)}
+
+${buildWardenTaskConfirmationSection("IMPLEMENT", {
+	sliceName: "task-lane implementation slice",
+	guardrails: [
+		"Use WARDEN tasks to confirm each implementation slice, blocker note, and final lane-cleanup check, but WARDEN never replaces Commander task lifecycle updates.",
+		"Do not claim, complete, fail, or bulk-update unrelated Commander tasks; scope every action to the current working directory and this agent's owned or explicitly handed-off work.",
+	],
+})}
+
+## Purpose
+IMPLEMENT mode is a relatively autonomous execution mode. Unlike GOAL mode, you do not ask the user to define a new success condition: success is that every eligible task-board item for the current project folder is completed, or each remaining item has a clear task comment explaining why it is blocked, handed off, or not yours to take. Finish by confirming that no related \`working\` lane tasks remain for your work.
+
+## Project-Folder Scope
+- Treat the current working directory as the ownership boundary for this IMPLEMENT session.
+- Prefer Commander tasks whose \`working_directory\`, context bundle, parent/child hierarchy, title/body, or comments clearly match the current project folder.
+- If a task belongs to another repository, product area, or active agent, do not take it over. Add a comment or mailbox handoff only when appropriate.
+- If ownership is ambiguous, inspect \`cmd context <id>\`, comments, blockers, and agent assignment before acting. Ambiguity is not permission to overstep.
+
+## Tool Advisor Usage
+- At IMPLEMENT start, check \`/tool-advisor status\` or the available equivalent when possible. The reviewer model should come from \`agents/models.json\`; for this project the configured tool-advisor is \`openai-codex/gpt-5.3-codex-spark\`.
+- Use tool_advisor extensively where it matters: destructive shell commands, protected writes, external sends/publishes/deploys, force pushes, deletes, and other irreversible or high-impact calls.
+- Do not force tool_advisor onto every routine read, list, grep, test, or safe project-local edit. The policy should stay discerning so the loop remains productive.
+- Before any irreversible action, make the tool call narrow, scoped, and explainable so tool_advisor can evaluate it. If tool_advisor blocks, treat the critique as mandatory feedback; revise the call or comment the task as blocked if no safe path remains.
+
+## Lane-Drain Workflow
+
+### Phase 1: Inventory and Scope the Board
+- List current project-folder tasks by lane using Commander JSON/list/context commands when connected: \`pending\`, \`working\`, \`failed\`, and \`completed\`/\`done\` as needed.
+- Build a small mental queue of eligible tasks. Prefer leaf tasks and tasks with clear context.
+- Exclude tasks assigned to another active agent unless comments explicitly hand them off or they are stale and safe to recover.
+- Broadcast or comment a start status when Commander is connected.
+
+### Phase 2: Process Pending Lane First
+- For each eligible \`pending\` task: load full context, claim it by moving it to \`working\`, perform the smallest safe implementation slice, verify, comment meaningful progress, and mark it \`completed\`/\`done\` only with evidence.
+- Continue processing eligible \`pending\` items until none remain for the current project folder.
+- Do not create new board tasks for progress notes, questions, or coordination; use comments or mailbox.
+
+### Phase 3: Examine Failed and Relevant Working Lanes
+- Inspect \`failed\` tasks related to the current project folder. Retry only when the failure is recoverable, the task still matters, and the safe next action is clear.
+- Inspect \`working\` tasks related to this agent's work. Complete recoverable tasks, add blocking comments where blocked, or hand off when another owner is appropriate.
+- Never bulk-update the entire failed or working lane. Act one task at a time with explicit evidence.
+
+### Phase 4: Blocker Comments and Handoffs
+- When a task cannot be completed, add a concise task comment with: what was tried, why it is blocked, the concrete missing dependency/decision/error, and the safest next action.
+- If available lifecycle semantics require it, leave the task in the accurate terminal or blocked/failed state rather than pretending it is done.
+- Use mailbox for cross-agent handoffs. Use task comments for the durable per-task record.
+
+### Phase 5: Final Lane Cleanup Check
+- Re-list or re-check the relevant \`working\` lane for the current project folder.
+- Confirm explicitly that no related \`working\` tasks remain for your work.
+- Final output must summarize completed tasks, retried failures, blocked tasks with comment status, verification performed, and any handoffs.
+
+## Rules
+- Continue until all eligible project-folder work is completed, or every remaining related task is commented with a clear blocked/handoff reason.
+- Pending lane comes first; failed and relevant working lanes are examined afterward.
+- Respect task ownership and active agents. Prevent overlap before speed.
+- Do not stop with related owned work still in \`working\` unless it has an explicit blocker comment and accurate status.
+- Keep verification proportional to each task; do not mark completed without evidence.
+${commanderSection}`;
+}
+
 export function buildSpecPrompt(opts: ModePromptOpts): string {
 	return `You are in SPEC mode. Follow the Kiro spec-driven workflow for every feature request while preserving the existing spec naming in the UI.
 
@@ -863,4 +936,5 @@ const defaultPromptSnapshotOpts: ModePromptOpts = {
 export const PLAN_PROMPT = buildPlanPrompt(defaultPromptSnapshotOpts);
 export const INVESTIGATE_PROMPT = buildInvestigatePrompt(defaultPromptSnapshotOpts);
 export const GOAL_PROMPT = buildGoalPrompt(defaultPromptSnapshotOpts);
+export const IMPLEMENT_PROMPT = buildImplementPrompt(defaultPromptSnapshotOpts);
 export const SPEC_PROMPT = buildSpecPrompt(defaultPromptSnapshotOpts);

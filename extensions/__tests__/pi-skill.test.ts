@@ -1,5 +1,5 @@
 // ABOUTME: Tests for the /pi skill (Pi runtime) and /pi slash command (Claude Code bridge dispatch).
-// ABOUTME: Validates SKILL.md frontmatter, command bridge references, and coverage of all 5 operational modes.
+// ABOUTME: Validates SKILL.md frontmatter, command bridge references, and coverage of operational modes.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -35,8 +35,8 @@ describe("/pi skill", () => {
 		expect(frontmatter["allowed-tools"]).toContain("set_mode");
 	});
 
-	it("references all 5 operational mode subcommands", () => {
-		for (const mode of ["plan", "spec", "team", "pipeline", "chain"]) {
+	it("references operational mode subcommands", () => {
+		for (const mode of ["plan", "spec", "investigate", "goal", "implement", "team", "pipeline", "chain"]) {
 			expect(body.toLowerCase()).toContain(mode);
 		}
 	});
@@ -47,6 +47,7 @@ describe("/pi skill", () => {
 		expect(body).toContain('mode: "TEAM"');
 		expect(body).toContain('mode: "CHAIN"');
 		expect(body).toContain('mode: "PIPELINE"');
+		expect(body).toContain('mode: "IMPLEMENT"');
 	});
 
 	it("documents prerequisites for modes that need setup", () => {

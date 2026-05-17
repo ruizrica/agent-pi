@@ -1,7 +1,7 @@
-// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, PIPELINE, TEAM, CHAIN).
+// ABOUTME: Pure functions for cycling operational modes (NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, PIPELINE, TEAM, CHAIN).
 // ABOUTME: No side effects — used by mode-cycler.ts extension and tested independently.
 
-export const MODES = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "PIPELINE", "TEAM", "CHAIN"] as const;
+export const MODES = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "IMPLEMENT", "PIPELINE", "TEAM", "CHAIN"] as const;
 export type Mode = typeof MODES[number];
 export type ModeOverlay = "CLAUDE" | "GEMMA" | "QWEN";
 
@@ -23,6 +23,7 @@ export const MODE_HINTS: Record<Mode, string> = {
 	SPEC: "Use for larger feature work that needs requirements, design, tasks, and review before coding.",
 	INVESTIGATE: "Use for bugs or unclear failures where the agent should diagnose before proposing fixes.",
 	GOAL: "Use when there is an explicit success condition and the agent should loop until it is met.",
+	IMPLEMENT: "Use when the agent should autonomously drain project-folder task-board lanes: pending first, then relevant failed/working tasks, with blocked comments and final lane cleanup.",
 	PIPELINE: "Use for phased orchestration with understand, gather, plan, execute, and review stages.",
 	TEAM: "Use when parallel specialists should gather, build, or review different slices.",
 	CHAIN: "Use when steps must run sequentially and each output feeds the next.",
@@ -50,6 +51,7 @@ const MODE_COLORS: Record<Mode, string> = {
 	PLAN: "accent",
 	INVESTIGATE: "accent",
 	GOAL: "accent",
+	IMPLEMENT: "accent",
 	SPEC: "accent",
 	PIPELINE: "accent",
 	TEAM: "accent",
@@ -78,6 +80,7 @@ const MODE_TEXT_ANSI: Record<Mode, string> = {
 	PLAN: BOLD_WHITE,
 	INVESTIGATE: BOLD_WHITE,
 	GOAL: BOLD_WHITE,
+	IMPLEMENT: BOLD_WHITE,
 	SPEC: BOLD_WHITE,
 	PIPELINE: BOLD_WHITE,
 	TEAM: BOLD_WHITE,
@@ -97,6 +100,7 @@ const ANSI_BG: Record<Mode, string> = {
 	PLAN: DODGER_BLUE_BG,
 	INVESTIGATE: DODGER_BLUE_BG,
 	GOAL: DODGER_BLUE_BG,
+	IMPLEMENT: DODGER_BLUE_BG,
 	SPEC: DODGER_BLUE_BG,
 	PIPELINE: DODGER_BLUE_BG,
 	TEAM: DODGER_BLUE_BG,

@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 import {
 	GOAL_PROMPT,
+	IMPLEMENT_PROMPT,
 	INVESTIGATE_PROMPT,
 	PLAN_PROMPT,
 	SPEC_PROMPT,
@@ -193,6 +194,37 @@ describe("GOAL_PROMPT — success-condition loop", () => {
 		expect(GOAL_PROMPT).toContain("WARDEN");
 		expect(GOAL_PROMPT).toContain("tasks");
 		expect(GOAL_PROMPT).toContain("PLAN, SPEC, or PIPELINE");
+	});
+});
+
+describe("IMPLEMENT_PROMPT — autonomous task-board loop", () => {
+	it("is a non-empty string", () => {
+		expect(typeof IMPLEMENT_PROMPT).toBe("string");
+		expect(IMPLEMENT_PROMPT.length).toBeGreaterThan(0);
+	});
+
+	it("describes task lanes and project-folder scope", () => {
+		expect(IMPLEMENT_PROMPT).toContain("pending");
+		expect(IMPLEMENT_PROMPT).toContain("working");
+		expect(IMPLEMENT_PROMPT).toContain("failed");
+		expect(IMPLEMENT_PROMPT).toContain("completed");
+		expect(IMPLEMENT_PROMPT).toContain("current working directory");
+		expect(IMPLEMENT_PROMPT).toContain("working_directory");
+		expect(IMPLEMENT_PROMPT).toContain("project folder");
+	});
+
+	it("protects task ownership and requires final lane cleanup", () => {
+		expect(IMPLEMENT_PROMPT).toContain("other agents' work");
+		expect(IMPLEMENT_PROMPT).toContain("do not take it over");
+		expect(IMPLEMENT_PROMPT).toContain("handoff");
+		expect(IMPLEMENT_PROMPT).toContain("blocked");
+		expect(IMPLEMENT_PROMPT).toContain("no related `working` tasks remain");
+	});
+
+	it("uses tool-advisor with the configured codex model", () => {
+		expect(IMPLEMENT_PROMPT).toContain("tool-advisor status");
+		expect(IMPLEMENT_PROMPT).toContain("agents/models.json");
+		expect(IMPLEMENT_PROMPT).toContain("openai-codex/gpt-5.3-codex-spark");
 	});
 });
 

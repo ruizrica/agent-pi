@@ -1,5 +1,5 @@
 // ABOUTME: tool_advisor extension — LLM gatekeeper for destructive tool calls (Apple paper pattern).
-// ABOUTME: pi.on("tool_call") routes in-scope calls to openrouter/openai/gpt-5.1-codex-mini for review.
+// ABOUTME: pi.on("tool_call") routes in-scope calls to the agents/models.json tool-advisor model for review.
 
 /**
  * tool_advisor — Inference-time reviewer gate
@@ -26,12 +26,13 @@
  * with a warning. A broken reviewer must never break the agent.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { complete } from "@earendil-works/pi-ai";
 import { Box, Text } from "@earendil-works/pi-tui";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadAgentModelsConfig, resolveAgentModelString } from "./lib/agent-defs.ts";
+import { buildModelString, loadAgentModelsConfig, resolveAgentModelString, type AgentModelEntry } from "./lib/agent-defs.ts";
 import { isInScope, explainScope } from "./lib/tool-advisor/tool-advisor-policy.ts";
 import {
 	reviewToolCall,
@@ -45,9 +46,11 @@ import {
 	type ToggleAction,
 	type ToggleState,
 } from "./lib/tool-advisor/tool-advisor-toggle.ts";
+import type { OpenRouterMessage, OpenRouterPostResult } from "./lib/tool-advisor/tool-advisor-openrouter.ts";
 
 const AGENT_NAME = "tool-advisor";
 const DEFAULT_MODEL_FALLBACK = "openrouter/openai/gpt-5-nano";
+const DEFAULT_MODEL_ENTRY: AgentModelEntry = { provider: "openrouter", model: "openai/gpt-5-nano" };
 const REVIEW_TIMEOUT_MS = 4000;
 /** Hard cap on reviews per session — protects against runaway cost on stuck loops. */
 const MAX_REVIEWS_PER_SESSION = 200;
@@ -75,6 +78,7 @@ interface AdvisorCardDetails {
 export default function toolAdvisor(pi: ExtensionAPI) {
 	let stats = freshStats();
 	let reviewerModel = DEFAULT_MODEL_FALLBACK;
+	let reviewerEntry: AgentModelEntry = DEFAULT_MODEL_ENTRY;
 	let projectRoot = "";
 	let toggle: ToggleState = initialToggleState(false);
 
@@ -116,13 +120,78 @@ export default function toolAdvisor(pi: ExtensionAPI) {
 		});
 	}
 
-	// ── OpenRouter client (wraps the lib helper into the runner's interface) ──
+	// ── Reviewer clients ──────────────────────────────────────────────────────
 
-	const client: OpenRouterClient = {
-		async postReview(messages, opts) {
-			return postReview(messages, { model: opts.model, timeoutMs: opts.timeoutMs });
-		},
-	};
+	async function postReviewViaModelRegistry(
+		messages: OpenRouterMessage[],
+		opts: { provider: string; model: string; displayModel: string; timeoutMs: number },
+		ctx: ExtensionContext,
+	): Promise<OpenRouterPostResult> {
+		const model = ctx.modelRegistry.find(opts.provider, opts.model);
+		if (!model) return { ok: false, error: `model not found: ${opts.displayModel}` };
+
+		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+		if (!auth.ok || !auth.apiKey) {
+			return { ok: false, error: auth.ok ? `No API key for ${opts.provider}` : auth.error };
+		}
+
+		const systemPrompt = messages
+			.filter((m) => m.role === "system")
+			.map((m) => m.content)
+			.join("\n\n");
+		const aiMessages = messages
+			.filter((m) => m.role !== "system")
+			.map((m) => ({
+				role: m.role,
+				content: [{ type: "text" as const, text: m.content }],
+				timestamp: Date.now(),
+			}));
+
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), Math.max(500, opts.timeoutMs));
+		try {
+			const response = await complete(
+				model,
+				{ systemPrompt, messages: aiMessages as any },
+				{
+					apiKey: auth.apiKey,
+					headers: auth.headers,
+					signal: controller.signal,
+					timeoutMs: opts.timeoutMs,
+					maxRetries: 0,
+					maxTokens: 500,
+				},
+			);
+			const content = response.content
+				.filter((c: any) => c.type === "text")
+				.map((c: any) => c.text)
+				.join("\n")
+				.trim();
+			if (!content) return { ok: false, error: "empty response content" };
+			return { ok: true, content };
+		} catch (err: any) {
+			if (err?.name === "AbortError") return { ok: false, error: "timeout" };
+			return { ok: false, error: String(err?.message || err) };
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
+	function makeClient(ctx: ExtensionContext): OpenRouterClient {
+		return {
+			async postReview(messages, opts) {
+				if (reviewerEntry.provider === "openrouter") {
+					return postReview(messages, { model: opts.model, timeoutMs: opts.timeoutMs });
+				}
+				return postReviewViaModelRegistry(messages, {
+					provider: reviewerEntry.provider,
+					model: reviewerEntry.model,
+					displayModel: reviewerModel,
+					timeoutMs: opts.timeoutMs,
+				}, ctx);
+			},
+		};
+	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -132,13 +201,16 @@ export default function toolAdvisor(pi: ExtensionAPI) {
 		try {
 			const config = loadAgentModelsConfig(projectRoot, defaultRoot);
 			const entry = config.agents?.[AGENT_NAME];
-			if (entry && entry.provider === "openrouter" && entry.model) {
+			if (entry?.provider && entry.model) {
 				configured = true;
+				reviewerEntry = entry;
 				reviewerModel = resolveAgentModelString(AGENT_NAME, config);
 			} else {
-				reviewerModel = DEFAULT_MODEL_FALLBACK;
+				reviewerEntry = DEFAULT_MODEL_ENTRY;
+				reviewerModel = buildModelString(DEFAULT_MODEL_ENTRY);
 			}
 		} catch {
+			reviewerEntry = DEFAULT_MODEL_ENTRY;
 			reviewerModel = DEFAULT_MODEL_FALLBACK;
 		}
 		toggle = initialToggleState(configured);
@@ -153,7 +225,7 @@ export default function toolAdvisor(pi: ExtensionAPI) {
 
 	// ── Tool-call gate ───────────────────────────────────────────────────────
 
-	pi.on("tool_call", async (event, _ctx) => {
+	pi.on("tool_call", async (event, ctx) => {
 		if (!toggle.enabled) return { block: false };
 
 		const toolName = (event as any).toolName as string;
@@ -169,7 +241,7 @@ export default function toolAdvisor(pi: ExtensionAPI) {
 
 		const verdict = await reviewToolCall(
 			{ toolName, toolInput },
-			{ client, model: reviewerModel, timeoutMs: REVIEW_TIMEOUT_MS },
+			{ client: makeClient(ctx), model: reviewerModel, timeoutMs: REVIEW_TIMEOUT_MS },
 		);
 
 		stats.reviews++;

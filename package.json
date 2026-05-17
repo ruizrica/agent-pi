@@ -2,7 +2,7 @@
   "name": "agent-pi",
   "private": true,
   "version": "2.0.0",
-  "description": "Multi-agent orchestration suite for Pi — 8 modes, 61 extensions, 11 themes",
+  "description": "Multi-agent orchestration suite for Pi — 9 modes, 61 extensions, 11 themes",
   "keywords": [
     "pi-package"
   ],
@@ -36,7 +36,7 @@
   "devDependencies": {
     "@eslint/js": "^9.x",
     "patch-package": "^8.0.1",
-    "typescript-eslint": "^8.x",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.6"
   },
   "scripts": {
