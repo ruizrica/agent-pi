@@ -1,0 +1,155 @@
+{
+  "category": "session-management",
+  "category_name": "Session Flags & Storage",
+  "scope": "pi --continue/-c, --resume/-r, --session, --fork, --no-session, --session-dir, --export, session storage layout, --mode values",
+  "tested_by": "claude-agent-02",
+  "started_at": "2026-05-17T14:30:00Z",
+  "finished_at": "2026-05-17T14:35:00Z",
+  "environment": {
+    "pi_version": "0.74.1",
+    "node_version": "v20.19.5",
+    "platform": "darwin",
+    "cwd": "/Users/ricardo/Workshop/GitHub/agent-pi"
+  },
+  "tests": [
+    {
+      "id": "session.help.flags",
+      "name": "pi --help documents all six session flags: --continue, --resume, --session, --fork, --no-session, --session-dir",
+      "command": "pi --help | grep -E -- '--continue|--resume|--session|--fork|--no-session|--session-dir'",
+      "status": "pass",
+      "evidence": "--continue, -c\\n--resume, -r\\n--session <path|id>\\n--fork <path|id>\\n--session-dir <dir>\\n--no-session",
+      "duration_ms": 85,
+      "notes": "All six session management flags present in help text"
+    },
+    {
+      "id": "session.help.export",
+      "name": "pi --help documents --export flag",
+      "command": "pi --help | grep -- '--export'",
+      "status": "pass",
+      "evidence": "--export <file>                Export session file to HTML and exit",
+      "duration_ms": 45,
+      "notes": "Export flag documented with description"
+    },
+    {
+      "id": "session.storage.pi",
+      "name": "Session storage directory ~/.pi exists",
+      "command": "ls -d ~/.pi",
+      "status": "pass",
+      "evidence": "/Users/ricardo/.pi",
+      "duration_ms": 20,
+      "notes": "Primary session directory exists at ~/.pi"
+    },
+    {
+      "id": "session.storage.sessions_subdir",
+      "name": "Session subdirectory ~/.pi/agent/sessions exists",
+      "command": "find ~/.pi -maxdepth 4 -type d -name sessions",
+      "status": "pass",
+      "evidence": "/Users/ricardo/.pi/agent/sessions",
+      "duration_ms": 35,
+      "notes": "Sessions stored in ~/.pi/agent/sessions/"
+    },
+    {
+      "id": "session.storage.xdg",
+      "name": "XDG session dir ~/.local/share/pi/sessions checked",
+      "command": "ls -d ~/.local/share/pi/sessions 2>/dev/null",
+      "status": "skip",
+      "evidence": "Not found; using ~/.pi instead",
+      "duration_ms": 15,
+      "notes": "XDG path not in use; primary storage is ~/.pi"
+    },
+    {
+      "id": "session.flags.session_dir_no_session",
+      "name": "Flag combination --session-dir and --no-session accepted together",
+      "command": "pi --session-dir /tmp/pi-test-sess --no-session --help 2>&1 | head -3",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools",
+      "duration_ms": 60,
+      "notes": "Both flags accepted; help rendered without error"
+    },
+    {
+      "id": "session.flags.no_session_alone",
+      "name": "Flag --no-session accepted without --session-dir",
+      "command": "pi --no-session --help 2>&1 | head -3",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools",
+      "duration_ms": 55,
+      "notes": "Help rendered; flag parsed correctly"
+    },
+    {
+      "id": "session.flags.fork_invalid",
+      "name": "Flag --fork with invalid session ID handled gracefully",
+      "command": "pi --fork bogus-id-xxx --help 2>&1 | head -1",
+      "status": "pass",
+      "evidence": "No session found matching 'bogus-id-xxx'",
+      "duration_ms": 40,
+      "notes": "Error message displayed; exit code 0 (help still runs)"
+    },
+    {
+      "id": "session.flags.resume",
+      "name": "Flag --resume shows interactive session picker UI",
+      "command": "pi --resume --help 2>&1 | head -10",
+      "status": "pass",
+      "evidence": "Resume Session (Curren[...] Loading ... TUI rendered with search/sort controls",
+      "duration_ms": 100,
+      "notes": "Interactive TUI spawned (colors, search box, tab controls visible)"
+    },
+    {
+      "id": "session.flags.continue",
+      "name": "Flag --continue without prior session shows help",
+      "command": "pi --continue --help 2>&1 | head -10",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools",
+      "duration_ms": 75,
+      "notes": "Help text rendered when no prior session exists"
+    },
+    {
+      "id": "session.storage.real_sessions",
+      "name": "Real session files exist in session directory",
+      "command": "find /Users/ricardo/.pi -maxdepth 5 \\( -name '*.jsonl' -o -name '*.session.json' \\) | head -5",
+      "status": "pass",
+      "evidence": "/Users/ricardo/.pi/agent/sessions/--Users-ricardo-Workshop-Github-Work-plannotator--/2026-04-29T02-15-40-341Z_019dd705-4635-7768-8ac6-41601f756590.jsonl\\n/Users/ricardo/.pi/agent/sessions/--Users-ricardo-Workshop-GitHub-specbook-v2--/2026-05-03T05-39-56-846Z_019dec59-bb2e-76e0-b7f5-7b7ce7f160ea.jsonl",
+      "duration_ms": 120,
+      "notes": "Multiple JSONL session files found; directory-per-project layout evident"
+    },
+    {
+      "id": "session.export.flag",
+      "name": "Flag --export is accepted; missing file yields error",
+      "command": "pi --export /tmp/pi-test-export.html --help 2>&1 | head -1",
+      "status": "pass",
+      "evidence": "Error: File not found: /tmp/pi-test-export.html",
+      "duration_ms": 35,
+      "notes": "Flag parsed; validation triggered (expects existing session file)"
+    },
+    {
+      "id": "session.mode.values",
+      "name": "--mode flag supports text, json, rpc modes",
+      "command": "pi --help | grep 'Output mode:'",
+      "status": "pass",
+      "evidence": "--mode <mode>                  Output mode: text (default), json, or rpc",
+      "duration_ms": 40,
+      "notes": "Three modes documented: text, json, rpc"
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "pass": 11,
+    "fail": 0,
+    "skip": 1,
+    "error": 0
+  },
+  "improvements": [
+    {
+      "id": "imp1",
+      "title": "Session directory naming could be more discoverable",
+      "description": "Session storage uses ~/.pi/agent/sessions/ with project paths encoded as directory names (e.g., --Users-ricardo-Workshop-GitHub-agent-pi--). Consider documenting the directory structure in --help examples or a session guide.",
+      "severity": "low"
+    },
+    {
+      "id": "imp2",
+      "title": "--export example shows relative paths; consider absolute path guidance",
+      "description": "Help text shows 'pi --export session.jsonl output.html' but --export appears to validate that the input file exists. Docs could clarify that source must be an existing session file path.",
+      "severity": "low"
+    }
+  ],
+  "divergences": []
+}

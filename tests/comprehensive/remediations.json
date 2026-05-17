@@ -1,0 +1,359 @@
+{
+  "groups": [
+    {
+      "id": "context-architecture",
+      "title": "Architecture \u2014 PI Context-Window Bloat",
+      "summary": "PI serializes all loaded extension and skill metadata into the system prompt, growing to ~262K tokens \u2014 overruns OpenRouter's 200K hard limit and causes ANY live invocation to fail until the session is cleared. Reproduced across slices 20-re (security) and 22-re (skills). Obsidian-memory eventually completed in a separate process with a fresh session (22 min run).",
+      "items": [
+        {
+          "id": "rem-ctx-1",
+          "priority": "P0",
+          "effort": "M",
+          "title": "Lazy-load SKILL.md contents on demand",
+          "rationale": "Eager loading of every SKILL.md inflates the system prompt. Defer file reads until a skill is actually triggered by a slash command.",
+          "action": "In the skill loader, return only {name, description, triggers, slashCommands} at load time; fetch full body on first invocation.",
+          "owner_hint": "pi core team (skill resolver)",
+          "files": [
+            "pi-coding-agent/src/skills/loader.ts (or equivalent)"
+          ]
+        },
+        {
+          "id": "rem-ctx-2",
+          "priority": "P0",
+          "effort": "S",
+          "title": "Audit memory-cycle.ts prompt budget",
+          "rationale": "memory-cycle.ts emits the stale-context warning during slice 18 and contributes substantial system-prompt content. Trim or paginate its restored-memory block.",
+          "action": "Cap the restored-memory section at e.g. 8K tokens and elide older entries; surface a 'memory truncated' note instead.",
+          "owner_hint": "extensions team",
+          "files": [
+            "extensions/memory-cycle.ts"
+          ]
+        },
+        {
+          "id": "rem-ctx-3",
+          "priority": "P1",
+          "effort": "S",
+          "title": "Honor --no-extensions for the session itself",
+          "rationale": "Even with `--no-session --no-extensions`, accumulated session state still consumed 282K tokens. Verify the flag truly sheds extension prompts.",
+          "action": "Add an integration test that `pi --no-extensions --no-session -p 'OK'` produces a system prompt under 8K tokens.",
+          "owner_hint": "pi core",
+          "files": [
+            "tests/integration/no-extensions-budget.test.ts (new)"
+          ]
+        },
+        {
+          "id": "rem-ctx-4",
+          "priority": "P1",
+          "effort": "M",
+          "title": "Add pi-doctor check for context-budget overflow",
+          "rationale": "Users hit a cryptic OpenRouter 400 with no signal that the cause is local. pi-doctor should pre-flight the expected system-prompt token count and warn.",
+          "action": "Extend pi-doctor.sh to tokenize the assembled system prompt and warn if it exceeds 150K (configurable per provider).",
+          "owner_hint": "tools team",
+          "files": [
+            "pi-doctor.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vitest-failures",
+      "title": "Test Suite \u2014 13 Vitest Failures",
+      "summary": "extensions vitest run: 1763/1776 pass. Real failures cluster in tool-advisor config, commander-tracker mission-brief forwarding, escape-cancel, extension-inventory fingerprint, interfaze demos, and plan-viewer regressions.",
+      "items": [
+        {
+          "id": "rem-tests-tooladvisor",
+          "priority": "P1",
+          "effort": "S",
+          "title": "Reconcile agents/models.json with tool-advisor expectations",
+          "rationale": "tool-advisor.test.ts expects provider='openrouter' but the on-disk models.json has 'openai-codex'. Either the test or the config drifted.",
+          "action": "Run `cat agents/models.json` and decide canonical value; update either the test or the file. If 'openai-codex' is correct, update tool-advisor.test.ts; otherwise update models.json.",
+          "owner_hint": "advisor maintainers",
+          "files": [
+            "agents/models.json",
+            "extensions/__tests__/tool-advisor.test.ts"
+          ]
+        },
+        {
+          "id": "rem-tests-commander-tracker",
+          "priority": "P1",
+          "effort": "M",
+          "title": "Fix 3 mission-brief forwarding asserts in commander-tracker-mission-brief.test.ts",
+          "rationale": "commander-tracker is the bridge to Commander; broken mission-brief forwarding affects new-task creation visibility on the kanban board.",
+          "action": "Run the failing test, capture the diff between expected and actual brief payload, patch commander-tracker.ts to emit the missing fields.",
+          "owner_hint": "commander interop team",
+          "files": [
+            "extensions/commander-tracker.ts",
+            "extensions/__tests__/commander-tracker-mission-brief.test.ts"
+          ]
+        },
+        {
+          "id": "rem-tests-fingerprint",
+          "priority": "P2",
+          "effort": "XS",
+          "title": "Regenerate extension-inventory fingerprint",
+          "rationale": "Hash mismatch in extension-inventory.test.ts indicates the inventory was edited without updating the fingerprint snapshot.",
+          "action": "Run vitest in update mode for that test or regenerate the fingerprint by hand.",
+          "owner_hint": "anyone",
+          "files": [
+            "extensions/__tests__/extension-inventory.test.ts"
+          ]
+        },
+        {
+          "id": "rem-tests-interfaze",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Land missing interfaze demo files (3 file-existence fails)",
+          "rationale": "interfaze-*demo*.test.ts expects files that aren't in the repo (or were renamed).",
+          "action": "Either add the demo files referenced by the tests OR mark the tests xfail with a tracking issue.",
+          "owner_hint": "interfaze maintainers",
+          "files": [
+            "extensions/__tests__/interfaze-*.test.ts"
+          ]
+        },
+        {
+          "id": "rem-tests-plan-viewer",
+          "priority": "P1",
+          "effort": "M",
+          "title": "Investigate 2 plan-viewer regressions",
+          "rationale": "plan-viewer.test.ts and plan-viewer-html-regression.test.ts both fail \u2014 one on source content, one on HTML output. plan-viewer is user-visible; regressions block the /plan UX.",
+          "action": "Run vitest in watch mode on those files; diff observed vs golden output; fix.",
+          "owner_hint": "viewer team",
+          "files": [
+            "extensions/plan-viewer.ts",
+            "extensions/__tests__/plan-viewer*.test.ts"
+          ]
+        },
+        {
+          "id": "rem-tests-escape-cancel",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Investigate escape-cancel lifecycle test",
+          "rationale": "escape-cancel.test.ts fails on ESC context-switch lifecycle. Likely a small state-machine fix.",
+          "action": "Reproduce the failing assert; add a debug log to the lifecycle transition; patch the missed state.",
+          "owner_hint": "UX team",
+          "files": [
+            "extensions/escape-cancel.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "coverage",
+      "title": "Coverage \u2014 42 Untested Extensions + pi-computer-use",
+      "summary": "65 extensions audited; only 23 (35%) have vitest coverage. pi-computer-use package ships ZERO unit tests, violating CLAUDE.md TDD rule.",
+      "items": [
+        {
+          "id": "rem-cov-1",
+          "priority": "P1",
+          "effort": "L",
+          "title": "Add tests for orchestration + viewer extensions",
+          "rationale": "agent-team, agent-chain, pipeline-team, board-viewer, completion-report, plan-viewer, spec-viewer, test-viewer collectively shape user experience but lack unit tests.",
+          "action": "Per CLAUDE.md TDD rule: for each, write a failing test that captures one expected behavior, then patch to green. Start with agent-team (most-used).",
+          "owner_hint": "extension owners",
+          "files": [
+            "extensions/{agent-team,agent-chain,pipeline-team,board-viewer,completion-report}.ts"
+          ]
+        },
+        {
+          "id": "rem-cov-2",
+          "priority": "P0",
+          "effort": "M",
+          "title": "Add pi-computer-use test suite",
+          "rationale": "pi-computer-use/ has bridge.ts (3670 lines), config.ts, permissions.ts and a 2097-line Swift bridge, but no test files. CLAUDE.md rule #2 mandates TDD on every change.",
+          "action": "Bootstrap vitest in pi-computer-use/. Start with config.ts (layered config resolution is testable without macOS) and permissions.ts (mock the OS APIs).",
+          "owner_hint": "pi-computer-use maintainer",
+          "files": [
+            "pi-computer-use/src/{bridge,config,permissions}.ts"
+          ]
+        },
+        {
+          "id": "rem-cov-3",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Add coverage targets to extension-inventory test",
+          "rationale": "extension-inventory currently audits presence; extend it to assert a minimum test ratio per extension category.",
+          "action": "Add an assertion: for every public-facing extension, a matching .test.ts must exist. Fail-fast on regression.",
+          "owner_hint": "QA",
+          "files": [
+            "extensions/__tests__/extension-inventory.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cli-divergences",
+      "title": "CLI \u2014 Documented Divergences",
+      "summary": "Several pi CLI flags accept invalid values silently or have surprising scope semantics.",
+      "items": [
+        {
+          "id": "rem-cli-mode",
+          "priority": "P2",
+          "effort": "XS",
+          "title": "Reject invalid --mode values",
+          "rationale": "`pi --mode bogus` currently exits 0 and falls through to text mode. Should reject with the list of valid modes (text|json|rpc).",
+          "action": "Add validation in the mode-parser; mirror how --thinking rejects unknown levels.",
+          "owner_hint": "pi core CLI",
+          "files": [
+            "pi-coding-agent/src/cli/parse.ts (or equivalent)"
+          ]
+        },
+        {
+          "id": "rem-cli-no-tools",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Document or enforce --no-tools across extension-registered tools",
+          "rationale": "`--no-tools` disables built-in tools but does NOT block extension meta-tools (call_tool, tool_search). Users may assume it disables everything.",
+          "action": "Decide policy: either (a) make --no-tools also disable extension tools, or (b) document the exception in --help and add a flag like --no-extension-tools.",
+          "owner_hint": "pi core",
+          "files": [
+            "pi-coding-agent/src/tools/*.ts",
+            "pi --help text"
+          ]
+        },
+        {
+          "id": "rem-cli-provider-fallback",
+          "priority": "P1",
+          "effort": "S",
+          "title": "Auto-fall-back to OpenRouter when default provider has no key",
+          "rationale": "If OPENROUTER_API_KEY is set but the default (google) is not, pi errors with 'no api key' instead of routing via OpenRouter.",
+          "action": "Provider selection: if default fails 'missing key', and OPENROUTER_API_KEY is present, switch to openrouter (with a stderr note).",
+          "owner_hint": "pi core provider",
+          "files": [
+            "pi-coding-agent/src/providers/select.ts (or equivalent)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ecosystem-cleanup",
+      "title": "Ecosystem \u2014 Deprecated + Mislabeled Items",
+      "summary": "Several extensions and skills are stale, deprecated, or non-canonical and should be cleaned up.",
+      "items": [
+        {
+          "id": "rem-eco-dream-broken",
+          "priority": "P1",
+          "effort": "XS",
+          "title": "dream-scheduler.ts crashes on load (TypeError)",
+          "rationale": "Live invocation of dream-scheduler raises \"definition.execute is not a function\". Deprecated extension is not just stale \u2014 it actively breaks pi -e loading.",
+          "action": "Delete dream-scheduler.ts now (already user-approved DELETE-ME) OR add an execute() stub if any consumer remains.",
+          "owner_hint": "ecosystem owner",
+          "files": [
+            "extensions/dream-scheduler.ts"
+          ]
+        },
+        {
+          "id": "rem-eco-memcycle-module",
+          "priority": "P0",
+          "effort": "S",
+          "title": "memory-cycle.ts: module not found \"anthropic.js\" in pi-ai dist",
+          "rationale": "pi -e .../memory-cycle.ts fails with \"Cannot find module '.../anthropic.js'\" under pi-ai dist/providers/. Combined with the system-prompt bloat finding, memory-cycle is both an install-fragility risk AND a context cost.",
+          "action": "Audit memory-cycle's require/import resolution against pi-ai bundle; ensure provider modules are listed in the package manifest or use dynamic resolution with fallback.",
+          "owner_hint": "extensions team",
+          "files": [
+            "extensions/memory-cycle.ts",
+            "pi-ai dist/providers/"
+          ]
+        },
+        {
+          "id": "rem-eco-summary-mode-ctx",
+          "priority": "P1",
+          "effort": "M",
+          "title": "summary-mode.ts captures stale ctx after newSession()",
+          "rationale": "Live load of summary-mode triggers \"extension ctx captured outside withSession() and used after ctx.newSession()\" at subagent-widget.ts:638. The captured context becomes stale after a session swap.",
+          "action": "Refactor summary-mode to pass ctx through the withSession callback rather than capturing the outer ctx; pattern is the same as the warning the runtime emits.",
+          "owner_hint": "extensions team",
+          "files": [
+            "extensions/summary-mode.ts",
+            "extensions/subagent-widget.ts:638"
+          ]
+        },
+        {
+          "id": "rem-eco-deprecated-exts",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Remove deprecated extensions (user-approved)",
+          "rationale": "dream-scheduler, gemma-overlay, secure, session-recap are marked DELETE-ME (gemma-overlay last consumer folded; secure superseded by vuln-scanner; session-recap is an empty stub).",
+          "action": "Delete the four files + any imports. Verify no remaining consumers by `grep`.",
+          "owner_hint": "ecosystem owner",
+          "files": [
+            "extensions/{dream-scheduler,gemma-overlay,secure,session-recap}.ts"
+          ]
+        },
+        {
+          "id": "rem-eco-qa-skill",
+          "priority": "P3",
+          "effort": "XS",
+          "title": "Add SKILL.md to qa-automation (or move it out of skills/)",
+          "rationale": "qa-automation/ is 252KB but has README.md instead of SKILL.md, so the standard skill resolver can't find it.",
+          "action": "Either create a SKILL.md pointing to the README, or relocate qa-automation outside skills/ if it isn't actually a skill.",
+          "owner_hint": "qa-automation maintainer",
+          "files": [
+            "skills/qa-automation/"
+          ]
+        },
+        {
+          "id": "rem-eco-doctor",
+          "priority": "P3",
+          "effort": "XS",
+          "title": "Fix broken symlinks under commands/",
+          "rationale": "pi-doctor.sh exits 1 because of unrelated broken symlinks in commands/. Hides real diagnostics.",
+          "action": "Locate the broken symlinks (`find commands -type l ! -e .`) and remove or repoint them.",
+          "owner_hint": "anyone",
+          "files": [
+            "commands/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "interop",
+      "title": "Commander Interop \u2014 Working but Strict",
+      "summary": "PI \u2194 Commander interop is fully functional (slice 25: 5/7 pass; slice 8: 14/14). The one fail is intentional schema enforcement on task creation.",
+      "items": [
+        {
+          "id": "rem-interop-doc",
+          "priority": "P3",
+          "effort": "XS",
+          "title": "Document the cmd task add schema in cmd-plan",
+          "rationale": "Agents discovered the strict schema empirically (--title, --description, --primary-file, --body with ## Steps/Tests/References, --lifecycle-owner). The discovery cost a failing test.",
+          "action": "Add a runnable example to `cmd guide agent` showing the minimum valid `cmd task add` invocation.",
+          "owner_hint": "cmd maintainer",
+          "files": [
+            "commander v2 guide docs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "observability",
+      "title": "Observability \u2014 Easier Future Tests",
+      "summary": "The comprehensive test surfaced inconsistencies in how pi reports errors and how slow operations are bounded.",
+      "items": [
+        {
+          "id": "rem-obs-timeout",
+          "priority": "P2",
+          "effort": "S",
+          "title": "Add per-invocation soft timeout (env-overridable)",
+          "rationale": "pi -p has no built-in timeout; agents resort to wrapping with `timeout 90 pi -p ...`. macOS lacks `timeout` by default, forcing Python subprocess wrappers.",
+          "action": "Add `--max-duration <seconds>` flag (env: PI_MAX_DURATION) that aborts the invocation cleanly with exit 124-compatible code.",
+          "owner_hint": "pi core CLI",
+          "files": [
+            "pi-coding-agent/src/main.ts"
+          ]
+        },
+        {
+          "id": "rem-obs-thinking-events",
+          "priority": "P3",
+          "effort": "S",
+          "title": "Surface thinking budget in --mode json",
+          "rationale": "Phase-2 thinking-levels probe showed off\u2192medium emits 0 thinking events while high/xhigh emit 18-20. There is no schema event documenting the configured vs effective budget.",
+          "action": "Add a `thinking_budget` event to the JSON-mode stream at turn start.",
+          "owner_hint": "pi core mode",
+          "files": [
+            "pi-coding-agent/src/output/json-stream.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}

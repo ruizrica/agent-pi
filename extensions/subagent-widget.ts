@@ -269,12 +269,38 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function safeUi(ctx: any): any | undefined {
+		try {
+			return ctx?.hasUI ? ctx.ui : undefined;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			if (msg.includes("ctx is stale") || msg.includes("stale after session replacement")) return undefined;
+			throw err;
+		}
+	}
+
+	function safeNotify(ctx: any, message: string, level: "info" | "success" | "warning" | "error") {
+		try {
+			safeUi(ctx)?.notify?.(message, level);
+		} catch (err) {
+			console.error(`[subagent] notify skipped:`, err instanceof Error ? err.message : err);
+		}
+	}
+
+	function safeSetWidget(ctx: any, key: string, value: any) {
+		try {
+			safeUi(ctx)?.setWidget?.(key, value);
+		} catch (err) {
+			console.error(`[subagent] setWidget skipped:`, err instanceof Error ? err.message : err);
+		}
+	}
+
 	function removeSubagentWidget(id: number, ctx: any, reason: string): boolean {
 		const state = agents.get(id);
 		if (!state) return false;
 		clearDismissTimer(state);
 		logLifecycle(state, ctx, "auto_remove", { status: state.status, reason });
-		ctx?.ui?.setWidget?.(`sub-${id}`, undefined);
+		safeSetWidget(ctx, `sub-${id}`, undefined);
 		widgetBoxes.delete(id);
 		agents.delete(id);
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
@@ -552,7 +578,7 @@ export default function (pi: ExtensionAPI) {
 					state.failureDetail = timeoutMsg;
 					state.textChunks.push(`\n[TIMEOUT] ${timeoutMsg}`);
 					logLifecycle(state, ctx, "timeout", { maxDurationMs: state.maxDurationMs, pid: state.proc?.pid });
-					ctx.ui.notify(`SA${state.id} (${state.name}) timed out after ${mins}m`, "warning");
+					safeNotify(ctx, `SA${state.id} (${state.name}) timed out after ${mins}m`, "warning");
 					if (state.proc) {
 						killGracefully(state.proc, TIMEOUT_KILL_GRACE_MS).catch((err: any) => {
 							logLifecycle(state, ctx, "timeout_kill_error", { error: err?.message || err });
@@ -635,7 +661,8 @@ export default function (pi: ExtensionAPI) {
 
 				// Standby spawns (warmup) suppress notification and follow-up message.
 				if (!state.standby) {
-					ctx.ui.notify(
+					safeNotify(
+						ctx,
 						`SA${state.id} (${state.name}) ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
 						state.status === "done" ? "success" : "error"
 					);

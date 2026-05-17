@@ -161,11 +161,11 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 		name: "dream_status",
 		description: "Check global Pi dream state and freshness",
 		parameters: Type.Object({}),
-		handler: async () => {
+		execute: async () => {
 			const state = readDreamState();
 			const hoursSince = getHoursSinceLastDream(state);
 			const isStale = hoursSince !== null && hoursSince > state.intervalHours;
-			return {
+			const details = {
 				lastDream: state.lastDream,
 				hoursSinceLastDream: hoursSince ? Math.round(hoursSince * 10) / 10 : null,
 				intervalHours: state.intervalHours,
@@ -175,6 +175,10 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 				isStale,
 				nextDream: formatNextDream(state),
 				lastSummary: state.lastSummary || null,
+			};
+			return {
+				content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
+				details,
 			};
 		},
 	});
@@ -190,30 +194,27 @@ export default function dreamScheduler(pi: ExtensionAPI) {
 			recommendationsGenerated: Type.Number(),
 			scope: Type.Optional(Type.String()),
 		}),
-		handler: async (params: {
-			workspacesScanned: number;
-			sourcesConsolidated: number;
-			durableMemoriesPromoted: number;
-			supersededItems: number;
-			recommendationsGenerated: number;
-			scope?: string;
-		}) => {
+		execute: async (_toolCallId, params) => {
 			const state = readDreamState();
 			state.lastDream = new Date().toISOString();
 			state.lastScope = params.scope === "workspace" ? "workspace" : "global";
 			state.lastSummary = {
-				workspacesScanned: params.workspacesScanned,
-				sourcesConsolidated: params.sourcesConsolidated,
-				durableMemoriesPromoted: params.durableMemoriesPromoted,
-				supersededItems: params.supersededItems,
-				recommendationsGenerated: params.recommendationsGenerated,
+				workspacesScanned: params.workspacesScanned ?? 0,
+				sourcesConsolidated: params.sourcesConsolidated ?? 0,
+				durableMemoriesPromoted: params.durableMemoriesPromoted ?? 0,
+				supersededItems: params.supersededItems ?? 0,
+				recommendationsGenerated: params.recommendationsGenerated ?? 0,
 			};
 			writeDreamState(state);
-			return {
+			const details = {
 				recorded: true,
 				lastDream: state.lastDream,
 				nextDream: formatNextDream(state),
 				globalRoot: state.globalRoot,
+			};
+			return {
+				content: [{ type: "text", text: JSON.stringify(details, null, 2) }],
+				details,
 			};
 		},
 	});

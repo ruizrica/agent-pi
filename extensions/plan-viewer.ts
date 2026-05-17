@@ -464,8 +464,9 @@ export default function (pi: ExtensionAPI) {
 			// re-persisted as new report entries.
 			let result: ViewerResult;
 			try {
+				const viewerOptions = { forceBrowser: !!forceBrowser };
 				result = await runViewer(ctx, markdown, effectiveFilePath, displayTitle, purpose, signal, {
-					forceBrowser: !!forceBrowser,
+					...viewerOptions,
 					readonly: fromSnapshot || !!readonlyFlag,
 				});
 			} catch (err: any) {

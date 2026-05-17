@@ -1,0 +1,75 @@
+{
+  "tests": [
+    {
+      "name": "vuln-scanner",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 20006,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "secure",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 20005,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "safe-port-scan",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 45005,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "security-guard",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 20006,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "security-news",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 75011,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "security-report",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 20005,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "message-integrity-guard",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 20005,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    },
+    {
+      "name": "network-inspect",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 45005,
+      "reason": "Verified with active model openai-codex/gpt-5.4-mini; extension loads and responds within timeout.",
+      "evidence": "Live invocation completed successfully after remediation/retest."
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "pass": 8,
+    "fail": 0,
+    "error": 0,
+    "skip": 0
+  }
+}

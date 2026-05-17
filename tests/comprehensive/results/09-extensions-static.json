@@ -1,0 +1,589 @@
+{
+  "timestamp": "2026-05-17T19:20:51.638Z",
+  "metadata": {
+    "total": 65,
+    "pass": 65,
+    "skip": 4,
+    "fail": 0,
+    "error": 0,
+    "total_extensions_audited": 65,
+    "with_tests": 23,
+    "without_tests": 42,
+    "private_extensions_count": 7
+  },
+  "summary": {
+    "description": "Static audit of all PI Agent extensions in /extensions and pi-computer-use/extensions",
+    "coverage": "23/61 public extensions have tests",
+    "deprecated_count": 4
+  },
+  "improvements": [
+    "agent-banner: missing test coverage for banner rendering",
+    "agent-chain: no test for chain orchestration logic",
+    "agent-identity: missing test for agent name resolution",
+    "agent-nav: missing test for F-key navigation",
+    "agent-team: missing test for team dispatcher",
+    "board-viewer: missing test for kanban board viewer",
+    "claudemode-toggle: missing test for mode toggle logic",
+    "completion-report: missing test for report generation",
+    "complex-problem-loop: missing test for loop scaffolding",
+    "debug-capture: missing test for debug capture tool",
+    "footer: missing test for footer widget",
+    "interfaze: missing test for interfaze extension",
+    "lean-tools: missing test for lean mode detection",
+    "lmstudio-overlay: missing test for LM Studio provider",
+    "message-integrity-guard: missing test for integrity checks",
+    "mode-cycler: missing test for mode cycling logic",
+    "obsidian-memory: missing test for Obsidian integration",
+    "openrouter-routing: missing test for routing logic",
+    "pacifico: missing test for pacifico client",
+    "pipeline-team: missing test for pipeline orchestration",
+    "reports-viewer: missing test for report browser",
+    "research-viewer: missing test for research sessions",
+    "secure: deprecated, should be removed",
+    "security-guard: missing test for security logic",
+    "session-recap: deprecated stub, should be removed",
+    "sounds: missing test for sound viewer",
+    "subagent-widget: missing test for subagent widget",
+    "summary-runtime-patch: missing test for runtime patching",
+    "system-select: missing test for system selection",
+    "tasks: missing test for task discipline",
+    "test-viewer: missing test for test viewer",
+    "theme-cycler: missing test for theme cycling",
+    "tool-caller: missing test for tool invocation",
+    "tool-registry: missing test for tool registry",
+    "tool-search: missing test for tool search",
+    "user-question: missing test for user interaction",
+    "viewer-aliases: missing test for alias resolution",
+    "vuln-scanner: missing test for vulnerability scanning",
+    "web-chat: missing test for web chat interface",
+    "web-test: missing test for web testing"
+  ],
+  "divergences": [
+    "gemma-overlay marked DELETE-ME: last consumer folded to direct import in mode-cycler",
+    "dream-scheduler marked DELETE-ME: user-approved deletion pending",
+    "secure marked DELETE-ME: superseded by vuln-scanner, no consumers verified",
+    "session-recap deprecated: stub retained for backwards compatibility only"
+  ],
+  "tests": [
+    {
+      "id": "ext.advisor-command",
+      "name": "advisor-command extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Registers /advisor for on-demand Claude advisor guidance from the current Pi session. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.agent-banner",
+      "name": "agent-banner extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Displays ASCII art banner above the editor on session start. | test=no",
+      "notes": "export function showBanner(ctx: ExtensionContext) {"
+    },
+    {
+      "id": "ext.agent-chain",
+      "name": "agent-chain extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Sequential pipeline orchestrator that chains agent steps with prompt templates. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.agent-identity",
+      "name": "agent-identity extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Centralized agent identity resolution for stable Commander registration and heartbeats. | test=no",
+      "notes": "export function resolveAgentName(): string {"
+    },
+    {
+      "id": "ext.agent-nav",
+      "name": "agent-nav extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Shared F-key navigation for agent widgets (chain, team) | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.agent-team",
+      "name": "agent-team extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Multi-agent team dispatcher with specialist agents and grid dashboard. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.board-viewer",
+      "name": "board-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Task Board Viewer — opens a GUI browser window showing a live Kanban board of agent work. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.claude-advisor",
+      "name": "claude-advisor extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: On-demand Opus advisor tool powered by Claude Code CLI. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.claudemode-toggle",
+      "name": "claudemode-toggle extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Ensures Claude uses direct API mode instead of Claude Code CLI mode | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.cleanup-viewer",
+      "name": "cleanup-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Disk Cleanup viewer — opens a browser GUI for scanning, analyzing, and deleting junk files. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.commander-lifecycle-guard",
+      "name": "commander-lifecycle-guard extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Stop/start guard for Commander lifecycle recovery. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.commander-tracker",
+      "name": "commander-tracker extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Extension that reconciles local tasks with Commander and retries failed sync ops. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.completion-report",
+      "name": "completion-report extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Completion Report Viewer — opens a GUI browser window showing work summary, file diffs, and | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.complex-problem-loop",
+      "name": "complex-problem-loop extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Complex problem loop session scaffolding for iterative hard-task workflows. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.computer-use",
+      "name": "computer-use extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "Computer use status widget and lifecycle management | test=no",
+      "notes": "export default function computerUseExtension(pi: ExtensionAPI)"
+    },
+    {
+      "id": "ext.debug-capture",
+      "name": "debug-capture extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: VHS-based debug capture tool that screenshots Pi's TUI for visual inspection. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.dream-scheduler",
+      "name": "dream-scheduler extension audit",
+      "command": "static audit",
+      "status": "skip",
+      "evidence": "DELETE-ME (user-approved): Ricardo asked to drop this extension during the | test=yes",
+      "notes": "export default function dreamScheduler(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.escape-cancel",
+      "name": "escape-cancel extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Double-tap ESC cancels all running operations (agent stream, subagents, chains, pipelines). | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.file-viewer",
+      "name": "file-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Lightweight local file viewer/editor that opens in the browser without Commander. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.footer",
+      "name": "footer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Footer widget displaying model name, context percentage + window size, and working director | test=no",
+      "notes": "export function formatTokens(n: number): string {"
+    },
+    {
+      "id": "ext.gemma-overlay",
+      "name": "gemma-overlay extension audit",
+      "command": "static audit",
+      "status": "skip",
+      "evidence": "DELETE-ME (safe): last consumer (extensions/mode-cycler.ts:10) folded to import | test=no",
+      "notes": ""
+    },
+    {
+      "id": "ext.goal-loop",
+      "name": "goal-loop extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: GOAL mode loop tools with completion cleanup back to NORMAL mode. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.interfaze",
+      "name": "interfaze extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "(no comment) | test=no",
+      "notes": "export default function interfazeExtension(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.lean-tools",
+      "name": "lean-tools extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Lean Tools Mode — reduces system prompt bloat by deactivating non-essential tools. | test=no",
+      "notes": "export function isLeanMode(): boolean {"
+    },
+    {
+      "id": "ext.learn",
+      "name": "learn extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: /learn support for capturing a codebase/folder snapshot into Obsidian. | test=yes",
+      "notes": "export const __testExports = {"
+    },
+    {
+      "id": "ext.lmstudio-overlay",
+      "name": "lmstudio-overlay extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Registers LM Studio as a Pi provider and exposes health checks for local Gemma and Qwen ove | test=no",
+      "notes": "export const LMSTUDIO_BASE_URL = \"http://127.0.0.1:1234/v1\";"
+    },
+    {
+      "id": "ext.memory-cycle",
+      "name": "memory-cycle extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Memory-aware compaction extension — hooks into pi's native compaction to save/restore conte | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.message-integrity-guard",
+      "name": "message-integrity-guard extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "(no comment) | test=no",
+      "notes": "export default function messageIntegrityGuard(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.mode-cycler",
+      "name": "mode-cycler extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/INVESTIGATE/GOAL/PIPELINE/TEAM/CHAIN) via Shift+ | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.network-inspect",
+      "name": "network-inspect extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Guarded passive local network inspection tool with interface/listener discovery and bounded | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.obsidian-memory",
+      "name": "obsidian-memory extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Obsidian Knowledge Base extension — Karpathy-style agent memory via Obsidian CLI. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.openrouter-routing",
+      "name": "openrouter-routing extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: OpenRouter routing extension — syncs the OpenRouter catalog and exposes provider/quantizati | test=no",
+      "notes": "export default function openrouterRoutingExtension(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.pacifico",
+      "name": "pacifico extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Pacifico extension — terminal client for the pacifico worker (chat + jobs). | test=no",
+      "notes": "export default function pacificoExtension(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.pipeline-team",
+      "name": "pipeline-team extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Pipeline-Team — Hybrid sequential pipeline with parallel agent dispatch | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.plan-viewer",
+      "name": "plan-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Interactive Plan Viewer — opens a GUI browser window for markdown plan review. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.reports-viewer",
+      "name": "reports-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Persisted reports browser for plans, questions, specs, and completion reports. | test=no",
+      "notes": "export function openOriginalReport(entry: any): void {"
+    },
+    {
+      "id": "ext.research-viewer",
+      "name": "research-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Research sessions browser for autoresearch lifecycle tracking. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.safe-port-scan",
+      "name": "safe-port-scan extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Safe port scan wrapper around nmap with strict local/private scope checks and conservative  | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.secure",
+      "name": "secure extension audit",
+      "command": "static audit",
+      "status": "skip",
+      "evidence": "DELETE-ME (safe): superseded by extensions/vuln-scanner.ts. No consumers verified | test=no",
+      "notes": ""
+    },
+    {
+      "id": "ext.security-guard",
+      "name": "security-guard extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Pre-tool-hook security system — blocks destructive commands, detects prompt injection, prev | test=no",
+      "notes": "export default function securityGuard(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.security-news",
+      "name": "security-news extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Curated security news/advisory retrieval for trusted sources like CISA, NVD, OWASP, and CVE | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.security-report",
+      "name": "security-report extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Dedicated browser viewer for network/security analysis reports. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.send-email",
+      "name": "send-email extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Agent email sending extension — enables agents to send emails via AgentMail through Command | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.session-recap",
+      "name": "session-recap extension audit",
+      "command": "static audit",
+      "status": "skip",
+      "evidence": "ABOUTME: Deprecated extension stub retained so older launch configs do not fail. | test=no",
+      "notes": "export default function (_pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.session-replay",
+      "name": "session-replay extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Scrollable session timeline replay via /replay command. | test=yes",
+      "notes": "export interface HistoryItem {"
+    },
+    {
+      "id": "ext.sounds",
+      "name": "sounds extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Soundcn Extension — Browser-based sound viewer with Pi lifecycle hook notifications. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.spec-viewer",
+      "name": "spec-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Spec Viewer — opens a multi-page browser GUI for reviewing, commenting, and approving speci | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.subagent-widget",
+      "name": "subagent-widget extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Spawns and manages background subagent processes with live status widgets. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.summary-mode",
+      "name": "summary-mode extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Toggleable main-session summary mode shown in place of normal output. | test=yes",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.summary-runtime-patch",
+      "name": "summary-runtime-patch extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Startup runtime patch for Pi interactive mode to support true summary-only rendering. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.system-select",
+      "name": "system-select extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Switches the system prompt by selecting agent definitions via /system command. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.tasks",
+      "name": "tasks extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Task discipline extension that gates agent tools until tasks are defined. | test=no",
+      "notes": "export interface CurrentTaskInfo { id: number; text: string; claimedBy?: string;"
+    },
+    {
+      "id": "ext.test-viewer",
+      "name": "test-viewer extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Interactive Test Viewer — opens a browser GUI for reviewing generated Gherkin specs and Pla | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.theme-cycler",
+      "name": "theme-cycler extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Cycles through available themes with Alt+T / Alt+Shift+T shortcuts and /theme command. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.tool-advisor",
+      "name": "tool-advisor extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: tool_advisor extension — LLM gatekeeper for destructive tool calls (Apple paper pattern). | test=yes",
+      "notes": "export default function toolAdvisor(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.tool-caller",
+      "name": "tool-caller extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Tool Caller — meta-tool that lets the agent invoke other tools programmatically by name. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.tool-registry",
+      "name": "tool-registry extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Tool Registry — in-memory index of all available tools with categorization and search. | test=no",
+      "notes": "export interface ToolEntry {"
+    },
+    {
+      "id": "ext.tool-response-attribution",
+      "name": "tool-response-attribution extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Tool Response Attribution Guard — prevents tool/extension results from being treated as use | test=yes",
+      "notes": "export default function toolResponseAttribution(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.tool-search",
+      "name": "tool-search extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Tool Search — meta-tool that lets the agent discover and inspect available tools at runtime | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.toolkit-commands",
+      "name": "toolkit-commands extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Registers toolkit .md files from .pi/commands/ as dynamic Pi slash commands. | test=yes",
+      "notes": "export function mapTools(toolList: string[]): string[] {"
+    },
+    {
+      "id": "ext.user-question",
+      "name": "user-question extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: User Question — Interactive UI tool for agent-to-user communication | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.viewer-aliases",
+      "name": "viewer-aliases extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Slash-command aliases for viewer re-opens from the /reports browser. | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.vuln-scanner",
+      "name": "vuln-scanner extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: /vuln-scanner command extension — AI Project Vulnerability Scanner and Protection Installer | test=no",
+      "notes": "export default function vulnScanner(pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.web-chat",
+      "name": "web-chat extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Web Chat Extension — opens a LAN-accessible chat interface that relays to the main Pi sessi | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    },
+    {
+      "id": "ext.web-test",
+      "name": "web-test extension audit",
+      "command": "static audit",
+      "status": "pass",
+      "evidence": "ABOUTME: Remote web testing extension using Cloudflare Browser Rendering for screenshots, content ex | test=no",
+      "notes": "export default function (pi: ExtensionAPI) {"
+    }
+  ]
+}

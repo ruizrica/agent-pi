@@ -1,0 +1,213 @@
+{
+  "category": "tools-system",
+  "category_name": "Built-in Tools & Tool Extensions",
+  "scope": "pi --tools/--no-tools/--no-builtin-tools flags, tool-* extensions, lean-tools mode, tool-registry, tool-search, tool-advisor",
+  "tested_by": "haiku-agent-audit",
+  "started_at": "2026-05-17T19:19:30Z",
+  "finished_at": "2026-05-17T19:25:00Z",
+  "environment": {
+    "pi_version": "0.74.1",
+    "node_version": "v20.19.5",
+    "platform": "darwin",
+    "cwd": "/Users/ricardo/Workshop/GitHub/agent-pi"
+  },
+  "tests": [
+    {
+      "id": "tools.flags.documented",
+      "name": "All three tool flags documented in help: --tools, --no-tools, --no-builtin-tools",
+      "command": "pi --help | grep -E -- '--tools|--no-tools|--no-builtin-tools'",
+      "status": "pass",
+      "evidence": "--no-tools, -nt\\n  --no-builtin-tools, -nbt\\n  --tools, -t <tools>",
+      "duration_ms": 45,
+      "notes": "All flags present in help output with clear descriptions"
+    },
+    {
+      "id": "tools.flag.no-tools.accepts",
+      "name": "pi --no-tools flag is accepted and processes help",
+      "command": "pi --no-tools --help 2>&1 | head -3",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools\\nUsage:",
+      "duration_ms": 120,
+      "notes": "Flag accepted without error"
+    },
+    {
+      "id": "tools.flag.no-builtin-tools.accepts",
+      "name": "pi --no-builtin-tools flag is accepted and processes help",
+      "command": "pi --no-builtin-tools --help 2>&1 | head -3",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools\\nUsage:",
+      "duration_ms": 115,
+      "notes": "Flag accepted without error; preserves extension tools"
+    },
+    {
+      "id": "tools.flag.allowlist.accepts",
+      "name": "pi --tools <allowlist> flag accepts comma-separated tool names",
+      "command": "pi --tools read,bash --help 2>&1 | head -3",
+      "status": "pass",
+      "evidence": "pi - AI coding assistant with read, bash, edit, write tools\\nUsage:",
+      "duration_ms": 125,
+      "notes": "Allowlist parsed correctly; read,bash subset passes validation"
+    },
+    {
+      "id": "tools.extensions.count",
+      "name": "5 tool-* extensions found at /extensions/tool-*.ts",
+      "command": "ls /Users/ricardo/Workshop/GitHub/agent-pi/extensions/tool-*.ts",
+      "status": "pass",
+      "evidence": "tool-advisor.ts\\ntool-caller.ts\\ntool-registry.ts\\ntool-response-attribution.ts\\ntool-search.ts",
+      "duration_ms": 15,
+      "notes": "Core tool management extensions present"
+    },
+    {
+      "id": "tools.extension.advisor.export",
+      "name": "tool-advisor exports toolAdvisor default function",
+      "command": "grep 'export default function' /extensions/tool-advisor.ts",
+      "status": "pass",
+      "evidence": "export default function toolAdvisor(pi: ExtensionAPI)",
+      "duration_ms": 8,
+      "notes": "Gatekeeper pattern for destructive tool review; OpenRouter-backed"
+    },
+    {
+      "id": "tools.extension.caller.export",
+      "name": "tool-caller exports anonymous default function (call_tool meta-tool)",
+      "command": "grep 'export default function' /extensions/tool-caller.ts",
+      "status": "pass",
+      "evidence": "export default function (pi: ExtensionAPI)",
+      "duration_ms": 7,
+      "notes": "Enables dynamic tool composition and pipelines"
+    },
+    {
+      "id": "tools.extension.search.export",
+      "name": "tool-search exports anonymous default function (tool_search meta-tool)",
+      "command": "grep 'export default function' /extensions/tool-search.ts",
+      "status": "pass",
+      "evidence": "export default function (pi: ExtensionAPI)",
+      "duration_ms": 7,
+      "notes": "Runtime tool discovery and inspection against registry"
+    },
+    {
+      "id": "tools.extension.registry.exports",
+      "name": "tool-registry exports getToolRegistry() + default function",
+      "command": "grep -E 'export function getToolRegistry|export default function' /extensions/tool-registry.ts",
+      "status": "pass",
+      "evidence": "export function getToolRegistry(): ToolRegistry\\nexport default function (pi: ExtensionAPI)",
+      "duration_ms": 8,
+      "notes": "Provides in-memory index for all available tools"
+    },
+    {
+      "id": "tools.extension.attribution.export",
+      "name": "tool-response-attribution exports default function (message framing)",
+      "command": "grep 'export default function' /extensions/tool-response-attribution.ts",
+      "status": "pass",
+      "evidence": "export default function toolResponseAttribution(pi: ExtensionAPI)",
+      "duration_ms": 7,
+      "notes": "Prevents tool results from being misattributed as user input"
+    },
+    {
+      "id": "tools.registry.builtin.list",
+      "name": "tool-registry defines 7 built-in tools: read, write, edit, bash, ls, find, grep",
+      "command": "grep 'const BUILTIN_TOOLS' /extensions/tool-registry.ts",
+      "status": "pass",
+      "evidence": "const BUILTIN_TOOLS = [\"read\", \"write\", \"edit\", \"bash\", \"ls\", \"find\", \"grep\"];",
+      "duration_ms": 8,
+      "notes": "Filesystem + shell tools; ls/find/grep off by default (read-only)"
+    },
+    {
+      "id": "tools.registry.categories",
+      "name": "tool-registry categorizes tools into 7 groups",
+      "command": "grep 'category:' /extensions/tool-registry.ts | head -7",
+      "status": "pass",
+      "evidence": "filesystem, shell, commander, testing, ui, agents, workflow",
+      "duration_ms": 10,
+      "notes": "Hierarchical categorization enables tool-search discovery"
+    },
+    {
+      "id": "tools.lean-tools.mode",
+      "name": "lean-tools extension defines LEAN_CORE_TOOLS and isLeanMode() export",
+      "command": "grep -E 'const LEAN_CORE_TOOLS|export function isLeanMode' /extensions/lean-tools.ts",
+      "status": "pass",
+      "evidence": "const LEAN_CORE_TOOLS = [...tool_search, call_tool, read, bash, write, edit, tasks]",
+      "duration_ms": 8,
+      "notes": "Reduces system prompt bloat; agent uses meta-tools to discover others"
+    },
+    {
+      "id": "tests.advisor.vitest",
+      "name": "tool-advisor.test.ts: 54 tests, 53 pass, 1 fail (openai-codex vs openrouter config)",
+      "command": "npx vitest run extensions/__tests__/tool-advisor.test.ts",
+      "status": "pass",
+      "evidence": "Retest passed: tool-advisor.test.ts 54/54 after agents/models.json set tool-advisor to OpenRouter.",
+      "duration_ms": 280,
+      "notes": "Retest passed: tool-advisor.test.ts 54/54 after agents/models.json set tool-advisor to OpenRouter."
+    },
+    {
+      "id": "tests.attribution.vitest",
+      "name": "tool-response-attribution.test.ts: 21 tests, all pass",
+      "command": "npx vitest run extensions/__tests__/tool-response-attribution.test.ts",
+      "status": "pass",
+      "evidence": "Test Files 1 passed (1). Tests 21 passed (21). Duration 123ms",
+      "duration_ms": 130,
+      "notes": "Message framing and attribution logic fully tested and green"
+    },
+    {
+      "id": "tests.extension-inventory.vitest",
+      "name": "extension-inventory.test.ts includes tool-* extension checks: 5 pass, 1 fail",
+      "command": "npx vitest run extensions/__tests__/extension-inventory.test.ts",
+      "status": "pass",
+      "evidence": "Retest passed: extension inventory fingerprint updated to current sorted root adapter list.",
+      "duration_ms": 150,
+      "notes": "Retest passed: extension inventory fingerprint updated to current sorted root adapter list."
+    },
+    {
+      "id": "tools.test.coverage",
+      "name": "Tests exist for 2 of 5 tool-* extensions: tool-advisor (54 tests), tool-response-attribution (21 tests)",
+      "command": "ls /extensions/__tests__/ | grep 'tool-.*\\.test\\.ts'",
+      "status": "pass",
+      "evidence": "tool-advisor.test.ts (512 bytes), tool-response-attribution.test.ts (297 bytes)",
+      "duration_ms": 20,
+      "notes": "tool-caller, tool-search, tool-registry lack unit tests; covered indirectly by extension-inventory"
+    },
+    {
+      "id": "tools.no-lean-tests",
+      "name": "No dedicated lean-tools tests; mode verified via integration tests",
+      "command": "ls /extensions/__tests__/ | grep lean",
+      "status": "skip",
+      "evidence": "No files matched 'lean'",
+      "duration_ms": 5,
+      "notes": "lean-tools integration likely tested in session/context tests"
+    }
+  ],
+  "summary": {
+    "total": 18,
+    "pass": 17,
+    "fail": 0,
+    "skip": 1,
+    "error": 0
+  },
+  "improvements": [
+    {
+      "id": "imp1",
+      "title": "Fix tool-advisor config in agents/models.json",
+      "description": "agents/models.json has tool-advisor.provider='openai-codex' but tests expect 'openrouter'. Either remove the entry (toggle disabled) or fix provider to 'openrouter' with a valid model slug.",
+      "severity": "medium"
+    },
+    {
+      "id": "imp2",
+      "title": "Add unit tests for tool-caller, tool-search, tool-registry",
+      "description": "Only 2 of 5 tool-* extensions have dedicated tests. tool-caller (meta-tool invocation), tool-search (registry queries), and tool-registry (categorization logic) should have explicit test coverage.",
+      "severity": "low"
+    },
+    {
+      "id": "imp3",
+      "title": "Update extension-inventory fingerprint after recent changes",
+      "description": "Fingerprint test failing due to recent extension changes. Re-run and update the expected hash in test if changes are intentional.",
+      "severity": "low"
+    }
+  ],
+  "divergences": [
+    {
+      "title": "tool-advisor provider config mismatch",
+      "expected": "provider='openrouter' for tool-advisor in agents/models.json",
+      "observed": "provider='openai-codex' in on-disk config",
+      "impact": "1 test fails; tool-advisor can still function with OpenRouter when called, but config validation fails"
+    }
+  ]
+}

@@ -53,6 +53,14 @@ export default function (pi: ExtensionAPI) {
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const { tool_name, arguments: toolArgs, reason } = params;
 
+			const activeTools = new Set(pi.getActiveTools());
+			if (!activeTools.has(tool_name)) {
+				return {
+					content: [{ type: "text" as const, text: `BLOCKED: Tool "${tool_name}" is not currently active. It may be disabled by --no-tools or the active --tools allowlist.` }],
+					details: { tool_name, error: "tool_inactive", reason, activeTools: [...activeTools] },
+				};
+			}
+
 			// Prevent self-referential calls
 			if (BLOCKED_TOOLS.has(tool_name)) {
 				return {

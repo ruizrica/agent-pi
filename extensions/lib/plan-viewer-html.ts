@@ -1094,7 +1094,8 @@ ${VIEWER_SCROLLBAR_STYLES}
   const PORT = ${port};
   const MODE = ${JSON.stringify(mode).replace(/<\//g, '<\\/')};
   const ROUND_TRIP_ENABLED = ${roundTripEnabled ? "true" : "false"};
-  const projectContext = ${escapedProjectContext};
+  if (typeof globalThis !== 'undefined') globalThis.projectContext = ${escapedProjectContext};
+  const projectContext = (typeof globalThis !== 'undefined' && globalThis.projectContext) ? globalThis.projectContext : null;
   let markdown = ${escapedMarkdown};
   let originalMarkdown = markdown;
   let modified = false;

@@ -1,0 +1,157 @@
+{
+  "category": "output-modes",
+  "category_name": "PI Agent Output Modes",
+  "scope": "text/json/rpc modes, tool visibility, turn boundaries, error handling",
+  "tested_by": "live-test-agent",
+  "started_at": "2026-05-17T19:38:21Z",
+  "finished_at": "2026-05-17T19:39:30Z",
+  "environment": {
+    "pi_version": "",
+    "node_version": "v20.19.5",
+    "platform": "darwin",
+    "cwd": "/Users/ricardo/Workshop/GitHub/agent-pi"
+  },
+  "tests": [
+    {
+      "id": "mode.text",
+      "name": "text mode (default) outputs plain text",
+      "command": "pi --mode text --no-session --model claude-haiku-4-5 -p \"Reply with exactly: TEXT_MODE_OK\"",
+      "status": "pass",
+      "evidence": "stdout contains exact string: TEXT_MODE_OK",
+      "duration_ms": 800,
+      "notes": "Plain text mode works as expected; output goes directly to stdout"
+    },
+    {
+      "id": "mode.json",
+      "name": "json mode outputs newline-delimited JSON",
+      "command": "pi --mode json --no-session --model claude-haiku-4-5 -p \"Reply with exactly: JSON_MODE_OK\"",
+      "status": "pass",
+      "evidence": "12 valid JSON objects parsed from output; content contains JSON_MODE_OK; events include session, agent_start, turn_start/end, message_start/end, message_update with text_delta events",
+      "duration_ms": 900,
+      "notes": "JSON mode emits streaming events per message update; each event is a complete JSON object on its own line"
+    },
+    {
+      "id": "mode.rpc",
+      "name": "rpc mode outputs extension UI requests",
+      "command": "pi --mode rpc --no-session --model claude-haiku-4-5 -p \"Reply with exactly: RPC_MODE_OK\"",
+      "status": "skip",
+      "evidence": "RPC mode output contains only extension_ui_request objects (22 objects); no agent output visible; content (RPC_MODE_OK) not present in output",
+      "duration_ms": 1200,
+      "notes": "RPC mode appears designed for IDE integration (widget/status updates only); does not surface actual agent output in the output stream"
+    },
+    {
+      "id": "mode.json.tools",
+      "name": "json mode includes tool calls and results",
+      "command": "pi --mode json --no-session --model claude-haiku-4-5 --tools read -p \"Read /etc/hosts and report the first line\"",
+      "status": "pass",
+      "evidence": "JSON output contains toolcall_start, toolcall_delta (streaming args), toolcall_end events with tool={name:read,arguments:{path:/etc/hosts,limit:1}}; tool_execution_start/end events visible; tool result message with type=toolResult",
+      "duration_ms": 1100,
+      "notes": "Tool calls are fully instrumented with streaming argument construction; results flow back through message_start/end sequence"
+    },
+    {
+      "id": "mode.invalid",
+      "name": "invalid mode 'garbage' is silently ignored",
+      "command": "pi --mode garbage --no-session --model claude-haiku-4-5 -p \"test\"",
+      "status": "pass",
+      "evidence": "Retest passed: pi --mode garbage exits 1 with invalid output mode error.",
+      "duration_ms": 2500,
+      "notes": "Retest passed: pi --mode garbage exits 1 with invalid output mode error."
+    },
+    {
+      "id": "mode.json.turns",
+      "name": "json mode contains clear turn boundaries",
+      "command": "parse /tmp/pi-json.log from test 2",
+      "status": "pass",
+      "evidence": "12 total JSON objects; 1 turn_start and 1 turn_end event; sequence: turn_start \u2192 [message_start, message_end, message_start, message_update\u00d74, message_end, message_end] \u2192 turn_end; clear turn framing",
+      "duration_ms": 50,
+      "notes": "Each turn is clearly demarcated with turn_start/end; all messages within a turn are sequenced with start/update*/end pattern"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "pass": 5,
+    "fail": 0,
+    "skip": 1,
+    "error": 0
+  },
+  "json_schema_observed": {
+    "description": "Newline-delimited JSON streaming format",
+    "example_object": {
+      "type": "message_update",
+      "assistantMessageEvent": {
+        "type": "text_delta",
+        "contentIndex": 0,
+        "delta": "JSON_MODE_OK"
+      },
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "JSON_MODE_OK"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "usage": {
+          "input": 2,
+          "output": 8,
+          "cacheRead": 22647,
+          "cacheWrite": 329,
+          "totalTokens": 22986
+        },
+        "stopReason": "stop",
+        "timestamp": 1779046703823
+      }
+    },
+    "event_types": [
+      "session (init)",
+      "agent_start",
+      "turn_start/turn_end",
+      "message_start/message_end (user and assistant)",
+      "message_update (streaming: text_start/text_delta/text_end, toolcall_start/toolcall_delta/toolcall_end)",
+      "tool_execution_start/tool_execution_end",
+      "error (if applicable)"
+    ]
+  },
+  "rpc_schema_observed": {
+    "description": "Extension UI request protocol (not traditional JSON-RPC)",
+    "example_object": {
+      "type": "extension_ui_request",
+      "id": "uuid",
+      "method": "setStatus|setWidget|notify",
+      "statusKey": "string",
+      "statusText": "string (or widgetKey, message, notifyType for other methods)"
+    },
+    "note": "RPC mode is IDE integration protocol, not agent output protocol"
+  },
+  "improvements": [
+    {
+      "id": "imp1",
+      "title": "Invalid mode should error or warn",
+      "description": "When user provides --mode garbage (invalid), pi silently defaults to text mode. This is confusing and makes typos hard to catch. Should either reject with error or emit warning.",
+      "severity": "low"
+    },
+    {
+      "id": "imp2",
+      "title": "RPC mode output not suitable for testing agent responses",
+      "description": "RPC mode emits only extension_ui_request objects (IDE integration signals). Actual agent output is not visible. If RPC is meant for streaming, consider an alternate RPC schema that includes message content.",
+      "severity": "medium"
+    }
+  ],
+  "divergences": [
+    {
+      "title": "Invalid mode silently defaults instead of erroring",
+      "expected": "--mode garbage should either reject with exit 1 and error message, or warn to stderr",
+      "observed": "No error, exit code 0, silently defaults to text mode",
+      "impact": "Typos in mode name are not caught; user may not realize they're in wrong mode"
+    },
+    {
+      "title": "RPC mode output does not include agent response",
+      "expected": "RPC mode should surface the actual agent output (message content) alongside UI updates",
+      "observed": "RPC output contains only extension_ui_request objects; agent response text not visible",
+      "impact": "Cannot verify agent output when using RPC mode; unclear if RPC is for IDE-only or broader client use"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "category": "pi-commander-interop",
+  "category_name": "PI ↔ Commander Interop",
+  "scope": "Task lifecycle (claim/comment/status/show), mailbox round-trip, extension wiring, housekeep",
+  "tested_by": "claude-haiku",
+  "started_at": "2026-05-17T19:21:35Z",
+  "finished_at": "2026-05-17T19:22:09Z",
+  "environment": {
+    "pi_version": "",
+    "node_version": "v20.19.5",
+    "platform": "darwin",
+    "cwd": "/Users/ricardo/Workshop/github/agent-pi"
+  },
+  "tests": [
+    {"id":"cmd.claim_task","name":"Claim task for work","command":"cmd task claim","status":"pass","evidence":"Claimed successfully","duration_ms":0,"notes":""},{"id":"cmd.comment_progress","name":"Add progress comment","command":"cmd task comment","status":"pass","evidence":"Comment added","duration_ms":0,"notes":""},{"id":"cmd.status_working","name":"Update status to working","command":"cmd task update --status working","status":"pass","evidence":"Status updated","duration_ms":0,"notes":""},{"id":"cmd.show_task","name":"Verify task state in show","command":"cmd task show","status":"pass","evidence":"Task shown successfully","duration_ms":0,"notes":""},{"id":"cmd.comment_error","name":"Add error comment","command":"cmd task comment --type error","status":"pass","evidence":"Error comment added","duration_ms":0,"notes":""},{"id":"cmd.status_completed","name":"Update status to completed","command":"cmd task update --status completed","status":"pass","evidence":"Task completed","duration_ms":0,"notes":""},{"id":"cmd.final_state","name":"Verify completed state","command":"cmd task show","status":"pass","evidence":"Task is completed","duration_ms":0,"notes":""},{"id":"cmd.mailbox_send","name":"Send mailbox message","command":"cmd mailbox send commander","status":"pass","evidence":"Message sent","duration_ms":0,"notes":""},{"id":"cmd.mailbox_inbox","name":"Check mailbox inbox","command":"cmd mailbox inbox","status":"pass","evidence":"Inbox accessible","duration_ms":0,"notes":""},{"id":"ext.tracker","name":"commander-tracker.ts exists","command":"ls -l","status":"pass","evidence":"Extension file present","duration_ms":0,"notes":""},{"id":"ext.lifecycle","name":"commander-lifecycle-guard.ts exists","command":"ls -l","status":"pass","evidence":"Extension file present","duration_ms":0,"notes":""},{"id":"ext.tests","name":"Task-related test files present","command":"ls -l","status":"pass","evidence":"Found        8 task-related test files","duration_ms":0,"notes":""},{"id":"cmd.doctor","name":"Housekeep doctor audit runs","command":"cmd housekeep --doctor","status":"pass","evidence":"Audit complete","duration_ms":0,"notes":""},{"id":"cmd.help","name":"cmd --help shows commands","command":"cmd --help","status":"pass","evidence":"Help accessible","duration_ms":0,"notes":""}
+  ],
+  "summary": {
+    "total": 14,
+    "pass": 14,
+    "fail": 0,
+    "skip": 0,
+    "error": 0
+  },
+  "cleanup_status": "ok",
+  "task_id": "agent-pi-vw1tj",
+  "task_status": "completed"
+}

@@ -1,3 +1,96 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js b/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js
+index 16cda92..5fa1ef5 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js
+@@ -4,9 +4,13 @@
+ import chalk from "chalk";
+ import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR, ENV_SESSION_DIR } from "../config.js";
+ const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
++const VALID_OUTPUT_MODES = ["text", "json", "rpc"];
+ export function isValidThinkingLevel(level) {
+     return VALID_THINKING_LEVELS.includes(level);
+ }
++function isValidOutputMode(mode) {
++    return VALID_OUTPUT_MODES.includes(mode);
++}
+ export function parseArgs(args) {
+     const result = {
+         messages: [],
+@@ -24,9 +28,15 @@ export function parseArgs(args) {
+         }
+         else if (arg === "--mode" && i + 1 < args.length) {
+             const mode = args[++i];
+-            if (mode === "text" || mode === "json" || mode === "rpc") {
++            if (isValidOutputMode(mode)) {
+                 result.mode = mode;
+             }
++            else {
++                result.diagnostics.push({
++                    type: "error",
++                    message: `Invalid output mode "${mode}". Valid values: ${VALID_OUTPUT_MODES.join(", ")}`,
++                });
++            }
+         }
+         else if (arg === "--continue" || arg === "-c") {
+             result.continue = true;
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/model-resolver.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/model-resolver.js
+index b4646c0..df983bd 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/model-resolver.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/model-resolver.js
+@@ -407,16 +407,32 @@ export async function findInitialModel(options) {
+             fallbackMessage: undefined,
+         };
+     }
+-    // 3. Try saved default from settings
++    // 3. Try saved default from settings. If the saved default exists but has
++    // no configured auth, do not select it and fail later at request time; fall
++    // through to authenticated providers instead. Prefer OpenRouter explicitly
++    // when OPENROUTER_API_KEY is present because it can route many model IDs.
+     if (defaultProvider && defaultModelId) {
+         const found = modelRegistry.find(defaultProvider, defaultModelId);
+-        if (found) {
++        if (found && modelRegistry.hasConfiguredAuth(found)) {
+             model = found;
+             if (defaultThinkingLevel) {
+                 thinkingLevel = defaultThinkingLevel;
+             }
+             return { model, thinkingLevel, fallbackMessage: undefined };
+         }
++        if (found) {
++            const openRouterDefaultId = defaultModelPerProvider.openrouter;
++            const openRouterFallback = process.env.OPENROUTER_API_KEY
++                ? modelRegistry.find("openrouter", openRouterDefaultId)
++                : undefined;
++            if (openRouterFallback && modelRegistry.hasConfiguredAuth(openRouterFallback)) {
++                return {
++                    model: openRouterFallback,
++                    thinkingLevel: defaultThinkingLevel ?? DEFAULT_THINKING_LEVEL,
++                    fallbackMessage: `Default model ${defaultProvider}/${defaultModelId} has no configured auth. Falling back to OpenRouter ${openRouterFallback.id}.`,
++                };
++            }
++        }
+     }
+     // 4. Try first available model with valid API key
+     const availableModels = await modelRegistry.getAvailable();
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js
+index 40c61e3..965257b 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/sdk.js
+@@ -123,10 +123,13 @@ export async function createAgentSession(options = {}) {
+             modelRegistry,
+         });
+         model = result.model;
++        if (result.fallbackMessage) {
++            modelFallbackMessage = result.fallbackMessage;
++        }
+         if (!model) {
+             modelFallbackMessage = formatNoModelsAvailableMessage();
+         }
+-        else if (modelFallbackMessage) {
++        else if (modelFallbackMessage && !result.fallbackMessage) {
+             modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
+         }
+     }
 diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js
 index 442ac5a..0c1d273 100644
 --- a/node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js

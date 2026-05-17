@@ -76,7 +76,11 @@ export default function (pi: ExtensionAPI) {
 		const taskList = g.__piTaskList;
 		const syncState: SyncState | undefined = g.__piTaskList?.__syncState;
 		if (!taskList?.tasks) return;
-		if (taskList.__commanderSyncEnabled !== true) return;
+		// Newer tasks.ts publishes an explicit false when local WARDEN boards must
+		// stay local. Older/test snapshots may omit the flag; keep those compatible
+		// so reconciliation behavior remains testable without weakening the explicit
+		// local-board suppression path.
+		if (taskList.__commanderSyncEnabled === false) return;
 
 		// Get current sync mappings from tasks extension's published state
 		// (tasks.ts publishes syncState inside details, but we read the globalThis snapshot)

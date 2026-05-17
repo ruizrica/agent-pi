@@ -3,6 +3,18 @@
     "provider": "openai-codex",
     "model": "gpt-5.4-mini"
   },
+  "providers": {
+    "openai-codex": {
+      "modelOverrides": {
+        "gpt-5.4": {
+          "contextWindow": 1000000
+        },
+        "gpt-5.5": {
+          "contextWindow": 1000000
+        }
+      }
+    }
+  },
   "agents": {
     "scout": {
       "provider": "openai-codex",
@@ -49,8 +61,8 @@
       "model": "claude-opus-4-7"
     },
     "tool-advisor": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4-mini"
+      "provider": "openrouter",
+      "model": "qwen/qwen3.6-plus"
     }
   }
 }

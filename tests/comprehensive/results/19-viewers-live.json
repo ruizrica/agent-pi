@@ -1,0 +1,199 @@
+{
+  "tests": 12,
+  "pass": 12,
+  "fail": 0,
+  "skip": 0,
+  "error": 0,
+  "viewers": [
+    {
+      "name": "plan-viewer",
+      "file": "plan-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "plan"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Interactive Plan Viewer \u2014 opens a GUI browser window for markdown plan review.",
+      "tool_names": [
+        "show_plan"
+      ]
+    },
+    {
+      "name": "spec-viewer",
+      "file": "spec-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "spec"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Spec Viewer \u2014 opens a multi-page browser GUI for reviewing, commenting, and approving specifications.",
+      "tool_names": [
+        "show_spec"
+      ]
+    },
+    {
+      "name": "board-viewer",
+      "file": "board-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "board"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Task Board Viewer \u2014 opens a GUI browser window showing a live Kanban board of agent work.",
+      "tool_names": [
+        "show_board"
+      ]
+    },
+    {
+      "name": "reports-viewer",
+      "file": "reports-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "reports"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Persisted reports browser for plans, questions, specs, and completion reports.",
+      "tool_names": [
+        "show_reports"
+      ]
+    },
+    {
+      "name": "research-viewer",
+      "file": "research-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "research"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Research sessions browser for autoresearch lifecycle tracking.",
+      "tool_names": [
+        "show_research"
+      ]
+    },
+    {
+      "name": "test-viewer",
+      "file": "test-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "tests"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Interactive Test Viewer \u2014 opens a browser GUI for reviewing generated Gherkin specs and Playwright test code.",
+      "tool_names": [
+        "show_test_viewer"
+      ]
+    },
+    {
+      "name": "completion-report",
+      "file": "completion-report.ts",
+      "status": "pass",
+      "commands": [
+        "report"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Completion Report Viewer \u2014 opens a GUI browser window showing work summary, file diffs, and rollback controls.",
+      "tool_names": [
+        "show_report"
+      ]
+    },
+    {
+      "name": "session-replay",
+      "file": "session-replay.ts",
+      "status": "pass",
+      "commands": [
+        "replay"
+      ],
+      "tools": 0,
+      "http_server": false,
+      "notes": "Scrollable session timeline replay via /replay command.",
+      "tool_names": []
+    },
+    {
+      "name": "viewer-aliases",
+      "file": "viewer-aliases.ts",
+      "status": "pass",
+      "commands": [
+        "show-plan",
+        "show-spec",
+        "show-report"
+      ],
+      "tools": 0,
+      "http_server": false,
+      "notes": "Slash-command aliases for viewer re-opens from the /reports browser.",
+      "tool_names": []
+    },
+    {
+      "name": "cleanup-viewer",
+      "file": "cleanup-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "cleanup"
+      ],
+      "tools": 1,
+      "http_server": true,
+      "notes": "Disk Cleanup viewer \u2014 opens a browser GUI for scanning, analyzing, and deleting junk files.",
+      "tool_names": [
+        "show_cleanup"
+      ]
+    },
+    {
+      "name": "file-viewer",
+      "file": "file-viewer.ts",
+      "status": "pass",
+      "commands": [
+        "show-file",
+        "close-viewer",
+        "show-file-help"
+      ],
+      "tools": 2,
+      "http_server": true,
+      "notes": "Lightweight local file viewer/editor that opens in the browser without Commander.",
+      "tool_names": [
+        "show_file",
+        "close_file"
+      ]
+    },
+    {
+      "name": "subagent-widget",
+      "file": "subagent-widget.ts",
+      "status": "pass",
+      "commands": [
+        "sub",
+        "subcont",
+        "subrm",
+        "subclear"
+      ],
+      "tools": 6,
+      "http_server": false,
+      "notes": "Spawns and manages background subagent processes with live status widgets.",
+      "tool_names": [
+        "subagent_create",
+        "subagent_create_batch",
+        "subagent_continue",
+        "subagent_remove",
+        "subagent_list",
+        "subagent_cleanup"
+      ]
+    }
+  ],
+  "metadata": {
+    "test_date": "2026-05-17T12:40:29.714777",
+    "test_type": "extension_interface_verification",
+    "base_path": "/Users/ricardo/Workshop/GitHub/agent-pi",
+    "test_approach": "Static analysis of TS files for registration patterns",
+    "verification_method": "grep for registerCommand/registerTool patterns"
+  },
+  "summary": {
+    "total_commands": 19,
+    "total_tools": 16,
+    "http_server_viewers": 9,
+    "cli_only_viewers": 3
+  }
+}
