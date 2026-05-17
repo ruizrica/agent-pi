@@ -79,7 +79,7 @@ export default function (pi: ExtensionAPI) {
 		// Get current sync mappings from tasks extension's published state
 		// (tasks.ts publishes syncState inside details, but we read the globalThis snapshot)
 		const mappings = syncState?.mappings || [];
-		const actions = computeReconcileActions(taskList.tasks, mappings);
+		const actions = computeReconcileActions(taskList.tasks, mappings, syncState?.pendingCreates || []);
 
 		for (const action of actions) {
 			if (action.type === "create") {
@@ -98,13 +98,15 @@ export default function (pi: ExtensionAPI) {
 					operation: "create",
 					description: action.text,
 					working_directory: process.cwd(),
+					status: action.commanderStatus,
 					...(groupId !== undefined ? { group_id: groupId } : {}),
 					...(missionBrief ? { mission_brief: missionBrief } : {}),
 				}).then((res: any) => {
 					const cid = parseCommanderTaskId(res);
 					if (cid !== undefined && syncState) {
 						// Mutate sync state to add mapping — tasks.ts will pick it up
-						syncState.mappings.push({ localId: action.localId, commanderId: cid });
+						syncState.mappings.push({ localId: action.localId, commanderId: cid, lastSyncedStatus: action.localStatus as any });
+						syncState.pendingCreates = (syncState.pendingCreates || []).filter(p => p.localId !== action.localId);
 					}
 				}).catch(() => {});
 			} else if (action.type === "status-update") {
