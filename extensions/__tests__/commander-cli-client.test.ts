@@ -412,4 +412,70 @@ describe("CommanderCliClient", () => {
 			}
 		});
 	});
+
+	describe("execFile error surfacing", () => {
+		it("surfaces SIGTERM/killed timeouts with a clean cause line instead of dumping stderr NDJSON", async () => {
+			execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+				const err: any = new Error("Command failed");
+				err.killed = true;
+				err.signal = "SIGTERM";
+				err.code = null;
+				const stderrNdjson = [
+					'{"ts":"2026-05-17T17:59:22.554Z","event":"bd_exec","status":0,"ok":true}',
+					'{"ts":"2026-05-17T17:59:22.563Z","event":"cmd_writer_lock_stale_removed","stale_pid":44585}',
+				].join("\n");
+				cb(err, "", stderrNdjson);
+			});
+
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			await expect(
+				client.callTool("commander_task", { operation: "complete", task_id: 1075 }),
+			).rejects.toMatchObject({
+				message: expect.stringMatching(/^cmd task update failed: killed \(SIGTERM, timeout=\d+ms\)/),
+				cmdKilled: true,
+				cmdSignal: "SIGTERM",
+			});
+		});
+
+		it("includes captured telemetry under a labeled section so debugging is still possible", async () => {
+			execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+				const err: any = new Error("Command failed");
+				err.killed = false;
+				err.signal = null;
+				err.code = 2;
+				cb(err, "", '{"event":"bd_exec","ok":true}');
+			});
+
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			let caught: any;
+			try {
+				await client.callTool("commander_task", { operation: "complete", task_id: 1 });
+			} catch (e) {
+				caught = e;
+			}
+			expect(caught?.message).toMatch(/^cmd task update failed: exit 2/);
+			expect(caught?.message).toContain("--- subprocess telemetry (stderr) ---");
+			expect(caught?.message).toContain('"event":"bd_exec"');
+			expect(caught?.cmdExitCode).toBe(2);
+		});
+
+		it("omits the telemetry section when stderr is empty", async () => {
+			execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+				const err: any = new Error("Command failed");
+				err.killed = false;
+				err.signal = null;
+				err.code = 1;
+				cb(err, "", "");
+			});
+
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			let caught: any;
+			try {
+				await client.callTool("commander_task", { operation: "complete", task_id: 1 });
+			} catch (e) {
+				caught = e;
+			}
+			expect(caught?.message).toBe("cmd task update failed: exit 1");
+		});
+	});
 });

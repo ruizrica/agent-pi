@@ -292,10 +292,32 @@ export class CommanderCliClient {
 	}
 
 	private run(args: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
+		const finalArgs = this.withIdentity(args);
 		return new Promise((resolve, reject) => {
-			execFile(this.bin, this.withIdentity(args), { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
+			execFile(this.bin, finalArgs, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
 				if (error) {
-					reject(new Error(stderr?.trim() || error.message));
+					const subcommand = finalArgs.slice(0, 2).join(" ") || "(no args)";
+					// Surface the real failure shape (signal/code/killed) instead of dumping
+					// captured stderr — `diag.ts` writes NDJSON telemetry to stderr unconditionally,
+					// so `stderr.trim()` is almost never the actual cause of an execFile rejection.
+					const e = error as NodeJS.ErrnoException & { killed?: boolean; signal?: NodeJS.Signals | null; code?: string | number };
+					const cause =
+						e.killed ? `killed (${e.signal ?? "SIGTERM"}, timeout=${timeoutMs}ms)`
+						: e.signal ? `signal ${e.signal}`
+						: e.code !== undefined ? `exit ${e.code}`
+						: e.message;
+					const telemetry = stderr?.trim();
+					const msg = telemetry
+						? `cmd ${subcommand} failed: ${cause}\n--- subprocess telemetry (stderr) ---\n${telemetry}`
+						: `cmd ${subcommand} failed: ${cause}`;
+					const wrapped = new Error(msg);
+					(wrapped as any).cmdArgs = finalArgs;
+					(wrapped as any).cmdExitCode = e.code ?? null;
+					(wrapped as any).cmdSignal = e.signal ?? null;
+					(wrapped as any).cmdKilled = e.killed ?? false;
+					(wrapped as any).cmdStderr = stderr ?? "";
+					(wrapped as any).cmdStdout = stdout ?? "";
+					reject(wrapped);
 					return;
 				}
 				resolve({ stdout: stdout || "", stderr: stderr || "" });
