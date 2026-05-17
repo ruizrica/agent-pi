@@ -57,7 +57,7 @@ Arguments: `$ARGUMENTS`
 agent-memory status --json
 agent-memory index
 agent-memory search "worktree save workflow" --json
-agent-memory add "Pi /compact is handoff-first but preserves memory-cycle state" --source memory --tags "pi,compact,memory"
+agent-memory add "Pi /handoff is the handoff-first place to preserve continuation context and can explicitly request native memory cycling" --source memory --tags "pi,handoff,memory"
 agent-memory code-index ./src
 agent-memory code-tree --json
 agent-memory code-nav "memory cycle extension" --json
@@ -68,7 +68,7 @@ agent-memory code-nav "memory cycle extension" --json
 - `/setup` is the preferred first-time place to validate `agent-memory`, refresh the memory index, and offer `code-index` for the current repo/worktree.
 - At the start of substantial work, search memory for prior decisions before rediscovering them from files.
 - When locating code, prefer `code-nav`/`code-tree` if a code index exists, then fall back to normal file reads and grep.
-- At handoff/compact/save boundaries, add only concise durable memories when there is a reusable lesson.
+- At handoff/save boundaries, add only concise durable memories when there is a reusable lesson.
 
 ## Memory write rubric
 
