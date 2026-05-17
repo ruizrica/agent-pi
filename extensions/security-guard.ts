@@ -198,8 +198,10 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// System prompt fingerprints for leakage detection (OWASP #7)
 	let promptFingerprints: string[] = [];
 
-	/** Dedupe inline cards across repeated `context` invocations (same detections = one card until reset). */
+	/** Dedupe inline cards across repeated `context` invocations. */
 	let shownContextCardKeys = new Set<string>();
+	const recentGuardCardAt = new Map<string, number>();
+	const GUARD_CARD_DEDUP_WINDOW_MS = 60_000;
 
 	// ── Security event inline card ───────────────────────────────────────────
 	// Dark gray card that flows with conversation (like memory-cycle cards).
@@ -233,8 +235,16 @@ export default function securityGuard(pi: ExtensionAPI) {
 	function emitGuardCard(
 		action: string,
 		detail: string,
-		opts?: { tone?: GuardCardDetails["tone"] },
+		opts?: { tone?: GuardCardDetails["tone"]; dedupeKey?: string; force?: boolean },
 	) {
+		const key = opts?.dedupeKey || `${action}|${detail}`;
+		const nowMs = Date.now();
+		const last = recentGuardCardAt.get(key) || 0;
+		if (!opts?.force && nowMs - last < GUARD_CARD_DEDUP_WINDOW_MS) return;
+		recentGuardCardAt.set(key, nowMs);
+		for (const [k, ts] of Array.from(recentGuardCardAt.entries())) {
+			if (nowMs - ts > GUARD_CARD_DEDUP_WINDOW_MS * 5) recentGuardCardAt.delete(k);
+		}
 		pi.sendMessage({
 			customType: "security-guard-event",
 			content: `security-guard | ${action} | ${detail}`,
@@ -759,7 +769,9 @@ export default function securityGuard(pi: ExtensionAPI) {
 	// Session Lifecycle
 	// ================================================================
 
-	// Reset per-turn budget counters on each new user input
+	// Reset per-turn budget counters on each new user input.
+	// Guard-card dedupe intentionally survives input turns for a short window so
+	// repeated context scans of the same file/tool output do not alert-loop.
 	pi.on("input", async (_event, _ctx) => {
 		budgetCounters.turn = 0;
 		budgetCounters.bashTurn = 0;
@@ -772,6 +784,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		stats = freshStats();
 		budgetCounters = { turn: 0, session: 0, bashTurn: 0 };
 		shownContextCardKeys.clear();
+		recentGuardCardAt.clear();
 
 		if (ctx?.ui?.setStatus && !(globalThis as any).__piSummaryModeActive) {
 			ctx.ui.setStatus("security", "🛡️ Security Guard");
@@ -783,6 +796,7 @@ export default function securityGuard(pi: ExtensionAPI) {
 		const cwd = ctx?.cwd || defaultRoot;
 		initPolicy(cwd);
 		shownContextCardKeys.clear();
+		recentGuardCardAt.clear();
 
 		// Keep stats across session switches (they're cumulative)
 		if (ctx?.ui?.setStatus) {
