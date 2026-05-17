@@ -1,12 +1,12 @@
 ---
-description: "Break down a feature into bd-tracked microtasks via the cmd CLI using deep codebase analysis, then coordinate parallel agent execution"
+description: "Break down a feature into cmd-tracked microtasks via the cmd CLI using deep codebase analysis, then coordinate parallel agent execution"
 argument-hint: "[plan description or feature to implement]"
 allowed-tools: ["Task", "Bash", "Read", "Glob", "Grep", "AskUserQuestion"]
 ---
 
-# cmd Plan — Multi-Agent Task Orchestration via cmd CLI + bd
+# cmd Plan — Multi-Agent Task Orchestration via cmd CLI
 
-Same workflow shape as `/commander-plan`, but tasks live in **bd** (via the `cmd` CLI's bd-backed adapter) instead of the Commander MCP server. Dependency wiring uses bd's native `dep add` so `bd ready` reports the unblocked work for the claim-loop.
+Same workflow shape as `/commander-plan`, but tasks are managed through **cmd** (backed internally by the cmd adapter) instead of the Commander MCP server. Dependency wiring uses `cmd dep add` so cmd dependency queries and task context report blocked and unblocked work for the claim-loop.
 
 ## Planning Agent Architecture
 
@@ -43,7 +43,7 @@ Same workflow shape as `/commander-plan`, but tasks live in **bd** (via the `cmd
               ┌─────────────────────┐
               │    MAIN AGENT       │
               │  Present Plan, then │
-              │  cmd task add + bd  │
+              │  cmd task add  │
               │  dep add (waves)    │
               └─────────────────────┘
 ```
@@ -61,11 +61,11 @@ Same workflow shape as `/commander-plan`, but tasks live in **bd** (via the `cmd
 This command requires:
 
 1. `cmd` CLI on PATH (the Commander v2 CLI; ships from `commander-v2/cli/cmd`)
-2. `bd` CLI on PATH (beads, the bd-backed task store)
-3. The current directory has a `.beads/` database. If missing, run `bd init` first.
-4. The cmd CLI's bd backend is the default. To use the JSON mock backend instead, set `CMD_BACKEND=mock`.
+2. `cmd` wrapper on PATH (it owns any backend access)
+3. The current project is initialized for `cmd`. If not, run `cmd init` first.
+4. The cmd CLI backend is the default. To use the JSON mock backend instead, set `CMD_BACKEND=mock`.
 
-If you're not sure: `cmd whoami` shows the active project; `bd where` shows the bd database in use.
+If you're not sure: `cmd whoami` shows the active project and working directory in use.
 
 ---
 
@@ -422,7 +422,7 @@ AskUserQuestion({
     question: "I've created a plan with X tasks across Y waves. How would you like to proceed?",
     header: "Plan Ready",
     options: [
-      { label: "Create Tasks", description: "Create all tasks in cmd/bd and start execution" },
+      { label: "Create Tasks", description: "Create all tasks in cmd and start execution" },
       { label: "Modify Plan", description: "Let me adjust the plan based on your feedback" },
       { label: "Cancel", description: "Don't create tasks, discard the plan" }
     ],
@@ -433,23 +433,23 @@ AskUserQuestion({
 
 Wait for user response before proceeding to Phase 6.
 
-### Phase 6: Create Tasks via cmd + Wire Deps via bd
+### Phase 6: Create Tasks and Wire Deps via cmd
 
-**Why two CLIs?** `cmd task` writes to bd through the cmd v2 adapter (full `Task` contract: typed comments, `claimedBy: AgentIdentity`, sidecar metadata). `bd dep add` writes the dependency edge directly into the bd graph so `bd ready` correctly excludes blocked work.
+**Use one CLI.** `cmd task` and `cmd dep` own the full Commander task contract: typed comments, `claimedBy: AgentIdentity`, sidecar metadata, and dependency edges. Do not bypass `cmd` for dependency wiring.
 
 #### 6.1 Create each microtask via `cmd task add`
 
 For each microtask, in the order Opus emitted them:
 
 ```bash
-# Capture both numeric id and bead_id for later use
+# Capture both numeric id and task_id for later use
 result=$(cmd task add "$DESC" \
   --priority "$PRIORITY" \
   --type task \
   --json)
 
 numeric_id=$(echo "$result" | jq -r '.id')
-bead_id=$(echo "$result"   | jq -r '.bead_id')
+task_id=$(echo "$result"   | jq -r '.task_id')
 ```
 
 Where:
@@ -457,7 +457,7 @@ Where:
   `"In <file> around lines <X> to <Y>, <problem>; <solution>"`
 - `$PRIORITY` — 0–4 (cmd clamps; 0 is highest)
 
-Save a mapping `{wave_number: [{numeric_id, bead_id, description}]}` for the next step.
+Save a mapping `{wave_number: [{numeric_id, task_id, description}]}` for the next step.
 
 #### 6.2 Stash full task context as a comment
 
@@ -479,37 +479,37 @@ cmd task comment "$numeric_id" "$CONTEXT_JSON" --type info
 
 The execution-side commands (`/cmd-execute`, `/cmd-task`) read these `info` comments to recover the file_scope and implementation guide without re-running scouts.
 
-#### 6.3 Wire wave dependencies via `bd dep add`
+#### 6.3 Wire wave dependencies via `cmd dep add`
 
 For each task in Wave N (where N ≥ 2), add a `blocks` edge from each Wave N-1 task:
 
 ```bash
-# For every (waveN_bead, waveN_minus_1_bead) pair:
-bd dep add "$waveN_bead" "$waveN_minus_1_bead"
+# For every (waveN_task, waveN_minus_1_task) pair:
+cmd dep add "$waveN_task" "$waveN_minus_1_task"
 ```
 
-The default edge type is `blocks`, which is what `bd ready` honors. This means:
-- Wave 2 tasks won't appear in `bd ready` until ALL Wave 1 tasks are closed
-- `cmd-execute` claim-loops can rely on `bd ready --json` to find unblocked work
+The default edge type is `blocks`, which is what `cmd task list --status pending` honors. This means:
+- Wave 2 tasks won't appear in `cmd task list --status pending` until ALL Wave 1 tasks are closed
+- `cmd-execute` claim-loops can rely on `cmd task list --status pending --json` to find unblocked work
 
-**Avoid `cmd dep add`** for now — that bridge still routes through the JSON mock and won't persist into the bd graph.
+**Avoid `cmd dep add`** for now — that bridge still routes through the JSON mock and won't persist into the cmd dependency graph.
 
 #### 6.4 (Optional) Mark wave-1 tasks ready, others backlog
 
-If you want a clean "backlog vs ready" split for the dashboard, leave Wave 1 tasks at the cmd default status (`pending` → bd `open`) and tag downstream waves with a status label:
+If you want a clean "backlog vs ready" split for the dashboard, leave Wave 1 tasks at the cmd default status (`pending`) and tag downstream waves with a status label:
 
 ```bash
 cmd task update "$numeric_id" --status backlog
 ```
 
-Note: cmd's status alias `backlog` maps to bd `open` plus a `cmd-status:backlog` label, so it round-trips through `cmd task list`.
+Note: cmd's status alias `backlog` round-trips through `cmd task list --status backlog`, so it round-trips through `cmd task list`.
 
 ### Phase 7: Display Task Board
 
 Show created tasks:
 
 ```
-## Tasks Created (cmd + bd)
+## Tasks Created (cmd)
 
 ### Wave 1 (Foundation)
 - #1  v2-abc  [pending]   In file.ts:45-52  Fix auth bug             (p1)
@@ -522,7 +522,7 @@ Show created tasks:
 - #4  v2-jkl  [pending]   In test.ts:1-50 Add tests                  (p4)
 
 Sanity check:
-  bd ready              # should list only Wave 1 tasks
+  cmd task list --status pending              # should list only Wave 1 tasks
   cmd tree              # hierarchical view
   cmd task list --json  # full state
 ```
@@ -538,7 +538,7 @@ When the user runs `/cmd-execute`, tasks execute via the **claim-loop pattern**:
 │                    CLAIM-LOOP EXECUTION                          │
 │                                                                  │
 │  Each agent:                                                     │
-│  1. Calls `bd ready --json` to find unblocked work               │
+│  1. Calls `cmd task list --status pending --json` to find unblocked work               │
 │  2. Picks one task, calls `cmd task claim <id>`                  │
 │  3. Works on it; logs progress via `cmd task comment`            │
 │  4. On success: `cmd task update <id> --status done`             │
@@ -548,8 +548,8 @@ When the user runs `/cmd-execute`, tasks execute via the **claim-loop pattern**:
 
 **Multi-Agent Support:**
 - Multiple `/cmd-execute` instances can run in parallel
-- Agents distribute work via `cmd task claim`'s claim semantics (sidecar `byBead` map is set atomically per claim call)
-- Wave boundaries fall out naturally from the bd dep graph — Wave N+1 only becomes ready when Wave N closes
+- Agents distribute work via `cmd task claim`'s claim semantics (sidecar `byTask` map is set atomically per claim call)
+- Wave boundaries fall out naturally from the cmd dependency graph — Wave N+1 only becomes ready when Wave N closes
 
 **Trigger execution:**
 - `/cmd-execute` — process all unblocked tasks
@@ -567,7 +567,7 @@ AskUserQuestion({
     header: "Next Steps",
     options: [
       { label: "Execute All", description: "Run /cmd-execute to begin claim-loop" },
-      { label: "Execute Wave 1", description: "Start with foundation tasks only (`bd ready` already gates this)" },
+      { label: "Execute Wave 1", description: "Start with foundation tasks only (`cmd task list --status pending` already gates this)" },
       { label: "Review First", description: "I'll review with `cmd task list` / `cmd tree` before executing" },
       { label: "Done", description: "Tasks are saved, I'll execute them later" }
     ],
@@ -625,7 +625,7 @@ cmd mailbox send @all "scout-arch" "Found: auth lives in src/auth/middleware.ts"
 
 | Old MCP tool | New cmd CLI |
 |---|---|
-| `commander_task(operation="create", description, priority, context)` | `cmd task add "..." --priority N --type task --json` (parse `.id` and `.bead_id`) |
+| `commander_task(operation="create", description, priority, context)` | `cmd task add "..." --priority N --type task --json` (parse `.id`) |
 | `commander_task(operation="list", status, working_directory)` | `cmd task list --status <s> --json` (current cwd is implicit) |
 | `commander_task(operation="get", task_id)` | `cmd task show <id> --json` |
 | `commander_task(operation="update", task_id, status="X")` | `cmd task update <id> --status X` |
@@ -638,8 +638,8 @@ cmd mailbox send @all "scout-arch" "Found: auth lives in src/auth/middleware.ts"
 | `commander_mailbox(operation="send", from_agent, to_agent, body, message_type)` | `cmd mailbox send <to> "<subject>" "<body>"` |
 | `commander_mailbox(operation="inbox")` | `cmd mailbox inbox` |
 | `commander_mailbox(operation="read", message_id)` | `cmd mailbox read <id>` |
-| `commander_task_group(operation="create", tasks, total_waves, ...)` | Loop `cmd task add` + `bd dep add` per wave (no native group object) |
-| `commander_task_group(operation="get", group_id)` | No direct equivalent. Reconstruct from `bd dep` graph or use a parent-task convention. |
+| `commander_task_group(operation="create", tasks, total_waves, ...)` | Loop `cmd task add` + `cmd dep add` per wave (no native group object) |
+| `commander_task_group(operation="get", group_id)` | No direct equivalent. Reconstruct from the `cmd dep` graph or use a parent-task convention. |
 
 ---
 

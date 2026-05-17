@@ -1,5 +1,5 @@
 ---
-description: "Plan and execute a single task end-to-end with cmd CLI tracking — Haiku scouts gather context, Opus plans, then implement directly with progress comments on the bd-tracked task"
+description: "Plan and execute a single task end-to-end with cmd CLI tracking — Haiku scouts gather context, Opus plans, then implement directly with progress comments on the cmd-tracked task"
 argument-hint: "[task description — what to implement, fix, or build]"
 allowed-tools: ["Task", "Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "AskUserQuestion"]
 ---
@@ -10,7 +10,7 @@ This command combines **planning agent architecture** with **direct execution** 
 
 1. Uses Haiku agents to gather context in parallel
 2. Uses Opus agent to create an implementation plan
-3. Creates the task in bd via `cmd task add`
+3. Creates the task via `cmd task add`
 4. **Executes the task directly with full observability** (progress comments via `cmd task comment`)
 
 ## Planning + Execution Architecture
@@ -73,15 +73,15 @@ Use `/cmd-plan` instead if:
 Use the simpler direct approach if:
 - Task is trivial (e.g., "fix typo in README")
 - No context gathering needed
-- You don't need bd tracking
+- You don't need cmd tracking
 
 ---
 
 ## Prerequisites
 
 Same as `/cmd-plan`:
-- `cmd` and `bd` on PATH
-- Current directory has `.beads/` (or run `bd init` first)
+- `cmd` on PATH
+- Current project is initialized for `cmd` (run `cmd init` if needed)
 
 ---
 
@@ -242,7 +242,7 @@ Use the Task tool with:
 
 ### Phase 4: Create Task & Present Plan (Main Agent)
 
-#### 4.1 Create the bd-tracked task
+#### 4.1 Create the cmd-tracked task
 
 ```bash
 result=$(cmd task add "$TASK_DESCRIPTION" \
@@ -251,10 +251,9 @@ result=$(cmd task add "$TASK_DESCRIPTION" \
   --json)
 
 task_id=$(echo "$result" | jq -r '.id')
-bead_id=$(echo "$result" | jq -r '.bead_id')
 ```
 
-Save `$task_id` and `$bead_id` for later steps.
+Save `$task_id` for later steps.
 
 #### 4.2 Stash the plan as an `info` comment
 
@@ -296,7 +295,7 @@ cmd task comment "$task_id" "$OPUS_PLAN_JSON" --type info
 
 ---
 
-**Task created:** #[task_id] (bead: [bead_id])
+**Task created:** #[task_id]
 
 Ready to execute this plan?
 - **Yes** — Begin implementation with full tracking
@@ -413,7 +412,7 @@ cmd task comment "$task_id" \
   --type handoff
 ```
 
-Note: cmd's `needs_review` status maps to bd `open` plus a `cmd-status:needs_review` label, so it round-trips through `cmd task list --status needs_review`.
+Note: cmd's `needs_review` status round-trips through `cmd task list --status needs_review`, so it round-trips through `cmd task list --status needs_review`.
 
 ---
 
@@ -422,7 +421,7 @@ Note: cmd's `needs_review` status maps to bd `open` plus a `cmd-status:needs_rev
 After completing the primary task, check whether there are unblocked tasks in the same project to continue with:
 
 ```bash
-ready_count=$(bd ready --json | jq 'length')
+ready_count=$(cmd task list --status pending --json | jq 'length')
 pending_count=$(cmd task list --status pending --json \
   | sed -E 's/\x1b\[[0-9;]*m//g' \
   | python3 -c 'import json,sys,re; d=sys.stdin.read(); s=d.find("["); e=d.rfind("]")+1; print(len(json.loads(d[s:e])))')
@@ -453,16 +452,16 @@ If the user chooses Continue, enter claim-loop mode (same shape as `/cmd-execute
 ```
 CLAIM_LOOP:
   WHILE TRUE:
-    next=$(bd ready --json | jq -r '.[0].id // empty')
+    next=$(cmd task list --status pending --json | jq -r '.[0].id // empty')
     if [[ -z "$next" ]]; then
       echo "No more ready work; exiting loop."
       break
     fi
 
-    # Resolve bead → numeric id via cmd task list
+    # Resolve task lookup id via cmd task list
     numeric=$(cmd task list --json \
       | sed -E 's/\x1b\[[0-9;]*m//g' \
-      | python3 -c "import json,sys,re; d=sys.stdin.read(); s=d.find('['); e=d.rfind(']')+1; arr=json.loads(d[s:e]); print(next(t['id'] for t in arr if t['bead_id']=='$next'))")
+      | python3 -c "import json,sys; arr=json.load(sys.stdin); print(next(t['id'] for t in arr if str(t.get('id')) == '$next'))")
 
     cmd task claim "$numeric"
     # Re-run a focused planning pass on this new task, or execute directly if it has an `info` comment with a pre-baked plan.
@@ -504,14 +503,14 @@ cmd task comment "$task_id" "$(cat /tmp/comment.txt)" --type info
 
 | Operation | Command |
 |---|---|
-| Create task | `cmd task add "..." --priority N --type task --json` (parse `.id`, `.bead_id`) |
+| Create task | `cmd task add "..." --priority N --type task --json` (parse `.id`) |
 | Show task | `cmd task show <id> --json` |
 | Update status | `cmd task update <id> --status <pending\|working\|done\|failed\|needs_review>` |
 | Claim | `cmd task claim <id>` |
 | Release | `cmd task release <id>` |
 | Add comment | `cmd task comment <id> "msg" --type progress\|error\|attempt\|handoff\|info` |
 | List comments | `cmd task comments <id>` |
-| Find unblocked work | `bd ready --json` |
+| Find unblocked work | `cmd task list --status pending --json` |
 | List by status | `cmd task list --status pending --json` |
 | Mailbox | `cmd mailbox send <to> "<subj>" "<body>"`, `cmd mailbox inbox`, `cmd mailbox read <id>` |
 | Hierarchy view | `cmd tree` |
@@ -528,7 +527,7 @@ cmd task comment "$task_id" "$(cat /tmp/comment.txt)" --type info
 | working → failed | Error | `cmd task update <id> --status failed` |
 | working → needs_review | Human input needed | `cmd task update <id> --status needs_review` |
 
-Note: `cmd task claim` records the agent identity in the claims sidecar but does **not** by itself flip the bd status. If you want the kanban view to reflect "in progress", run both `cmd task claim` and `cmd task update <id> --status working`.
+Note: `cmd task claim` records the agent identity in the claims sidecar but does **not** by itself flip the task status. If you want the kanban view to reflect "in progress", run both `cmd task claim` and `cmd task update <id> --status working`.
 
 ---
 

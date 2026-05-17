@@ -1,12 +1,12 @@
 ---
-description: "Execute existing cmd/bd tasks via continuous claim-loop with bd-aware dependency ordering, file-scope guards, and Haiku→Sonnet→Opus escalation"
+description: "Execute existing cmd tasks via continuous claim-loop with cmd-aware dependency ordering, file-scope guards, and Haiku→Sonnet→Opus escalation"
 argument-hint: "[task IDs or 'all' or filter like 'pending' or 'backlog' or 'ready']"
 allowed-tools: ["Task", "SlashCommand", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "AskUserQuestion"]
 ---
 
-# cmd Execute — Intelligent Task Orchestration via cmd CLI + bd ready
+# cmd Execute — Intelligent Task Orchestration via cmd CLI ready
 
-This command executes **existing tasks** stored in bd (created by `/cmd-plan`, `/cmd-task`, or `cmd task add`) using a planning-agent architecture for ad-hoc tasks and a **bd-native ready queue** for the claim-loop.
+This command executes **existing tasks** managed through cmd (created by `/cmd-plan`, `/cmd-task`, or `cmd task add`) using a planning-agent architecture for ad-hoc tasks and a **cmd dependency-aware queue** for the claim-loop.
 
 ## Planning Agent Architecture for Execution
 
@@ -18,7 +18,7 @@ This command executes **existing tasks** stored in bd (created by `/cmd-plan`, `
                               │
                     ┌─────────┴─────────┐
                     │ Phase 0: Fetch     │
-                    │ tasks via cmd/bd   │
+                    │ tasks via cmd   │
                     └─────────┬─────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -105,10 +105,10 @@ This command executes **existing tasks** stored in bd (created by `/cmd-plan`, `
 ## CRITICAL: Execution Only — No Planning
 
 **`/cmd-execute` does NOT create tasks.** It only:
-1. Fetches existing tasks via `cmd task list` / `bd ready`
+1. Fetches existing tasks via `cmd task list` / `cmd task list --status pending`
 2. Uses planning agents to analyze dependencies and waves (for ad-hoc tasks only)
 3. Moves tasks through lifecycle: pending → working → completed
-4. Orchestrates parallel agent execution via the bd-native ready queue
+4. Orchestrates parallel agent execution via the cmd dependency-aware queue
 
 **If you need to create new tasks:**
 - Use `/cmd-plan [description]` to scout, synthesize, and create tasks
@@ -119,9 +119,9 @@ This command executes **existing tasks** stored in bd (created by `/cmd-plan`, `
 
 ## Prerequisites
 
-- `cmd` and `bd` on PATH
-- Current directory has `.beads/` (or run `bd init` first)
-- Tasks exist in bd (otherwise `/cmd-execute` exits with "no tasks to execute")
+- `cmd` on PATH
+- Current project is initialized for `cmd` (run `cmd init` if needed)
+- Tasks exist in cmd (otherwise `/cmd-execute` exits with "no tasks to execute")
 
 ---
 
@@ -130,10 +130,10 @@ This command executes **existing tasks** stored in bd (created by `/cmd-plan`, `
 Task selection: **$ARGUMENTS**
 
 Options:
-- `all` or empty — Execute all currently-ready tasks (`bd ready`)
-- `ready` — Same as default; shows what `bd ready` returns
+- `all` or empty — Execute all currently-ready tasks (`cmd task list --status pending`)
+- `ready` — Same as default; shows what `cmd task list --status pending` returns
 - `backlog` — Tasks tagged `cmd-status:backlog`; promote them to `pending` then execute
-- `pending` — All `pending` tasks (regardless of bd-ready status — useful when deps are off-graph)
+- `pending` — All `pending` tasks (regardless of cmd-ready status — useful when deps are off-graph)
 - Comma-separated numeric IDs — Execute specific tasks: `123,124,125`
 
 ---
@@ -148,8 +148,8 @@ Options:
 
 ```bash
 # Default / "ready" / "all"
-bd ready --json
-# Returns array of bead-id objects ready to work on (deps closed)
+cmd task list --status pending --json
+# Returns array of task id objects ready to work on (deps closed)
 
 # "pending"
 cmd task list --status pending --json
@@ -163,20 +163,20 @@ for id in 123 124 125; do
 done
 ```
 
-**For the canonical agent loop, prefer `bd ready --json`** — it filters to unblocked work and is the single source of truth for "what can run now".
+**For the canonical agent loop, prefer `cmd task list --status pending --json`** — it filters to unblocked work and is the single source of truth for "what can run now".
 
-To resolve a bd bead-id back to the cmd numeric id (needed for `cmd task claim`), parse `cmd task list --json` and look up `.bead_id == <ready bead>`.
+To resolve a cmd task id back to the cmd numeric id (needed for `cmd task claim`), parse `cmd task list --json` and look up `.task_id == <ready task>`.
 
 ```bash
-# Resolve bead → numeric
-ready_beads=$(bd ready --json | jq -r '.[].id')
+# Resolve task lookup
+ready_tasks=$(cmd task list --status pending --json | jq -r '.[].id')
 all_tasks=$(cmd task list --json | sed -E 's/\x1b\[[0-9;]*m//g')
-# Then lookup .bead_id == bead in all_tasks → .id
+# Then lookup .task_id == task in all_tasks → .id
 ```
 
 #### 0.2 Filter by working_directory
 
-`bd` is scoped per `.beads/` directory, so the working_directory filter is automatic — every task returned by `bd ready` lives under the current `.beads/`. No explicit filter is needed.
+`cmd` scopes task operations to the active project/working directory, so every task returned by `cmd task list --status pending` belongs to the current project. No raw backend filtering is needed.
 
 If $ARGUMENTS specifies cross-project execution, switch directories first or run a separate `/cmd-execute` per project.
 
@@ -243,11 +243,11 @@ Use the Task tool with:
     **Mission:** Analyze task dependencies and build execution order.
 
     **Tasks:**
-    1. Run `bd dep tree <bead-id>` for each task to see existing edges
+    1. Run `cmd dep list <task id>` for each task to see existing edges
     2. Parse each task description for dependency keywords:
        - "after", "depends on", "requires", "blocks", "must complete before"
        - Explicit IDs in description text
-    3. Compare written deps against the bd graph; flag mismatches
+    3. Compare written deps against the cmd dependency graph; flag mismatches
     4. Build a per-task wave assignment based on transitive blockers
 
     **Return Format (JSON):**
@@ -266,7 +266,7 @@ Use the Task tool with:
       "circular_dependencies": [],
       "execution_order": ["v2-abc", "v2-def", "v2-ghi"],
       "missing_bd_edges": [
-        {"from": "v2-def", "to": "v2-abc", "reason": "task description says 'after v2-abc' but no bd edge exists"}
+        {"from": "v2-def", "to": "v2-abc", "reason": "task description says 'after v2-abc' but no cmd dependency edge exists"}
       ]
     }
     ```
@@ -382,7 +382,7 @@ Use the Task tool with:
           "tasks": [
             {
               "numeric_id": 1,
-              "bead_id": "v2-abc",
+              "task_id": "v2-abc",
               "description": "...",
               "work_type": "backend",
               "assigned_agent": "haiku-4.5",
@@ -393,17 +393,17 @@ Use the Task tool with:
         }
       ],
       "missing_bd_edges_to_create": [
-        {"from_bead": "v2-def", "to_bead": "v2-abc", "reason": "wave-2 must wait for wave-1"}
+        {"from_task": "v2-def", "to_task": "v2-abc", "reason": "wave-2 must wait for wave-1"}
       ]
     }
     ```
 ```
 
-After Opus returns, **wire any missing bd edges** so `bd ready` correctly gates the loop:
+After Opus returns, **wire any missing cmd dependency edges** so `cmd task list --status pending` correctly gates the loop:
 
 ```bash
 for edge in $missing_bd_edges; do
-  bd dep add "$edge.from_bead" "$edge.to_bead"
+  cmd dep add "$edge.from_task" "$edge.to_task"
 done
 ```
 
@@ -417,7 +417,7 @@ For pre-planned tasks, the per-task `info` comment already contains:
 - `implementation_guide`
 - `analysis_context`
 
-The main agent just collects them per-wave (where wave is derived from `bd dep tree`):
+The main agent just collects them per-wave (where wave is derived from `cmd dep list`):
 
 ```bash
 # For each pre-planned task, parse its info comment to get wave assignment
@@ -451,7 +451,7 @@ If both pre-planned and ad-hoc tasks are present, merge results from Phase 2 and
 ---
 
 Sanity:
-  bd ready              # should match Wave 1 only
+  cmd task list --status pending              # should match Wave 1 only
   cmd tree              # full hierarchy
 ```
 
@@ -477,7 +477,7 @@ Wait for user response.
 
 ### Phase 5: Continuous Claim-Loop Execution
 
-**On approval, execute via continuous claim-loop. Each agent claims ONE bd-ready task at a time. Multiple agents (multiple terminals running `/cmd-execute`) coexist via `cmd task claim`'s atomic sidecar write.**
+**On approval, execute via continuous claim-loop. Each agent claims ONE cmd-ready task at a time. Multiple agents (multiple terminals running `/cmd-execute`) coexist via `cmd task claim`'s atomic sidecar write.**
 
 #### 5.1 Algorithm
 
@@ -488,7 +488,7 @@ Wait for user response.
                               │
                               ▼
               ┌───────────────────────────────┐
-              │ 1. bd ready --json            │
+              │ 1. cmd task list --status pending --json            │
               │    Find unblocked work        │
               └───────────────┬───────────────┘
                               │
@@ -497,7 +497,7 @@ Wait for user response.
               ▼ Found                        ▼ Empty
      ┌────────────────┐           ┌────────────────────────┐
      │ 2. Resolve     │           │ 3. Are any tasks still │
-     │ bead → numeric │           │    open / working?     │
+     │ task lookup │           │    open / working?     │
      └───────┬────────┘           └───────────┬────────────┘
              │                                │
              ▼                          ┌─────┴─────┐
@@ -511,7 +511,7 @@ Wait for user response.
        ▼ ok       ▼ already claimed
   ┌──────────┐ ┌─────────────┐
   │ 4. Work  │ │ Pick next   │
-  │ on task  │ │ ready bead  │
+  │ on task  │ │ ready task  │
   └────┬─────┘ └─────────────┘
        │
        ▼
@@ -533,10 +533,10 @@ INITIALIZE:
 MAIN_LOOP:
   WHILE TRUE:
 
-    # Step 1: Find next ready task (bd does the dependency-aware filtering)
-    next_bead=$(bd ready --json | jq -r '.[0].id // empty')
+    # Step 1: Find next ready task (backend does the dependency-aware filtering)
+    next_task=$(cmd task list --status pending --json | jq -r '.[0].id // empty')
 
-    IF next_bead is empty:
+    IF next_task is empty:
       # Are there still tasks open elsewhere (working, deferred)?
       open_count=$(cmd task list --status working --json | jq 'length')
 
@@ -555,14 +555,14 @@ MAIN_LOOP:
 
     consecutive_empty_polls = 0
 
-    # Step 2: Resolve bead → numeric id
+    # Step 2: Resolve task lookup id
     numeric=$(cmd task list --json \
       | sed -E 's/\x1b\[[0-9;]*m//g' \
       | python3 -c "
 import json, sys
 d = sys.stdin.read()
 arr = json.loads(d[d.find('['):d.rfind(']')+1])
-print(next(t['id'] for t in arr if t['bead_id'] == '$next_bead'))
+print(next(t['id'] for t in arr if t['task_id'] == '$next_task'))
 ")
 
     # Step 3: Atomic claim
@@ -575,7 +575,7 @@ print(next(t['id'] for t in arr if t['bead_id'] == '$next_bead'))
     cmd task update "$numeric" --status working
 
     # Step 5: Execute the task (see 5.4)
-    executeTask numeric=$numeric bead=$next_bead
+    executeTask numeric=$numeric task=$next_task
 
     # Loop continues
     CONTINUE
@@ -586,7 +586,7 @@ print(next(t['id'] for t in arr if t['bead_id'] == '$next_bead'))
 When all tasks at the current "wave depth" close, run a commit checkpoint before the next wave begins:
 
 ```bash
-# Detect wave boundary: when bd ready returns NEW beads that weren't ready before,
+# Detect wave boundary: when cmd task list --status pending returns NEW tasks that weren't ready before,
 # treat that transition as a wave boundary.
 
 # After every wave:
@@ -607,7 +607,7 @@ Use the Task tool with:
 - prompt: |
     ## cmd CLI Protocol — Claim-Loop Execution (Haiku 4.5)
 
-    **You are a Haiku 4.5 agent. You have ALREADY been claimed onto task #[NUMERIC_ID] (bead [BEAD_ID]).**
+    **You are a Haiku 4.5 agent. You have ALREADY been claimed onto task #[NUMERIC_ID] (task [BEAD_ID]).**
 
     **Working directory:** [WORKING_DIRECTORY]
     **File scope (allowed):** [FILE_SCOPE_ALLOWED]
@@ -721,7 +721,7 @@ After the claim-loop exits (either all tasks complete or user-requested stop):
 Sanity:
   cmd task list --status pending
   cmd task list --status failed
-  bd ready
+  cmd task list --status pending
 ```
 
 ---
@@ -737,7 +737,7 @@ Sanity:
 | `commander_task_lifecycle(operation="fail")` | `cmd task update <id> --status failed` + `cmd task comment <id> "..." --type error` |
 | `commander_comment(operation="add")` | `cmd task comment <id> "msg" --type T` |
 | `commander_log` | `cmd task comment <id> "msg" --type progress` |
-| `commander_task_group(operation="get", group_id)` | `bd dep tree <root-bead>` (use the bd dep graph as the group; `bd ready` filters to unblocked) |
+| `commander_task_group(operation="get", group_id)` | `cmd dep list <root-task>` (use the cmd dependency graph as the group; `cmd task list --status pending` plus blockers context filters to actionable work) |
 | `commander_task_group(operation="list")` | `cmd task list --json` (full picture) |
 | `commander_mailbox` | `cmd mailbox send`, `cmd mailbox inbox`, `cmd mailbox read` |
 
@@ -746,7 +746,7 @@ Sanity:
 ## Usage Examples
 
 ```bash
-# Default: process whatever bd thinks is ready
+# Default: process whatever backend thinks is ready
 /cmd-execute
 
 # Explicit: ready queue only
@@ -758,7 +758,7 @@ Sanity:
 # Specific tasks
 /cmd-execute 123,124,125
 
-# All pending (ignore bd ready filter — useful when deps are off-graph)
+# All pending (ignore cmd task list --status pending filter — useful when deps are off-graph)
 /cmd-execute pending
 ```
 

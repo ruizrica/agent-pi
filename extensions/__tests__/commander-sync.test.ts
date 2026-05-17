@@ -18,6 +18,7 @@ import {
 	parseGroupCreateResult,
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
+	markGroupCreateSettled,
 	updateMappingStatus,
 	addPendingCreate,
 	addPendingCreates,
@@ -511,6 +512,22 @@ describe("applyGroupCreateResult", () => {
 			{ localId: 10, commanderId: 200 },
 			{ localId: 1, commanderId: 101 },
 		]);
+	});
+});
+
+describe("markGroupCreateSettled", () => {
+	it("clears groupCreationInFlight without dropping pending creates or mappings", () => {
+		const state: SyncState = {
+			available: true,
+			groupId: undefined,
+			groupCreationInFlight: true,
+			mappings: [{ localId: 1, commanderId: 42 }],
+			pendingCreates: [{ localId: 2, text: "child", desiredStatus: "idle", requestedAt: 1, mode: "group" }],
+		};
+		const updated = markGroupCreateSettled(state);
+		expect(updated.groupCreationInFlight).toBe(false);
+		expect(updated.mappings).toEqual(state.mappings);
+		expect(updated.pendingCreates).toEqual(state.pendingCreates);
 	});
 });
 

@@ -152,16 +152,27 @@ export class CommanderCliClient {
 				return normalizeTask(await this.runJson(["task", "show", String(id), "--json", "--no-color"], timeoutMs, {}));
 			}
 			case "create": {
-				const description = String(required(params.description, "description"));
+				const originalDescription = String(required(params.description, "description"));
+				const groupId = params.group_id ?? params.groupId;
+				const synthetic = groupId !== undefined ? buildSyntheticBoardTaskFields(originalDescription, params) : null;
+				const description = synthetic?.description ?? originalDescription;
 				const args = ["task", "add", description, "--json", "--no-color"];
 				if (params.status) args.push("--status", String(params.status));
 				if (params.priority) args.push("--priority", String(params.priority));
-				if (params.title) args.push("--title", String(params.title));
+				if (params.title || synthetic?.title) args.push("--title", String(params.title ?? synthetic?.title));
 				const missionBrief = params.mission_brief ?? params.missionBrief;
 				if (missionBrief) args.push("--mission-brief", String(missionBrief));
 				const labels = normalizeLabelsParam(params.labels ?? params.label);
 				if (labels) args.push("--labels", labels);
-				if (params.group_id) args.push("--parent", String(params.group_id));
+				if (groupId !== undefined) args.push("--parent", String(groupId));
+				const primaryFile = params.primary_file ?? params.primaryFile ?? synthetic?.primaryFile;
+				if (primaryFile) args.push("--primary-file", String(primaryFile));
+				const body = params.body ?? synthetic?.body;
+				if (body) args.push("--body", String(body));
+				const lifecycleOwner = params.lifecycle_owner ?? params.lifecycleOwner ?? synthetic?.lifecycleOwner;
+				if (lifecycleOwner) args.push("--lifecycle-owner", String(lifecycleOwner));
+				if (params.accept_lifecycle === true || params.acceptLifecycle === true) args.push("--accept-lifecycle");
+				if (params.confirm_wrapper === true || params.confirmWrapper === true || synthetic?.confirmWrapper) args.push("--confirm-wrapper");
 				const created = normalizeTask(await this.runJson(args, timeoutMs, {}));
 				return { ...created, task_id: Number((created as any).task_id ?? (created as any).id) };
 			}
@@ -309,6 +320,29 @@ function normalizeLabelsParam(value: unknown): string | undefined {
 		return labels.length > 0 ? labels.join(",") : undefined;
 	}
 	return String(value);
+}
+
+function truncateForTitle(value: string): string {
+	const compact = value.replace(/\s+/g, " ").trim() || "Local task";
+	return compact.length <= 80 ? compact : `${compact.slice(0, 77)}...`;
+}
+
+function sanitizeSentence(value: string): string {
+	return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").replace(/[.;]+$/g, "").trim() || "local task";
+}
+
+function buildSyntheticBoardTaskFields(description: string, params: Record<string, unknown>) {
+	if (params.primary_file || params.primaryFile || params.body || params.lifecycle_owner || params.lifecycleOwner) return null;
+	const title = truncateForTitle(String(params.title || description));
+	const cleanDescription = sanitizeSentence(description);
+	return {
+		title,
+		description: `In . around lines 1-1, local task requires execution: ${cleanDescription}; complete the requested local task.`,
+		primaryFile: ".",
+		body: `## Steps\n1. Complete the local Pi task: ${cleanDescription}\n\n## Tests\n- Verify the local Pi task is marked done and the Commander board status stays in sync.\n\n## References\n- Generated from Pi local task discipline sync.`,
+		lifecycleOwner: "self",
+		confirmWrapper: true,
+	};
 }
 
 function normalizeTask(task: any): any {

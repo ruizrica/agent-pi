@@ -1,6 +1,6 @@
 ---
 name: cmd-skill
-description: Routes Commander v2 (`cmd` CLI on bd) workflows — multi-task planning (`cmd-plan`), single-task plan+execute (`cmd-task`), claim-loop execution (`cmd-execute`), and ad-hoc `cmd task` usage. Use when the user mentions cmd-plan, cmd-task, cmd-execute, cmd-tasks, Commander, bd ready, claim-loop, or managing tasks through `cmd` instead of in-chat todos.
+description: Routes Commander v2 (`cmd` CLI on backend) workflows — multi-task planning (`cmd-plan`), single-task plan+execute (`cmd-task`), claim-loop execution (`cmd-execute`), and ad-hoc `cmd task` usage. Use when the user mentions cmd-plan, cmd-task, cmd-execute, cmd-tasks, Commander, cmd task list --status pending, claim-loop, or managing tasks through `cmd` instead of in-chat todos.
 disable-model-invocation: false
 ---
 
@@ -10,9 +10,9 @@ disable-model-invocation: false
 
 | User intent | Follow |
 |-------------|--------|
-| Decompose a feature into many bd-backed tasks, wire wave deps with `bd dep add`, optionally run parallel execution later | [cmd-plan.md](cmd-plan.md) |
+| Decompose a feature into many cmd-managed tasks, wire wave deps with `cmd dep add`, optionally run parallel execution later | [cmd-plan.md](cmd-plan.md) |
 | One task — scouts + planner, then implement on a single `cmd task` with comment trail | [cmd-task.md](cmd-task.md) |
-| Run the claim-loop on **existing** tasks (`bd ready`, `cmd task claim`, complete/fail) | [cmd-execute.md](cmd-execute.md) |
+| Run the claim-loop on **existing** tasks (`cmd task list --status pending`, `cmd task claim`, complete/fail) | [cmd-execute.md](cmd-execute.md) |
 | Ad-hoc listing, comments, status, mailbox — no full scout/plan pipeline | [cmd-tasks.md](cmd-tasks.md) |
 
 Treat **`/cmd-plan`**, **`/cmd-task`**, **`/cmd-execute`** as shorthand for “open the matching markdown and execute that protocol verbatim.” User text after the command is the plan/task description or filter (`$ARGUMENTS` in those docs).
@@ -28,9 +28,9 @@ Run from a shell for the live, versioned contract:
 ## Preconditions (all workflows)
 
 1. `cmd` on PATH (e.g. `~/.local/bin/cmd`)
-2. `bd` on PATH when using the bd-backed store (default)
-3. `.beads/` in the project (`bd init` if missing)
-4. Prefer **`bd dep add`** for real dependency edges; avoid relying on **`cmd dep add`** for bd persistence (see [cmd-tasks.md](cmd-tasks.md))
+2. `cmd` wrapper on PATH; backend access stays behind the wrapper
+3. `cmd init` has been run for the project if needed
+4. Prefer **`cmd dep add`** for real dependency edges; avoid relying on **`cmd dep add`** for backend persistence (see [cmd-tasks.md](cmd-tasks.md))
 
 ## Invocation note
 

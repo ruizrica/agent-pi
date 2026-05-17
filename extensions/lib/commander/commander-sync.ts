@@ -259,6 +259,10 @@ export function applyGroupCreateResult(
 	};
 }
 
+export function markGroupCreateSettled(state: SyncState): SyncState {
+	return { ...state, groupCreationInFlight: false };
+}
+
 export function isExternalSyncActive(): boolean {
 	return (globalThis as any).__piCommanderPlanGroupId !== undefined;
 }

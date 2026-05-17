@@ -91,6 +91,13 @@ describe("mission complete lifecycle", () => {
 		expect(tasksSource).not.toContain("tasks are dropped");
 	});
 
+	it("clears stuck group-create state after failed Commander group sync", () => {
+		expect(tasksSource).toContain("markGroupCreateSettled(syncState)");
+		expect(tasksSource).toContain("client.callTool(\"commander_task\", payload, 30_000)");
+		expect(tasksSource).toContain("catch (err)");
+		expect(tasksSource).toContain("throw err;");
+	});
+
 	it("suppresses subagent local-task board sync through the shared ownership policy", () => {
 		expect(tasksSource).toContain("resolveCommanderTaskSyncPolicyFromEnv");
 		expect(tasksSource).toContain("function shouldSyncLocalTasksToCommander()");

@@ -42,6 +42,7 @@ import {
 	parseGroupCreateResult,
 	buildGroupCreatePayload,
 	applyGroupCreateResult,
+	markGroupCreateSettled,
 	updateMappingStatus,
 	addPendingCreates,
 	addPendingCreate,
@@ -879,15 +880,20 @@ export default function (pi: ExtensionAPI) {
 								process.cwd(),
 							);
 							syncToCommander("group-create", async (client) => {
-								const res = await client.callTool("commander_task", payload);
-								const parsed = parseGroupCreateResult(res);
-								if (parsed) {
-									syncState = applyGroupCreateResult(syncState, localIds, parsed);
-									for (const lid of localIds) {
-										syncState = updateMappingStatus(syncState, lid, "idle");
+								try {
+									const res = await client.callTool("commander_task", payload, 30_000);
+									const parsed = parseGroupCreateResult(res);
+									if (parsed) {
+										syncState = applyGroupCreateResult(syncState, localIds, parsed);
+										for (const lid of localIds) {
+											syncState = updateMappingStatus(syncState, lid, "idle");
+										}
+									} else {
+										syncState = markGroupCreateSettled(syncState);
 									}
-								} else {
-									syncState = { ...syncState, groupCreationInFlight: false };
+								} catch (err) {
+									syncState = markGroupCreateSettled(syncState);
+									throw err;
 								}
 							});
 						}
@@ -960,15 +966,20 @@ export default function (pi: ExtensionAPI) {
 								process.cwd(),
 							);
 							syncToCommander("group-create", async (client) => {
-								const res = await client.callTool("commander_task", payload);
-								const parsed = parseGroupCreateResult(res);
-								if (parsed) {
-									syncState = applyGroupCreateResult(syncState, localIds, parsed);
-									for (const lid of localIds) {
-										syncState = updateMappingStatus(syncState, lid, "idle");
+								try {
+									const res = await client.callTool("commander_task", payload, 30_000);
+									const parsed = parseGroupCreateResult(res);
+									if (parsed) {
+										syncState = applyGroupCreateResult(syncState, localIds, parsed);
+										for (const lid of localIds) {
+											syncState = updateMappingStatus(syncState, lid, "idle");
+										}
+									} else {
+										syncState = markGroupCreateSettled(syncState);
 									}
-								} else {
-									syncState = { ...syncState, groupCreationInFlight: false };
+								} catch (err) {
+									syncState = markGroupCreateSettled(syncState);
+									throw err;
 								}
 							});
 						} else if (syncState.groupId !== undefined) {
