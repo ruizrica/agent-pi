@@ -68,6 +68,14 @@ describe("plan-viewer implementation", () => {
 		expect(source).toContain("materializeApprovedTasksToCommander");
 	});
 
+	it("materializes investigation report remediation tasks before IMPLEMENT handoff", () => {
+		expect(source).toContain('sourceKind: isInvestigation ? "investigation" : "plan"');
+		expect(source).toContain('labels: isInvestigation ? ["investigation-remediation"] : ["plan-approval"]');
+		expect(source).toContain("sectionHint: isInvestigation");
+		expect(source).toContain("Remediation|Next Steps|Remediation \\/ Next Steps");
+		expect(source).toContain("Proceed with IMPLEMENT mode");
+	});
+
 	it("calls global __piSetModeForApproval callback when approval happens", () => {
 		expect(source).toContain("__piSetModeForApproval");
 		expect(source).toContain("typeof setModeCallback === \"function\"");

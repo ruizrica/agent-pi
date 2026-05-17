@@ -195,7 +195,7 @@ describe("GOAL_PROMPT — success-condition loop", () => {
 	it("includes WARDEN and approval handoff guardrails", () => {
 		expect(GOAL_PROMPT).toContain("WARDEN");
 		expect(GOAL_PROMPT).toContain("tasks");
-		expect(GOAL_PROMPT).toContain("PLAN, SPEC, or IMPLEMENT");
+		expect(GOAL_PROMPT).toContain("PLAN, SPEC, INVESTIGATE, or IMPLEMENT");
 	});
 });
 

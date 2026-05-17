@@ -30,6 +30,37 @@ describe("approval task materialization", () => {
 		expect(tasks.map((task) => task.description)).toEqual(["Fix root cause", "Add regression test"]);
 	});
 
+	it("builds investigation Commander tasks only from remediation/next steps", () => {
+		const payload = buildCommanderTaskGroupPayload({
+			title: "Login Outage Investigation",
+			sourceKind: "investigation",
+			sourcePath: ".context/todo.md",
+			cwd: "/repo",
+			markdown: `# Investigation Report
+## Findings
+- [ ] Finding checkbox should not become implementation work
+## Remediation / Next Steps
+- [ ] Fix session refresh handling
+- [x] Already mitigated
+- [ ] Add outage regression test
+## Evidence
+- [ ] Evidence checkbox should not become work`,
+			sectionHint: /^##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i,
+		});
+
+		expect(payload).toMatchObject({
+			operation: "group:create",
+			group_name: "Investigation: Login Outage Investigation",
+		});
+		expect(payload.labels).toContain("approved-investigation");
+		expect(String(payload.initiative_summary)).toContain("Investigation approved for IMPLEMENT mode");
+		expect((payload.tasks as any[]).map((task) => task.description)).toEqual([
+			"Fix session refresh handling",
+			"Add outage regression test",
+		]);
+		expect((payload.tasks as any[])[0].labels).toContain("approved-investigation");
+	});
+
 	it("builds a Commander group:create payload with source metadata", () => {
 		const payload = buildCommanderTaskGroupPayload({
 			title: "Approved Plan",

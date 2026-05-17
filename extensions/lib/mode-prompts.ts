@@ -1,5 +1,5 @@
 // ABOUTME: System prompt templates injected by mode-cycler for each operational mode.
-// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, and PIPELINE prompts plus shared Commander integration helper.
+// ABOUTME: Includes complexity-aware NORMAL, PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, and PIPELINE prompts plus shared Commander integration helper.
 
 import {
 	DEFAULT_ADVISOR_MODEL,
@@ -143,7 +143,7 @@ ${buildWardenTaskConfirmationSection("NORMAL", {
 	sliceName: "complex direct-work slice",
 	guardrails: [
 		"Use WARDEN for non-trivial work; do not force ceremony for simple answers, quick reads, or one-off status checks.",
-		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE instead of improvising.",
+		"When WARDEN tasks show the work is bigger than NORMAL mode, switch to PLAN, SPEC, INVESTIGATE, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE instead of improvising.",
 	],
 })}
 
@@ -243,6 +243,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 |----------|--------------------------------------------------------------------|
 | PLAN     | Multi-step changes needing a plan + user approval before coding.   |
 | SPEC     | New features needing requirements gathering and a written spec.    |
+| INVESTIGATE | Bugs, incidents, regressions, or unclear failures needing diagnosis before remediation. |
 | IMPLEMENT | Autonomous execution loop for existing project-folder task-board work. |
 | GOAL     | Objective-driven loop that continues until an explicit success condition is met. |
 | TEAM     | Parallel specialist dispatch — independent workstreams.            |
@@ -251,9 +252,9 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ### When to Switch Modes
 1. **SIMPLE task** (read, answer, single edit) — work directly in NORMAL, do NOT call set_mode.
-2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, GOAL, or IMPLEMENT immediately, explain your choice, and await user approval of the plan when that mode requires it.
+2. **STRUCTURED multi-step change** — call \`set_mode\` with PLAN, SPEC, INVESTIGATE, GOAL, or IMPLEMENT immediately, explain your choice, and await user approval of the plan/report/spec when that mode requires it.
 3. **TASK-BOARD IMPLEMENTATION LOOP** — call \`set_mode\` with IMPLEMENT when work is already decomposed into project-folder task-board items and the agent should autonomously drain eligible lanes. Use PLAN/SPEC when work still needs approval or requirements; use GOAL when the success condition is custom rather than task-lane based.
-4. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE if the task needs explicit approval, a written spec, an explicit success-condition loop, or autonomous task-board execution.
+4. **COMPLEX parallelizable work** — stay in NORMAL and use the advisor + mixed non-advisor fan-out pattern above. Prefer workers for content gathering and builders for execution-heavy work. Only switch to PLAN/SPEC/INVESTIGATE/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE if the task needs explicit approval, a written spec, diagnostic investigation, an explicit success-condition loop, or autonomous task-board execution.
 
 ## Mode Availability
 - CHAIN: ${chainStatus}
@@ -691,7 +692,7 @@ ${buildWardenTaskConfirmationSection("GOAL", {
 	sliceName: "goal loop slice",
 	guardrails: [
 		"Use WARDEN tasks to confirm the active goal, each meaningful loop slice, blocking questions, and GOAL MET completion.",
-		"Do not treat an active WARDEN task as permission to bypass PLAN, SPEC, or IMPLEMENT handoff approval when the next slice includes code changes that need explicit approval.",
+		"Do not treat an active WARDEN task as permission to bypass PLAN, SPEC, INVESTIGATE, or IMPLEMENT handoff approval when the next slice includes code changes that need explicit approval.",
 	],
 })}
 
@@ -724,7 +725,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 ### Phase 2: Choose One Next Slice
 - Choose the smallest useful slice that moves the goal closer to completion or reduces uncertainty.
 - Keep every slice tied to the success condition.
-- If the slice requires implementation approval, switch to PLAN, SPEC, or prepare Commander tasks for IMPLEMENT instead of silently coding.
+- If the slice requires implementation approval, switch to PLAN, SPEC, INVESTIGATE, or prepare Commander tasks for IMPLEMENT instead of silently coding.
 
 ### Phase 3: Execute or Delegate the Slice
 - Execute one focused slice at a time.

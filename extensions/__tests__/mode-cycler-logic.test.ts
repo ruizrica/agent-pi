@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 8 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"]);
+	it("has exactly 9 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"]);
 	});
 });
 
@@ -19,8 +19,12 @@ describe("nextMode", () => {
 		expect(nextMode("PLAN")).toBe("SPEC");
 	});
 
-	it("cycles SPEC → IMPLEMENT", () => {
-		expect(nextMode("SPEC")).toBe("IMPLEMENT");
+	it("cycles SPEC → INVESTIGATE", () => {
+		expect(nextMode("SPEC")).toBe("INVESTIGATE");
+	});
+
+	it("cycles INVESTIGATE → IMPLEMENT", () => {
+		expect(nextMode("INVESTIGATE")).toBe("IMPLEMENT");
 	});
 
 	it("cycles IMPLEMENT → GOAL", () => {
@@ -53,8 +57,12 @@ describe("prevMode", () => {
 		expect(prevMode("SPEC")).toBe("PLAN");
 	});
 
-	it("cycles IMPLEMENT → SPEC", () => {
-		expect(prevMode("IMPLEMENT")).toBe("SPEC");
+	it("cycles INVESTIGATE → SPEC", () => {
+		expect(prevMode("INVESTIGATE")).toBe("SPEC");
+	});
+
+	it("cycles IMPLEMENT → INVESTIGATE", () => {
+		expect(prevMode("IMPLEMENT")).toBe("INVESTIGATE");
 	});
 
 	it("cycles GOAL → IMPLEMENT", () => {
@@ -244,6 +252,7 @@ describe("mode hints", () => {
 		expect(modeHintText("NORMAL").toLowerCase()).toContain("default direct mode");
 		expect(modeHintText("PLAN").toLowerCase()).toContain("planning");
 		expect(modeHintText("SPEC").toLowerCase()).toContain("requirements");
+		expect(modeHintText("INVESTIGATE").toLowerCase()).toContain("diagnose");
 		expect(modeHintText("GOAL").toLowerCase()).toContain("success condition");
 		expect(modeHintText("IMPLEMENT").toLowerCase()).toContain("task-board");
 		expect(modeHintText("PIPELINE").toLowerCase()).toContain("phased");
