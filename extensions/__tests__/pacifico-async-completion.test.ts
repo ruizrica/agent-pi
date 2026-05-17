@@ -30,7 +30,7 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("pi.registerMessageRenderer(PACIFICO_MESSAGE_TYPE, renderPacificoMessage)");
 		expect(source).toContain("pi.registerMessageRenderer(PACIFICO_JOB_COMPLETE_TYPE, renderPacificoMessage)");
 		expect(source).toContain("ctx.ui.setWidget(PACIFICO_WIDGET_KEY");
-		expect(source).toContain("setPacificoWidget(ctx, r.id");
+		expect(source).toContain("runPacificoInferWithRetry(body");
 		expect(source).toContain("setPacificoWidget(ctx, job.id");
 		expect(source).toContain('const rows = renderPacificoRows(activeWidgetDetails, theme, "", width, true);');
 		expect(source).toContain('return rows.length > 0 ? [...rows, ""] : rows;');
@@ -58,7 +58,24 @@ describe("pacifico async completion notifier", () => {
 		expect(source).not.toContain("I'll stay quiet while Pacifico works and continue when the result is ready.");
 	});
 
-	it("supports queued, processing, completed, and error widget states without old color-table chrome", () => {
+	it("shows retry metadata and retry progress in the Pacifico widget and overlay", () => {
+		expect(source).toContain("const PACIFICO_MAX_ATTEMPTS = 3");
+		expect(source).toContain("const PACIFICO_RETRY_BACKOFF_MS");
+		expect(source).toContain("retryAttempt?: number | null");
+		expect(source).toContain("maxRetries?: number | null");
+		expect(source).toContain("retryReason?: string | null");
+		expect(source).toContain("function pacificoRetryLabel");
+		expect(source).toContain("retrying ${retryLabel");
+		expect(source).toContain("failed after ${retryLabel}");
+		expect(source).toContain('lines.push(`retry: ${retryLabel}`)');
+		expect(source).toContain('"Retry reason:"');
+		expect(source).toContain("function isRetryablePacificoError");
+		expect(source).toContain("function runPacificoInferWithRetry");
+		expect(source).toContain("!isRetryablePacificoError(failure)");
+		expect(source).toContain("isAbortError");
+	});
+
+	it("supports queued, processing, retrying, completed, and error widget states without old color-table chrome", () => {
 		expect(source).toContain("function normalizeWidgetStatus");
 		expect(source).toContain('return "queued"');
 		expect(source).toContain('return "processing"');
@@ -73,8 +90,8 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("status:");
 		expect(source).toContain("formatPacificoWidgetContent({");
 		expect(source).toContain("const PACIFICO_SPINNER_FRAMES");
-		expect(source).toContain('return status === "queued" || status === "processing"');
-		expect(source).toContain('return status === "processing" ? `${frame} running` : `${frame} awaiting`;');
+		expect(source).toContain('return status === "queued" || status === "processing" || status === "retrying"');
+		expect(source).toContain('if (status === "retrying") return `${frame} retrying ${retryLabel ?? ""}`.trim();');
 		expect(source).toContain('const status = activeWidgetDetails ? normalizeWidgetStatus(activeWidgetDetails.status) : "completed"');
 		expect(source).toContain("function hidePacificoStatusWidget");
 		expect(source).toContain('if (status === "completed") {');
@@ -183,9 +200,10 @@ describe("pacifico async completion notifier", () => {
 	it("keeps sync responses immediate and only registers the poller for async responses", () => {
 		expect(source).toContain('if (result.kind === "sync")');
 		expect(source).toContain("const meta = `_${r.provider} · ${r.model} · route ${r.route}_`;");
-		expect(source).toContain("registerPoller(r.id, ctx)");
+		expect(source).toContain("runPacificoInferWithRetry(body");
+		expect(source).toContain("queueJobCompletion(job, ctx.cwd)");
 		const syncBranchIndex = source.indexOf('if (result.kind === "sync")');
-		const pollerIndex = source.indexOf("registerPoller(r.id, ctx)", syncBranchIndex);
-		expect(pollerIndex).toBeGreaterThan(syncBranchIndex);
+		const completionIndex = source.indexOf("queueJobCompletion(job, ctx.cwd)", syncBranchIndex);
+		expect(completionIndex).toBeGreaterThan(syncBranchIndex);
 	});
 });

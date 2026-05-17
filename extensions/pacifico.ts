@@ -1633,7 +1633,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				const job = result.job;
 				meta = { ...meta, jobId: job.id, status: job.status, route: job.result?.route ?? job.route ?? null, provider: job.result?.provider ?? null, model: job.result?.model ?? job.model ?? r.model ?? null };
 				if (job.status === "completed" && job.result?.output) raw = job.result.output;
-				else raw = `Pacifico advisor job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : " without output."}`;
+				else raw = `Pacifico advisor job ${job.id} ended ${job.status} after ${result.attempts}/${PACIFICO_MAX_ATTEMPTS} attempts${job.error ? `: ${job.error}` : " without output."}`;
 			}
 			const normalized = normalizeAdvisorResponse(raw);
 			const text = formatPacificoAdvisorResult(normalized, {
@@ -1772,7 +1772,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 					};
 				}
 				return {
-					content: [{ type: "text", text: `Job ${job.id} ended ${job.status}${job.error ? `: ${job.error}` : "."}` }],
+					content: [{ type: "text", text: `Job ${job.id} ended ${job.status} after ${result.attempts}/${PACIFICO_MAX_ATTEMPTS} attempts${job.error ? `: ${job.error}` : "."}` }],
 					details: { jobId: job.id, status: job.status, error: job.error ?? null, attempts: result.attempts },
 				};
 			} catch (err) {
