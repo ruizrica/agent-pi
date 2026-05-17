@@ -49,6 +49,7 @@ import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
+import { resolveCommanderTaskSyncPolicyFromEnv } from "./lib/commander/task-ownership-policy.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import {
 	renderMissionComplete,
@@ -270,7 +271,20 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Commander sync (gate-aware) ─────────────────────────────────────
 
+	function getCommanderTaskSyncPolicy() {
+		return resolveCommanderTaskSyncPolicyFromEnv(process.env as Record<string, string | undefined>, isExternalSyncActive());
+	}
+
+	function shouldSyncLocalTasksToCommander(): boolean {
+		return getCommanderTaskSyncPolicy().shouldSyncLocalTasksToCommander;
+	}
+
+	function commanderSyncSuppressedMessage(): string {
+		return getCommanderTaskSyncPolicy().suppressedMessage || "Commander board sync suppressed by task ownership policy.";
+	}
+
 	function syncToCommander(label: string, fn: (client: any) => Promise<void>): void {
+		if (!shouldSyncLocalTasksToCommander()) return;
 		if (!isCommanderAvailable()) return;
 		const g = globalThis as any;
 		const client = getCommanderCliClient();
@@ -355,7 +369,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function auditCommanderBoardForMissionComplete(): void {
-		if (isExternalSyncActive()) return;
+		if (!shouldSyncLocalTasksToCommander()) return;
 		const tracker = g.__piCommanderTracker;
 
 		if (!isCommanderAvailable() || syncState.mappings.length === 0) {
@@ -388,7 +402,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function isCommanderAvailableForPreStopAudit(): boolean {
-		if (isExternalSyncActive()) return false;
+		if (!shouldSyncLocalTasksToCommander()) return false;
 		return isCommanderAvailable();
 	}
 
@@ -399,7 +413,7 @@ export default function (pi: ExtensionAPI) {
 			&& syncState.mappings.length > 0
 			&& !isFullySynced(tasks, syncState.mappings);
 		const commanderMessage = commanderAvailable
-			? "Before stopping, verify/update the Commander board for this work so every related Commander task is completed or accurately reflects the remaining status."
+			? "Before stopping, verify/update the Commander board for this work so every related Commander task is completed, cancelled, failed, handed off, or accurately reflects the remaining status. Every Commander board task you create or claim is your responsibility; use mailbox/comments for coordination instead of leaving placeholder tasks."
 			: "";
 
 		return { incomplete, commanderAvailable, commanderNeedsAttention, commanderMessage };
@@ -840,7 +854,7 @@ export default function (pi: ExtensionAPI) {
 					saveSharedStateIfNeeded("new-list", `Started shared list "${listTitle}".`);
 
 					// Sync initial tasks to Commander if any were provided
-					if (initialTasks.length > 0 && !isExternalSyncActive()) {
+					if (initialTasks.length > 0 && shouldSyncLocalTasksToCommander()) {
 						if (shouldCreateGroup(syncState)) {
 							syncState = markGroupCreationInFlight(syncState);
 							const localIds = initialTasks.map((t) => t.id);
@@ -871,6 +885,9 @@ export default function (pi: ExtensionAPI) {
 					}
 					if (initialTasks.length > 0) {
 						msg += `\nAdded ${initialTasks.length} tasks: ${initialTasks.map((t) => `#${t.id}`).join(", ")}`;
+						if (!shouldSyncLocalTasksToCommander()) {
+							msg += `\n(${commanderSyncSuppressedMessage()})`;
+						}
 					}
 
 					const result = {
@@ -915,8 +932,8 @@ export default function (pi: ExtensionAPI) {
 					}
 					saveSharedStateIfNeeded("add", `Added ${added.length === 1 ? 'task' : 'tasks'} ${added.map((t) => `#${t.id}`).join(', ')}.`);
 
-					// Sync: create Commander tasks (skip if external sync owns it)
-					if (!isExternalSyncActive()) {
+					// Sync: create Commander tasks only when this session owns local task-board sync.
+					if (shouldSyncLocalTasksToCommander()) {
 						if (shouldCreateGroup(syncState)) {
 							// Path A: no group yet — batch all tasks into a single group:create
 							syncState = markGroupCreationInFlight(syncState);
@@ -961,9 +978,12 @@ export default function (pi: ExtensionAPI) {
 						// (race window — the group:create hasn't returned yet)
 					}
 
-					const msg = added.length === 1
+					let msg = added.length === 1
 						? `Added task #${added[0].id}: ${added[0].text}`
 						: `Added ${added.length} tasks: ${added.map((t) => `#${t.id}`).join(", ")}`;
+					if (!shouldSyncLocalTasksToCommander()) {
+						msg += `\n(${commanderSyncSuppressedMessage()})`;
+					}
 					const result = {
 						content: [{ type: "text" as const, text: msg }],
 						details: makeDetails("add"),
@@ -1009,8 +1029,8 @@ export default function (pi: ExtensionAPI) {
 						msg += `\n(Auto-paused ${demoted.map((t) => `#${t.id}`).join(", ")} → idle. Only one task can be in progress at a time.)`;
 					}
 
-					// Sync: update Commander task status (skip if external sync owns it)
-					if (!isExternalSyncActive()) {
+					// Sync: update Commander task status only when this session owns local task-board sync.
+					if (shouldSyncLocalTasksToCommander()) {
 						if (isCommanderAvailable()) {
 							const client = getCommanderCliClient();
 							// Commander available: await sync for per-task verification
@@ -1079,6 +1099,8 @@ export default function (pi: ExtensionAPI) {
 								syncState = updateMappingStatus(syncState, d.id, "idle");
 							});
 						}
+					} else {
+						msg += ` (${commanderSyncSuppressedMessage()})`;
 					}
 
 					saveSharedStateIfNeeded("toggle", `Changed task #${task.id} from ${prev} to ${task.status}.`);
@@ -1112,8 +1134,8 @@ export default function (pi: ExtensionAPI) {
 					const removed = tasks.splice(idx, 1)[0];
 					saveSharedStateIfNeeded("remove", `Removed task #${removed.id}.`);
 
-					// Sync: cancel Commander task (skip if external sync owns it)
-					if (!isExternalSyncActive()) {
+					// Sync: cancel Commander task only when this session owns local task-board sync.
+					if (shouldSyncLocalTasksToCommander()) {
 						syncToCommander("task-remove", async (client) => {
 							const cid = lookupMapping(syncState, removed.id);
 							if (cid === undefined) return;
@@ -1186,7 +1208,7 @@ export default function (pi: ExtensionAPI) {
 					const count = tasks.length;
 
 					// Sync: cancel all mapped Commander tasks (skip if external sync owns it)
-					if (!isExternalSyncActive() && syncState.mappings.length > 0) {
+					if (shouldSyncLocalTasksToCommander() && syncState.mappings.length > 0) {
 						syncToCommander("cancel-all", async (client) => {
 							for (const m of syncState.mappings) {
 								await client.callTool("commander_task", {

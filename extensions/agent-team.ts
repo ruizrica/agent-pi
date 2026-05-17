@@ -567,7 +567,11 @@ export default function (pi: ExtensionAPI) {
 		return new Promise((resolve) => {
 			let toolkitFinalOutput = "";
 			// Build env — include Commander task ID when available
-			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+			const spawnEnv: Record<string, string | undefined> = {
+				...process.env,
+				PI_SUBAGENT: "1",
+				PI_COMMANDER_TASK_SYNC_MODE: "assigned-only",
+			};
 			if ((globalThis as any).__piClaudeOverlay) {
 				spawnEnv.PI_CLAUDE_OVERLAY_ACTIVE = "1";
 			}

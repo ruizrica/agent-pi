@@ -100,4 +100,19 @@ describe("buildCommanderPrompt", () => {
 		expect(result).toContain("comment:add");
 		expect(result).toContain("agent_name");
 	});
+
+	it("forbids phantom Commander tasks for assigned subagent communication", () => {
+		const result = buildCommanderPrompt({ agentName: "SCOUT", taskId: 7, enableMailboxChat: true });
+		expect(result).toContain("Commander Task Ownership");
+		expect(result).toContain("Do not create additional Commander board tasks");
+		expect(result).toContain("progress, status, questions, coordination");
+		expect(result).toContain("commander_mailbox");
+	});
+
+	it("requires agents to close or hand off every Commander task they create or claim", () => {
+		const result = buildCommanderPrompt({ agentName: "BUILDER" });
+		expect(result).toContain("Every Commander board task you create or claim is your responsibility");
+		expect(result).toContain("completed, failed, cancelled, or explicitly handed off");
+		expect(result).toContain("Never leave pending/working tasks behind");
+	});
 });

@@ -83,6 +83,13 @@ describe("mission complete lifecycle", () => {
 		expect(tasksSource).toContain("Don't stop until local tasks and any Commander board updates are complete!");
 	});
 
+	it("suppresses subagent local-task board sync through the shared ownership policy", () => {
+		expect(tasksSource).toContain("resolveCommanderTaskSyncPolicyFromEnv");
+		expect(tasksSource).toContain("function shouldSyncLocalTasksToCommander()");
+		expect(tasksSource).toContain("function commanderSyncSuppressedMessage()");
+		expect(tasksSource).toContain("Every Commander board task you create or claim is your responsibility");
+	});
+
 	it("guards explicit self-cleanup as a stop/stomper path", () => {
 		expect(tasksSource).toContain("function shouldGuardSelfCleanup");
 		expect(tasksSource).toContain('operation === "cleanup:self"');

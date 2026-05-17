@@ -7,6 +7,7 @@ import {
 	MAX_WORKER_AGENTS,
 } from "./claude/advisor-default-config.ts";
 import { resolveCrossProviderSecondOpinion } from "./claude/advisor-default-orchestration.ts";
+import { buildCommanderTaskOwnershipPolicy } from "./commander/task-ownership-policy.ts";
 import { buildWardenTaskConfirmationSection } from "./warden-prompt-section.ts";
 
 /** Options for the shared delegate-everything policy section. */
@@ -67,13 +68,14 @@ If a subagent errors, dispatch a **new subagent** with corrected context — do 
 export function buildCommanderSection(): string {
 	return `\n## Commander Integration (REQUIRED)
 Commander CLI is connected. ALWAYS use these CLI-backed tools for dashboard visibility:
-- \`commander_task\` — track tasks in Commander (auto-synced from local tasks)
-- \`commander_mailbox\` — ALWAYS send status updates at task start and completion
+- \`commander_task\` — track durable, executable work in Commander; every board task needs a lifecycle owner and must be completed, failed, cancelled, or explicitly handed off
+- \`commander_mailbox\` — ALWAYS send status updates, discoveries, questions, blockers, handoffs, and worker_done/result messages through mailbox instead of creating coordination tasks
 
 ### Mailbox Protocol
 - Check your inbox periodically: \`commander_mailbox { operation: "inbox", agent_name: "<your-name>" }\`
 - Send status at start, milestones, and completion
-- Warm, professional, collaborative tone — no emojis anywhere`;
+- Use task comments/logs for progress on an existing claimed task; use mailbox for cross-agent signals
+- Warm, professional, collaborative tone — no emojis anywhere${buildCommanderTaskOwnershipPolicy()}`;
 }
 
 /** Options for building the dynamic mode prompts. */

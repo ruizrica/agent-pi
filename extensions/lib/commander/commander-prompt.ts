@@ -1,6 +1,8 @@
 // ABOUTME: Pure function to build Commander Task Discipline system prompt for subagents.
 // ABOUTME: Shared by agent-team.ts and subagent-widget.ts to avoid duplicating prompt logic.
 
+import { buildCommanderTaskOwnershipPolicy } from "./task-ownership-policy.ts";
+
 export interface CommanderPromptOptions {
 	agentName: string;
 	taskId?: number;
@@ -24,6 +26,8 @@ During WORK:
 - Log progress: commander_task { operation: "log", task_id: ${idStr}, message: "<progress>", level: "info" }
 - Add comments: commander_task { operation: "comment:add", task_id: ${idStr}, body: "<update>", agent_name: "${agentName}" }
 - For long tasks (>30s), send heartbeats: commander_orchestration { operation: "agent:heartbeat", agent_name: "${agentName}" }` : "No Commander task assigned. Commander tools are available if needed."}`;
+
+	prompt += buildCommanderTaskOwnershipPolicy({ agentName, taskId, hasAssignedTask: hasTask });
 
 	if (enableMailboxChat) {
 		const mailboxSystem = collaborationMode === "local" ? "local mailbox log" : "mailbox (commander_mailbox)";

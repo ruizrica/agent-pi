@@ -2,6 +2,8 @@
 // ABOUTME: Validates watchdog timeout resolution, stale cleanup, and duplicate batch prevention
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { renderSubagentWidget, type SubRenderState } from "../lib/subagent-render.ts";
 
 // ── Timeout resolution tests ─────────────────────────────────────────────────
@@ -91,6 +93,20 @@ describe("timeout render warnings", () => {
 		const state = makeState({ elapsed: 570_000 }); // exactly 95%
 		const result = renderSubagentWidget(state, 120, theme);
 		expect(result.lines[0]).toContain("TIMING OUT");
+	});
+});
+
+describe("subagent Commander task sync policy", () => {
+	it("spawns standalone subagents with child local-task sync disabled", () => {
+		const source = readFileSync(join(__dirname, "..", "subagent-widget.ts"), "utf-8");
+		expect(source).toContain('PI_SUBAGENT: "1"');
+		expect(source).toContain('PI_COMMANDER_TASK_SYNC_MODE: "assigned-only"');
+	});
+
+	it("spawns team agents with child local-task sync disabled", () => {
+		const source = readFileSync(join(__dirname, "..", "agent-team.ts"), "utf-8");
+		expect(source).toContain('PI_SUBAGENT: "1"');
+		expect(source).toContain('PI_COMMANDER_TASK_SYNC_MODE: "assigned-only"');
 	});
 });
 
