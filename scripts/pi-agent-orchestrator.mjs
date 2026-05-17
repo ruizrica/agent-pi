@@ -122,8 +122,16 @@ function loadModels() {
 
 function resolveModel(agentName, models) {
 	const entry = models.agents?.[agentName] || models.default;
-	if (!entry) return "anthropic/claude-haiku-4-5-20251001";
-	return entry.provider ? `${entry.provider}/${entry.model}` : entry.model;
+	if (!entry) {
+		return {
+			displayModel: "anthropic/claude-haiku-4-5-20251001",
+			cliArgs: ["--model", "anthropic/claude-haiku-4-5-20251001"],
+		};
+	}
+	return {
+		displayModel: entry.provider ? `${entry.provider}/${entry.model}` : entry.model,
+		cliArgs: entry.provider ? ["--provider", entry.provider, "--model", entry.model] : ["--model", entry.model],
+	};
 }
 
 function loadChains() {
@@ -154,7 +162,7 @@ async function runPiAgent(agent, task, cwd) {
 		"--mode", "json",
 		"-p",
 		"--no-extensions",
-		"--model", model,
+		...model.cliArgs,
 		"--tools", agent.tools,
 		"--thinking", "off",
 		"--append-system-prompt", agent.systemPrompt,

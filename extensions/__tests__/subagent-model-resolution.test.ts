@@ -6,6 +6,8 @@ import {
 	resolveAgentByName,
 	resolveAgentModelString,
 	buildModelString,
+	buildModelCliArgs,
+	resolveAgentModelForSpawn,
 	loadAgentModelsConfig,
 	type AgentDef,
 	type AgentModelsConfig,
@@ -30,6 +32,8 @@ function makeModelsConfig(): AgentModelsConfig {
 			scout: { provider: "x-ai", model: "grok-4.1-fast" },
 			builder: { provider: "mercury", model: "mercury-2" },
 			reviewer: { provider: "anthropic", model: "claude-opus-4-6" },
+			"opus-reviewer": { provider: "anthropic", model: "claude-opus-4-7" },
+			"openrouter-scout": { provider: "openrouter", model: "openai/gpt-5-nano" },
 			planner: { provider: "github-copilot", model: "gemini-3.1-pro-preview" },
 			tester: { provider: "anthropic", model: "claude-haiku-4-5" },
 			"red-team": { provider: "anthropic", model: "claude-haiku-4-5" },
@@ -67,6 +71,50 @@ describe("buildModelString", () => {
 	it("returns just model when provider is empty", () => {
 		expect(buildModelString({ provider: "", model: "mercury-2" }))
 			.toBe("mercury-2");
+	});
+});
+
+describe("buildModelCliArgs", () => {
+	it("preserves provider and model as separate Pi CLI arguments", () => {
+		expect(buildModelCliArgs("anthropic", "claude-opus-4-7"))
+			.toEqual(["--provider", "anthropic", "--model", "claude-opus-4-7"]);
+	});
+
+	it("preserves OpenRouter slugs without folding the provider into the model value", () => {
+		expect(buildModelCliArgs("openrouter", "openai/gpt-5-nano"))
+			.toEqual(["--provider", "openrouter", "--model", "openai/gpt-5-nano"]);
+	});
+
+	it("uses raw --model args for caller overrides and legacy values", () => {
+		expect(buildModelCliArgs(undefined, "anthropic/claude-sonnet-4"))
+			.toEqual(["--model", "anthropic/claude-sonnet-4"]);
+	});
+});
+
+describe("resolveAgentModelForSpawn", () => {
+	const config = makeModelsConfig();
+
+	it("keeps Anthropic config as provider=anthropic and model=claude-opus-4-7", () => {
+		const resolved = resolveAgentModelForSpawn("opus-reviewer", { config });
+		expect(resolved.displayModel).toBe("anthropic/claude-opus-4-7");
+		expect(resolved.cliArgs).toEqual(["--provider", "anthropic", "--model", "claude-opus-4-7"]);
+		expect(resolved.source).toBe("agent-config");
+	});
+
+	it("keeps OpenRouter as the configured provider and the OpenRouter slug as the model", () => {
+		const resolved = resolveAgentModelForSpawn("openrouter-scout", { config });
+		expect(resolved.displayModel).toBe("openrouter/openai/gpt-5-nano");
+		expect(resolved.cliArgs).toEqual(["--provider", "openrouter", "--model", "openai/gpt-5-nano"]);
+	});
+
+	it("does not reinterpret caller model overrides through models.json", () => {
+		const resolved = resolveAgentModelForSpawn("openrouter-scout", {
+			callerModel: "anthropic/claude-sonnet-4-20250514",
+			config,
+		});
+		expect(resolved.displayModel).toBe("anthropic/claude-sonnet-4-20250514");
+		expect(resolved.cliArgs).toEqual(["--model", "anthropic/claude-sonnet-4-20250514"]);
+		expect(resolved.source).toBe("caller");
 	});
 });
 

@@ -64,6 +64,8 @@ import {
   type AgentModelsConfig,
   loadAgentModelsConfig,
   resolveAgentModelString,
+  resolveAgentModelForSpawn,
+  buildModelCliArgs,
 } from "./lib/agent-defs.ts";
 import {
   type ChainDef,
@@ -92,7 +94,9 @@ interface AgentDef {
   name: string;
   description: string;
   tools: string;
-  model: string; // full provider/model ID, empty = use default
+  model: string; // display model ID, empty = use default
+  modelProvider?: string;
+  modelId?: string;
   systemPrompt: string;
 }
 
@@ -134,11 +138,15 @@ function parseAgentFile(
 
     // Model resolution: models.json > frontmatter fallback > empty
     let model = "";
+    let modelProvider: string | undefined;
+    let modelId: string | undefined;
     if (modelsConfig) {
       const key = frontmatter.name.toLowerCase();
       const entry = modelsConfig.agents[key];
       if (entry) {
         model = resolveAgentModelString(frontmatter.name, modelsConfig);
+        modelProvider = entry.provider || undefined;
+        modelId = entry.model;
       }
     }
     if (!model && frontmatter.model) {
@@ -150,6 +158,8 @@ function parseAgentFile(
       description: frontmatter.description || "",
       tools: frontmatter.tools || "read,grep,find,ls",
       model,
+      modelProvider,
+      modelId,
       systemPrompt: match[2].trim(),
     };
   } catch {
@@ -201,6 +211,7 @@ function scanAgentDirs(
 export default function (pi: ExtensionAPI) {
   const piRef = pi;
   let allAgents: Map<string, AgentDef> = new Map();
+  let activeModelsConfig: AgentModelsConfig | null = null;
   let chains: ChainDef[] = [];
   let activeChain: ChainDef | null = null;
   let widgetCtx: any;
@@ -226,6 +237,7 @@ export default function (pi: ExtensionAPI) {
 
     // Load model config from .pi/agents/models.json, then scan agent .md files
     const modelsConfig = loadAgentModelsConfig(cwd, extProjectDir);
+    activeModelsConfig = modelsConfig;
     allAgents = scanAgentDirs(cwd, extProjectDir, modelsConfig);
 
     agentSessions.clear();
@@ -364,13 +376,18 @@ export default function (pi: ExtensionAPI) {
     stepIndex: number,
     ctx: any,
   ): Promise<{ output: string; exitCode: number; elapsed: number }> {
-    // Use agent's defined model or fall back to default subagent model.
+    // Use agent's configured provider/model or fall back to default subagent model.
     // NOTE: We intentionally do NOT inherit the parent model. Each agent
     // should use its explicitly defined model or the lightweight default.
-    let model = resolveToolkitWorkerModel(
-      agentDef.name,
-      agentDef.model || DEFAULT_SUBAGENT_MODEL,
-    );
+    const modelResolution = resolveAgentModelForSpawn(agentDef.name, {
+      agentModel: agentDef.model,
+      config: activeModelsConfig,
+      fallbackModel: DEFAULT_SUBAGENT_MODEL,
+    });
+    let model = resolveToolkitWorkerModel(agentDef.name, modelResolution.displayModel);
+    let modelCliArgs = model === modelResolution.displayModel
+      ? modelResolution.cliArgs
+      : buildModelCliArgs(undefined, model);
 
     // Local overlays: reroute builder/worker agents to LM Studio Gemma or Qwen
     if (
@@ -378,12 +395,14 @@ export default function (pi: ExtensionAPI) {
       agentDef.name.toLowerCase().startsWith("builder")
     ) {
       model = "lmstudio/google/gemma-4-26b-a4b";
+      modelCliArgs = buildModelCliArgs(undefined, model);
     }
     if (
       (globalThis as any).__piQwenOverlay &&
       agentDef.name.toLowerCase().startsWith("builder")
     ) {
       model = "lmstudio/qwen/qwen3.6-27b";
+      modelCliArgs = buildModelCliArgs(undefined, model);
     }
 
     const agentKey = agentDef.name.toLowerCase().replace(/\s+/g, "-");
@@ -405,8 +424,7 @@ export default function (pi: ExtensionAPI) {
       footerExtPath,
       "-e",
       memoryCycleExtPath,
-      "--model",
-      model,
+      ...modelCliArgs,
       "--tools",
       agentDef.tools,
       "--thinking",

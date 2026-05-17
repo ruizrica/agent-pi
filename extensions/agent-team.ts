@@ -33,7 +33,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 
 import { statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
-import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
+import { loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, resolveAgentModelForSpawn, buildModelCliArgs, scanToolkitAgentDefs, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
 import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
@@ -54,7 +54,9 @@ interface AgentDef {
 	name: string;
 	description: string;
 	tools: string;
-	model: string; // full provider/model ID, empty = inherit parent
+	model: string; // display model ID, empty = inherit parent
+	modelProvider?: string;
+	modelId?: string;
 	systemPrompt: string;
 	file: string;
 }
@@ -137,11 +139,15 @@ function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): Age
 
 		// Model resolution: models.json > frontmatter fallback > empty
 		let model = "";
+		let modelProvider: string | undefined;
+		let modelId: string | undefined;
 		if (modelsConfig) {
 			const key = frontmatter.name.toLowerCase();
 			const entry = modelsConfig.agents[key];
 			if (entry) {
 				model = resolveAgentModelString(frontmatter.name, modelsConfig);
+				modelProvider = entry.provider || undefined;
+				modelId = entry.model;
 			}
 		}
 		if (!model && frontmatter.model) {
@@ -153,6 +159,8 @@ function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): Age
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
 			model,
+			modelProvider,
+			modelId,
 			systemPrompt: match[2].trim(),
 			file: filePath,
 		};
@@ -201,6 +209,7 @@ function scanAgentDirs(cwd: string, extProjectDir?: string, modelsConfig?: Agent
 export default function (pi: ExtensionAPI) {
 	const agentStates: Map<string, AgentState> = new Map();
 	let allAgentDefs: AgentDef[] = [];
+	let activeModelsConfig: AgentModelsConfig | null = null;
 	let teams: Record<string, string[]> = {};
 	let activeTeamName = "";
 	let gridCols = 2;
@@ -235,6 +244,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Load standard + toolkit model config, then scan agent .md files
 		const modelsConfig = loadAgentModelsConfig(cwd, extProjectDir);
+		activeModelsConfig = modelsConfig;
 		const toolkitModelsConfig = loadToolkitModelsConfig(cwd, extProjectDir);
 		const standardAgentDefs = scanAgentDirs(cwd, extProjectDir, modelsConfig);
 		const toolkitAgentDefs = Array.from(scanToolkitAgentDefs(cwd, extProjectDir, toolkitModelsConfig).values());
@@ -480,17 +490,27 @@ export default function (pi: ExtensionAPI) {
 			invalidateAgentWidget(state);
 		}, 1000);
 
-		// Use agent's defined model or fall back to default subagent model.
+		// Use agent's configured provider/model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		let model = resolveToolkitWorkerModel(state.def.name, state.def.model || DEFAULT_SUBAGENT_MODEL);
+		const modelResolution = resolveAgentModelForSpawn(state.def.name, {
+			agentModel: state.def.model,
+			config: activeModelsConfig,
+			fallbackModel: DEFAULT_SUBAGENT_MODEL,
+		});
+		let model = resolveToolkitWorkerModel(state.def.name, modelResolution.displayModel);
+		let modelCliArgs = model === modelResolution.displayModel
+			? modelResolution.cliArgs
+			: buildModelCliArgs(undefined, model);
 
 		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
 		if ((globalThis as any).__piGemmaOverlay && state.def.name.toLowerCase().startsWith("builder")) {
 			model = "lmstudio/google/gemma-4-26b-a4b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && state.def.name.toLowerCase().startsWith("builder")) {
 			model = "lmstudio/qwen/qwen3.6-27b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		state.resolvedModel = model;
 
@@ -548,7 +568,7 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			"--model", model,
+			...modelCliArgs,
 			"--tools", tools,
 			"--thinking", "off",
 			"--append-system-prompt", systemPrompt,

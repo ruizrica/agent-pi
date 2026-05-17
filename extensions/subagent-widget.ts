@@ -31,7 +31,7 @@ import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander/co
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander/commander-sync.ts";
 import { buildSubagentBatchBrief } from "./lib/commander/subagent-mission-brief.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
-import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
+import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, resolveAgentModelForSpawn, buildModelCliArgs, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
 import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
@@ -128,6 +128,7 @@ interface SubState {
 	commanderTaskId?: number;  // pre-assigned Commander task ID
 	autoRemove?: boolean;      // auto-remove widget ~2s after done (default: true)
 	model?: string;            // resolved model string for display
+	modelOverride?: string;    // caller-specified raw model override from tool args
 	lifecycleEvents?: string[]; // safe, short spawn/failure breadcrumbs for widget display
 	lifecycleLogPath?: string;  // durable project-local lifecycle log path
 	failureDetail?: string;    // concise failure reason shown after ERROR
@@ -411,25 +412,35 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Model resolution priority:
-		// 1) Caller-specified override (state.model set by tool call)
-		// 2) Agent definition model (from .md file, resolved via models.json)
-		// 3) models.json agent entry (even without .md file)
+		// 1) Caller-specified override (state.modelOverride set by tool call)
+		// 2) models.json agent entry (even without .md file)
+		// 3) Agent definition/frontmatter model
 		// 4) models.json default entry
-		const requestedModel = state.model;
+		const requestedModel = state.modelOverride;
 		const agentDef = resolveAgentByName(state.name, knownAgents, modelsConfig || undefined);
-		const configModel = modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined;
-		let model = resolveToolkitWorkerModel(
-			state.name,
-			state.model || agentDef?.model || configModel || DEFAULT_SUBAGENT_MODEL,
-		);
+		const modelResolution = resolveAgentModelForSpawn(state.name, {
+			callerModel: state.modelOverride,
+			agentModel: agentDef?.model,
+			config: modelsConfig,
+			fallbackModel: DEFAULT_SUBAGENT_MODEL,
+		});
+		const configModel = modelResolution.source === "agent-config" || modelResolution.source === "default-config"
+			? modelResolution.displayModel
+			: (modelsConfig ? resolveAgentModelString(state.name, modelsConfig) : undefined);
+		let model = resolveToolkitWorkerModel(state.name, modelResolution.displayModel);
+		let modelCliArgs = model === modelResolution.displayModel
+			? modelResolution.cliArgs
+			: buildModelCliArgs(undefined, model);
 
 		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4.
 		// Only builders are rerouted — scouts, reviewers, planners keep their models.
 		if ((globalThis as any).__piGemmaOverlay && isGemmaEligibleRole(state.name)) {
 			model = "lmstudio/google/gemma-4-26b-a4b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && isGemmaEligibleRole(state.name)) {
 			model = "lmstudio/qwen/qwen3.6-27b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		state.model = model;
 		logLifecycle(state, ctx, "spawn_requested", {
@@ -688,7 +699,7 @@ export default function (pi: ExtensionAPI) {
 				"--session", state.sessionFile,
 				"--no-extensions",
 				...extensions,
-				"--model", model,
+				...modelCliArgs,
 				"--tools", tools,
 				"--thinking", "off",
 				...systemPromptArgs,
@@ -769,7 +780,7 @@ export default function (pi: ExtensionAPI) {
 				summary: args.summary,
 				commanderTaskId: args.commanderTaskId,
 				autoRemove: args.autoRemove,
-				model: args.model, // caller-specified model override
+				modelOverride: args.model, // caller-specified model override
 				maxDurationMs: resolveTimeout(agentName, args.timeout),
 			};
 			agents.set(id, state);
@@ -841,7 +852,7 @@ export default function (pi: ExtensionAPI) {
 					turnCount: 1,
 					summary: def.summary,
 					autoRemove: args.autoRemove,
-					model: def.model, // per-agent model override
+					modelOverride: def.model, // per-agent model override
 					maxDurationMs: resolveTimeout(agentName, args.timeout),
 				};
 			});

@@ -36,7 +36,7 @@ import { outputLine, outputBox, type BarColor } from "./lib/output-box.ts";
 import { renderVerticalTimeline, renderCollapsedTimeline, statusButton } from "./lib/pipeline-render.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { resolveToolkitWorkerModel, shouldUseClaudeCliForAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
-import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
+import { loadAgentModelsConfig, resolveAgentModelString, resolveAgentModelForSpawn, buildModelCliArgs, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
 import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
@@ -48,7 +48,9 @@ interface AgentDef {
 	name: string;
 	description: string;
 	tools: string;
-	model: string; // full provider/model ID, empty = use default
+	model: string; // display model ID, empty = use default
+	modelProvider?: string;
+	modelId?: string;
 	systemPrompt: string;
 }
 
@@ -99,11 +101,15 @@ function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): Age
 
 		// Model resolution: models.json > frontmatter fallback > empty
 		let model = "";
+		let modelProvider: string | undefined;
+		let modelId: string | undefined;
 		if (modelsConfig) {
 			const key = frontmatter.name.toLowerCase();
 			const entry = modelsConfig.agents[key];
 			if (entry) {
 				model = resolveAgentModelString(frontmatter.name, modelsConfig);
+				modelProvider = entry.provider || undefined;
+				modelId = entry.model;
 			}
 		}
 		if (!model && frontmatter.model) {
@@ -115,6 +121,8 @@ function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfig): Age
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
 			model,
+			modelProvider,
+			modelId,
 			systemPrompt: match[2].trim(),
 		};
 	} catch {
@@ -176,6 +184,7 @@ function resolveTemplate(
 
 export default function (pi: ExtensionAPI) {
 	let allAgents: Map<string, AgentDef> = new Map();
+	let activeModelsConfig: AgentModelsConfig | null = null;
 	let pipelineConfigs: PipelineConfig[] = [];
 	let activeConfig: PipelineConfig | null = null;
 	let phaseStates: PhaseState[] = [];
@@ -208,6 +217,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Load model config from .pi/agents/models.json, then scan agent .md files
 		const modelsConfig = loadAgentModelsConfig(cwd, extProjectDir);
+		activeModelsConfig = modelsConfig;
 		allAgents = scanAgentDirs(cwd, extProjectDir, modelsConfig);
 
 		// Look for config in cwd first, fall back to extension's own project dir
@@ -358,17 +368,27 @@ export default function (pi: ExtensionAPI) {
 			updateWidget();
 		}, 1000);
 
-		// Use agent's defined model or fall back to default subagent model.
+		// Use agent's configured provider/model or fall back to default subagent model.
 		// NOTE: We intentionally do NOT inherit the parent model. Each agent
 		// should use its explicitly defined model or the lightweight default.
-		let model = resolveToolkitWorkerModel(agentDef.name, agentDef.model || DEFAULT_SUBAGENT_MODEL);
+		const modelResolution = resolveAgentModelForSpawn(agentDef.name, {
+			agentModel: agentDef.model,
+			config: activeModelsConfig,
+			fallbackModel: DEFAULT_SUBAGENT_MODEL,
+		});
+		let model = resolveToolkitWorkerModel(agentDef.name, modelResolution.displayModel);
+		let modelCliArgs = model === modelResolution.displayModel
+			? modelResolution.cliArgs
+			: buildModelCliArgs(undefined, model);
 
 		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
 		if ((globalThis as any).__piGemmaOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
 			model = "lmstudio/google/gemma-4-26b-a4b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
 			model = "lmstudio/qwen/qwen3.6-27b";
+			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 
 		const agentKey = `pipeline-${agentDef.name.toLowerCase().replace(/\s+/g, "-")}-${agentState.index}`;
@@ -385,7 +405,7 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			"--model", model,
+			...modelCliArgs,
 			"--tools", agentDef.tools,
 			"--thinking", "off",
 			"--append-system-prompt", agentDef.systemPrompt,

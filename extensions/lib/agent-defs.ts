@@ -10,7 +10,9 @@ export interface AgentDef {
 	name: string;
 	description: string;
 	tools: string;
-	model: string; // resolved execution model, may be overridden for toolkit CLI agents
+	model: string; // resolved display model, may be overridden for toolkit CLI agents
+	modelProvider?: string; // provider from models.json when available
+	modelId?: string; // model field from models.json when available
 	systemPrompt: string;
 	file: string;
 }
@@ -25,6 +27,16 @@ export interface AgentModelEntry {
 export interface AgentModelsConfig {
 	default: AgentModelEntry;
 	agents: Record<string, AgentModelEntry>;
+}
+
+export type AgentModelSource = "caller" | "agent-config" | "agent-definition" | "default-config" | "fallback";
+
+export interface ResolvedAgentModel {
+	provider?: string;
+	model: string;
+	displayModel: string;
+	source: AgentModelSource;
+	cliArgs: string[];
 }
 
 // ── Model Config Loader ──────────────────────────────────────────────────────
@@ -69,12 +81,63 @@ export function loadToolkitModelsConfig(cwd: string, extProjectDir?: string): Ag
 }
 
 /**
- * Build a "provider/model" string from an AgentModelEntry.
+ * Build a "provider/model" display string from an AgentModelEntry.
  * If provider is empty, returns just the model ID.
  */
 export function buildModelString(entry: AgentModelEntry): string {
 	if (!entry.provider) return entry.model;
 	return `${entry.provider}/${entry.model}`;
+}
+
+/**
+ * Build Pi CLI arguments while preserving provider and model as separate fields.
+ * This avoids turning a configured provider into an implicit model prefix before
+ * the child Pi process performs provider routing.
+ */
+export function buildModelCliArgs(provider: string | undefined, model: string): string[] {
+	if (provider) return ["--provider", provider, "--model", model];
+	return ["--model", model];
+}
+
+function resolvedFromEntry(entry: AgentModelEntry, source: AgentModelSource): ResolvedAgentModel {
+	return {
+		provider: entry.provider || undefined,
+		model: entry.model,
+		displayModel: buildModelString(entry),
+		source,
+		cliArgs: buildModelCliArgs(entry.provider || undefined, entry.model),
+	};
+}
+
+function resolvedFromRaw(model: string, source: AgentModelSource): ResolvedAgentModel {
+	return {
+		model,
+		displayModel: model,
+		source,
+		cliArgs: buildModelCliArgs(undefined, model),
+	};
+}
+
+export function resolveAgentModelForSpawn(
+	agentName: string,
+	options: {
+		callerModel?: string;
+		agentModel?: string;
+		config?: AgentModelsConfig | null;
+		fallbackModel?: string;
+	} = {},
+): ResolvedAgentModel {
+	if (options.callerModel) return resolvedFromRaw(options.callerModel, "caller");
+
+	const key = agentName.toLowerCase();
+	const configEntry = options.config?.agents?.[key];
+	if (configEntry) return resolvedFromEntry(configEntry, "agent-config");
+
+	if (options.agentModel) return resolvedFromRaw(options.agentModel, "agent-definition");
+
+	if (options.config?.default) return resolvedFromEntry(options.config.default, "default-config");
+
+	return resolvedFromRaw(options.fallbackModel || buildModelString(HARDCODED_DEFAULT), "fallback");
 }
 
 /**
@@ -121,10 +184,16 @@ export function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfi
 		// Model resolution: Claude profiles use configured model, generic toolkit CLIs use
 		// the shared worker model, then models.json/frontmatter fallback for everyone else.
 		let model = "";
+		let modelProvider: string | undefined;
+		let modelId: string | undefined;
 		if (isClaudeCliAgent(frontmatter.name) && modelsConfig) {
 			const key = frontmatter.name.toLowerCase();
 			const entry = modelsConfig.agents[key];
-			if (entry) model = buildModelString(entry);
+			if (entry) {
+				model = buildModelString(entry);
+				modelProvider = entry.provider || undefined;
+				modelId = entry.model;
+			}
 		} else if (isToolkitCliAgent(frontmatter.name)) {
 			model = TOOLKIT_WORKER_MODEL;
 		} else if (modelsConfig) {
@@ -132,6 +201,8 @@ export function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfi
 			const entry = modelsConfig.agents[key];
 			if (entry) {
 				model = buildModelString(entry);
+				modelProvider = entry.provider || undefined;
+				modelId = entry.model;
 			}
 		}
 		// Fallback: if models.json didn't have this agent, check frontmatter
@@ -145,6 +216,8 @@ export function parseAgentFile(filePath: string, modelsConfig?: AgentModelsConfi
 			description: frontmatter.description || "",
 			tools: frontmatter.tools || "read,grep,find,ls",
 			model,
+			modelProvider,
+			modelId,
 			systemPrompt: match[2].trim(),
 			file: filePath,
 		};
@@ -245,6 +318,8 @@ export function resolveAgentByName(
 					name: key,
 					description: `${key} Builder — dynamic variant using ${buildModelString(entry)}`,
 					model: buildModelString(entry),
+					modelProvider: entry.provider || undefined,
+					modelId: entry.model,
 				};
 			}
 		}
