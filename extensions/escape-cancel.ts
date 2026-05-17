@@ -8,6 +8,10 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 /** Time window (ms) for two ESC presses to be considered a double-tap. */
 const DOUBLE_TAP_WINDOW = 400;
 
+function isPrintMode(): boolean {
+	return process.argv.includes("-p") || process.argv.includes("--print");
+}
+
 export default function (pi: ExtensionAPI) {
 	let lastEscTime = 0;
 	let unsub: (() => void) | null = null;
@@ -52,7 +56,11 @@ export default function (pi: ExtensionAPI) {
 
 	function teardownInputListener() {
 		if (unsub) {
-			unsub();
+			try {
+				unsub();
+			} catch {
+				// Ignore stale/tearing-down UI contexts during session shutdown.
+			}
 			unsub = null;
 		}
 	}
@@ -112,41 +120,63 @@ export default function (pi: ExtensionAPI) {
 	// ── Track agent state for status hint ─────────────────
 
 	pi.on("agent_start", async (_event, ctx) => {
-		isAgentRunning = true;
-		if (ctx.hasUI) {
-			ctx.ui.setStatus("esc-hint", "\x1b[2m ESC ESC to cancel\x1b[0m");
+		try {
+			isAgentRunning = true;
+			if (ctx.hasUI && !isPrintMode()) {
+				ctx.ui.setStatus("esc-hint", "\x1b[2m ESC ESC to cancel\x1b[0m");
+			}
+		} catch {
+			// Ignore stale/tearing-down UI contexts.
 		}
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		isAgentRunning = false;
-		if (ctx.hasUI) {
-			ctx.ui.setStatus("esc-hint", undefined);
+		try {
+			isAgentRunning = false;
+			if (ctx.hasUI && !isPrintMode()) {
+				ctx.ui.setStatus("esc-hint", undefined);
+			}
+		} catch {
+			// Ignore stale/tearing-down UI contexts.
 		}
 	});
 
 	// ── Session lifecycle ─────────────────────────────────
 
 	pi.on("session_start", async (_event, ctx) => {
-		applyExtensionDefaults(import.meta.url, ctx);
-		lastEscTime = 0;
-		isAgentRunning = false;
-		if (ctx.hasUI) {
-			setupInputListener(ctx);
+		try {
+			if (!isPrintMode()) {
+				applyExtensionDefaults(import.meta.url, ctx);
+			}
+			lastEscTime = 0;
+			isAgentRunning = false;
+			if (ctx.hasUI && !isPrintMode()) {
+				setupInputListener(ctx);
+			}
+		} catch {
+			// Ignore stale/tearing-down UI contexts.
 		}
 	});
 
 	pi.on("session_switch", async (_event, ctx) => {
-		lastEscTime = 0;
-		isAgentRunning = false;
-		teardownInputListener();
-		if (ctx.hasUI) {
-			ctx.ui.setStatus("esc-hint", undefined);
-			setupInputListener(ctx);
+		try {
+			lastEscTime = 0;
+			isAgentRunning = false;
+			teardownInputListener();
+			if (ctx.hasUI && !isPrintMode()) {
+				ctx.ui.setStatus("esc-hint", undefined);
+				setupInputListener(ctx);
+			}
+		} catch {
+			// Ignore stale/tearing-down UI contexts.
 		}
 	});
 
 	pi.on("session_shutdown", async () => {
-		teardownInputListener();
+		try {
+			teardownInputListener();
+		} catch {
+			// Ignore stale/tearing-down UI contexts.
+		}
 	});
 }

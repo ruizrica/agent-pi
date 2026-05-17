@@ -29,8 +29,17 @@ function nowIso(): string {
 	return new Date().toISOString();
 }
 
+function findIntentRoot(cwd = process.cwd()): string {
+	let dir = cwd;
+	while (dir && dir !== dirname(dir)) {
+		if (existsSync(join(dir, "package.json")) || existsSync(join(dir, ".git"))) return dir;
+		dir = dirname(dir);
+	}
+	return cwd;
+}
+
 function defaultPath(cwd = process.cwd()): string {
-	return process.env.PI_LIFECYCLE_INTENTS_PATH || join(cwd, ".commander", "pi-lifecycle-intents.json");
+	return process.env.PI_LIFECYCLE_INTENTS_PATH || join(findIntentRoot(cwd), ".commander", "pi-lifecycle-intents.json");
 }
 
 function intentKey(taskId: number | string, action: LifecycleIntentAction): string {

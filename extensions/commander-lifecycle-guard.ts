@@ -34,6 +34,18 @@ async function collectLifecycleWarnings(): Promise<string[]> {
 }
 
 export default function (pi: ExtensionAPI) {
+	let lastAgentEndFingerprint = "";
+	let lastAgentEndNotifiedAt = 0;
+
+	function shouldNotifyAgentEnd(warnings: string[]): boolean {
+		const fingerprint = warnings.join("\n");
+		const now = Date.now();
+		if (fingerprint === lastAgentEndFingerprint && now - lastAgentEndNotifiedAt < 60_000) return false;
+		lastAgentEndFingerprint = fingerprint;
+		lastAgentEndNotifiedAt = now;
+		return true;
+	}
+
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 		const warnings = await collectLifecycleWarnings();
@@ -44,11 +56,22 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("agent_end", async (_event, _ctx) => {
 		const warnings = await collectLifecycleWarnings();
-		if (warnings.length === 0) return;
-		pi.sendMessage({
-			customType: "commander-lifecycle-validation",
-			content: `Commander lifecycle responsibilities remain open. Before stopping, resolve them through cmd: add a current task comment/handoff, then complete/fail/cancel/delete or adopt stale work.\n\n${warnings.map(w => `- ${w}`).join("\n")}`,
-			display: true,
-		}, { triggerTurn: true });
+		if (warnings.length === 0) {
+			lastAgentEndFingerprint = "";
+			lastAgentEndNotifiedAt = 0;
+			return;
+		}
+		if (!shouldNotifyAgentEnd(warnings)) return;
+		try {
+			pi.sendMessage({
+				customType: "commander-lifecycle-validation",
+				content: `Commander lifecycle responsibilities remain open. Before stopping, resolve them through cmd: add a current task comment/handoff, then complete/fail/cancel/delete or adopt stale work.\n\n${warnings.map(w => `- ${w}`).join("\n")}`,
+				display: true,
+			}, { triggerTurn: false });
+		} catch {
+			// Short-lived/replaced sessions can make the extension API stale before
+			// this advisory message is delivered. Do not surface lifecycle advice as
+			// a startup/shutdown artifact.
+		}
 	});
 }
