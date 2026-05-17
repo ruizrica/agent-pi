@@ -43,6 +43,7 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain('briefLabel: "Query:"');
 		expect(source).toContain('hint: "ctrl+alt+q to view query/output"');
 		expect(source).toContain("maxDescriptionLines: 3");
+		expect(source).toContain('descriptionColor: "text"');
 		expect(source).toContain("function pacificoPromptText");
 		expect(source).toContain('prompt, sentPrompt: prompt');
 		expect(source).toContain("new Box(0, 0)");
@@ -156,6 +157,17 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain('badgeLabel: "QUEUED"');
 		expect(source).toContain('bannerLabel: "Pacifico Complete"');
 		expect(source).not.toContain("generatePacificoResultHTML");
+	});
+
+	it("renders Pacifico job rows as uniform larger labeled markdown rows", () => {
+		expect(source).toContain("function formatPacificoJobRow(job: JobDetail)");
+		expect(source).toContain("### **Job:** ${job.id}");
+		expect(source).toContain("**Status:** ${job.status}");
+		expect(source).toContain("**Type:** ${job.taskType ?? \"?\"}");
+		expect(source).toContain("**Created:** ${created}");
+		expect(source).toContain("**Prompt:** ${inputPreview}");
+		expect(source).toContain("lines.push(formatPacificoJobRow(j));");
+		expect(source).not.toContain(" — ${inputPreview}");
 	});
 
 	it("keeps sync responses immediate and only registers the poller for async responses", () => {

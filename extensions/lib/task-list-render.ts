@@ -142,6 +142,7 @@ export interface BriefWidgetInfo {
 	briefLabel?: string;
 	hint?: string;
 	maxDescriptionLines?: number;
+	descriptionColor?: string;
 }
 
 export function renderBriefWidget(
@@ -164,6 +165,7 @@ export function renderBriefWidget(
 		? maxSummaryLines
 		: Math.min(maxSummaryLines, Math.max(0, info.maxDescriptionLines));
 	const summaryLines = rawSummaryLines.slice(0, descriptionLineLimit);
+	const descriptionColor = info.descriptionColor ?? "muted";
 
 	// ── Header ────────────────────────────────────────────────────
 	const headerLabel = `  ${info.title}${info.progressText ? ` ${info.progressText}` : ""}`;
@@ -172,7 +174,7 @@ export function renderBriefWidget(
 	if (summaryLines.length > 0) {
 		lines.push(`  ${fg("accent", info.briefLabel ?? "Mission Brief:")}`);
 		for (const line of summaryLines) {
-			lines.push(trunc(`    ${fg("muted", line)}`, width, ""));
+			lines.push(trunc(`    ${fg(descriptionColor, line)}`, width, ""));
 		}
 		lines.push("");
 	}

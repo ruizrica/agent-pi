@@ -338,6 +338,25 @@ describe("renderTaskList", () => {
 		expect(joined).not.toContain("ctrl+alt+t or /tasks to view tasks");
 	});
 
+	it("allows generic brief description color to be overridden without changing the default", () => {
+		const colorDeps: RenderDeps = {
+			truncateToWidth: (s) => s,
+			fg: (color, text) => `<${color}>${text}</${color}>`,
+		};
+		const defaultResult = renderBriefWidget({
+			title: "Tasks",
+			description: "Default mission brief color.",
+		}, 80, 20, colorDeps).join("\n");
+		const overrideResult = renderBriefWidget({
+			title: "Pacifico",
+			description: "Prompt matches row fields.",
+			descriptionColor: "text",
+		}, 80, 20, colorDeps).join("\n");
+		expect(defaultResult).toContain("<muted>Default mission brief color.</muted>");
+		expect(overrideResult).toContain("<text>Prompt matches row fields.</text>");
+		expect(overrideResult).not.toContain("<muted>Prompt matches row fields.</muted>");
+	});
+
 	it("limits generic brief description lines when requested", () => {
 		const result = renderBriefWidget({
 			title: "Pacifico",

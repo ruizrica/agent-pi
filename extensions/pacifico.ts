@@ -224,6 +224,7 @@ function renderPacificoRows(details: PacificoWidgetDetails | undefined, theme: a
 		briefLabel: "Query:",
 		hint: "ctrl+alt+q to view query/output",
 		maxDescriptionLines: 3,
+		descriptionColor: "text",
 	}, safeWidth, availableHeight, {
 		truncateToWidth,
 		fg: (color: string, text: string) => theme.fg(color, text),
@@ -538,6 +539,14 @@ function formatAsyncAcceptedMessage(response: InferAsyncResponse): string {
 		jobId: response.id,
 		model: response.model ?? "(default)",
 	});
+}
+
+function formatPacificoJobRow(job: JobDetail): string {
+	const created = job.createdAt ?? "unknown";
+	const completed = job.completedAt ? ` · **Completed:** ${job.completedAt}` : "";
+	const inputPreview = normalizePacificoContent(job.input)?.slice(0, 80);
+	const prompt = inputPreview ? ` · **Prompt:** ${inputPreview}` : "";
+	return `### **Job:** ${job.id} · **Status:** ${job.status} · **Type:** ${job.taskType ?? "?"} · **Created:** ${created}${completed}${prompt}`;
 }
 
 function formatJobOutcome(job: JobDetail): string {
@@ -1362,10 +1371,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				}
 				const lines = ["**Pacifico jobs**", ""];
 				for (const j of jobs.slice(0, 50)) {
-					const created = j.createdAt ?? "";
-					const completed = j.completedAt ? ` → ${j.completedAt}` : "";
-					const inputPreview = (j.input ?? "").replace(/\s+/g, " ").slice(0, 60);
-					lines.push(`- \`${j.id}\` · **${j.status}** · ${j.taskType ?? "?"} · ${created}${completed}` + (inputPreview ? ` — ${inputPreview}` : ""));
+					lines.push(formatPacificoJobRow(j));
 				}
 				emitMessage(pi, lines.join("\n"));
 			} catch (err) {
