@@ -87,7 +87,7 @@ Show counts and a one-line summary per task. Let the maintainer pick.
 
 ## Triage a specific task
 
-1. **Gather context.** Run `cmd context <id>` to read the full task (description, comments, labels, dependencies, timestamps). Parse any prior triage notes so you don't re-ask resolved questions. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Read `.out-of-scope/*.md` and surface any prior rejection that resembles this task.
+1. **Gather context.** Run `cmd context <id>` to read the full task (description, comments, labels, dependencies, timestamps). Parse any prior triage notes so you don't re-ask resolved questions. If `agent-memory` is available, search for similar prior triage decisions, rejected patterns, related bugs, or agent brief conventions before re-discovering context. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Read `.out-of-scope/*.md` and surface any prior rejection that resembles this task.
 
 2. **Recommend.** Tell the maintainer your category and state recommendation with reasoning, plus a brief codebase summary relevant to the task. Wait for direction.
 

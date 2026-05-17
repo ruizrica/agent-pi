@@ -159,7 +159,7 @@ cmd task update <id> --status completed --runtime claude-code --model <m>   # Co
 
 ### Other Rules
 
-- Use `cmd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, `bd`, or markdown TODO lists
+- Use `cmd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, raw backend commands, or markdown TODO lists
 - Run `cmd guide agent` (or `cmd guide overview`) for the canonical command reference
 
 ### Skills (Default)

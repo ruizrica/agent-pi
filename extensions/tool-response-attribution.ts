@@ -97,14 +97,6 @@ const ATTRIBUTION_MAP: Record<string, (content: string) => [string, string]> = {
 		"[SYSTEM: Memory restored from previous session. NOT user input.]\n",
 		"",
 	],
-	"session-recap": () => [
-		"[SYSTEM: Session recap generated. NOT user input.]\n",
-		"",
-	],
-	"session-recap-card": () => [
-		"[SYSTEM: Session recap card. NOT user input.]\n",
-		"",
-	],
 
 	// Vulnerability scan results
 	"vulnerability-sweep-result": () => [

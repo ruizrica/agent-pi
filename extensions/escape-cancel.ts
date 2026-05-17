@@ -50,6 +50,13 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	function teardownInputListener() {
+		if (unsub) {
+			unsub();
+			unsub = null;
+		}
+	}
+
 	function setupInputListener(ctx: any) {
 		if (unsub) return; // Already listening
 
@@ -132,15 +139,14 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_switch", async (_event, ctx) => {
 		lastEscTime = 0;
 		isAgentRunning = false;
+		teardownInputListener();
 		if (ctx.hasUI) {
 			ctx.ui.setStatus("esc-hint", undefined);
+			setupInputListener(ctx);
 		}
 	});
 
 	pi.on("session_shutdown", async () => {
-		if (unsub) {
-			unsub();
-			unsub = null;
-		}
+		teardownInputListener();
 	});
 }

@@ -55,11 +55,6 @@ import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { resolveCommanderTaskSyncPolicyFromEnv } from "./lib/commander/task-ownership-policy.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
-import {
-	renderMissionComplete,
-	MISSION_COMPLETE_BG,
-	type MissionCompleteState,
-} from "./lib/mission-complete-render.ts";
 import { addRetry, isFullySynced } from "./lib/commander/commander-tracker.ts";
 import { resolveAgentName } from "./agent-identity.ts";
 
@@ -100,7 +95,6 @@ const TasksParams = Type.Object({
 
 // ── Status helpers ─────────────────────────────────────────────────────
 
-const MISSION_COMPLETE_DISMISS_MS = 2_000;
 
 const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", done: "x" };
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprogress: "done", done: "idle" };
@@ -341,36 +335,12 @@ export default function (pi: ExtensionAPI) {
 
 		refreshWidget(ctx);
 		ctx.ui.setWidget("tasks-list", undefined);
-		if (tasks.length === 0 || tasks.some((t) => t.status !== "done")) {
-			publishCompletedTaskUiDismissed(false);
-		}
-		if (missionCompleteVisible && (tasks.length === 0 || tasks.some((t) => t.status !== "done"))) {
-			dismissMissionComplete(ctx);
-		}
 	};
 
-	// ── Mission Complete widget ───────────────────────────────────────
+	// ── Completion side effects ────────────────────────────────────────
 
-	let missionCompleteVisible = false;
-	let missionCompleteDismissTimer: ReturnType<typeof setTimeout> | undefined;
 	g.__piMissionCompleteVisible = false;
 	g.__piCompletedTaskUiDismissed = false;
-
-	function publishMissionCompleteVisibility(visible: boolean): void {
-		missionCompleteVisible = visible;
-		g.__piMissionCompleteVisible = visible;
-	}
-
-	function publishCompletedTaskUiDismissed(dismissed: boolean): void {
-		g.__piCompletedTaskUiDismissed = dismissed;
-	}
-
-	function clearMissionCompleteDismissTimer(): void {
-		if (missionCompleteDismissTimer) {
-			clearTimeout(missionCompleteDismissTimer);
-			missionCompleteDismissTimer = undefined;
-		}
-	}
 
 	function auditCommanderBoardForMissionComplete(): void {
 		if (!shouldSyncLocalTasksToCommander()) return;
@@ -451,109 +421,16 @@ export default function (pi: ExtensionAPI) {
 		};
 	}
 
-	function showMissionComplete(ctx: ExtensionContext): void {
-		if (!ctx.hasUI) return;
-		if ((globalThis as any).__piSummaryModeActive) return;
-
-		publishCompletedTaskUiDismissed(false);
+	function runCompletionSideEffects(): void {
 		auditCommanderBoardForMissionComplete();
-
-		// Build state for the render
-		const stats = getSessionStats();
-		const completedTasks: { id: number; text: string; commanderId?: number }[] = tasks
-			.filter(t => t.status === "done")
-			.map(t => ({
-				id: t.id,
-				text: t.text,
-				commanderId: lookupMapping(syncState, t.id),
-			}));
-
-		const syncedCount = completedTasks.filter(t => t.commanderId !== undefined).length;
-		const completion = inferCompletionPresentation();
-
-		const mcState: MissionCompleteState = {
-			listTitle: listTitle || "Tasks",
-			summary: listDescription,
-			variant: completion.variant,
-			nextStep: completion.nextStep,
-			tasks: completedTasks,
-			stats: stats || undefined,
-			allSynced: syncedCount === completedTasks.length,
-			syncedCount,
-			completedAt: Date.now(),
-		};
-
-		const RESET_BG = "\x1b[49m";
-		const WHITE_BOLD = "\x1b[1;97m";
-		const RESET_ALL = "\x1b[0m";
-
-		// Mission Complete replaces the regular task section while visible.
-		ctx.ui.setWidget("agent-team", undefined);
-		(globalThis as any).__piRefreshAgentTeamWidget?.();
-
-		ctx.ui.setWidget("mission-complete", (_tui: any, theme: any) => {
-			const { Box, Text: TuiText } = require("@earendil-works/pi-tui");
-			const bgFn = (text: string): string =>
-				`${MISSION_COMPLETE_BG}${WHITE_BOLD}${text}${RESET_ALL}${RESET_BG}`;
-			const box = new Box(1, 1, bgFn);
-			const content = new TuiText("", 0, 0);
-			box.addChild(content);
-
-			return {
-				render(width: number): string[] {
-					const result = renderMissionComplete(mcState, width, theme);
-					content.setText(result.lines.join("\n"));
-					return box.render(width);
-				},
-				invalidate() {
-					box.invalidate();
-				},
-			};
-		});
-
-		publishMissionCompleteVisibility(true);
-		ctx.ui.setWidget("agent-team", undefined);
-		(globalThis as any).__piRefreshAgentTeamWidget?.();
-		scheduleMissionCompleteDismiss(ctx);
 	}
 
-	function clearTransientTaskWidgets(ctx: ExtensionContext, _reason: string): void {
-		clearMissionCompleteDismissTimer();
-		const allDone = tasks.length > 0 && tasks.every((t) => t.status === "done");
-		if (allDone) publishCompletedTaskUiDismissed(true);
-		publishMissionCompleteVisibility(false);
-		if (ctx.hasUI) {
-			ctx.ui.setWidget("mission-complete", undefined);
-			ctx.ui.setWidget("tasks-list", undefined);
-		}
-		(globalThis as any).__piRefreshAgentTeamWidget?.();
-	}
-
-	function scheduleMissionCompleteDismiss(ctx: ExtensionContext): void {
-		clearMissionCompleteDismissTimer();
-		missionCompleteDismissTimer = setTimeout(() => {
-			missionCompleteDismissTimer = undefined;
-			if (tasks.length > 0 && tasks.every((t) => t.status === "done")) {
-				clearTransientTaskWidgets(ctx, "mission_complete_timer");
-			}
-		}, MISSION_COMPLETE_DISMISS_MS);
-		(missionCompleteDismissTimer as any)?.unref?.();
-	}
-
-	function dismissMissionComplete(ctx: ExtensionContext): void {
-		clearMissionCompleteDismissTimer();
-		publishCompletedTaskUiDismissed(false);
-		publishMissionCompleteVisibility(false);
-		if (ctx.hasUI) ctx.ui.setWidget("mission-complete", undefined);
-		(globalThis as any).__piRefreshAgentTeamWidget?.();
-	}
-
-	/** Check if all tasks are done and show the mission complete widget */
+	/** Check if all tasks are done and run non-UI completion side effects. */
 	function checkMissionComplete(ctx: ExtensionContext): void {
 		if (tasks.length === 0) return;
 		const allDone = tasks.every(t => t.status === "done");
 		if (allDone) {
-			showMissionComplete(ctx);
+			runCompletionSideEffects();
 
 			// Fire-and-forget: complete the parent initiative-root task on Commander.
 			// This is idempotent — if already closed or non-existent, the host ignores it.
@@ -620,10 +497,6 @@ export default function (pi: ExtensionAPI) {
 	// this file to sort before security-guard without updating both.
 
 	pi.on("tool_call", async (event, ctx) => {
-		if ((event.toolName || "").startsWith("show_")) {
-			clearTransientTaskWidgets(ctx, "show_tool");
-		}
-
 		// Sub-agents manage their own task discipline — don't gate them
 		if (process.env.PI_SUBAGENT === "1") return { block: false };
 		if (event.toolName === "tasks") return { block: false };
@@ -766,7 +639,7 @@ export default function (pi: ExtensionAPI) {
 				{
 					customType: "mission-complete",
 					content: `${completionPrefix}${summaryLine}${nextStepLine}${statsLine}${reportHint}`,
-					display: false, // Hidden context for the agent — widget handles the visual
+					display: false, // Hidden completion context for the agent; no completion widget is shown
 				},
 			);
 			return;
@@ -810,7 +683,7 @@ export default function (pi: ExtensionAPI) {
 			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and rich 1-3 sentence work summary in description, not just a short label. " +
-			"The work summary is shown when starting/listing tasks and as the completion summary when the mission is complete. " +
+			"The work summary is shown when starting/listing tasks. " +
 			"IMPORTANT: If the user's new request does not fit the current list's theme, use clear to wipe the slate and new-list to start fresh.",
 		parameters: TasksParams,
 
@@ -839,7 +712,7 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
-					dismissMissionComplete(ctx);
+					if (ctx.hasUI) ctx.ui.setWidget("tasks-list", undefined);
 
 					// Cancel any previously synced tasks before resetting
 					if (syncState.mappings.length > 0) {
@@ -1236,7 +1109,7 @@ export default function (pi: ExtensionAPI) {
 						}
 					}
 
-					dismissMissionComplete(ctx);
+					if (ctx.hasUI) ctx.ui.setWidget("tasks-list", undefined);
 					const count = tasks.length;
 
 					// Sync: cancel all mapped Commander tasks (skip if external sync owns it)

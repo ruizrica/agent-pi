@@ -62,12 +62,22 @@ Before calling `set_mode`, check whether the mode requires prior setup:
 - **PIPELINE**: Requires an active pipeline config. If no pipeline is active, tell the user to run `/pipeline` first to select a pipeline.
 - **PLAN**, **SPEC**, **INVESTIGATE**, **GOAL**, **NORMAL**: No prerequisites — activate immediately.
 
+## Memory-First Context
+
+For substantial `plan`, `spec`, `investigate`, `pipeline`, `team`, and `chain` tasks, use `agent-memory` as a recon accelerator when available:
+
+1. Search prior decisions and context: `agent-memory search "<task/topic>" --json`.
+2. If code navigation has been indexed, locate likely files with `agent-memory code-nav "<feature/module/symptom>" --json` or inspect structure with `agent-memory code-tree --json`.
+3. Continue gracefully if `agent-memory` is missing or the code index has not been built; do not block mode activation.
+4. Do not run this memory-first step for trivial commands or `normal` mode.
+
 ## After Activation
 
 1. Call `set_mode` with the correct mode and reason.
-2. Immediately begin the mode's workflow using the task from the arguments.
-3. Do NOT wait for the user to restate the task — you already have it.
-4. The `before_agent_start` handler will inject the full mode-specific system prompt on the next agent turn.
+2. For substantial work, run the memory-first context step above before broad file reconnaissance.
+3. Immediately begin the mode's workflow using the task from the arguments.
+4. Do NOT wait for the user to restate the task — you already have it.
+5. The `before_agent_start` handler will inject the full mode-specific system prompt on the next agent turn.
 
 ## No Subcommand — Help
 

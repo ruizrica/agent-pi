@@ -1,31 +1,29 @@
-// ABOUTME: Source-level regression tests for agent-team task widget replacement.
-// ABOUTME: Ensures Mission Complete hides the regular task section while visible.
+// ABOUTME: Source-level regression tests for the agent-team task widget.
+// ABOUTME: Confirms stale Mission Complete compatibility flags cannot create a visible summary widget.
 
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const source = readFileSync(join(__dirname, "..", "agent-team.ts"), "utf-8");
+const agentTeamSource = readFileSync(join(__dirname, "..", "agent-team.ts"), "utf-8");
+const tasksSource = readFileSync(join(__dirname, "..", "tasks.ts"), "utf-8");
 
-describe("agent-team Mission Complete replacement", () => {
-	it("checks the global Mission Complete visibility flag only when all tasks are complete", () => {
-		expect(source).toContain("__piMissionCompleteVisible");
-		expect(source).toContain("const allTasksComplete = !!taskList?.tasks?.length && taskList.tasks.every((task) => task.status === \"done\");");
-		expect(source).toContain("const completedTaskUiDismissed = !!(globalThis as any).__piCompletedTaskUiDismissed && allTasksComplete;");
-		expect(source).toContain("const missionCompleteVisible = !!(globalThis as any).__piMissionCompleteVisible && allTasksComplete;");
+describe("agent-team after completion-summary widget removal", () => {
+	it("keeps the agent-team refresh hook for normal task updates", () => {
+		expect(agentTeamSource).toContain("__piRefreshAgentTeamWidget");
+		expect(agentTeamSource).toContain("__piRefreshAgentTeamWidget = () => updateWidget();");
 	});
 
-	it("clears the regular task widget while Mission Complete is visible or dismissed", () => {
-		expect(source).toContain('if (missionCompleteVisible || completedTaskUiDismissed) {\n\t\t\twidgetCtx.ui.setWidget("agent-team", undefined);');
-		expect(source).toContain("} else if (taskList && taskList.tasks.length > 0) {");
+	it("does not have an active tasks-side Mission Complete widget publisher", () => {
+		expect(tasksSource).toContain("g.__piMissionCompleteVisible = false;");
+		expect(tasksSource).toContain("g.__piCompletedTaskUiDismissed = false;");
+		expect(tasksSource).not.toContain("function publishMissionCompleteVisibility");
+		expect(tasksSource).not.toContain("publishMissionCompleteVisibility(true)");
+		expect(tasksSource).not.toContain('setWidget("mission-complete"');
 	});
 
-	it("exposes a refresh hook so Mission Complete can immediately hide the task widget", () => {
-		expect(source).toContain("__piRefreshAgentTeamWidget");
-		expect(source).toContain("__piRefreshAgentTeamWidget = () => updateWidget();");
-	});
-
-	it("disables task-list navigation while Mission Complete replaces the task section", () => {
-		expect(source).toContain("if ((globalThis as any).__piMissionCompleteVisible) return false;");
+	it("keeps task-list navigation available because the completion widget is no longer shown", () => {
+		expect(tasksSource).not.toContain("publishCompletedTaskUiDismissed(true)");
+		expect(tasksSource).not.toContain("clearTransientTaskWidgets");
 	});
 });

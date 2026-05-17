@@ -1,6 +1,7 @@
 // ABOUTME: Tests for escape-cancel extension — double-tap ESC detection and cancel-all logic.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import escapeCancelExtension from "../escape-cancel.ts";
 
 // ── Double-tap detection logic (extracted for testability) ────────
 
@@ -198,6 +199,59 @@ describe("escape-cancel", () => {
 
 			cancelAll(ctx);
 			expect(ctx.ui.notify).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("terminal input listener lifecycle", () => {
+		it("rebinds ESC handling to the active session context after session switch", async () => {
+			const handlers: Record<string, Array<(event: any, ctx: any) => Promise<void>>> = {};
+			const pi = {
+				on: vi.fn((event: string, handler: (event: any, ctx: any) => Promise<void>) => {
+					(handlers[event] ??= []).push(handler);
+				}),
+			} as any;
+			escapeCancelExtension(pi);
+
+			const ctx1Unsub = vi.fn();
+			const ctx1 = {
+				hasUI: true,
+				isIdle: () => false,
+				abort: vi.fn(),
+				ui: {
+					onTerminalInput: vi.fn(() => ctx1Unsub),
+					setStatus: vi.fn(),
+					setTheme: vi.fn(() => ({ success: true })),
+					notify: vi.fn(),
+				},
+			};
+			const ctx2InputHandlers: Array<(data: string) => any> = [];
+			const ctx2 = {
+				hasUI: true,
+				isIdle: () => false,
+				abort: vi.fn(),
+				ui: {
+					onTerminalInput: vi.fn((handler: (data: string) => any) => {
+						ctx2InputHandlers.push(handler);
+						return vi.fn();
+					}),
+					setStatus: vi.fn(),
+					setTheme: vi.fn(() => ({ success: true })),
+					notify: vi.fn(),
+				},
+			};
+
+			await handlers.session_start[0]({}, ctx1);
+			expect(ctx1.ui.onTerminalInput).toHaveBeenCalledTimes(1);
+
+			await handlers.session_switch[0]({}, ctx2);
+			expect(ctx1Unsub).toHaveBeenCalledTimes(1);
+			expect(ctx2.ui.onTerminalInput).toHaveBeenCalledTimes(1);
+
+			ctx2InputHandlers[0]("\x1b");
+			const result = ctx2InputHandlers[0]("\x1b");
+			expect(result).toEqual({ consume: true });
+			expect(ctx2.abort).toHaveBeenCalledTimes(1);
+			expect(ctx1.abort).not.toHaveBeenCalled();
 		});
 	});
 });

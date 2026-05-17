@@ -133,7 +133,7 @@ Options:
 - `all` or empty — Execute all currently-ready tasks (`cmd task list --status pending`)
 - `ready` — Same as default; shows what `cmd task list --status pending` returns
 - `backlog` — Tasks tagged `cmd-status:backlog`; promote them to `pending` then execute
-- `pending` — All `pending` tasks (regardless of cmd-ready status — useful when deps are off-graph)
+- `pending` — All `pending` tasks in cmd (useful when dependency metadata needs review)
 - Comma-separated numeric IDs — Execute specific tasks: `123,124,125`
 
 ---
@@ -165,14 +165,7 @@ done
 
 **For the canonical agent loop, prefer `cmd task list --status pending --json`** — it filters to unblocked work and is the single source of truth for "what can run now".
 
-To resolve a cmd task id back to the cmd numeric id (needed for `cmd task claim`), parse `cmd task list --json` and look up `.task_id == <ready task>`.
-
-```bash
-# Resolve task lookup
-ready_tasks=$(cmd task list --status pending --json | jq -r '.[].id')
-all_tasks=$(cmd task list --json | sed -E 's/\x1b\[[0-9;]*m//g')
-# Then lookup .task_id == task in all_tasks → .id
-```
+The `id` values returned by `cmd task list --status pending --json` are the ids to pass to `cmd task claim`, `cmd task show`, and `cmd task update`.
 
 #### 0.2 Filter by working_directory
 
@@ -265,7 +258,7 @@ Use the Task tool with:
       },
       "circular_dependencies": [],
       "execution_order": ["v2-abc", "v2-def", "v2-ghi"],
-      "missing_bd_edges": [
+      "missing_cmd_edges": [
         {"from": "v2-def", "to": "v2-abc", "reason": "task description says 'after v2-abc' but no cmd dependency edge exists"}
       ]
     }
@@ -382,7 +375,7 @@ Use the Task tool with:
           "tasks": [
             {
               "numeric_id": 1,
-              "task_id": "v2-abc",
+              "task_id": 1,
               "description": "...",
               "work_type": "backend",
               "assigned_agent": "haiku-4.5",
@@ -392,7 +385,7 @@ Use the Task tool with:
           ]
         }
       ],
-      "missing_bd_edges_to_create": [
+      "missing_cmd_edges_to_create": [
         {"from_task": "v2-def", "to_task": "v2-abc", "reason": "wave-2 must wait for wave-1"}
       ]
     }
@@ -402,7 +395,7 @@ Use the Task tool with:
 After Opus returns, **wire any missing cmd dependency edges** so `cmd task list --status pending` correctly gates the loop:
 
 ```bash
-for edge in $missing_bd_edges; do
+for edge in $missing_cmd_edges; do
   cmd dep add "$edge.from_task" "$edge.to_task"
 done
 ```
@@ -555,15 +548,8 @@ MAIN_LOOP:
 
     consecutive_empty_polls = 0
 
-    # Step 2: Resolve task lookup id
-    numeric=$(cmd task list --json \
-      | sed -E 's/\x1b\[[0-9;]*m//g' \
-      | python3 -c "
-import json, sys
-d = sys.stdin.read()
-arr = json.loads(d[d.find('['):d.rfind(']')+1])
-print(next(t['id'] for t in arr if t['task_id'] == '$next_task'))
-")
+    # Step 2: Use the cmd task id returned by the ready query
+    numeric="$next_task"
 
     # Step 3: Atomic claim
     claim_out=$(cmd task claim "$numeric" 2>&1) || {

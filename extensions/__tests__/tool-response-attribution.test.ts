@@ -90,8 +90,6 @@ describe("ATTRIBUTION_MAP", () => {
 			"pacifico_job_complete",
 			"memory-cycle-resume",
 			"memory-restored",
-			"session-recap",
-			"session-recap-card",
 			"vulnerability-sweep-result",
 			"vulnerability-install-result",
 			"qa-rico-config",

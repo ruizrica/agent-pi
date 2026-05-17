@@ -73,6 +73,12 @@ If any ambiguity matters to implementation, ask focused clarifying questions. Pr
 
 ### Phase 2: Reconnaissance
 
+Start with memory-assisted recon when useful:
+
+- Run `agent-memory search "<goal/topic>" --json` for prior decisions, patterns, or gotchas if the CLI is available.
+- If the codebase has been indexed, run `agent-memory code-nav "<feature/module>" --json` or `agent-memory code-tree --json` to identify likely entry points before broad file reads.
+- Treat memory results as leads and verify them against current files.
+
 For simple or tightly scoped tasks, gather context yourself.
 
 For complex tasks, dispatch focused scouts in parallel. Typical scout areas:
@@ -124,6 +130,7 @@ After each slice:
 - Record what was learned
 - Decide whether the slice reduced uncertainty
 - Update the loop state
+- If a durable decision, project convention, verified root cause, or reusable workflow emerged, add one concise `agent-memory` entry; do not store noisy transient state
 - Choose one of three next actions:
   - Continue immediately with the next slice
   - Ask the user a precise follow-up question

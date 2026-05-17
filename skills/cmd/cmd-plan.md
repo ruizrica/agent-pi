@@ -43,8 +43,8 @@ Same workflow shape as `/commander-plan`, but tasks are managed through **cmd** 
               ┌─────────────────────┐
               │    MAIN AGENT       │
               │  Present Plan, then │
-              │  cmd task add  │
-              │  dep add (waves)    │
+              │  cmd task add +      │
+              │  cmd dep add waves  │
               └─────────────────────┘
 ```
 
@@ -442,14 +442,13 @@ Wait for user response before proceeding to Phase 6.
 For each microtask, in the order Opus emitted them:
 
 ```bash
-# Capture both numeric id and task_id for later use
+# Capture the numeric cmd task id for later use
 result=$(cmd task add "$DESC" \
   --priority "$PRIORITY" \
   --type task \
   --json)
 
 numeric_id=$(echo "$result" | jq -r '.id')
-task_id=$(echo "$result"   | jq -r '.task_id')
 ```
 
 Where:
@@ -457,7 +456,7 @@ Where:
   `"In <file> around lines <X> to <Y>, <problem>; <solution>"`
 - `$PRIORITY` — 0–4 (cmd clamps; 0 is highest)
 
-Save a mapping `{wave_number: [{numeric_id, task_id, description}]}` for the next step.
+Save a mapping `{wave_number: [{numeric_id, description}]}` for the next step.
 
 #### 6.2 Stash full task context as a comment
 
@@ -492,7 +491,6 @@ The default edge type is `blocks`, which is what `cmd task list --status pending
 - Wave 2 tasks won't appear in `cmd task list --status pending` until ALL Wave 1 tasks are closed
 - `cmd-execute` claim-loops can rely on `cmd task list --status pending --json` to find unblocked work
 
-**Avoid `cmd dep add`** for now — that bridge still routes through the JSON mock and won't persist into the cmd dependency graph.
 
 #### 6.4 (Optional) Mark wave-1 tasks ready, others backlog
 
@@ -502,7 +500,7 @@ If you want a clean "backlog vs ready" split for the dashboard, leave Wave 1 tas
 cmd task update "$numeric_id" --status backlog
 ```
 
-Note: cmd's status alias `backlog` round-trips through `cmd task list --status backlog`, so it round-trips through `cmd task list`.
+Note: cmd's status alias `backlog` round-trips through `cmd task list --status backlog` and the dashboard.
 
 ### Phase 7: Display Task Board
 

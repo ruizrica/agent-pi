@@ -9,6 +9,15 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use the project's domain glossary to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
+## Phase 0 — Memory and code-index recon
+
+Before building new context from scratch, check whether the bug or module has already appeared in local memory:
+
+1. If `agent-memory` is available, run `agent-memory search "<bug/error/module>" --json` for prior incidents, decisions, or known gotchas.
+2. If a code index exists, run `agent-memory code-nav "<symptom/module>" --json` to identify likely seams before broad file reads.
+3. Treat memory results as leads, not proof. The feedback loop still decides correctness.
+4. Continue gracefully if the CLI or index is unavailable.
+
 ## Phase 1 — Build a feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.
@@ -113,5 +122,6 @@ Required before declaring done:
 - [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message — so the next debugger learns
+- [ ] If the root cause or fix pattern is durable, add one concise memory with `agent-memory add "<root cause + fix pattern>" --source memory --tags "bug,root-cause,<module>"`
 
 **Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
