@@ -64,7 +64,7 @@ async function callCommander(toolName: string, params: Record<string, unknown>):
  */
 function getLocalTasks(): { tasks: any[]; title?: string } {
 	const g = globalThis as any;
-	const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string }[]; title?: string; remaining: number; total: number } | undefined;
+	const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string; claimedBy?: string; claimedAt?: string; lastUpdatedAt?: string; lastUpdatedBy?: string }[]; title?: string; remaining: number; total: number } | undefined;
 	const now = new Date().toISOString();
 	const statusMap: Record<string, string> = { idle: "pending", inprogress: "working", done: "completed" };
 
@@ -72,8 +72,10 @@ function getLocalTasks(): { tasks: any[]; title?: string } {
 		task_id: t.id,
 		description: t.text,
 		status: statusMap[t.status] || t.status,
-		created_at: now,
-		updated_at: now,
+		claimed_by: t.claimedBy,
+		agent_name: t.claimedBy,
+		created_at: t.claimedAt || t.lastUpdatedAt || now,
+		updated_at: t.lastUpdatedAt || t.claimedAt || now,
 	}));
 
 	return { tasks, title: taskList?.title };
