@@ -23,7 +23,7 @@ Show:
 - short git status
 - recent commits
 - active `.context/todo.md` or `.context/session-state.json` if present
-- suggested next command: `/setup`, `/commit`, `/save`, `/handoff`, `/compact`, or `/pi plan`
+- suggested next command: `/setup`, `/commit`, `/save`, `/handoff`, or `/pi plan`
 
 ## Guardrails
 

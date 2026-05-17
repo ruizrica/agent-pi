@@ -31,4 +31,4 @@ Reason: `$ARGUMENTS`
 
 - Do not force-remove dirty worktrees.
 - Do not delete unmerged branches without explicit confirmation.
-- Prefer `/handoff` or `/compact` before abandoning substantial work.
+- Prefer `/handoff` before abandoning substantial work; explicitly ask `/handoff` to cycle memory if native compaction is needed.

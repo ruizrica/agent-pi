@@ -38,7 +38,7 @@ If uncommitted related work exists and no message is provided, derive a message 
    - stop
    - report conflicting files
    - preserve the worktree and branch
-   - suggest `/handoff` or `/compact` if the user needs to pause
+   - suggest `/handoff` if the user needs to pause; mention an explicit memory-cycle request when native compaction is needed
 8. Run post-merge verification when practical.
 9. Push if a remote/upstream is configured.
 10. After successful merge/push, optionally preserve durable knowledge:
@@ -58,7 +58,7 @@ If uncommitted related work exists and no message is provided, derive a message 
 - Do not clean up after merge conflicts or push failures.
 - Do not silently include unrelated changes.
 - Do not store secrets, full diffs, or noisy transient state in `agent-memory`.
-- If the user needs to stop mid-save, run `/handoff` or `/compact` to preserve state.
+- If the user needs to stop mid-save, run `/handoff` to preserve state; explicitly ask it to cycle memory when native compaction is needed.
 
 ## Success output
 
