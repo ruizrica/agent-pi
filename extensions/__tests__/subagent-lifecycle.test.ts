@@ -97,6 +97,13 @@ describe("timeout render warnings", () => {
 });
 
 describe("subagent Commander task sync policy", () => {
+	it("does not auto-create Commander task groups for coordination batches", () => {
+		const source = readFileSync(join(__dirname, "..", "subagent-widget.ts"), "utf-8");
+		expect(source).toContain("createCommanderTasks");
+		expect(source).toContain("Commander task groups are opt-in only");
+		expect(source).toContain("args.createCommanderTasks === true");
+	});
+
 	it("spawns standalone subagents with child local-task sync disabled", () => {
 		const source = readFileSync(join(__dirname, "..", "subagent-widget.ts"), "utf-8");
 		expect(source).toContain('PI_SUBAGENT: "1"');

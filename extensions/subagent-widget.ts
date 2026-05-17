@@ -800,7 +800,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: "subagent_create_batch",
-		description: "Spawn multiple subagents at once with optional Commander task group. Pre-creates Commander tasks to avoid race conditions where multiple agents try to claim the same task.\n\nWhen an agent's `name` matches a known agent definition, that agent's configured model, tools, and system prompt are automatically applied.",
+		description: "Spawn multiple subagents at once. Commander task-group creation is disabled by default to avoid phantom coordination tasks; set createCommanderTasks=true only for durable executable Commander work with lifecycle ownership.\n\nWhen an agent's `name` matches a known agent definition, that agent's configured model, tools, and system prompt are automatically applied.",
 		parameters: Type.Object({
 			agents: Type.Array(Type.Object({
 				task: Type.String({ description: "The complete task description for the subagent" }),
@@ -808,7 +808,8 @@ export default function (pi: ExtensionAPI) {
 				summary: Type.Optional(Type.String({ description: "Short summary shown in widget (no markdown)" })),
 				model: Type.Optional(Type.String({ description: "Model override. Only set to override the agent definition's default model." })),
 			}), { description: "Array of agent definitions to spawn" }),
-			groupName: Type.Optional(Type.String({ description: "Commander task group name (used when Commander is available)" })),
+			groupName: Type.Optional(Type.String({ description: "Commander task group name (only used when createCommanderTasks=true)" })),
+			createCommanderTasks: Type.Optional(Type.Boolean({ description: "Explicitly pre-create Commander tasks for this batch. Default false; use only for durable executable board work." })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~2s after done (default: true)" })),
 			timeout: Type.Optional(Type.Number({ description: "Max runtime in ms for all agents in this batch. Defaults by role." })),
 			force: Type.Optional(Type.Boolean({ description: "Force spawn even if agents are already running (default: false)" })),
@@ -859,9 +860,11 @@ export default function (pi: ExtensionAPI) {
 				};
 			});
 
-			// Try to create Commander task group for all agents at once
+			// Commander task groups are opt-in only. Most subagent batches are
+			// coordination/scout work, not durable Kanban tasks; auto-creating a
+			// group here produced phantom mission-brief duplicate cards.
 			const client = getCommanderClient();
-			if (client && isCommanderAvailable()) {
+			if (args.createCommanderTasks === true && client && isCommanderAvailable()) {
 				const groupName = args.groupName || `subagent-batch-${Date.now()}`;
 				const taskTexts = defs.map((def: any) => def.task);
 				const missionBrief = buildSubagentBatchBrief(groupName, defs);
