@@ -66,6 +66,8 @@ interface Task {
 	id: number;
 	text: string;
 	status: TaskStatus;
+	claimedBy?: string;
+	claimedAt?: string;
 	lastUpdatedAt?: string;
 	lastUpdatedBy?: string;
 }
@@ -86,7 +88,7 @@ interface CompletionPresentation {
 }
 
 const TasksParams = Type.Object({
-	action: StringEnum(["new-list", "add", "toggle", "remove", "update", "list", "clear"] as const),
+	action: StringEnum(["new-list", "add", "claim", "toggle", "remove", "update", "list", "clear"] as const),
 	text: Type.Optional(Type.String({ description: "Task text (for add/update), or list title (for new-list)" })),
 	texts: Type.Optional(Type.Array(Type.String(), { description: "Multiple task texts (for add). Use this to batch-add several tasks at once." })),
 	description: Type.Optional(Type.String({ description: "Rich 1-3 sentence work summary for the list (for new-list)" })),
@@ -100,9 +102,9 @@ const STATUS_ICON: Record<TaskStatus, string> = { idle: "-", inprogress: "*", do
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { idle: "inprogress", inprogress: "done", done: "idle" };
 const STATUS_LABEL: Record<TaskStatus, string> = { idle: "idle", inprogress: "in progress", done: "done" };
 
-export interface CurrentTaskInfo { id: number; text: string; commanderTaskId?: number }
+export interface CurrentTaskInfo { id: number; text: string; claimedBy?: string; claimedAt?: string; commanderTaskId?: number }
 export interface TaskListInfo {
-	tasks: { id: number; text: string; status: TaskStatus }[];
+	tasks: { id: number; text: string; status: TaskStatus; claimedBy?: string; claimedAt?: string; lastUpdatedAt?: string; lastUpdatedBy?: string }[];
 	title?: string;
 	description?: string;
 	remaining: number;
@@ -118,9 +120,34 @@ function currentActor(): string {
 	return resolveAgentName();
 }
 
+function claimTask(task: Task, actor = currentActor(), at = nowIso()): void {
+	task.claimedBy = actor;
+	task.claimedAt = at;
+	task.lastUpdatedAt = at;
+	task.lastUpdatedBy = actor;
+}
+
+function taskPublicInfo(t: Task): TaskListInfo["tasks"][number] {
+	return {
+		id: t.id,
+		text: t.text,
+		status: t.status,
+		...(t.claimedBy ? { claimedBy: t.claimedBy } : {}),
+		...(t.claimedAt ? { claimedAt: t.claimedAt } : {}),
+		...(t.lastUpdatedAt ? { lastUpdatedAt: t.lastUpdatedAt } : {}),
+		...(t.lastUpdatedBy ? { lastUpdatedBy: t.lastUpdatedBy } : {}),
+	};
+}
+
 function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, description?: string, commanderSyncEnabled = false) {
 	const cur = tasks.find(t => t.status === "inprogress");
-	g.__piCurrentTask = cur ? { id: cur.id, text: cur.text, commanderTaskId: commanderSyncEnabled ? lookupMapping(sync, cur.id) : undefined } as CurrentTaskInfo : null;
+	g.__piCurrentTask = cur ? {
+		id: cur.id,
+		text: cur.text,
+		...(cur.claimedBy ? { claimedBy: cur.claimedBy } : {}),
+		...(cur.claimedAt ? { claimedAt: cur.claimedAt } : {}),
+		commanderTaskId: commanderSyncEnabled ? lookupMapping(sync, cur.id) : undefined,
+	} as CurrentTaskInfo : null;
 
 	const fallbackSummary = description
 		|| (() => {
@@ -130,7 +157,7 @@ function publishCurrentTask(tasks: Task[], sync: SyncState, title?: string, desc
 
 	const remaining = tasks.filter(t => t.status !== "done").length;
 	g.__piTaskList = {
-		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
+		tasks: tasks.map(taskPublicInfo),
 		title,
 		description: fallbackSummary,
 		remaining,
@@ -230,7 +257,8 @@ class TasksListComponent {
 					: task.status === "inprogress"
 						? th.fg("success", displayText)
 						: th.fg("muted", displayText);
-				lines.push(truncateToWidth(`  ${icon} ${id} ${text}`, width));
+				const claim = task.claimedBy ? th.fg("dim", ` @${task.claimedBy}`) : "";
+				lines.push(truncateToWidth(`  ${icon} ${id} ${text}${claim}`, width));
 			}
 		}
 
@@ -681,7 +709,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Tasks",
 		description:
 			"Manage your task list. You MUST add tasks before using any other tools. " +
-			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
+			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), claim (id, optional text=agent name), toggle (id) — cycles idle→inprogress→done and auto-claims on inprogress, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and rich 1-3 sentence work summary in description, not just a short label. " +
 			"The work summary is shown when starting/listing tasks. " +
@@ -801,7 +829,7 @@ export default function (pi: ExtensionAPI) {
 							type: "text" as const,
 							text: tasks.length
 								? (prefix ? prefix + "\n" : "") +
-									tasks.map((t) => `[${STATUS_ICON[t.status]}] #${t.id} (${t.status}): ${t.text}`).join("\n")
+									tasks.map((t) => `[${STATUS_ICON[t.status]}] #${t.id} (${t.status}${t.claimedBy ? ` @${t.claimedBy}` : ""}): ${t.text}`).join("\n")
 								: "No tasks defined yet.",
 						}],
 						details: makeDetails("list"),
@@ -909,8 +937,12 @@ export default function (pi: ExtensionAPI) {
 					}
 					const prev = task.status;
 					task.status = NEXT_STATUS[task.status];
-					task.lastUpdatedAt = nowIso();
-					task.lastUpdatedBy = currentActor();
+					if (task.status === "inprogress") {
+						claimTask(task);
+					} else {
+						task.lastUpdatedAt = nowIso();
+						task.lastUpdatedBy = currentActor();
+					}
 					if (shouldSyncLocalTasksToCommander()) {
 						syncState = addPendingCreate(syncState, task, syncState.groupId === undefined ? "group" : "single");
 						syncState = updateMappingStatus(syncState, task.id, task.status);
@@ -930,6 +962,9 @@ export default function (pi: ExtensionAPI) {
 					}
 
 					let msg = `Task #${task.id}: ${prev} → ${task.status}`;
+					if (task.status === "inprogress" && task.claimedBy) {
+						msg += ` (claimed by ${task.claimedBy})`;
+					}
 					if (demoted.length > 0) {
 						msg += `\n(Auto-paused ${demoted.map((t) => `#${t.id}`).join(", ")} → idle. Only one task can be in progress at a time.)`;
 					}
@@ -1020,6 +1055,31 @@ export default function (pi: ExtensionAPI) {
 					};
 					refreshUI(ctx);
 					checkMissionComplete(ctx);
+					return result;
+				}
+
+				case "claim": {
+					if (params.id === undefined) {
+						return {
+							content: [{ type: "text" as const, text: "Error: id required for claim" }],
+							details: makeDetails("claim", "id required"),
+						};
+					}
+					const task = tasks.find((t) => t.id === params.id);
+					if (!task) {
+						return {
+							content: [{ type: "text" as const, text: `Task #${params.id} not found` }],
+							details: makeDetails("claim", `#${params.id} not found`),
+						};
+					}
+					const actor = params.text?.trim() || currentActor();
+					claimTask(task, actor);
+					saveSharedStateIfNeeded("claim", `Claimed task #${task.id} for ${actor}.`);
+					const result = {
+						content: [{ type: "text" as const, text: `Task #${task.id} claimed by ${actor}` }],
+						details: makeDetails("claim"),
+					};
+					refreshUI(ctx);
 					return result;
 				}
 
@@ -1204,7 +1264,8 @@ export default function (pi: ExtensionAPI) {
 							: t.status === "inprogress"
 								? theme.fg("success", itemDisplayText)
 								: theme.fg("muted", itemDisplayText);
-						listText += `\n${icon} ${theme.fg("accent", `#${t.id}`)} ${itemText}`;
+						const claim = t.claimedBy ? theme.fg("dim", ` @${t.claimedBy}`) : "";
+						listText += `\n${icon} ${theme.fg("accent", `#${t.id}`)} ${itemText}${claim}`;
 					}
 					if (!expanded && taskList.length > 5) {
 						listText += `\n${theme.fg("dim", `... ${taskList.length - 5} more`)}`;
@@ -1223,6 +1284,13 @@ export default function (pi: ExtensionAPI) {
 					const msg = text?.type === "text" ? text.text : "";
 					return new Text(outputLine(theme, "accent", msg), 0, 0);
 				}
+
+				case "claim": {
+					const text = result.content[0];
+					const msg = text?.type === "text" ? text.text : "";
+					return new Text(outputLine(theme, "accent", msg), 0, 0);
+				}
+
 
 				case "remove": {
 					const text = result.content[0];
