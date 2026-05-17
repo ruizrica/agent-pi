@@ -70,19 +70,27 @@ export function popRetries(state: TrackerState): { entries: RetryEntry[]; state:
 
 // ── Reconciliation ──────────────────────────────────────────────────
 
+export interface ReconcileOptions {
+	suppressCreateActions?: boolean;
+	skipCreateLocalIds?: Iterable<number>;
+}
+
 export function computeReconcileActions(
 	localTasks: { id: number; text: string; status: string }[],
 	mappings: { localId: number; commanderId: number; lastSyncedStatus?: LocalStatus }[],
 	pendingCreates: PendingCommanderCreate[] = [],
+	options: ReconcileOptions = {},
 ): ReconcileAction[] {
 	const mappingByLocalId = new Map(mappings.map(m => [m.localId, m]));
 	const pendingByLocalId = new Map(pendingCreates.map(p => [p.localId, p]));
+	const skipCreateLocalIds = new Set(options.skipCreateLocalIds || []);
 	const actions: ReconcileAction[] = [];
 
 	for (const task of localTasks) {
 		const mapping = mappingByLocalId.get(task.id);
 		const currentCommander = localToCommander(task.status as LocalStatus);
 		if (!mapping) {
+			if (options.suppressCreateActions || skipCreateLocalIds.has(task.id)) continue;
 			const pending = pendingByLocalId.get(task.id);
 			if (pending || task.status !== "done") {
 				actions.push({

@@ -26,6 +26,7 @@ export default function (pi: ExtensionAPI) {
 	let reconcileTimer: ReturnType<typeof setInterval> | undefined;
 	let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 	let trackerState: TrackerState = createTrackerState();
+	const createInFlightLocalIds = new Set<number>();
 
 	// Publish tracker on globalThis so tasks.ts can push retries
 	const tracker = {
@@ -79,11 +80,16 @@ export default function (pi: ExtensionAPI) {
 		// Get current sync mappings from tasks extension's published state
 		// (tasks.ts publishes syncState inside details, but we read the globalThis snapshot)
 		const mappings = syncState?.mappings || [];
-		const actions = computeReconcileActions(taskList.tasks, mappings, syncState?.pendingCreates || []);
+		const suppressCreateActions = !!syncState?.groupCreationInFlight && syncState?.groupId === undefined;
+		const actions = computeReconcileActions(taskList.tasks, mappings, syncState?.pendingCreates || [], {
+			suppressCreateActions,
+			skipCreateLocalIds: createInFlightLocalIds,
+		});
 
 		for (const action of actions) {
 			if (action.type === "create") {
 				const groupId = syncState?.groupId;
+				createInFlightLocalIds.add(action.localId);
 				// When we have no group yet, the retry would otherwise land as a bare
 				// root task with no mission brief — then the Commander dashboard's
 				// InitiativeCard can't surface anything meaningful. Use the list's
@@ -108,7 +114,9 @@ export default function (pi: ExtensionAPI) {
 						syncState.mappings.push({ localId: action.localId, commanderId: cid, lastSyncedStatus: action.localStatus as any });
 						syncState.pendingCreates = (syncState.pendingCreates || []).filter(p => p.localId !== action.localId);
 					}
-				}).catch(() => {});
+				}).catch(() => {}).finally(() => {
+					createInFlightLocalIds.delete(action.localId);
+				});
 			} else if (action.type === "status-update") {
 				client.callTool("commander_task", {
 					operation: "update",

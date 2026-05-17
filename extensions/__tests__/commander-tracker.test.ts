@@ -228,6 +228,27 @@ describe("computeReconcileActions", () => {
 			commanderStatus: "completed",
 		});
 	});
+
+	it("suppresses create actions when group creation is in flight", () => {
+		const localTasks = [
+			{ id: 1, text: "Unmapped pending", status: "idle" as const },
+		];
+		const actions = computeReconcileActions(localTasks, [], [
+			{ localId: 1, text: "Unmapped pending", desiredStatus: "idle", requestedAt: 1, mode: "group" },
+		], { suppressCreateActions: true });
+		expect(actions).toEqual([]);
+	});
+
+	it("skips create for localIds already in flight", () => {
+		const localTasks = [
+			{ id: 1, text: "Already creating", status: "idle" as const },
+			{ id: 2, text: "Needs create", status: "idle" as const },
+		];
+		const actions = computeReconcileActions(localTasks, [], [], { skipCreateLocalIds: [1] });
+		expect(actions).toEqual([
+			{ type: "create", localId: 2, text: "Needs create", localStatus: "idle", commanderStatus: "pending" },
+		]);
+	});
 });
 
 describe("isFullySynced", () => {
