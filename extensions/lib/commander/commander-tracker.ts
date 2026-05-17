@@ -1,7 +1,7 @@
 // ABOUTME: Pure logic for Commander task tracker — retry queue and reconciliation.
 // ABOUTME: No side effects — fully testable state management for failed op retries and unmapped task detection.
 
-import { localToCommander, type LocalStatus } from "./commander-sync.ts";
+import { localToCommander, type LocalStatus, type PendingCommanderCreate } from "./commander-sync.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -19,6 +19,8 @@ export interface CreateAction {
 	type: "create";
 	localId: number;
 	text: string;
+	localStatus: string;
+	commanderStatus: string;
 }
 
 export interface StatusUpdateAction {
@@ -71,20 +73,28 @@ export function popRetries(state: TrackerState): { entries: RetryEntry[]; state:
 export function computeReconcileActions(
 	localTasks: { id: number; text: string; status: string }[],
 	mappings: { localId: number; commanderId: number; lastSyncedStatus?: LocalStatus }[],
+	pendingCreates: PendingCommanderCreate[] = [],
 ): ReconcileAction[] {
 	const mappingByLocalId = new Map(mappings.map(m => [m.localId, m]));
+	const pendingByLocalId = new Map(pendingCreates.map(p => [p.localId, p]));
 	const actions: ReconcileAction[] = [];
 
 	for (const task of localTasks) {
 		const mapping = mappingByLocalId.get(task.id);
+		const currentCommander = localToCommander(task.status as LocalStatus);
 		if (!mapping) {
-			// Unmapped and not done → create in Commander
-			if (task.status !== "done") {
-				actions.push({ type: "create", localId: task.id, text: task.text });
+			const pending = pendingByLocalId.get(task.id);
+			if (pending || task.status !== "done") {
+				actions.push({
+					type: "create",
+					localId: task.id,
+					text: pending?.text || task.text,
+					localStatus: task.status,
+					commanderStatus: currentCommander,
+				});
 			}
 		} else {
 			// Mapped → check for status drift
-			const currentCommander = localToCommander(task.status as LocalStatus);
 			const lastSyncedCommander = localToCommander(mapping.lastSyncedStatus ?? "idle");
 			if (currentCommander !== lastSyncedCommander) {
 				actions.push({
