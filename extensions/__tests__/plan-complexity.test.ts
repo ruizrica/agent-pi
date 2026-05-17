@@ -104,8 +104,8 @@ This is a simple plan.`;
 			expect(mapComplexityToMode("simple")).toBeNull();
 		});
 
-		it("maps complete to PIPELINE", () => {
-			expect(mapComplexityToMode("complete")).toBe("PIPELINE");
+		it("maps complete to IMPLEMENT", () => {
+			expect(mapComplexityToMode("complete")).toBe("IMPLEMENT");
 		});
 	});
 
@@ -119,7 +119,7 @@ This is a simple plan.`;
 			expect(result.complexity).toBe("simple");
 		});
 
-		it("returns PIPELINE for complete plan", () => {
+		it("returns IMPLEMENT for complete plan", () => {
 			const markdown = `# Plan
 ## Phase 1: A
 - Task
@@ -128,7 +128,7 @@ This is a simple plan.`;
 ## Phase 3: C
 - Task`;
 			const result = getPlanTargetMode(markdown);
-			expect(result.mode).toBe("PIPELINE");
+			expect(result.mode).toBe("IMPLEMENT");
 			expect(result.complexity).toBe("complete");
 		});
 

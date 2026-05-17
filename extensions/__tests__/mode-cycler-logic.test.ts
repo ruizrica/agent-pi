@@ -5,8 +5,8 @@ import { describe, it, expect } from "vitest";
 import { MODES, nextMode, prevMode, modeLabel, modeColor, modeTextAnsi, modeBgAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi } from "../lib/mode-cycler-logic.ts";
 
 describe("MODES", () => {
-	it("has exactly 9 entries in correct order", () => {
-		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "IMPLEMENT", "PIPELINE", "TEAM", "CHAIN"]);
+	it("has exactly 8 entries in correct order", () => {
+		expect(MODES).toEqual(["NORMAL", "PLAN", "SPEC", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"]);
 	});
 });
 
@@ -19,32 +19,28 @@ describe("nextMode", () => {
 		expect(nextMode("PLAN")).toBe("SPEC");
 	});
 
-	it("cycles SPEC → INVESTIGATE", () => {
-		expect(nextMode("SPEC")).toBe("INVESTIGATE");
+	it("cycles SPEC → IMPLEMENT", () => {
+		expect(nextMode("SPEC")).toBe("IMPLEMENT");
 	});
 
-	it("cycles INVESTIGATE → GOAL", () => {
-		expect(nextMode("INVESTIGATE")).toBe("GOAL");
+	it("cycles IMPLEMENT → GOAL", () => {
+		expect(nextMode("IMPLEMENT")).toBe("GOAL");
 	});
 
-	it("cycles GOAL → IMPLEMENT", () => {
-		expect(nextMode("GOAL")).toBe("IMPLEMENT");
-	});
-
-	it("cycles IMPLEMENT → PIPELINE", () => {
-		expect(nextMode("IMPLEMENT")).toBe("PIPELINE");
-	});
-
-	it("cycles PIPELINE → TEAM", () => {
-		expect(nextMode("PIPELINE")).toBe("TEAM");
+	it("cycles GOAL → TEAM", () => {
+		expect(nextMode("GOAL")).toBe("TEAM");
 	});
 
 	it("cycles TEAM → CHAIN", () => {
 		expect(nextMode("TEAM")).toBe("CHAIN");
 	});
 
-	it("wraps CHAIN → NORMAL", () => {
-		expect(nextMode("CHAIN")).toBe("NORMAL");
+	it("cycles CHAIN → PIPELINE", () => {
+		expect(nextMode("CHAIN")).toBe("PIPELINE");
+	});
+
+	it("wraps PIPELINE → NORMAL", () => {
+		expect(nextMode("PIPELINE")).toBe("NORMAL");
 	});
 });
 
@@ -57,28 +53,24 @@ describe("prevMode", () => {
 		expect(prevMode("SPEC")).toBe("PLAN");
 	});
 
-	it("returns SPEC as previous mode for INVESTIGATE", () => {
-		expect(prevMode("INVESTIGATE")).toBe("SPEC");
+	it("cycles IMPLEMENT → SPEC", () => {
+		expect(prevMode("IMPLEMENT")).toBe("SPEC");
 	});
 
-	it("cycles GOAL → INVESTIGATE", () => {
-		expect(prevMode("GOAL")).toBe("INVESTIGATE");
+	it("cycles GOAL → IMPLEMENT", () => {
+		expect(prevMode("GOAL")).toBe("IMPLEMENT");
 	});
 
-	it("wraps NORMAL → CHAIN", () => {
-		expect(prevMode("NORMAL")).toBe("CHAIN");
+	it("wraps NORMAL → PIPELINE", () => {
+		expect(prevMode("NORMAL")).toBe("PIPELINE");
 	});
 
 	it("cycles CHAIN → TEAM", () => {
 		expect(prevMode("CHAIN")).toBe("TEAM");
 	});
 
-	it("cycles PIPELINE → IMPLEMENT", () => {
-		expect(prevMode("PIPELINE")).toBe("IMPLEMENT");
-	});
-
-	it("cycles IMPLEMENT → GOAL", () => {
-		expect(prevMode("IMPLEMENT")).toBe("GOAL");
+	it("cycles PIPELINE → CHAIN", () => {
+		expect(prevMode("PIPELINE")).toBe("CHAIN");
 	});
 
 });
@@ -90,10 +82,6 @@ describe("modeLabel", () => {
 
 	it("returns [PLAN] for PLAN", () => {
 		expect(modeLabel("PLAN")).toBe("[PLAN]");
-	});
-
-	it("returns [INVESTIGATE] for INVESTIGATE", () => {
-		expect(modeLabel("INVESTIGATE")).toBe("[INVESTIGATE]");
 	});
 
 	it("returns [GOAL] for GOAL", () => {
@@ -129,10 +117,6 @@ describe("modeColor", () => {
 
 	it("returns accent for PLAN", () => {
 		expect(modeColor("PLAN")).toBe("accent");
-	});
-
-	it("returns accent for INVESTIGATE", () => {
-		expect(modeColor("INVESTIGATE")).toBe("accent");
 	});
 
 	it("returns accent for GOAL", () => {
@@ -222,10 +206,6 @@ describe("modeTextAnsi", () => {
 		expect(modeTextAnsi("PLAN")).toBe("\x1b[1;97m");
 	});
 
-	it("returns bold white for INVESTIGATE (blue bg)", () => {
-		expect(modeTextAnsi("INVESTIGATE")).toBe("\x1b[1;97m");
-	});
-
 	it("returns bold white for GOAL (blue bg)", () => {
 		expect(modeTextAnsi("GOAL")).toBe("\x1b[1;97m");
 	});
@@ -264,7 +244,6 @@ describe("mode hints", () => {
 		expect(modeHintText("NORMAL").toLowerCase()).toContain("default direct mode");
 		expect(modeHintText("PLAN").toLowerCase()).toContain("planning");
 		expect(modeHintText("SPEC").toLowerCase()).toContain("requirements");
-		expect(modeHintText("INVESTIGATE").toLowerCase()).toContain("diagnose");
 		expect(modeHintText("GOAL").toLowerCase()).toContain("success condition");
 		expect(modeHintText("IMPLEMENT").toLowerCase()).toContain("task-board");
 		expect(modeHintText("PIPELINE").toLowerCase()).toContain("phased");

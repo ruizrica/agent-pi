@@ -19,6 +19,7 @@ import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
 import { isCommanderAvailable, openAndWaitInCommander } from "./lib/commander/commander-viewer.ts";
 import { getProjectContext } from "./lib/project-context.ts";
+import { materializeApprovedTasksToCommander, readSpecTaskMarkdown, summarizeMaterialization, type CommanderTaskMaterializationResult } from "./lib/approval-task-materialization.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -298,6 +299,38 @@ export default function (pi: ExtensionAPI) {
 			title,
 			featureIdea,
 		});
+	}
+
+	async function materializeSpecApprovalTasks(folderPath: string, title: string, ctx: ExtensionContext): Promise<CommanderTaskMaterializationResult> {
+		const taskMarkdown = readSpecTaskMarkdown(folderPath);
+		if (!taskMarkdown) {
+			return {
+				ok: false,
+				taskCount: 0,
+				source: folderPath,
+				warning: "No tasks.md or planning/tasks.md found; Commander source-of-truth tasks were not created.",
+			};
+		}
+		return materializeApprovedTasksToCommander({
+			title,
+			sourceKind: "spec",
+			sourcePath: taskMarkdown.path,
+			markdown: taskMarkdown.markdown,
+			cwd: ctx.cwd || process.cwd(),
+			labels: ["spec-approval"],
+		});
+	}
+
+	function triggerSpecApprovalModeSwitch(ctx: ExtensionContext, materialization: CommanderTaskMaterializationResult) {
+		try {
+			const setModeCallback = (globalThis as any).__piSetModeForApproval;
+			if (typeof setModeCallback === "function") {
+				setModeCallback("IMPLEMENT", ctx);
+				ctx.ui.notify(`Mode switched to IMPLEMENT on spec approval. ${materialization.ok ? "Commander tasks recorded." : materialization.warning || ""}`, "info");
+			}
+		} catch {
+			// Never fail spec approval because of an auto-mode switch.
+		}
 	}
 
 	function parseSpecCommandArgs(args: string): { folderPath: string; featureIdea?: string } {
@@ -615,11 +648,14 @@ export default function (pi: ExtensionAPI) {
 					const modifiedNote = result.modified
 						? " (spec was edited by user — use the updated version)"
 						: "";
+					const materialization = await materializeSpecApprovalTasks(folderPath, displayTitle, ctx);
+					const commanderNote = summarizeMaterialization(materialization);
+					triggerSpecApprovalModeSwitch(ctx, materialization);
 
 					piRef.sendMessage(
 						{
 							customType: "spec-approved",
-							content: `Spec approved! Proceed with implementation.${modifiedNote}`,
+							content: `Spec approved! Proceed with IMPLEMENT mode.${modifiedNote}${commanderNote}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -635,6 +671,7 @@ export default function (pi: ExtensionAPI) {
 							modified: result.modified,
 							folderPath: folder_path,
 							scaffoldedFiles: scaffoldResult.createdFiles,
+							commanderTaskMaterialization: materialization,
 						},
 					};
 				}
@@ -802,10 +839,13 @@ export default function (pi: ExtensionAPI) {
 				const result = await runSpecViewer(ctx, resolved, displayTitle);
 
 				if (result.action === "approved") {
+					const materialization = await materializeSpecApprovalTasks(resolved, displayTitle, ctx);
+					const commanderNote = summarizeMaterialization(materialization);
+					triggerSpecApprovalModeSwitch(ctx, materialization);
 					piRef.sendMessage(
 						{
 							customType: "spec-approved",
-							content: `Spec approved! Proceed with implementation.${result.modified ? " (spec was edited)" : ""}`,
+							content: `Spec approved! Proceed with IMPLEMENT mode.${result.modified ? " (spec was edited)" : ""}${commanderNote}`,
 							display: true,
 						},
 						{ deliverAs: "followUp" as any, triggerTurn: true },

@@ -54,7 +54,7 @@ describe("plan-viewer implementation", () => {
 		const commandSection = source.slice(source.indexOf("// ── /plan command"));
 
 		expect(toolSection).toContain('customType: "plan-approved"');
-		expect(toolSection).toContain('content: `Plan approved! Proceed with implementation.${modifiedNote}`');
+		expect(toolSection).toContain("summarizeMaterialization");
 		expect(toolSection).toContain('text: `Plan approved by user.${modifiedNote} The updated plan has been saved to ${file_path}.`');
 
 		expect(commandSection).toContain('customType: "plan-approved"');
@@ -65,6 +65,7 @@ describe("plan-viewer implementation", () => {
 		expect(source).toContain("triggerApprovalModeSwitch");
 		expect(source).toContain('result.action === "approved"');
 		expect(source).toContain("Only switch if targetMode is not null");
+		expect(source).toContain("materializeApprovedTasksToCommander");
 	});
 
 	it("calls global __piSetModeForApproval callback when approval happens", () => {
@@ -92,16 +93,16 @@ describe("plan-viewer implementation", () => {
 			expect(result.mode).toBeNull();
 		});
 
-		it("returns PIPELINE for complete plans", () => {
+		it("returns IMPLEMENT for complete plans", () => {
 			const result = getPlanTargetMode("# Plan\n\n## Phase 1: A\n\n## Phase 2: B\n\n## Phase 3: C\n");
 			expect(result.complexity).toBe("complete");
-			expect(result.mode).toBe("PIPELINE");
+			expect(result.mode).toBe("IMPLEMENT");
 		});
 
-		it("returns PIPELINE for approved investigate remediation plans with 3+ phases", () => {
+		it("returns IMPLEMENT for approved investigate remediation plans with 3+ phases", () => {
 			const result = getPlanTargetMode("# Investigation Findings & Remediation\n\n## Phase 1: Clarify\n\n## Phase 2: Gather\n\n## Phase 3: Remediate\n");
 			expect(result.complexity).toBe("complete");
-			expect(result.mode).toBe("PIPELINE");
+			expect(result.mode).toBe("IMPLEMENT");
 		});
 	});
 });

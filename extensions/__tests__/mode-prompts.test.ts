@@ -149,10 +149,12 @@ describe("INVESTIGATE_PROMPT — complex problem loop", () => {
 		expect(INVESTIGATE_PROMPT).toContain("Continue or Handoff");
 	});
 
-	it("preserves approval and PIPELINE handoff guardrails", () => {
+	it("preserves approval and IMPLEMENT handoff guardrails", () => {
 		expect(INVESTIGATE_PROMPT).toContain("show_plan");
 		expect(INVESTIGATE_PROMPT).toContain("show_spec");
-		expect(INVESTIGATE_PROMPT).toContain("PIPELINE");
+		expect(INVESTIGATE_PROMPT).toContain("Investigation Report & Remediation Plan");
+		expect(INVESTIGATE_PROMPT).toContain("Commander tasks are the source of truth");
+		expect(INVESTIGATE_PROMPT).toContain("IMPLEMENT");
 		expect(INVESTIGATE_PROMPT).toContain("Never start coding before clarification and approval");
 	});
 
@@ -193,7 +195,7 @@ describe("GOAL_PROMPT — success-condition loop", () => {
 	it("includes WARDEN and approval handoff guardrails", () => {
 		expect(GOAL_PROMPT).toContain("WARDEN");
 		expect(GOAL_PROMPT).toContain("tasks");
-		expect(GOAL_PROMPT).toContain("PLAN, SPEC, or PIPELINE");
+		expect(GOAL_PROMPT).toContain("PLAN, SPEC, or IMPLEMENT");
 	});
 });
 
@@ -225,6 +227,12 @@ describe("IMPLEMENT_PROMPT — autonomous task-board loop", () => {
 		expect(IMPLEMENT_PROMPT).toContain("tool-advisor status");
 		expect(IMPLEMENT_PROMPT).toContain("agents/models.json");
 		expect(IMPLEMENT_PROMPT).toContain("openai-codex/gpt-5.3-codex-spark");
+	});
+
+	it("uses Commander board tasks as the source of truth", () => {
+		expect(IMPLEMENT_PROMPT).toContain("Source of Truth");
+		expect(IMPLEMENT_PROMPT).toContain("Commander board tasks are the source of truth");
+		expect(IMPLEMENT_PROMPT).toContain("PLAN, SPEC, or INVESTIGATE approval");
 	});
 });
 

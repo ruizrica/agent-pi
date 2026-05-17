@@ -2,7 +2,7 @@
 // ABOUTME: Detects explicit markers and counts phases to determine whether approval should switch modes.
 
 export type PlanComplexity = "simple" | "complete";
-export type PlannedMode = "NORMAL" | "PIPELINE" | "CHAIN";
+export type PlannedMode = "NORMAL" | "IMPLEMENT" | "CHAIN";
 
 interface ComplexityResult {
 	complexity: PlanComplexity;
@@ -80,15 +80,15 @@ export function classifyPlanComplexity(markdown: string): ComplexityResult {
 
 /**
  * Maps plan complexity to target mode after approval.
- * Simple → no switch, Complete → PIPELINE.
+ * Simple → no switch, Complete → IMPLEMENT.
  */
 export function mapComplexityToMode(complexity: PlanComplexity): PlannedMode | null {
-	return complexity === "complete" ? "PIPELINE" : null;
+	return complexity === "complete" ? "IMPLEMENT" : null;
 }
 
 /**
  * All-in-one: classify complexity and return target mode.
- * Simple plans stay in the current mode; complete plans switch to PIPELINE.
+ * Simple plans stay in the current mode; complete plans switch to IMPLEMENT.
  */
 export function getPlanTargetMode(markdown: string): { mode: PlannedMode | null; complexity: PlanComplexity; reason: string } {
 	const result = classifyPlanComplexity(markdown);

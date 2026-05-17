@@ -19,6 +19,7 @@ import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-s
 import { upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { getPlanTargetMode } from "./lib/plan-complexity.ts";
+import { materializeApprovedTasksToCommander, summarizeMaterialization, type CommanderTaskMaterializationResult } from "./lib/approval-task-materialization.ts";
 import { getProjectContext } from "./lib/project-context.ts";
 import { buildPlanSnapshot, buildQuestionsSnapshot, loadValidatedSnapshot, validateSnapshot, synthesizeSnapshotFromEntry } from "./lib/viewer-snapshots.ts";
 import type { PlanSnapshot, QuestionsSnapshot } from "./lib/viewer-snapshots.ts";
@@ -292,6 +293,19 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	async function materializePlanApprovalTasks(markdown: string, filePath: string, title: string, ctx: ExtensionContext): Promise<CommanderTaskMaterializationResult> {
+		const isInvestigation = /investigation|remediation|root cause|findings/i.test(title) || /##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i.test(markdown);
+		return materializeApprovedTasksToCommander({
+			title,
+			sourceKind: isInvestigation ? "investigation" : "plan",
+			sourcePath: filePath,
+			markdown,
+			cwd: ctx.cwd || process.cwd(),
+			labels: isInvestigation ? ["investigation-remediation"] : ["plan-approval"],
+			sectionHint: isInvestigation ? /^##\s+(Remediation|Next Steps|Remediation \/ Next Steps)/i : undefined,
+		});
+	}
+
 	// ── Core viewer logic (shared by tool + command) ─────────────────
 
 	async function runViewer(
@@ -535,16 +549,20 @@ export default function (pi: ExtensionAPI) {
 					? " (plan was edited by user — use the updated version)"
 					: "";
 
+				const approvedMarkdown = result.markdown || markdown;
+				const materialization = await materializePlanApprovalTasks(approvedMarkdown, file_path, displayTitle, ctx);
+				const commanderNote = summarizeMaterialization(materialization);
+
 				// Auto-switch mode only for complete/multi-phase plans.
 				// Simple plans remain in PLAN mode.
-				triggerApprovalModeSwitch(result.markdown || markdown, ctx);
+				triggerApprovalModeSwitch(approvedMarkdown, ctx);
 
 				// Enqueue an approval follow-up so viewer-driven approval reliably
 				// triggers the next turn and execution continues after the UI closes.
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with implementation.${modifiedNote}`,
+						content: `Plan approved! Proceed with IMPLEMENT mode.${modifiedNote}${commanderNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },
@@ -560,6 +578,7 @@ export default function (pi: ExtensionAPI) {
 						purpose: "plan",
 						modified: result.modified,
 						filePath: file_path,
+						commanderTaskMaterialization: materialization,
 					},
 				};
 			}
@@ -724,8 +743,10 @@ export default function (pi: ExtensionAPI) {
 			if (fromSnapshot) return;
 
 			if (result.action === "approved") {
+				const planText = result.markdown || markdown;
+				const materialization = await materializePlanApprovalTasks(planText, filePath, displayTitle, ctx);
+				const commanderNote = summarizeMaterialization(materialization);
 				try {
-					const planText = result.markdown || markdown;
 					const { mode: targetMode } = getPlanTargetMode(planText);
 
 					// Only switch if targetMode is not null (i.e., plan is complete/multi-phase).
@@ -741,13 +762,13 @@ export default function (pi: ExtensionAPI) {
 					// Never fail the /plan command because of an auto-mode switch.
 				}
 
-				const { mode: targetMode } = getPlanTargetMode(result.markdown || markdown);
+				const { mode: targetMode } = getPlanTargetMode(planText);
 				const modeNote = targetMode ? ` Mode switched to ${targetMode}.` : "";
 
 				piRef.sendMessage(
 					{
 						customType: "plan-approved",
-						content: `Plan approved! Proceed with implementation.${result.modified ? " (plan was edited)" : ""}${modeNote}`,
+						content: `Plan approved! Proceed with IMPLEMENT mode.${result.modified ? " (plan was edited)" : ""}${modeNote}${commanderNote}`,
 						display: true,
 					},
 					{ deliverAs: "followUp" as any, triggerTurn: true },

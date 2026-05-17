@@ -46,4 +46,13 @@ describe("spec-viewer Commander approval flow", () => {
 			expect(html).not.toContain("action === 'changes_requested') ? '/feedback' : '/result'");
 		}
 	});
+
+	it("materializes approved spec tasks and switches to IMPLEMENT", () => {
+		expect(source).toContain("materializeSpecApprovalTasks");
+		expect(source).toContain("readSpecTaskMarkdown");
+		expect(source).toContain("__piSetModeForApproval");
+		expect(source).toContain('setModeCallback("IMPLEMENT", ctx)');
+		expect(source).toContain("Commander tasks");
+		expect(source).toContain("Proceed with IMPLEMENT mode");
+	});
 });

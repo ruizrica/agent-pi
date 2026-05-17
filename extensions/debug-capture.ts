@@ -204,7 +204,7 @@ echo ""
 }
 
 function scenarioModes(captureDir: string, ts: string, opts: CaptureOptions, absCaptureDir: string): string {
-	const modes = ["NORMAL", "PLAN", "SPEC", "INVESTIGATE", "GOAL", "IMPLEMENT", "PIPELINE", "TEAM", "CHAIN"];
+	const modes = ["NORMAL", "PLAN", "SPEC", "IMPLEMENT", "GOAL", "TEAM", "CHAIN", "PIPELINE"];
 	const lines = [tapeHeader(captureDir, ts, opts)];
 
 	// Write a helper script that shows all mode banners plus temporary hint rows.

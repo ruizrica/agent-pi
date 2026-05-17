@@ -1,5 +1,5 @@
-// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/INVESTIGATE/GOAL/IMPLEMENT/PIPELINE/TEAM/CHAIN) via Shift+Tab.
-// ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/SPEC/INVESTIGATE/GOAL/IMPLEMENT prompts.
+// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/IMPLEMENT/GOAL/TEAM/CHAIN/PIPELINE) via Shift+Tab.
+// ABOUTME: Gates which extension's before_agent_start fires and injects NORMAL/PLAN/SPEC/IMPLEMENT/GOAL prompts.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
@@ -436,9 +436,9 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "set_mode",
 		label: "Set Mode",
-		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, PIPELINE, TEAM, or CHAIN based on task classification.",
+		description: "Switch the operational mode. Call this from NORMAL mode to activate PLAN, SPEC, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE based on task classification.",
 		parameters: Type.Object({
-			mode: Type.String({ description: "Target mode: NORMAL, PLAN, SPEC, INVESTIGATE, GOAL, IMPLEMENT, PIPELINE, TEAM, or CHAIN" }),
+			mode: Type.String({ description: "Target mode: NORMAL, PLAN, SPEC, IMPLEMENT, GOAL, TEAM, CHAIN, or PIPELINE" }),
 			reason: Type.Optional(Type.String({ description: "Why this mode was chosen" })),
 		}),
 
