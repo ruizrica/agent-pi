@@ -10,6 +10,7 @@ cmd context <id>                                               # Full task conte
 cmd task claim <id> --runtime claude-code --model <m>          # Claim work
 cmd task comment <id> "..." --type progress --runtime claude-code --model <m>
 cmd task update <id> --status completed --runtime claude-code --model <m>
+cmd housekeep --doctor --no-color --no-banner              # Lifecycle audit for scripts/TUIs (no cmd logo); add --json for machine JSON
 ```
 
 ## Non-Interactive Shell Commands
@@ -67,6 +68,7 @@ cmd context <id>                                                                
 cmd task claim <id> --runtime claude-code --model <m>                                    # Claim work
 cmd task comment <id> "msg" --type progress|error --runtime claude-code --model <m>      # Log progress
 cmd task update <id> --status completed --runtime claude-code --model <m>                # Complete
+cmd housekeep --doctor --no-color --no-banner              # Lifecycle audit (no CLI logo); --json for structured stdout
 ```
 
 ### Other Rules

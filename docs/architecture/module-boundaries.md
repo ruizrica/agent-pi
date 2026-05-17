@@ -16,7 +16,7 @@ Agent-Pi is intended to behave like a thin shell: extension entry files expose t
 
 These folders group related modules (imports use `extensions/lib/<area>/...`):
 
-- **`lib/commander/`** — Commander CLI client helpers (ready gate, lifecycle, sync, viewer routing, prompts).
+- **`lib/commander/`** — Commander CLI client helpers (ready gate, lifecycle, sync, viewer routing, prompts). `commander_housekeep` doctor calls `cmd housekeep --doctor --no-color --no-banner` so stdout omits the CLI gradient banner for parsers.
 - **`lib/sounds/`** — Sound picker config, playback, image cache, and viewer HTML.
 - **`lib/viewers/`** — Shared HTML viewer payloads (plan, spec, file, test, research, reports, board, cleanup, and related viewer modules).
 - **`lib/security/`** — Security engine, vulnerability scanner, security report HTML, and history helpers.

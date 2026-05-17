@@ -182,7 +182,7 @@ describe("CommanderCliClient", () => {
 		const result = await client.callTool("commander_housekeep", { operation: "doctor" });
 		expect(execFileMock).toHaveBeenCalledWith(
 			"cmd-test",
-			["housekeep", "--doctor", "--no-color"],
+			["housekeep", "--doctor", "--no-color", "--no-banner"],
 			expect.any(Object),
 			expect.any(Function),
 		);

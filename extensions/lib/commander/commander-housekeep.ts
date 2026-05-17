@@ -22,16 +22,24 @@ export function parseHousekeepDoctorOutput(raw: string): HousekeepDoctorResult {
 	for (const line of raw.split("\n")) {
 		const trimmed = line.trim();
 		if (!trimmed) continue;
+		// cmd prints a truecolor banner before doctor output even with --no-color; those
+		// lines must never become findings or category labels (they corrupt Pi's TUI).
+		if (/\x1b\[/u.test(line)) continue;
 		try {
 			const parsed = JSON.parse(trimmed);
-			if (parsed?.event === "housekeep_doctor") {
+			if (parsed !== null && typeof parsed === "object") {
 				continue;
 			}
-		} catch {}
+		} catch {
+			/* not JSONL telemetry */
+		}
 		const categoryMatch = line.match(CATEGORY_RE);
 		if (categoryMatch && !trimmed.startsWith("→")) {
-			currentCategory = categoryMatch[1].trim();
-			continue;
+			const nextCat = categoryMatch[1].trim();
+			if (nextCat.length > 0 && nextCat.length < 120 && !/\x1b/u.test(nextCat)) {
+				currentCategory = nextCat;
+				continue;
+			}
 		}
 		if (trimmed.startsWith("→")) continue;
 		if (/finding/i.test(trimmed)) continue;

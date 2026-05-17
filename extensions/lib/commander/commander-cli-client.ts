@@ -281,7 +281,7 @@ export class CommanderCliClient {
 	private async callHousekeep(params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
 		const operation = String(params.operation || "doctor");
 		if (operation === "doctor") {
-			const res = await this.runPlain(["housekeep", "--doctor", "--no-color"], timeoutMs).catch((err: any) => ({ stdout: err?.cmdStdout || "", stderr: err?.cmdStderr || String(err) }));
+			const res = await this.runPlain(["housekeep", "--doctor", "--no-color", "--no-banner"], timeoutMs).catch((err: any) => ({ stdout: err?.cmdStdout || "", stderr: err?.cmdStderr || String(err) }));
 			const raw = `${res.stdout || ""}\n${res.stderr || ""}`.trim();
 			return parseHousekeepDoctorOutput(raw);
 		}

@@ -17,6 +17,7 @@ cmd context <id>                        # parent + children + comments
 cmd mailbox send <agent> <subject> <body>
 cmd mailbox inbox
 cmd guide overview                      # full command reference
+cmd housekeep --doctor --no-color --no-banner   # lifecycle audit (no CLI logo; use --json for structured output)
 cmd whoami                              # agent identity
 ```
 

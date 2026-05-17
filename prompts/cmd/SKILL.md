@@ -24,6 +24,7 @@ Run from a shell for the live, versioned contract:
 - `cmd guide plan` — root vs child tasks, `--mission-brief`, `--runtime`, `--model`, decomposition rules
 - `cmd guide implement` — `cmd context`, claim, comments, done
 - `cmd guide overview` — full reference
+- **Housekeep:** `cmd housekeep --doctor --no-color --no-banner` for audits without the cmd gradient logo; `--json` for machine-readable output. See **Housekeep / lifecycle hygiene** in [cmd-tasks.md](cmd-tasks.md).
 
 ## Preconditions (all workflows)
 

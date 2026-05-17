@@ -87,6 +87,12 @@ Workaround: set `CMD_BACKEND=mock` for those calls, or loop `cmd task delete <id
 
 `cmd advance` (the orchestrator pipeline / planner-executor lifecycle) currently runs through the JSON mock adapter regardless of `CMD_BACKEND`, because its planner/researcher modules still depend on the mock store directly. Migration is tracked separately.
 
+## Housekeep / lifecycle hygiene
+
+Use **`cmd housekeep --doctor`** for a read-only audit (stale PID claims, stranded pending tasks, stuck working/researching rows, orphaned children). For **scripts, CI, or Pi**, pass **`--no-color --no-banner`** so stderr/stdout stay free of the interactive CLI gradient logo and color escapes where possible. **`--json`** (global argv flag) selects structured doctor output and also suppresses the startup logo in current Commander builds.
+
+Pi invokes this path through **`commander_housekeep`** (`operation: doctor`), which appends `--no-banner` automatically.
+
 ## Quick reference
 
 ```bash
@@ -134,6 +140,10 @@ cmd mailbox read <message-id>
 cmd project list|show|switch|add|delete
 cmd session list|cleanup
 cmd whoami
+
+# Housekeep (lifecycle hygiene — stale claims, stranded tasks, orphans)
+cmd housekeep --doctor --no-color --no-banner    # human-readable; suppresses cmd startup logo (Pi/scripts)
+cmd housekeep --doctor --json                     # structured JSON; logo suppressed (requires cmd that supports these flags)
 ```
 
 ## Failure modes to avoid

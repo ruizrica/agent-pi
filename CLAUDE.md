@@ -155,6 +155,7 @@ cmd context <id>                       # Full task context bundle
 cmd task claim <id> --runtime claude-code --model <m>     # Claim work
 cmd task comment <id> "msg" --type progress|error --runtime claude-code --model <m>  # Log progress
 cmd task update <id> --status completed --runtime claude-code --model <m>   # Complete
+cmd housekeep --doctor --no-color --no-banner   # Lifecycle audit (no CLI logo); --json for structured stdout
 ```
 
 ### Other Rules
