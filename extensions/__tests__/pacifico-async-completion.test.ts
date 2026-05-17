@@ -24,7 +24,7 @@ describe("pacifico async completion notifier", () => {
 	});
 
 	it("renders one updating widget with the shared Task Brief-style Pacifico brief", () => {
-		expect(source).toContain('import { Box, Text, truncateToWidth } from "@earendil-works/pi-tui"');
+		expect(source).toContain('import { Box, Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui"');
 		expect(source).toContain('import { renderBriefWidget } from "./lib/task-list-render.ts"');
 		expect(source).toContain('import { padRight } from "./lib/ui-helpers.ts"');
 		expect(source).toContain("pi.registerMessageRenderer(PACIFICO_MESSAGE_TYPE, renderPacificoMessage)");
@@ -39,9 +39,12 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain('const BRIEF_WIDGET_BG = "\\x1b[48;5;236m"');
 		expect(source).toContain("renderBriefWidget({");
 		expect(source).toContain('title: "Pacifico"');
-		expect(source).toContain('briefLabel: "Pacifico Brief:"');
-		expect(source).toContain('"/pacifico-jobs to view jobs"');
-		expect(source).toContain('"/pacifico-job <id> for details"');
+		expect(source).toContain("progressText: pacificoProgressText(details)");
+		expect(source).toContain('briefLabel: "Query:"');
+		expect(source).toContain('hint: "ctrl+alt+q to view query/output"');
+		expect(source).toContain("maxDescriptionLines: 3");
+		expect(source).toContain("function pacificoPromptText");
+		expect(source).toContain('prompt, sentPrompt: prompt');
 		expect(source).toContain("new Box(0, 0)");
 		expect(source).not.toContain("const PACIFICO_OPERATIONAL_MODE_BG");
 		expect(source).not.toContain("const PACIFICO_HEADER_BG");
@@ -61,18 +64,33 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain('return "error"');
 		expect(source).toContain('setPacificoWidget(ctx, provisionalKey, { status: "queued"');
 		expect(source).toContain("function shortJobId");
-		expect(source).toContain("function pacificoBriefDescription");
+		expect(source).toContain("function pacificoPromptText");
 		expect(source).toContain("formatPacificoWidgetContent");
 		expect(source).toContain("job ID:");
 		expect(source).toContain("model:");
 		expect(source).toContain("status:");
 		expect(source).toContain("formatPacificoWidgetContent({");
+		expect(source).toContain("const PACIFICO_SPINNER_FRAMES");
+		expect(source).toContain('return status === "queued" || status === "processing"');
+		expect(source).toContain('return status === "processing" ? `${frame} running` : `${frame} awaiting`;');
+		expect(source).toContain('const status = activeWidgetDetails ? normalizeWidgetStatus(activeWidgetDetails.status) : "completed"');
 		expect(source).not.toContain("38;2;148;163;184m");
 		expect(source).not.toContain("38;2;234;179;8m");
 		expect(source).not.toContain("38;2;34;197;94m");
 		expect(source).not.toContain("38;2;239;68;68m");
 		expect(source).not.toContain("BRAILLE_FRAMES");
 		expect(source).not.toContain("response.reason");
+	});
+
+	it("registers Ctrl+Alt+Q for a scrollable Pacifico query/output overlay", () => {
+		expect(source).toContain("class PacificoQueryOverlayComponent");
+		expect(source).toContain('pi.registerShortcut("ctrl+alt+q"');
+		expect(source).toContain('pi.registerCommand("pacifico-query"');
+		expect(source).toContain("showPacificoQueryOverlay");
+		expect(source).toContain("Prompt sent:");
+		expect(source).toContain("Output:");
+		expect(source).toContain("matchesKey(data, Key.pageDown)");
+		expect(source).toContain("Output will appear here when Pacifico completes.");
 	});
 
 	it("persists async jobs and wakes the assistant through a pending completion queue", () => {
@@ -85,6 +103,7 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("triggerTurn: true");
 		expect(source).toContain('deliverAs: "followUp"');
 		expect(source).toContain("queueJobCompletion(final, cwd)");
+		expect(source).toContain('status: "error"');
 		expect(source).not.toContain("emitJobComplete(pi, final)");
 		expect(source).toContain("Stay silent for timeout/not-found/network polling failures");
 	});
@@ -131,7 +150,8 @@ describe("pacifico async completion notifier", () => {
 		expect(source).toContain("onEveryResult");
 		expect(source).toContain('result?.action === "changes_requested"');
 		expect(source).toContain("live.updateMarkdown");
-		expect(source).toContain('bannerLabel: "Pacifico Queued"');
+		expect(source).toContain('bannerLabel: "Pacifico"');
+		expect(source).not.toContain('bannerLabel: "Pacifico Queued"');
 		expect(source).toContain('bannerTone: "warning"');
 		expect(source).toContain('badgeLabel: "QUEUED"');
 		expect(source).toContain('bannerLabel: "Pacifico Complete"');

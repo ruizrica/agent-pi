@@ -31,8 +31,8 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 
 ## Advisor (Escalation)
 
-- Use `claude_advisor` after drafting the plan when dependency ordering, technology selection, or risk tradeoffs are uncertain.
-- Provide: the proposed phases, key decisions, risks you see, and where you want critique. Include `task_context`.
+- Use `claude_advisor` after drafting the plan when dependency ordering, technology selection, or risk tradeoffs are uncertain. Use `pacifico_advisor` as the cloud/async advisor alternative when Pacifico routing, observability, or cost controls are useful.
+- Provide: the proposed phases, key decisions, risks you see, and where you want critique. Include `task_context`; for `pacifico_advisor`, include all relevant context/files explicitly because Pacifico cannot inspect local state unless you provide it.
 - Do NOT ask for routine plan validation; escalate only for non-trivial strategy or architecture questions.
 
 ## Constraints

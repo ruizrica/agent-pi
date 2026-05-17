@@ -149,7 +149,7 @@ ${buildWardenTaskConfirmationSection("NORMAL", {
 
 ## Strategic Advisor Guidance
 
-Use the ${advisorModel} advisor via the \`claude_advisor\` tool **only for complex problems** or when risk/ambiguity makes a task effectively complex. Do **not** consult the advisor for simple or routine medium tasks.
+Use the ${advisorModel} advisor via the \`claude_advisor\` tool **only for complex problems** or when risk/ambiguity makes a task effectively complex. You may also use \`pacifico_advisor\` as a cloud/async advisor path for complex problems when Pacifico's routing, observability, or cost controls are specifically useful; include explicit \`task_context\` and \`files\` because Pacifico cannot read hidden/local context by itself. Do **not** consult any advisor for simple or routine medium tasks.
 
 ### When to Seek Advice
 - **Complex work**: Architectural changes, multi-system coordination, security/compliance impact, critical paths, broad refactors, or unclear requirements
@@ -274,7 +274,7 @@ function buildAdvisorOverlay(modeName: string, opts: ModePromptOpts): string {
 	const secondOpinionModelId = `${secondOpinion.provider}/${secondOpinion.model}`;
 	return `## Selected-Model Main Advisor
 The main advisor agent in ${modeName} mode is the currently selected session model: ${advisorModel}.
-Use this advisor for strategic guidance before committing to a direction, especially for architecture, scope, risk, and execution planning.
+Use this advisor for strategic guidance before committing to a direction, especially for architecture, scope, risk, and execution planning. \`pacifico_advisor\` is also available as a cloud/async advisor option when Pacifico routing is desired; provide explicit context/files because Pacifico cannot inspect local state unless you include it.
 
 ## Mode Escalation Guidance
 - Switch to **PLAN** for complex tasks that need a structured plan and user approval before coding

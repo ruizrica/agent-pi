@@ -237,12 +237,15 @@ describe("buildNormalPrompt — Phase 4/5: Complexity-aware advisor strategy and
 	it("explains that advisor guidance is limited to complex work", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result.toLowerCase()).toContain("only for complex problems");
-		expect(result.toLowerCase()).toContain("consult the advisor for simple or routine medium tasks");
+		expect(result.toLowerCase()).toContain("consult any advisor for simple or routine medium tasks");
 	});
 
-	it("references claude_advisor tool for complex strategic consultation", () => {
+	it("references claude_advisor and pacifico_advisor tools for complex strategic consultation", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result).toContain("claude_advisor");
+		expect(result).toContain("pacifico_advisor");
+		expect(result).toContain("task_context");
+		expect(result).toContain("files");
 		expect(result.toLowerCase()).toContain("when not to seek advice");
 	});
 

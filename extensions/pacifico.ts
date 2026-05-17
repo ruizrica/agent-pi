@@ -2,7 +2,7 @@
 // ABOUTME: Registers /pacifico, /pacifico-model, /pacifico-api-key, /pacifico-jobs/-job/-cancel and pacifico_infer tool.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Box, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Box, Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
 import type { Server } from "node:http";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -152,6 +152,8 @@ interface PacificoWidgetDetails {
 	model?: string | null;
 	output?: string | null;
 	error?: string | null;
+	prompt?: string | null;
+	sentPrompt?: string | null;
 }
 
 type PacificoWidgetStatus = "queued" | "processing" | "completed" | "error";
@@ -164,8 +166,19 @@ function normalizeWidgetStatus(status: string | null | undefined): PacificoWidge
 	return "queued";
 }
 
-function isActiveWidgetStatus(_status: PacificoWidgetStatus): boolean {
-	return false;
+const PACIFICO_SPINNER_FRAMES = ["-", "\\", "|", "/"];
+
+function isActiveWidgetStatus(status: PacificoWidgetStatus): boolean {
+	return status === "queued" || status === "processing";
+}
+
+function pacificoProgressText(details: PacificoWidgetDetails | undefined): string | undefined {
+	if (!details) return undefined;
+	const status = normalizeWidgetStatus(details.status);
+	if (status === "completed") return "complete";
+	if (status === "error") return "failed";
+	const frame = PACIFICO_SPINNER_FRAMES[Math.floor(Date.now() / 120) % PACIFICO_SPINNER_FRAMES.length];
+	return status === "processing" ? `${frame} running` : `${frame} awaiting`;
 }
 
 function shortJobId(jobId: string | null | undefined): string {
@@ -190,32 +203,27 @@ function emitPacificoWidget(pi: ExtensionAPI, details: PacificoWidgetDetails): v
 	});
 }
 
-function normalizePacificoContent(content: string): string | undefined {
-	const normalized = content.replace(/\s+/g, " ").trim();
+function normalizePacificoContent(content: string | null | undefined): string | undefined {
+	const normalized = (content ?? "").replace(/\s+/g, " ").trim();
 	return normalized.length > 0 ? normalized : undefined;
 }
 
-function pacificoBriefDescription(details: PacificoWidgetDetails | undefined, content: string): string | undefined {
-	if (!details) return normalizePacificoContent(content);
-	const status = normalizeWidgetStatus(details.status);
-	const model = details.model ?? "(default)";
-	const job = shortJobId(details.jobId);
-	if (details.error) return `Pacifico ${status} on ${model}. Job ${job}. Error: ${details.error}`;
-	if (details.output) return `Pacifico ${status} on ${model}. Job ${job}. Result is ready.`;
-	return `Pacifico ${status} on ${model}. Job ${job}.`;
+function pacificoPromptText(details: PacificoWidgetDetails | undefined, content = ""): string | undefined {
+	return normalizePacificoContent(details?.prompt)
+		?? normalizePacificoContent(details?.sentPrompt)
+		?? normalizePacificoContent(content);
 }
 
 function renderPacificoRows(details: PacificoWidgetDetails | undefined, theme: any, content = "", width?: number, paintBackground = true): string[] {
-	const status = details ? normalizeWidgetStatus(details.status) : "message";
-	const jobSuffix = details?.jobId ? ` #${shortJobId(details.jobId)}` : "";
 	const safeWidth = width && width > 0 ? width : 80;
 	const availableHeight = Math.max(4, Math.min((process.stdout.rows || 24) - 10, 14));
 	const briefLines = renderBriefWidget({
 		title: "Pacifico",
-		progressText: `${status}${jobSuffix}`,
-		description: pacificoBriefDescription(details, content),
-		briefLabel: "Pacifico Brief:",
-		hint: details?.jobId ? "/pacifico-job <id> for details" : "/pacifico-jobs to view jobs",
+		progressText: pacificoProgressText(details),
+		description: pacificoPromptText(details, content) ?? "No query yet.",
+		briefLabel: "Query:",
+		hint: "ctrl+alt+q to view query/output",
+		maxDescriptionLines: 3,
 	}, safeWidth, availableHeight, {
 		truncateToWidth,
 		fg: (color: string, text: string) => theme.fg(color, text),
@@ -243,6 +251,107 @@ function renderPacificoMessage(message: { content?: unknown; details?: PacificoW
 		},
 	});
 	return box;
+}
+
+function wrapPacificoOverlayText(text: string, width: number): string[] {
+	const safeWidth = Math.max(20, width - 4);
+	const paragraphs = text.split(/\n{2,}/);
+	const lines: string[] = [];
+	for (const paragraph of paragraphs) {
+		const words = paragraph.replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean);
+		let current = "";
+		for (const word of words) {
+			if (!current) current = word;
+			else if (current.length + 1 + word.length <= safeWidth) current += ` ${word}`;
+			else {
+				lines.push(current);
+				current = word;
+			}
+			while (current.length > safeWidth) {
+				lines.push(current.slice(0, safeWidth));
+				current = current.slice(safeWidth);
+			}
+		}
+		if (current) lines.push(current);
+		lines.push("");
+	}
+	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+	return lines.length ? lines : ["(empty)"];
+}
+
+class PacificoQueryOverlayComponent {
+	private getDetails: () => PacificoWidgetDetails | undefined;
+	private theme: any;
+	private onClose: () => void;
+	private scrollOffset = 0;
+	private totalContentLines = 0;
+
+	constructor(getDetails: () => PacificoWidgetDetails | undefined, theme: any, onClose: () => void) {
+		this.getDetails = getDetails;
+		this.theme = theme;
+		this.onClose = onClose;
+	}
+
+	handleInput(data: string): void {
+		const height = process.stdout.rows || 24;
+		const contentHeight = Math.max(1, height - 1);
+		const maxScroll = Math.max(0, this.totalContentLines - contentHeight);
+		if (matchesKey(data, Key.up)) this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+		else if (matchesKey(data, Key.down)) this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
+		else if (matchesKey(data, Key.pageUp)) this.scrollOffset = Math.max(0, this.scrollOffset - Math.max(1, contentHeight - 1));
+		else if (matchesKey(data, Key.pageDown)) this.scrollOffset = Math.min(maxScroll, this.scrollOffset + Math.max(1, contentHeight - 1));
+		else if (matchesKey(data, Key.home)) this.scrollOffset = 0;
+		else if (matchesKey(data, Key.end)) this.scrollOffset = maxScroll;
+		else if (matchesKey(data, Key.escape) || matchesKey(data, "ctrl+c")) this.onClose();
+	}
+
+	private buildLines(width: number): string[] {
+		const th = this.theme;
+		const details = this.getDetails();
+		const lines: string[] = [];
+		const status = normalizeWidgetStatus(details?.status);
+		const prompt = normalizePacificoContent(details?.prompt) ?? normalizePacificoContent(details?.sentPrompt) ?? "No Pacifico query has been sent yet.";
+		const output = normalizePacificoContent(details?.output);
+		const error = normalizePacificoContent(details?.error);
+		lines.push("");
+		const heading = th.fg("accent", " Pacifico Query ");
+		lines.push(truncateToWidth(th.fg("borderMuted", "─".repeat(3)) + heading + th.fg("borderMuted", "─".repeat(Math.max(0, width - 19))), width, ""));
+		lines.push("");
+		lines.push(truncateToWidth(`  ${th.fg("accent", "Status:")} ${th.fg("muted", status)}`, width, ""));
+		if (details?.jobId) lines.push(truncateToWidth(`  ${th.fg("accent", "Job:")} ${th.fg("muted", details.jobId)}`, width, ""));
+		if (details?.model) lines.push(truncateToWidth(`  ${th.fg("accent", "Model:")} ${th.fg("muted", details.model)}`, width, ""));
+		lines.push("");
+		lines.push(`  ${th.fg("accent", "Prompt sent:")}`);
+		for (const line of wrapPacificoOverlayText(prompt, width)) lines.push(truncateToWidth(`    ${th.fg("muted", line)}`, width, ""));
+		lines.push("");
+		lines.push(`  ${th.fg("accent", "Output:")}`);
+		if (output) {
+			for (const line of wrapPacificoOverlayText(output, width)) lines.push(truncateToWidth(`    ${th.fg("muted", line)}`, width, ""));
+		} else if (error) {
+			for (const line of wrapPacificoOverlayText(error, width)) lines.push(truncateToWidth(`    ${th.fg("error", line)}`, width, ""));
+		} else {
+			lines.push(truncateToWidth(`    ${th.fg("dim", "Output will appear here when Pacifico completes.")}`, width, ""));
+		}
+		lines.push("");
+		return lines;
+	}
+
+	render(width: number): string[] {
+		const allLines = this.buildLines(width);
+		this.totalContentLines = allLines.length;
+		const height = process.stdout.rows || 24;
+		const contentHeight = Math.max(1, height - 1);
+		const maxScroll = Math.max(0, allLines.length - contentHeight);
+		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+		const visible = allLines.slice(this.scrollOffset, this.scrollOffset + contentHeight);
+		const footerText = maxScroll > 0
+			? `↑/↓/PgUp/PgDn/Home/End Scroll (${this.scrollOffset + 1}-${Math.min(this.scrollOffset + contentHeight, allLines.length)}/${allLines.length}) · Esc Close`
+			: "Esc Close";
+		visible.push(truncateToWidth(`  ${this.theme.fg("dim", footerText)}`, width, ""));
+		return visible;
+	}
+
+	invalidate(): void {}
 }
 
 function describeModel(model: string | null): string {
@@ -540,7 +649,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	}
 
 	function refreshPacificoWidget(): void {
-		const status = normalizeWidgetStatus(activeWidgetDetails?.status);
+		const status = activeWidgetDetails ? normalizeWidgetStatus(activeWidgetDetails.status) : "completed";
 		if (isActiveWidgetStatus(status)) startPacificoAnimation();
 		else stopPacificoAnimation();
 		pacificoWidgetInvalidate?.();
@@ -566,7 +675,16 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 	}
 
 	function setPacificoWidget(ctx: ExtensionContext | undefined, _key: string, details: PacificoWidgetDetails): void {
-		activeWidgetDetails = details;
+		const hasPromptUpdate = details.prompt !== undefined || details.sentPrompt !== undefined;
+		activeWidgetDetails = hasPromptUpdate
+			? details
+			: {
+				...details,
+				prompt: activeWidgetDetails?.prompt,
+				sentPrompt: activeWidgetDetails?.sentPrompt,
+				output: details.output ?? activeWidgetDetails?.output,
+				error: details.error ?? activeWidgetDetails?.error,
+			};
 		if (ctx?.hasUI) registerPacificoStatusWidget(ctx);
 		else if (widgetCtx?.hasUI) registerPacificoStatusWidget(widgetCtx);
 		refreshPacificoWidget();
@@ -576,6 +694,21 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		// Stable single-widget mode: do not clear when replacing provisional job state.
 		refreshPacificoWidget();
 	}
+
+	async function showPacificoQueryOverlay(ctx: ExtensionContext, source: "command" | "shortcut" = "command"): Promise<void> {
+		if (!ctx.hasUI) {
+			ctx.ui.notify(source === "shortcut" ? "Ctrl+Alt+Q Pacifico query requires interactive mode" : "/pacifico-query requires interactive mode", "error");
+			return;
+		}
+		await ctx.ui.custom<void>((_tui: any, theme: any, _kb: any, done: () => void) => {
+			return new PacificoQueryOverlayComponent(() => activeWidgetDetails, theme, () => done());
+		}, {
+			overlay: true,
+			overlayOptions: { width: "100%" },
+		});
+	}
+
+	(globalThis as any).__piShowPacificoQueryOverlay = showPacificoQueryOverlay;
 
 	function scheduleCompletionFlush(delayMs = COMPLETION_FLUSH_DELAY_MS): void {
 		if (completionFlushTimer) return;
@@ -606,6 +739,9 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			status: job.status,
 			jobId: job.id,
 			model: job.result?.model ?? job.model ?? "(default)",
+			prompt: activeWidgetDetails?.prompt ?? activeWidgetDetails?.sentPrompt ?? job.input,
+			output: job.result?.output ?? null,
+			error: job.error ?? null,
 		});
 		scheduleCompletionFlush();
 	}
@@ -622,13 +758,24 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 						status: job.status,
 						jobId: job.id,
 						model: job.result?.model ?? job.model ?? "(default)",
+						prompt: activeWidgetDetails?.prompt ?? activeWidgetDetails?.sentPrompt ?? job.input,
+						output: job.result?.output ?? null,
+						error: job.error ?? null,
 					});
 				});
 				queueJobCompletion(final, cwd);
 			} catch (err) {
-				markPacificoJobPollError(cwd, jobId, err instanceof Error ? err.message : String(err));
+				const message = err instanceof Error ? err.message : String(err);
+				markPacificoJobPollError(cwd, jobId, message);
+				setPacificoWidget(ctx, jobId, {
+					status: "error",
+					jobId,
+					model: activeWidgetDetails?.model ?? "(default)",
+					prompt: activeWidgetDetails?.prompt ?? activeWidgetDetails?.sentPrompt,
+					error: message,
+				});
 				// Stay silent for timeout/not-found/network polling failures. The user
-				// asked for no UI when nothing actionable has been found.
+				// asked for no notification noise when nothing actionable has been found.
 			} finally {
 				pollers.delete(jobId);
 			}
@@ -984,13 +1131,13 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		const body: InferRequest = { prompt, mode: "auto", metadata: { source: "pi_extension", command: "/pacifico" } };
 		if (model) body.model = model;
 		const provisionalKey = `pending-${Date.now()}`;
-		setPacificoWidget(ctx, provisionalKey, { status: "queued", model: model ?? "(default)" });
+		setPacificoWidget(ctx, provisionalKey, { status: "queued", model: model ?? "(default)", prompt, sentPrompt: prompt });
 		try {
 			const result = await postInfer(body);
 			if (result.kind === "sync") {
 				const r = result.data;
 				const meta = `_${r.provider} · ${r.model} · route ${r.route}_`;
-				setPacificoWidget(ctx, provisionalKey, { status: "completed", model: r.model });
+				setPacificoWidget(ctx, provisionalKey, { status: "completed", model: r.model, prompt, sentPrompt: prompt, output: r.output });
 				emitMessage(pi, `${meta}\n\n${r.output}`);
 			} else {
 				const r = result.data;
@@ -1006,6 +1153,8 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 					status: r.status,
 					jobId: r.id,
 					model: r.model ?? model ?? "(default)",
+					prompt,
+					sentPrompt: prompt,
 				});
 				registerPoller(r.id, ctx);
 			}
@@ -1046,16 +1195,16 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		updateStatus(ctx);
 		prunePacificoJobs(ctx.cwd, PACIFICO_JOB_PRUNE_AGE_MS);
 		for (const job of listIncompletePacificoJobs(ctx.cwd)) {
-			setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)" });
+			setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)", prompt: job.promptPreview });
 			registerPoller(job.jobId, ctx);
 		}
 		for (const job of listPendingPacificoCompletions(ctx.cwd)) {
 			try {
 				const fresh = await getJob(job.jobId);
-				setPacificoWidget(ctx, fresh.id, { status: fresh.status, jobId: fresh.id, model: fresh.result?.model ?? fresh.model ?? "(default)" });
+				setPacificoWidget(ctx, fresh.id, { status: fresh.status, jobId: fresh.id, model: fresh.result?.model ?? fresh.model ?? "(default)", prompt: job.promptPreview ?? fresh.input, output: fresh.result?.output ?? null, error: fresh.error ?? null });
 				pendingCompletions.set(fresh.id, { cwd: ctx.cwd, job: fresh });
 			} catch {
-				setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)" });
+				setPacificoWidget(ctx, job.jobId, { status: job.status, jobId: job.jobId, model: job.model ?? "(default)", prompt: job.promptPreview, output: job.resultPreview, error: job.error ?? job.lastPollError });
 				pendingCompletions.set(job.jobId, { cwd: ctx.cwd, job: jobFromTracked(job) });
 			}
 		}
@@ -1066,6 +1215,16 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				"warning",
 			);
 		}
+	});
+
+	pi.registerShortcut("ctrl+alt+q", {
+		description: "Show Pacifico query and output",
+		handler: async (ctx) => showPacificoQueryOverlay(ctx, "shortcut"),
+	});
+
+	pi.registerCommand("pacifico-query", {
+		description: "Show the current Pacifico query/output overlay (also Ctrl+Alt+Q)",
+		handler: async (_args, ctx) => showPacificoQueryOverlay(ctx, "command"),
 	});
 
 	// --- /pacifico [--simple|--standard|--complex|--super-complex] [question] ---
@@ -1092,7 +1251,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				for (let turn = 0; turn < 5; turn++) {
 					live.updateMarkdown(buildPacificoLoadingMarkdown(question, complexity, "Queued — waiting for Pacifico…", ancestry), {
 						changeSummary: ["Pacifico request queued", "Waiting for async result"],
-						bannerLabel: "Pacifico Queued",
+						bannerLabel: "Pacifico",
 						bannerTone: "warning",
 						badgeLabel: "QUEUED",
 						locked: true,
@@ -1114,7 +1273,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 							if (typeof text === "string" && text.trim()) {
 								live.updateMarkdown(buildPacificoLoadingMarkdown(question, complexity, text.trim(), ancestry), {
 									changeSummary: ["Pacifico async status updated", text.trim()],
-									bannerLabel: "Pacifico Queued",
+									bannerLabel: "Pacifico",
 									bannerTone: "warning",
 									badgeLabel: "QUEUED",
 									locked: true,
@@ -1279,7 +1438,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		};
 		if (args.max_output_tokens) body.maxOutputTokens = Math.trunc(args.max_output_tokens);
 		if (chosen) body.model = chosen;
-		setPacificoWidget(ctx, `advisor-${Date.now()}`, { status: "queued", model: chosen ?? "(default)" });
+		setPacificoWidget(ctx, `advisor-${Date.now()}`, { status: "queued", model: chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt });
 		try {
 			const result = await postInfer(body);
 			let raw = "";
@@ -1288,10 +1447,10 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				const r = result.data;
 				raw = r.output;
 				meta = { ...meta, route: r.route, provider: r.provider, model: r.model, mode: r.mode, requestId: r.requestId };
-				setPacificoWidget(ctx, r.requestId, { status: "completed", model: r.model });
+				setPacificoWidget(ctx, r.requestId, { status: "completed", model: r.model, prompt: args.question, sentPrompt: packet.prompt, output: r.output });
 			} else {
 				const r = result.data;
-				setPacificoWidget(ctx, r.id, { status: r.status, jobId: r.id, model: r.model ?? chosen ?? "(default)" });
+				setPacificoWidget(ctx, r.id, { status: r.status, jobId: r.id, model: r.model ?? chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt });
 				onUpdate?.({ content: [{ type: "text", text: `Pacifico advisor job ${r.id} accepted; waiting for result.` }] });
 				const ctrl = new AbortController();
 				const onParentAbort = () => ctrl.abort();
@@ -1301,7 +1460,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 				}
 				try {
 					const job = await pollJob(r.id, ctrl.signal, (jobUpdate) => {
-						setPacificoWidget(ctx, jobUpdate.id, { status: jobUpdate.status, jobId: jobUpdate.id, model: jobUpdate.result?.model ?? jobUpdate.model ?? r.model ?? chosen ?? "(default)" });
+						setPacificoWidget(ctx, jobUpdate.id, { status: jobUpdate.status, jobId: jobUpdate.id, model: jobUpdate.result?.model ?? jobUpdate.model ?? r.model ?? chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt, output: jobUpdate.result?.output ?? null, error: jobUpdate.error ?? null });
 					});
 					meta = { ...meta, jobId: job.id, status: job.status, route: job.result?.route ?? job.route ?? null, provider: job.result?.provider ?? null, model: job.result?.model ?? job.model ?? r.model ?? null };
 					if (job.status === "completed" && job.result?.output) raw = job.result.output;
@@ -1319,7 +1478,7 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 			});
 			return { content: [{ type: "text" as const, text }], details: { ...normalized, ...meta } };
 		} catch (err) {
-			setPacificoWidget(ctx, "advisor-error", { status: "error", model: chosen ?? "(default)", error: err instanceof Error ? err.message : String(err) });
+			setPacificoWidget(ctx, "advisor-error", { status: "error", model: chosen ?? "(default)", prompt: args.question, sentPrompt: packet.prompt, error: err instanceof Error ? err.message : String(err) });
 			return {
 				content: [{ type: "text" as const, text: `pacifico_advisor failed: ${err instanceof Error ? err.message : String(err)}` }],
 				details: { error: err instanceof Error ? err.message : String(err), contextDiagnostics: packet.diagnostics },

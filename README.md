@@ -144,7 +144,7 @@ Agent-Pi is organized as a thin extension shell with testable feature modules un
 
 ### Pacifico backend (`pacifico` extension)
 
-The [`extensions/pacifico.ts`](extensions/pacifico.ts) extension calls your Pacifico Worker (`POST /api/infer`, job APIs) with `Authorization: Bearer …`. Use the **same** secret the Worker validates as `PACIFICO_API_KEY` (Wrangler secret in production, [`.dev.vars`](https://developers.cloudflare.com/workers/testing/local-development/#local-only-environment-variables) for `wrangler dev`). The Worker requires the secret to be **at least 32 characters** (shorter or empty disables bearer auth).
+The [`extensions/pacifico.ts`](extensions/pacifico.ts) extension calls your Pacifico Worker (`POST /api/infer`, job APIs) with `Authorization: Bearer …`. Use the **same** secret the Worker validates as `PACIFICO_API_KEY` (Wrangler secret in production, [`.dev.vars`](https://developers.cloudflare.com/workers/testing/local-development/#local-only-environment-variables) for `wrangler dev`). The Worker requires the secret to be **at least 32 characters** (shorter or empty disables bearer auth). `/pacifico <question>` is the advisor-style command entry point: it packages current task/session context, routes through Pacifico asynchronously when needed, keeps a live queued/running UI, and renders the result with Claude-advisor-compatible sections.
 
 **Recommended:** run **`/pacifico-api-key`** in Pi (same TUI flow as the model picker). It stores the bearer secret in **`settings.json`** next to `pacificoModel` — the same file path Pi already uses for Pacifico model persistence, so it works even when env files and `process.env` are unavailable.
 
@@ -370,7 +370,10 @@ Example usage:
 ```text
 dispatch_agent { agent: "claude-worker", task: "Implement the approved refactor plan" }
 claude_advisor { question: "Should we split this into worker and advisor runtimes?", files: ["extensions/lib/toolkit-cli.ts", "extensions/subagent-widget.ts"] }
+pacifico_advisor { question: "What risks do you see in this plan?", task_context: "Summarize the current objective and constraints here.", files: [".context/todo.md", "extensions/pacifico.ts"] }
 ```
+
+Use `pacifico_advisor` when you specifically want Pacifico's cloud/async routing, observability, or cost controls. Because Pacifico cannot inspect local state on its own, include explicit `task_context` and any relevant `files`.
 
 ### Toolkit Worker Roles
 

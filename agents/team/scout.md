@@ -43,8 +43,8 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 
 ## Advisor (Escalation)
 
-- Use `claude_advisor` only when architecture is ambiguous, conventions conflict, or entry points are unclear after initial recon.
-- Provide: the ambiguity, the candidate options, and what decision you need. Include `task_context` when calling.
+- Use `claude_advisor` only when architecture is ambiguous, conventions conflict, or entry points are unclear after initial recon. Use `pacifico_advisor` as the cloud/async advisor alternative when Pacifico routing, observability, or cost controls are useful.
+- Provide: the ambiguity, the candidate options, and what decision you need. Include `task_context` when calling; for `pacifico_advisor`, include all relevant context/files explicitly because Pacifico cannot inspect local state unless you provide it.
 - Do NOT use the advisor for routine file discovery or simple pattern searches.
 
 ## Output Format

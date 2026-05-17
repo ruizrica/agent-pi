@@ -88,8 +88,8 @@ You have access to a persistent knowledge base via `obsidian_memory` if the tool
 
 ## Advisor (Escalation)
 
-- Use `claude_advisor` for hard design tradeoffs, uncertain refactor approaches, or when stuck after 2+ iterations on a complex implementation.
-- Provide: the goal, options you’re considering, constraints (performance, compatibility, safety), and your current hypothesis. Include `task_context`.
+- Use `claude_advisor` for hard design tradeoffs, uncertain refactor approaches, or when stuck after 2+ iterations on a complex implementation. Use `pacifico_advisor` as the cloud/async advisor alternative when Pacifico routing, observability, or cost controls are useful.
+- Provide: the goal, options you’re considering, constraints (performance, compatibility, safety), and your current hypothesis. Include `task_context`; for `pacifico_advisor`, include all relevant context/files explicitly because Pacifico cannot inspect local state unless you provide it.
 - Do NOT pre-consult on routine changes — attempt a reasonable approach first, then escalate if you’re blocked or risk long-term debt.
 
 ## Output

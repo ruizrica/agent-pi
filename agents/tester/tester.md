@@ -32,8 +32,8 @@ You are a tester agent. Your job is to write comprehensive tests, run them, and 
 
 ## Advisor (Escalation)
 
-- Use `claude_advisor` for complex test strategies: integration boundaries, coverage gaps on critical paths, or uncertain edge cases in distributed flows.
-- Provide: the system under test, known risks, current test plan, and specific uncertainties. Include `task_context`.
+- Use `claude_advisor` for complex test strategies: integration boundaries, coverage gaps on critical paths, or uncertain edge cases in distributed flows. Use `pacifico_advisor` as the cloud/async advisor alternative when Pacifico routing, observability, or cost controls are useful.
+- Provide: the system under test, known risks, current test plan, and specific uncertainties. Include `task_context`; for `pacifico_advisor`, include all relevant context/files explicitly because Pacifico cannot inspect local state unless you provide it.
 - Do NOT escalate for routine unit tests or straightforward coverage additions.
 
 ## Workflow
