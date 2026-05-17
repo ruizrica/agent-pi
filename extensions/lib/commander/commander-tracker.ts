@@ -116,6 +116,7 @@ export function computeReconcileActions(
 export function isFullySynced(
 	localTasks: { id: number; text: string; status: string }[],
 	mappings: { localId: number; commanderId: number; lastSyncedStatus?: LocalStatus }[],
+	pendingCreates: PendingCommanderCreate[] = [],
 ): boolean {
-	return computeReconcileActions(localTasks, mappings).length === 0;
+	return computeReconcileActions(localTasks, mappings, pendingCreates).length === 0;
 }
