@@ -12,20 +12,32 @@ interface Task {
 	id: number;
 	text: string;
 	status: TaskStatus;
+	claimedBy?: string;
+	claimedAt?: string;
+	lastUpdatedAt?: string;
+	lastUpdatedBy?: string;
 }
 
 export interface TaskListInfo {
-	tasks: { id: number; text: string; status: TaskStatus }[];
+	tasks: { id: number; text: string; status: TaskStatus; claimedBy?: string; claimedAt?: string; lastUpdatedAt?: string; lastUpdatedBy?: string }[];
 	title?: string;
 	remaining: number;
 	total: number;
 }
 
-// Mirror of the function we'll add to tasks.ts
+// Mirror of the task publishing shape in tasks.ts
 function publishTaskList(tasks: Task[], listTitle?: string): TaskListInfo {
 	const remaining = tasks.filter(t => t.status !== "done").length;
 	return {
-		tasks: tasks.map(t => ({ id: t.id, text: t.text, status: t.status })),
+		tasks: tasks.map(t => ({
+			id: t.id,
+			text: t.text,
+			status: t.status,
+			...(t.claimedBy ? { claimedBy: t.claimedBy } : {}),
+			...(t.claimedAt ? { claimedAt: t.claimedAt } : {}),
+			...(t.lastUpdatedAt ? { lastUpdatedAt: t.lastUpdatedAt } : {}),
+			...(t.lastUpdatedBy ? { lastUpdatedBy: t.lastUpdatedBy } : {}),
+		})),
 		title: listTitle,
 		remaining,
 		total: tasks.length,
@@ -64,6 +76,37 @@ describe("publishTaskList", () => {
 		const result = publishTaskList(tasks);
 		expect(result.remaining).toBe(2);
 		expect(result.total).toBe(4);
+	});
+
+	it("preserves claim metadata for board cards", () => {
+		const tasks: Task[] = [
+			{
+				id: 1,
+				text: "Claimed task",
+				status: "inprogress",
+				claimedBy: "builder-agent",
+				claimedAt: "2026-01-01T00:00:00.000Z",
+				lastUpdatedAt: "2026-01-01T00:01:00.000Z",
+				lastUpdatedBy: "builder-agent",
+			},
+		];
+		const result = publishTaskList(tasks);
+		expect(result.tasks[0]).toEqual({
+			id: 1,
+			text: "Claimed task",
+			status: "inprogress",
+			claimedBy: "builder-agent",
+			claimedAt: "2026-01-01T00:00:00.000Z",
+			lastUpdatedAt: "2026-01-01T00:01:00.000Z",
+			lastUpdatedBy: "builder-agent",
+		});
+	});
+
+	it("does not invent claim metadata for unclaimed tasks", () => {
+		const result = publishTaskList([{ id: 1, text: "Pending", status: "idle" }]);
+		expect(result.tasks[0]).toEqual({ id: 1, text: "Pending", status: "idle" });
+		expect(result.tasks[0].claimedBy).toBeUndefined();
+		expect(result.tasks[0].claimedAt).toBeUndefined();
 	});
 
 	it("includes list title when provided", () => {

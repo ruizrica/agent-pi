@@ -59,6 +59,14 @@ describe("approval task materialization", () => {
 			"Add outage regression test",
 		]);
 		expect((payload.tasks as any[])[0].labels).toContain("approved-investigation");
+		expect((payload.tasks as any[])[0]).toMatchObject({
+			primary_file: ".context/todo.md",
+			lifecycle_owner: "self",
+			confirm_wrapper: true,
+		});
+		expect((payload.tasks as any[])[0].body).toContain("## Steps");
+		expect((payload.tasks as any[])[0].body).toContain("## Tests");
+		expect((payload.tasks as any[])[0].body).toContain("## References");
 	});
 
 	it("builds debug Commander tasks only from remediation/next steps", () => {
@@ -106,9 +114,50 @@ Use the safer runtime path.
 			group_name: "Plan: Approved Plan",
 		});
 		expect(String(payload.initiative_summary)).toContain("Commander tasks are the source of truth");
+		expect(payload).toMatchObject({
+			primary_file: ".context/todo.md",
+			lifecycle_owner: "self",
+			confirm_wrapper: true,
+		});
+		expect(String(payload.body)).toContain("## Steps");
+		expect(String(payload.body)).toContain("## Tests");
+		expect(String(payload.body)).toContain("## References");
 		expect(payload.tasks).toHaveLength(2);
-		expect((payload.tasks as any[])[0]).toMatchObject({ description: "Implement A" });
+		expect((payload.tasks as any[])[0]).toMatchObject({
+			description: "Implement A",
+			title: "Implement A",
+			primary_file: ".context/todo.md",
+			lifecycle_owner: "self",
+			confirm_wrapper: true,
+		});
 		expect((payload.tasks as any[])[0].body).toContain(".context/todo.md");
+		expect((payload.tasks as any[])[0].body).toContain("## Steps");
+		expect((payload.tasks as any[])[0].body).toContain("## Tests");
+		expect((payload.tasks as any[])[0].body).toContain("## References");
+	});
+
+	it("extracts implementation checkboxes from structured implementation task sections", () => {
+		const payload = buildCommanderTaskGroupPayload({
+			title: "Structured Plan",
+			sourceKind: "plan",
+			sourcePath: ".context/todo.md",
+			cwd: "/repo",
+			markdown: `# Plan: Example
+
+## Phase 1: Context
+Narrative only.
+
+## Implementation Tasks for Commander Materialization
+
+- [ ] Add board/list pagination regression tests
+- [ ] Patch Commander list retrieval
+- [x] Already completed
+`,
+		});
+		expect((payload.tasks as any[]).map((task) => task.description)).toEqual([
+			"Add board/list pagination regression tests",
+			"Patch Commander list retrieval",
+		]);
 	});
 
 	it("returns no-task warning when no unchecked tasks exist", async () => {

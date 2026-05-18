@@ -61,6 +61,18 @@ describe("CommanderCliClient", () => {
 		expect(JSON.parse(text(result))).toEqual({ tasks: [{ id: 7, description: "Do it" }] });
 	});
 
+	it("uses a board-safe default limit for commander_task list when no limit is supplied", async () => {
+		mockExec([]);
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		await client.callTool("commander_task", { operation: "list" });
+		expect(execFileMock).toHaveBeenCalledWith(
+			"cmd-test",
+			["task", "list", "--runtime", "pi", "--model", "unknown", "--json", "--no-color", "--limit", "500", "--all"],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
 	it("maps commander_task create to cmd task add with identity inserted after subcommand", async () => {
 		mockExec({ id: 42, status: "pending" });
 		const client = new CommanderCliClient({ bin: "cmd-test" });
@@ -129,6 +141,10 @@ describe("CommanderCliClient", () => {
 				"--title", "Mission Title",
 				"--mission-brief", "Mission body",
 				"--labels", "initiative-root",
+				"--primary-file", ".",
+				"--body", "## Steps\n1. Complete the requested work: Mission body\n\n## Tests\n- Verify the task is complete and the Commander board status stays in sync.\n\n## References\n- Primary file: .\n- Commander group created from Pi approval materialization.",
+				"--lifecycle-owner", "self",
+				"--confirm-wrapper",
 			],
 			expect.any(Object),
 			expect.any(Function),
@@ -138,10 +154,10 @@ describe("CommanderCliClient", () => {
 			"cmd-test",
 			[
 				"task", "add", "--runtime", "pi", "--model", "unknown",
-				"In . around lines 1-1, local task requires execution: Child task; complete the requested local task.", "--json", "--no-color",
+				"Child task", "--json", "--no-color",
 				"--status", "pending", "--title", "Child task", "--parent", "100",
 				"--primary-file", ".",
-				"--body", "## Steps\n1. Complete the local Pi task: Child task\n\n## Tests\n- Verify the local Pi task is marked done and the Commander board status stays in sync.\n\n## References\n- Generated from Pi local task discipline sync.",
+				"--body", "## Steps\n1. Complete the requested work: Child task\n\n## Tests\n- Verify the task is complete and the Commander board status stays in sync.\n\n## References\n- Primary file: .\n- Commander child task created from Pi approval materialization.",
 				"--lifecycle-owner", "self",
 				"--confirm-wrapper",
 			],
@@ -149,6 +165,44 @@ describe("CommanderCliClient", () => {
 			expect.any(Function),
 		);
 		expect(JSON.parse(text(result))).toEqual({ group_id: 100, task_ids: [101], emulated: true });
+	});
+
+	it("preserves cmd-plan fields for group:create child tasks", async () => {
+		let nextId = 200;
+		execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+			cb(null, JSON.stringify({ id: nextId++ }), "");
+		});
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		await client.callTool("commander_task", {
+			operation: "group:create",
+			group_name: "Plan: Fix",
+			initiative_summary: "Approved plan",
+			primary_file: ".context/todo.md",
+			body: "## Steps\n1. Parent\n\n## Tests\n- Parent\n\n## References\n- Parent",
+			labels: ["approved-plan"],
+			tasks: [{
+				description: "Patch board",
+				title: "Patch board",
+				primary_file: "extensions/board-viewer.ts",
+				body: "## Steps\n1. Patch\n\n## Tests\n- Verify\n\n## References\n- Source",
+				labels: ["approved-plan", "implement-source"],
+				lifecycle_owner: "self",
+				confirm_wrapper: true,
+			}],
+		});
+		const childArgs = execFileMock.mock.calls[1][1];
+		expect(childArgs).toEqual([
+			"task", "add", "--runtime", "pi", "--model", "unknown",
+			"Patch board", "--json", "--no-color",
+			"--status", "pending",
+			"--title", "Patch board",
+			"--labels", "approved-plan,implement-source",
+			"--parent", "200",
+			"--primary-file", "extensions/board-viewer.ts",
+			"--body", "## Steps\n1. Patch\n\n## Tests\n- Verify\n\n## References\n- Source",
+			"--lifecycle-owner", "self",
+			"--confirm-wrapper",
+		]);
 	});
 
 	it("maps claim to a working status update with identity at position 2", async () => {

@@ -571,15 +571,17 @@ function startChatServer(
 			// ── Board Data (for inline board panel) ──────────────
 			if (req.method === "GET" && url.pathname === "/api/board-data") {
 				const g = globalThis as any;
-				const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string }[]; title?: string; remaining: number; total: number } | undefined;
+				const taskList = g.__piTaskList as { tasks: { id: number; text: string; status: string; claimedBy?: string; claimedAt?: string; lastUpdatedAt?: string; lastUpdatedBy?: string }[]; title?: string; remaining: number; total: number } | undefined;
 				const now = new Date().toISOString();
 				const statusMap: Record<string, string> = { idle: "pending", inprogress: "working", done: "completed" };
 				const tasks = (taskList?.tasks || []).map((t: any) => ({
 					task_id: t.id,
 					description: t.text,
 					status: statusMap[t.status] || t.status,
-					created_at: now,
-					updated_at: now,
+					claimed_by: t.claimedBy,
+					agent_name: t.claimedBy,
+					created_at: t.claimedAt || t.lastUpdatedAt || now,
+					updated_at: t.lastUpdatedAt || t.claimedAt || now,
 				}));
 				res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
 				res.end(JSON.stringify({

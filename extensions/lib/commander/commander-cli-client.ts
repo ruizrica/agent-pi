@@ -70,6 +70,8 @@ export function _setCommanderClientForTests(client: any | null, available = true
 	_availability = available;
 }
 
+const DEFAULT_TASK_LIST_LIMIT = 500;
+
 export interface CommanderCliClientOptions {
 	bin?: string;
 	cwd?: string;
@@ -146,7 +148,7 @@ export class CommanderCliClient {
 			case "list": {
 				const args = ["task", "list", "--json", "--no-color"];
 				if (params.status) args.push("--status", String(params.status));
-				if (params.limit) args.push("--limit", String(params.limit));
+				args.push("--limit", String(params.limit ?? DEFAULT_TASK_LIST_LIMIT));
 				if (params.working_directory === undefined) args.push("--all");
 				const rows = await this.runJson(args, timeoutMs, []);
 				return { tasks: Array.isArray(rows) ? rows : [] };
@@ -226,21 +228,47 @@ export class CommanderCliClient {
 	private async createTaskGroup(params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
 		const groupName = String(required(params.group_name, "group_name"));
 		const summary = String(params.initiative_summary || groupName);
+		const groupLabels = normalizeLabelsArray(params.labels ?? params.label);
+		const primaryFile = params.primary_file ?? params.primaryFile ?? ".";
+		const body = params.body ?? buildTaskBody({
+			description: summary,
+			primaryFile: String(primaryFile),
+			source: "Commander group created from Pi approval materialization.",
+		});
 		// Pi's initiative_summary is the mission brief shown in the Pi CLI task surfaces.
 		const parent = await this.callTask({
 			operation: "create",
 			description: summary,
 			title: groupName,
 			mission_brief: summary,
-			labels: ["initiative-root"],
+			labels: ["initiative-root", ...groupLabels],
 			status: "pending",
+			primary_file: primaryFile,
+			body,
+			lifecycle_owner: params.lifecycle_owner ?? params.lifecycleOwner ?? "self",
+			confirm_wrapper: params.confirm_wrapper ?? params.confirmWrapper ?? true,
 		}, timeoutMs) as any;
 		const groupId = Number(parent.task_id ?? parent.id);
 		const tasks = Array.isArray(params.tasks) ? params.tasks as any[] : [];
 		const taskIds: number[] = [];
 		for (const task of tasks) {
 			const description = String(task?.description || task?.task_prompt || summary);
-			const created = await this.callTask({ operation: "create", description, status: "pending", group_id: groupId }, timeoutMs) as any;
+			const created = await this.callTask({
+				operation: "create",
+				description,
+				status: task?.status ?? "pending",
+				group_id: groupId,
+				title: task?.title ?? truncateForTitle(description),
+				labels: task?.labels ?? task?.label,
+				primary_file: task?.primary_file ?? task?.primaryFile ?? primaryFile,
+				body: task?.body ?? buildTaskBody({
+					description,
+					primaryFile: String(task?.primary_file ?? task?.primaryFile ?? primaryFile),
+					source: "Commander child task created from Pi approval materialization.",
+				}),
+				lifecycle_owner: task?.lifecycle_owner ?? task?.lifecycleOwner ?? "self",
+				confirm_wrapper: task?.confirm_wrapper ?? task?.confirmWrapper ?? true,
+			}, timeoutMs) as any;
 			const id = Number(created.task_id ?? created.id);
 			if (Number.isFinite(id)) taskIds.push(id);
 		}
@@ -382,13 +410,15 @@ function required(value: unknown, name: string): unknown {
 	return value;
 }
 
+function normalizeLabelsArray(value: unknown): string[] {
+	if (value === undefined || value === null || value === "") return [];
+	if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+	return String(value).split(",").map((v) => v.trim()).filter(Boolean);
+}
+
 function normalizeLabelsParam(value: unknown): string | undefined {
-	if (value === undefined || value === null || value === "") return undefined;
-	if (Array.isArray(value)) {
-		const labels = value.map((v) => String(v).trim()).filter(Boolean);
-		return labels.length > 0 ? labels.join(",") : undefined;
-	}
-	return String(value);
+	const labels = normalizeLabelsArray(value);
+	return labels.length > 0 ? labels.join(",") : undefined;
 }
 
 function truncateForTitle(value: string): string {
@@ -398,6 +428,10 @@ function truncateForTitle(value: string): string {
 
 function sanitizeSentence(value: string): string {
 	return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").replace(/[.;]+$/g, "").trim() || "local task";
+}
+
+function buildTaskBody(options: { description: string; primaryFile: string; source: string }): string {
+	return `## Steps\n1. Complete the requested work: ${sanitizeSentence(options.description)}\n\n## Tests\n- Verify the task is complete and the Commander board status stays in sync.\n\n## References\n- Primary file: ${options.primaryFile}\n- ${options.source}`;
 }
 
 function buildSyntheticBoardTaskFields(description: string, params: Record<string, unknown>) {

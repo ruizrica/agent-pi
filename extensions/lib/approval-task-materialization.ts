@@ -97,20 +97,34 @@ export function readSpecTaskMarkdown(folderPath: string): ReadSpecTaskMarkdownRe
 	return null;
 }
 
+function buildCmdPlanBody(options: { description: string; sourcePath: string; cwd: string; kindLabel: string }): string {
+	return `## Steps\n1. Complete the approved ${options.kindLabel.toLowerCase()} task: ${options.description}\n\n## Tests\n- Verify the task acceptance criteria from the approved source are satisfied.\n- Keep Commander status and comments current before finishing.\n\n## References\n- Source: ${options.sourcePath}\n- Working directory: ${options.cwd}`;
+}
+
 export function buildCommanderTaskGroupPayload(input: CommanderTaskMaterializationInput): Record<string, unknown> {
+	const kindLabel = input.sourceKind === "debug" ? "Debug" : input.sourceKind === "investigation" ? "Investigation" : input.sourceKind === "spec" ? "Spec" : "Plan";
+	const labels = [sourceLabel(input.sourceKind), "implement-source", ...(input.labels ?? [])];
+	const initiativeSummary = `${kindLabel} approved for IMPLEMENT mode. Commander tasks are the source of truth. Source: ${input.sourcePath}. Working directory: ${input.cwd}.`;
 	const tasks = extractMarkdownCheckboxTasks(input.markdown, { sectionHint: input.sectionHint })
 		.filter((task) => !task.checked)
 		.map((task) => ({
 			description: task.description,
-			body: `Source: ${input.sourcePath}\nWorking directory: ${input.cwd}`,
-			labels: [sourceLabel(input.sourceKind), "implement-source", ...(input.labels ?? [])],
+			title: task.description,
+			primary_file: input.sourcePath,
+			body: buildCmdPlanBody({ description: task.description, sourcePath: input.sourcePath, cwd: input.cwd, kindLabel }),
+			labels,
+			lifecycle_owner: "self",
+			confirm_wrapper: true,
 		}));
-	const kindLabel = input.sourceKind === "debug" ? "Debug" : input.sourceKind === "investigation" ? "Investigation" : input.sourceKind === "spec" ? "Spec" : "Plan";
 	return {
 		operation: "group:create",
 		group_name: `${kindLabel}: ${input.title}`,
-		initiative_summary: `${kindLabel} approved for IMPLEMENT mode. Commander tasks are the source of truth. Source: ${input.sourcePath}. Working directory: ${input.cwd}.`,
-		labels: [sourceLabel(input.sourceKind), "implement-source", ...(input.labels ?? [])],
+		initiative_summary: initiativeSummary,
+		primary_file: input.sourcePath,
+		body: buildCmdPlanBody({ description: initiativeSummary, sourcePath: input.sourcePath, cwd: input.cwd, kindLabel }),
+		labels,
+		lifecycle_owner: "self",
+		confirm_wrapper: true,
 		tasks,
 	};
 }
