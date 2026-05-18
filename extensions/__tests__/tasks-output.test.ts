@@ -24,7 +24,8 @@ describe("removed completion summary widget", () => {
 		expect(checkMissionSection).toContain('const allDone = tasks.every(t => t.status === "done")');
 		expect(checkMissionSection).toContain("if (allDone) {");
 		expect(checkMissionSection).toContain("runCompletionSideEffects();");
-		expect(checkMissionSection).toContain('syncToCommander("mission-complete"');
+		expect(tasksSource).toContain("function closeCommanderParentIfAllLocalTasksDone()");
+		expect(tasksSource).toContain('syncToCommander("mission-complete"');
 	});
 
 	it("keeps task overlay cleanup before viewer tools without touching task state", () => {
@@ -67,12 +68,13 @@ describe("removed completion summary widget", () => {
 		expect(tasksSource).toContain("throw err;");
 	});
 
-	it("suppresses local WARDEN board sync through the shared ownership policy", () => {
+	it("promotes local tasks through the shared Commander sync policy", () => {
 		expect(tasksSource).toContain("resolveCommanderTaskSyncPolicyFromEnv");
 		expect(tasksSource).toContain("function shouldSyncLocalTasksToCommander()");
 		expect(tasksSource).toContain("function commanderSyncSuppressedMessage()");
 		expect(tasksSource).toContain("__commanderSyncEnabled");
 		expect(tasksSource).toContain("Every Commander board task you create or claim is your responsibility");
+		expect(tasksSource).not.toContain("Local WARDEN task list not promoted to Commander");
 	});
 
 	it("guards explicit self-cleanup as a stop/stomper path", () => {

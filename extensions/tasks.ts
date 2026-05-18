@@ -450,8 +450,23 @@ export default function (pi: ExtensionAPI) {
 		};
 	}
 
+	function closeCommanderParentIfAllLocalTasksDone(): void {
+		if (tasks.length === 0) return;
+		if (!tasks.every(t => t.status === "done")) return;
+		if (syncState.groupId === undefined || syncState.parentClosedAt) return;
+		syncToCommander("mission-complete", async (client) => {
+			await client.callTool("commander_task", {
+				operation: "update",
+				task_id: syncState.groupId,
+				status: "completed",
+			});
+		});
+		syncState = { ...syncState, parentClosedAt: Date.now() };
+	}
+
 	function runCompletionSideEffects(): void {
 		auditCommanderBoardForMissionComplete();
+		closeCommanderParentIfAllLocalTasksDone();
 	}
 
 	/** Check if all tasks are done and run non-UI completion side effects. */
@@ -460,21 +475,6 @@ export default function (pi: ExtensionAPI) {
 		const allDone = tasks.every(t => t.status === "done");
 		if (allDone) {
 			runCompletionSideEffects();
-
-			// Fire-and-forget: complete the parent initiative-root task on Commander.
-			// This is idempotent — if already closed or non-existent, the host ignores it.
-			// Guard against double-firing: only fire once per mission-complete event.
-			if (syncState.groupId !== undefined && !syncState.parentClosedAt) {
-				syncToCommander("mission-complete", async (client) => {
-					await client.callTool("commander_task", {
-						operation: "update",
-						task_id: syncState.groupId,
-						status: "completed",
-					});
-				});
-				// Mark that we've fired the parent-close update for this mission.
-				syncState = { ...syncState, parentClosedAt: Date.now() };
-			}
 		}
 	}
 
@@ -787,9 +787,7 @@ export default function (pi: ExtensionAPI) {
 									const parsed = parseGroupCreateResult(res);
 									if (parsed) {
 										syncState = applyGroupCreateResult(syncState, localIds, parsed);
-										for (const lid of localIds) {
-											syncState = updateMappingStatus(syncState, lid, "idle");
-										}
+										closeCommanderParentIfAllLocalTasksDone();
 									} else {
 										syncState = markGroupCreateSettled(syncState);
 									}
@@ -873,9 +871,7 @@ export default function (pi: ExtensionAPI) {
 									const parsed = parseGroupCreateResult(res);
 									if (parsed) {
 										syncState = applyGroupCreateResult(syncState, localIds, parsed);
-										for (const lid of localIds) {
-											syncState = updateMappingStatus(syncState, lid, "idle");
-										}
+										closeCommanderParentIfAllLocalTasksDone();
 									} else {
 										syncState = markGroupCreateSettled(syncState);
 									}
@@ -945,7 +941,6 @@ export default function (pi: ExtensionAPI) {
 					}
 					if (shouldSyncLocalTasksToCommander()) {
 						syncState = addPendingCreate(syncState, task, syncState.groupId === undefined ? "group" : "single");
-						syncState = updateMappingStatus(syncState, task.id, task.status);
 					}
 
 					// Enforce single inprogress — demote any other active task

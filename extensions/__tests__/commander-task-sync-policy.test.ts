@@ -1,5 +1,5 @@
-// ABOUTME: Tests Commander task ownership sync policy so subagents do not create phantom board tasks.
-// ABOUTME: Keeps local WARDEN bookkeeping separate from parent-managed Commander task lifecycle.
+// ABOUTME: Tests Commander task ownership sync policy for local task-to-board promotion.
+// ABOUTME: Keeps explicit opt-outs available while default local tasks sync to Commander.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -9,24 +9,32 @@ import {
 } from "../lib/commander/task-ownership-policy.ts";
 
 describe("resolveCommanderTaskSyncPolicy", () => {
-	it("keeps parent-session local WARDEN tasks local-only by default", () => {
+	it("syncs parent-session local WARDEN tasks to Commander by default", () => {
 		const policy = resolveCommanderTaskSyncPolicy({});
-		expect(policy.shouldSyncLocalTasksToCommander).toBe(false);
-		expect(policy.mode).toBe("local-only");
-		expect(policy.suppressedMessage).toContain("not promoted to Commander");
+		expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
+		expect(policy.mode).toBe("auto");
+		expect(policy.suppressedMessage).toBeUndefined();
 	});
 
-	it("allows explicit durable Commander sync opt-in for local tasks", () => {
+	it("keeps explicit durable Commander sync opt-in aliases enabled for local tasks", () => {
 		const policy = resolveCommanderTaskSyncPolicy({ syncMode: "auto" });
 		expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
 		expect(policy.mode).toBe("auto");
 	});
 
-	it("suppresses local task sync for subagents with an assigned Commander task", () => {
+	it("treats local and WARDEN sync modes as Commander sync aliases for now", () => {
+		for (const syncMode of ["local-only", "local", "warden", "warden-only"]) {
+			const policy = resolveCommanderTaskSyncPolicy({ syncMode });
+			expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
+			expect(policy.mode).toBe("auto");
+		}
+	});
+
+	it("syncs local task lists for subagents with an assigned Commander task by default", () => {
 		const policy = resolveCommanderTaskSyncPolicy({ isSubagent: true, commanderTaskId: 42 });
-		expect(policy.shouldSyncLocalTasksToCommander).toBe(false);
-		expect(policy.mode).toBe("assigned-only");
-		expect(policy.suppressedMessage).toContain("assigned Commander task is managed by parent");
+		expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
+		expect(policy.mode).toBe("auto");
+		expect(policy.suppressedMessage).toBeUndefined();
 	});
 
 	it("allows explicit opt-in for subagent local-task sync", () => {
@@ -37,6 +45,14 @@ describe("resolveCommanderTaskSyncPolicy", () => {
 		});
 		expect(policy.shouldSyncLocalTasksToCommander).toBe(true);
 		expect(policy.mode).toBe("auto");
+	});
+
+	it("honors explicit disabled modes", () => {
+		for (const syncMode of ["disabled", "off", "none"]) {
+			const policy = resolveCommanderTaskSyncPolicy({ syncMode });
+			expect(policy.shouldSyncLocalTasksToCommander).toBe(false);
+			expect(policy.mode).toBe("disabled");
+		}
 	});
 
 	it("honors explicit assigned-only mode even without a task id", () => {
@@ -63,9 +79,10 @@ describe("resolveCommanderTaskSyncPolicy", () => {
 });
 
 describe("buildCommanderTaskOwnershipPolicy", () => {
-	it("directs agents to mailbox/comments instead of coordination tasks", () => {
+	it("directs agents to mailbox/comments instead of separate ad-hoc coordination tasks", () => {
 		const prompt = buildCommanderTaskOwnershipPolicy({ taskId: 7 });
-		expect(prompt).toContain("Do not create additional Commander board tasks");
+		expect(prompt).toContain("local `tasks` entries may also sync to Commander");
+		expect(prompt).toContain("Do not create separate ad-hoc Commander tasks");
 		expect(prompt).toContain("commander_mailbox");
 		expect(prompt).toContain("comment:add");
 	});

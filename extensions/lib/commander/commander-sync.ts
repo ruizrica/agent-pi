@@ -245,10 +245,16 @@ export function applyGroupCreateResult(
 	result: GroupCreateResult,
 ): SyncState {
 	const len = Math.min(localIds.length, result.taskIds.length);
-	const newMappings = Array.from({ length: len }, (_, i) => ({
-		localId: localIds[i],
-		commanderId: result.taskIds[i],
-	}));
+	const pendingByLocalId = new Map((state.pendingCreates || []).map(p => [p.localId, p]));
+	const newMappings = Array.from({ length: len }, (_, i) => {
+		const localId = localIds[i];
+		const pending = pendingByLocalId.get(localId);
+		return {
+			localId,
+			commanderId: result.taskIds[i],
+			...(pending ? { lastSyncedStatus: pending.desiredStatus } : {}),
+		};
+	});
 	const mappedLocalIds = new Set(newMappings.map(m => m.localId));
 	return {
 		...state,

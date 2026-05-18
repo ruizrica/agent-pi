@@ -43,10 +43,9 @@ export function resolveCommanderTaskSyncPolicy(input: CommanderTaskSyncPolicyInp
 
 	if (["local-only", "local", "warden", "warden-only"].includes(requested)) {
 		return {
-			mode: "local-only",
-			shouldSyncLocalTasksToCommander: false,
-			reason: "Local WARDEN task lists are bookkeeping and are not Commander board cards.",
-			suppressedMessage: "Local WARDEN task list not promoted to Commander; create durable Commander cards explicitly with cmd task add and lifecycle ownership.",
+			mode: "auto",
+			shouldSyncLocalTasksToCommander: true,
+			reason: "Local tasks sync to Commander automatically, including WARDEN task lists.",
 		};
 	}
 
@@ -67,20 +66,12 @@ export function resolveCommanderTaskSyncPolicy(input: CommanderTaskSyncPolicyInp
 		};
 	}
 
-	if (input.isSubagent && hasAssignedCommanderTask(input.commanderTaskId)) {
-		return {
-			mode: "assigned-only",
-			shouldSyncLocalTasksToCommander: false,
-			reason: "Subagent local tasks are bookkeeping; the assigned Commander task represents the board work.",
-			suppressedMessage: "Commander board sync suppressed for subagent; assigned Commander task is managed by parent.",
-		};
-	}
-
 	return {
-		mode: "local-only",
-		shouldSyncLocalTasksToCommander: false,
-		reason: "Local WARDEN task lists are bookkeeping and are not Commander board cards by default.",
-		suppressedMessage: "Local WARDEN task list not promoted to Commander; create durable Commander cards explicitly with cmd task add and lifecycle ownership.",
+		mode: "auto",
+		shouldSyncLocalTasksToCommander: true,
+		reason: input.isSubagent && hasAssignedCommanderTask(input.commanderTaskId)
+			? "Subagent local tasks sync to Commander automatically unless explicitly disabled."
+			: "Local tasks sync to Commander automatically.",
 	};
 }
 
@@ -105,8 +96,8 @@ export interface CommanderTaskOwnershipPromptOptions {
 export function buildCommanderTaskOwnershipPolicy(opts: CommanderTaskOwnershipPromptOptions = {}): string {
 	const hasAssignedTask = opts.hasAssignedTask ?? opts.taskId !== undefined;
 	const assignedLine = hasAssignedTask
-		? `- Your assigned Commander task is the board card for this work. Do not create additional Commander board tasks for progress, status, questions, coordination, or notes unless the user explicitly asks you to create durable follow-up work.`
-		: `- Do not create Commander board tasks for progress, status, questions, coordination, or notes. Create a board task only for durable, executable follow-up work with a clear lifecycle owner.`;
+		? `- Your assigned Commander task remains the parent board card for this work, and local \`tasks\` entries may also sync to Commander when local task sync is enabled. Do not create separate ad-hoc Commander tasks for progress, status, questions, coordination, or notes unless the user explicitly asks for durable follow-up work.`
+		: `- Local \`tasks\` entries may sync to Commander when local task sync is enabled. Do not create separate ad-hoc Commander tasks for progress, status, questions, coordination, or notes; create a board task only for durable, executable follow-up work with a clear lifecycle owner.`;
 
 	return `
 

@@ -513,6 +513,24 @@ describe("applyGroupCreateResult", () => {
 			{ localId: 1, commanderId: 101 },
 		]);
 	});
+
+	it("records desired pending status when tasks changed before group mapping resolved", () => {
+		let state = emptySyncState();
+		state = addPendingCreates(state, [
+			{ id: 1, text: "Already done", status: "idle" },
+			{ id: 2, text: "Still working", status: "idle" },
+		], "group", 1);
+		state = addPendingCreate(state, { id: 1, text: "Already done", status: "done" }, "group", 2);
+		state = addPendingCreate(state, { id: 2, text: "Still working", status: "inprogress" }, "group", 3);
+
+		const updated = applyGroupCreateResult(state, [1, 2], { groupId: 7, taskIds: [101, 102] });
+
+		expect(updated.mappings).toEqual([
+			{ localId: 1, commanderId: 101, lastSyncedStatus: "done" },
+			{ localId: 2, commanderId: 102, lastSyncedStatus: "inprogress" },
+		]);
+		expect(updated.pendingCreates).toEqual([]);
+	});
 });
 
 describe("markGroupCreateSettled", () => {

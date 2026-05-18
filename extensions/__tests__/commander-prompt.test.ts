@@ -101,10 +101,11 @@ describe("buildCommanderPrompt", () => {
 		expect(result).toContain("agent_name");
 	});
 
-	it("forbids phantom Commander tasks for assigned subagent communication", () => {
+	it("allows local task sync while forbidding ad-hoc coordination tasks", () => {
 		const result = buildCommanderPrompt({ agentName: "SCOUT", taskId: 7, enableMailboxChat: true });
 		expect(result).toContain("Commander Task Ownership");
-		expect(result).toContain("Do not create additional Commander board tasks");
+		expect(result).toContain("local `tasks` entries may also sync to Commander");
+		expect(result).toContain("Do not create separate ad-hoc Commander tasks");
 		expect(result).toContain("progress, status, questions, coordination");
 		expect(result).toContain("commander_mailbox");
 	});
