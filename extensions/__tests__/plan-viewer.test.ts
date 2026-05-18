@@ -46,15 +46,16 @@ describe("plan-viewer implementation", () => {
 		expect(source).not.toContain("waitForFeedback().then");
 	});
 
-	it("enqueues a plan-approved follow-up from the show_plan tool so execution resumes after approval", () => {
+	it("does not enqueue a duplicate plan-approved follow-up from the show_plan tool", () => {
 		const toolSection = source.slice(
 			source.indexOf("// ── show_plan tool"),
 			source.indexOf("// ── /plan command"),
 		);
 		const commandSection = source.slice(source.indexOf("// ── /plan command"));
 
-		expect(toolSection).toContain('customType: "plan-approved"');
-		expect(toolSection).toContain("summarizeMaterialization");
+		expect(toolSection).not.toContain('customType: "plan-approved"');
+		expect(toolSection).toContain("materializePlanApprovalTasks");
+		expect(toolSection).toContain("the tool result is the continuation signal");
 		expect(toolSection).toContain('text: `Plan approved by user.${modifiedNote} The updated plan has been saved to ${file_path}.`');
 
 		expect(commandSection).toContain('customType: "plan-approved"');

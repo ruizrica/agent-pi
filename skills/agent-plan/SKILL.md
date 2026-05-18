@@ -1,4 +1,5 @@
 ---
+name: agent-plan
 description: "Interactive plan builder: gather details via Q&A, review via agent-viewer, then execute on approval"
 argument-hint: "[plan topic] [--name NAME] [--agent inline|haiku|sonnet|opus]"
 allowed-tools: ["Task", "Read", "Write", "Glob", "Grep", "Bash", "AskUserQuestion", "Edit"]

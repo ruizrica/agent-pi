@@ -1,4 +1,5 @@
 ---
+name: implement-directives
 description: Process @implement comments in code files and convert them to documentation
 argument-hint: [file or directory to process]
 allowed-tools: Task

@@ -1,4 +1,5 @@
 ---
+name: agent-spec
 description: "Interactive spec-driven development (Kiro pattern): requirements → design → tasks with agent-viewer gate, then execute"
 argument-hint: "[feature idea] [--project PATH] [--name SPEC_NAME] [--agent cursor|haiku]"
 allowed-tools: ["Task", "Read", "Write", "Glob", "Grep", "Bash", "AskUserQuestion", "Edit"]

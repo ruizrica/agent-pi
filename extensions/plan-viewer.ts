@@ -557,24 +557,15 @@ export default function (pi: ExtensionAPI) {
 
 				const approvedMarkdown = result.markdown || markdown;
 				const materialization = await materializePlanApprovalTasks(approvedMarkdown, file_path, displayTitle, ctx);
-				const commanderNote = summarizeMaterialization(materialization);
 
 				// Auto-switch mode only for complete/multi-phase plans after
 				// Commander source-of-truth tasks have been created.
 				// Simple plans remain in PLAN mode.
 				triggerApprovalModeSwitch(approvedMarkdown, ctx, materialization);
 
-				// Enqueue an approval follow-up so viewer-driven approval reliably
-				// triggers the next turn and execution continues after the UI closes.
-				piRef.sendMessage(
-					{
-						customType: "plan-approved",
-						content: `Plan approved! ${materialization.ok ? "Proceed with IMPLEMENT mode." : "IMPLEMENT handoff is blocked until Commander tasks are created."}${modifiedNote}${commanderNote}`,
-						display: true,
-					},
-					{ deliverAs: "followUp" as any, triggerTurn: true },
-				);
-
+				// In tool mode the tool result is the continuation signal. Do not
+				// also enqueue a plan-approved follow-up, or one approval can trigger
+				// a second stale planning turn after implementation has already begun.
 				return {
 					content: [{
 						type: "text" as const,
