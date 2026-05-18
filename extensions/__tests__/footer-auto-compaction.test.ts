@@ -104,6 +104,8 @@ describe("footer rendering", () => {
 		const lines = render(120);
 		expect(lines).toHaveLength(1);
 		expect(lines[0]).toContain("opus 4 | 42% / 200K");
+		expect(lines[0]).toContain("GitHub/agent-pi");
+		expect(lines[0]).not.toContain("/Users/ricardo/Workshop/GitHub/agent-pi");
 		expect(lines[0]).toContain("thinking: off");
 	});
 });

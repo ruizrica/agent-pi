@@ -70,6 +70,7 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const model = shortModelName(ctx.model?.name);
 				const usage = ctx.getContextUsage();
 				const contextWindow = ctx.model?.contextWindow || 0;
+				const cwd = shortDir(ctx.cwd || process.cwd());
 
 				let usageStr = "–";
 				if (usage?.percent != null) {
@@ -80,7 +81,7 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const thinking = thinkingIndicator(pi.getThinkingLevel?.(), theme);
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
-				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr);
+				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", cwd);
 
 				const stats = getSessionStats();
 				let agentTimeStr = "";
