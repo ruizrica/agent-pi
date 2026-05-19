@@ -154,7 +154,7 @@ describe("CommanderCliClient", () => {
 			"cmd-test",
 			[
 				"task", "add", "--runtime", "pi", "--model", "unknown",
-				"Child task", "--json", "--no-color",
+				"In . around lines 1-1, local task requires execution: Child task; complete the requested local task.", "--json", "--no-color",
 				"--status", "pending", "--title", "Child task", "--parent", "100",
 				"--primary-file", ".",
 				"--body", "## Steps\n1. Complete the requested work: Child task\n\n## Tests\n- Verify the task is complete and the Commander board status stays in sync.\n\n## References\n- Primary file: .\n- Commander child task created from Pi approval materialization.",
@@ -181,7 +181,7 @@ describe("CommanderCliClient", () => {
 			body: "## Steps\n1. Parent\n\n## Tests\n- Parent\n\n## References\n- Parent",
 			labels: ["approved-plan"],
 			tasks: [{
-				description: "Patch board",
+				description: "In extensions/board-viewer.ts around lines 10-20, board misrenders; patch the renderer.",
 				title: "Patch board",
 				primary_file: "extensions/board-viewer.ts",
 				body: "## Steps\n1. Patch\n\n## Tests\n- Verify\n\n## References\n- Source",
@@ -193,7 +193,7 @@ describe("CommanderCliClient", () => {
 		const childArgs = execFileMock.mock.calls[1][1];
 		expect(childArgs).toEqual([
 			"task", "add", "--runtime", "pi", "--model", "unknown",
-			"Patch board", "--json", "--no-color",
+			"In extensions/board-viewer.ts around lines 10-20, board misrenders; patch the renderer.", "--json", "--no-color",
 			"--status", "pending",
 			"--title", "Patch board",
 			"--labels", "approved-plan,implement-source",
@@ -203,6 +203,29 @@ describe("CommanderCliClient", () => {
 			"--lifecycle-owner", "self",
 			"--confirm-wrapper",
 		]);
+	});
+
+	it("rewrites non-CodeRabbit child description even when primary_file/body/lifecycle_owner are preset (regression: cmd rejects plain-text child descriptions)", async () => {
+		let nextId = 300;
+		execFileMock.mockImplementation((_bin, _args, _opts, cb) => {
+			cb(null, JSON.stringify({ id: nextId++ }), "");
+		});
+		const client = new CommanderCliClient({ bin: "cmd-test" });
+		await client.callTool("commander_task", {
+			operation: "group:create",
+			group_name: "APU task flow verification",
+			initiative_summary: "Local Pi tasks synced to Commander",
+			tasks: [{ description: "APU-1: Verify task creation appears on the board" }],
+		});
+		const childArgs = execFileMock.mock.calls[1][1];
+		// argv layout: ["task", "add", "--runtime", "pi", "--model", "unknown", <description>, "--json", ...]
+		const description = childArgs[childArgs.indexOf("--json") - 1];
+		// Description must satisfy cmd's CodeRabbit validator
+		// (cli/cmd/src/task-registration/validate.ts CODERABBIT_DESCRIPTION_RE).
+		expect(description).toMatch(
+			/^In\s+\S+\s+around\s+lines\s+\d+\s*-\s*\d+,\s+.+;\s+.+\.?$/i,
+		);
+		expect(description).toContain("APU-1: Verify task creation appears on the board");
 	});
 
 	it("maps claim to a working status update with identity at position 2", async () => {
