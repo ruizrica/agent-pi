@@ -165,6 +165,27 @@ export function pendingCreateLocalIds(state: SyncState): number[] {
 	return (state.pendingCreates || []).map(p => p.localId);
 }
 
+/**
+ * Classify the Commander-sync state for a single local task ID, used by the
+ * tasks tool toggle message. Distinguishes a missing mapping (unexpected drop —
+ * the agent or user should know something went wrong) from a pending create
+ * (sync is still in flight after a recent new-list/add), so the toggle output
+ * doesn't read as "broken" during the normal async window.
+ */
+export function describeToggleCommanderState(
+	state: SyncState,
+	localId: number,
+):
+	| { kind: "mapped"; commanderId: number }
+	| { kind: "pending" }
+	| { kind: "missing" } {
+	const cid = lookupMapping(state, localId);
+	if (cid !== undefined) return { kind: "mapped", commanderId: cid };
+	const pending = (state.pendingCreates || []).some(p => p.localId === localId);
+	if (pending) return { kind: "pending" };
+	return { kind: "missing" };
+}
+
 export function unresolvedCommanderLocalIds(
 	localTasks: { id: number; status: string }[],
 	state: SyncState,

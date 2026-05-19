@@ -47,6 +47,7 @@ import {
 	addPendingCreates,
 	addPendingCreate,
 	unresolvedCommanderLocalIds,
+	describeToggleCommanderState,
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
@@ -969,8 +970,9 @@ export default function (pi: ExtensionAPI) {
 						if (isCommanderAvailable()) {
 							const client = getCommanderCliClient();
 							// Commander available: await sync for per-task verification
-							const cid = lookupMapping(syncState, task.id);
-							if (cid !== undefined) {
+							const syncDescription = describeToggleCommanderState(syncState, task.id);
+							if (syncDescription.kind === "mapped") {
+								const cid = syncDescription.commanderId;
 								try {
 									await client.callTool("commander_task", {
 										operation: "update",
@@ -991,6 +993,8 @@ export default function (pi: ExtensionAPI) {
 									});
 									msg += ` (Commander sync failed — queued for retry)`;
 								}
+							} else if (syncDescription.kind === "pending") {
+								msg += ` (Commander sync pending for task #${task.id} — will apply once group:create resolves)`;
 							} else {
 								msg += ` (Commander: no mapping for task #${task.id})`;
 							}

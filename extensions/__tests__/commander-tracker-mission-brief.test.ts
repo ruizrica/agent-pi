@@ -1,6 +1,7 @@
-// ABOUTME: Tests that commander-tracker forwards a mission_brief when it creates
-// ABOUTME: a fallback root task (groupId undefined), pulling the brief from the
-// ABOUTME: published __piTaskList.description so the dashboard has real content.
+// ABOUTME: Tests that commander-tracker carries the list's work summary into the
+// ABOUTME: batched group:create payload (so the dashboard InitiativeCard has real
+// ABOUTME: content) instead of stamping mission_brief on every per-task create —
+// ABOUTME: which would auto-label every child as initiative-root and hide them.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { _setCommanderClientForTests, _resetCommanderClientForTests } from "../lib/commander/commander-cli-client.ts";
@@ -10,6 +11,10 @@ function makeMockClient() {
 	const client = {
 		callTool: vi.fn(async (tool: string, params: any) => {
 			calls.push({ tool, params });
+			if (params?.operation === "group:create") {
+				const taskIds = (params.tasks as any[]).map((_: any, i: number) => 300 + i);
+				return { content: [{ type: "text", text: JSON.stringify({ group_id: 200, task_ids: taskIds }) }] };
+			}
 			return { content: [{ type: "text", text: JSON.stringify({ id: 42, task_id: 42 }) }] };
 		}),
 	};
@@ -25,7 +30,7 @@ function makeMockPi() {
 	};
 }
 
-describe("commander-tracker — mission brief forwarding on fallback root create", () => {
+describe("commander-tracker — initiative summary carried via batched group:create when groupId is undefined", () => {
 	beforeEach(() => {
 		const g = globalThis as any;
 		delete g.__piCommanderGate;
@@ -43,7 +48,7 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 		_resetCommanderClientForTests();
 	});
 
-	it("attaches mission_brief from listDescription when groupId is undefined", async () => {
+	it("carries listDescription as initiative_summary in the batched group:create when groupId is undefined", async () => {
 		const { client, calls } = makeMockClient();
 		const g = globalThis as any;
 		_setCommanderClientForTests(client, true);
@@ -58,17 +63,17 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 		const pi = makeMockPi();
 		mod.default(pi as any);
 		await pi._handlers["session_start"]({}, {});
-
-		// Let the reconcile microtask resolve
 		await new Promise((r) => setTimeout(r, 0));
 
-		const created = calls.filter((c) => c.params?.operation === "create");
-		expect(created.length).toBeGreaterThan(0);
-		const payload = created[0].params;
-		expect(payload.mission_brief).toBe(
+		const groupCreates = calls.filter((c) => c.params?.operation === "group:create");
+		expect(groupCreates.length).toBe(1);
+		expect(groupCreates[0].params.initiative_summary).toBe(
 			"Migrate JWT to OAuth so we get SSO and refresh tokens.",
 		);
-		expect(payload.group_id).toBeUndefined();
+		const perTaskCreates = calls.filter((c) => c.params?.operation === "create");
+		for (const c of perTaskCreates) {
+			expect(c.params.mission_brief).toBeUndefined();
+		}
 	});
 
 	it("falls back to the list title when description is empty", async () => {
@@ -88,9 +93,9 @@ describe("commander-tracker — mission brief forwarding on fallback root create
 		await pi._handlers["session_start"]({}, {});
 		await new Promise((r) => setTimeout(r, 0));
 
-		const created = calls.filter((c) => c.params?.operation === "create");
-		expect(created.length).toBeGreaterThan(0);
-		expect(created[0].params.mission_brief).toBe("Auth Cleanup");
+		const groupCreates = calls.filter((c) => c.params?.operation === "group:create");
+		expect(groupCreates.length).toBe(1);
+		expect(groupCreates[0].params.initiative_summary).toBe("Auth Cleanup");
 	});
 
 	it("does NOT attach mission_brief when groupId is set (children inherit)", async () => {

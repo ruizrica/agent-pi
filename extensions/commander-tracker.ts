@@ -6,12 +6,15 @@ import {
 	createTrackerState,
 	popRetries,
 	computeReconcileActions,
+	type CreateAction,
 	type TrackerState,
 } from "./lib/commander/commander-tracker.ts";
 import {
 	parseCommanderTaskId,
 	addMapping,
 	updateMappingStatus,
+	buildGroupCreatePayload,
+	parseGroupCreateResult,
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
 import {
@@ -91,27 +94,83 @@ export default function (pi: ExtensionAPI) {
 			skipCreateLocalIds: createInFlightLocalIds,
 		});
 
+		// When no Commander group exists yet, retry the original group:create with
+		// every unmapped local task batched in. This preserves the parent/child
+		// structure (one initiative-root parent, executable children with cmd-parent
+		// labels) instead of producing one orphan initiative-root per task — every
+		// child of that fallback path used to land with mission_brief set, which the
+		// bd adapter auto-stamps with `initiative-root`, hiding it from the Kanban
+		// board.
+		if (syncState && syncState.groupId === undefined && !syncState.groupCreationInFlight) {
+			const createActions = actions.filter((a): a is CreateAction => a.type === "create");
+			if (createActions.length > 0) {
+				for (const a of createActions) createInFlightLocalIds.add(a.localId);
+				syncState.groupCreationInFlight = true;
+				const localIds = createActions.map((a) => a.localId);
+				const listDescription = String(taskList.description || "").trim();
+				const listTitleStr = String(taskList.title || "").trim();
+				const payload = buildGroupCreatePayload(
+					listTitleStr || "Tasks",
+					listDescription || listTitleStr || "Tasks",
+					createActions.map((a) => a.text),
+					process.cwd(),
+				);
+				const desiredStatusByLocalId = new Map(createActions.map((a) => [a.localId, a.localStatus]));
+				client.callTool("commander_task", payload, 30_000).then((res: any) => {
+					const parsed = parseGroupCreateResult(res);
+					if (!parsed || !syncState) return;
+					syncState.groupId = parsed.groupId;
+					const len = Math.min(localIds.length, parsed.taskIds.length);
+					const existingLocalIds = new Set(syncState.mappings.map(m => m.localId));
+					for (let i = 0; i < len; i++) {
+						const localId = localIds[i];
+						if (existingLocalIds.has(localId)) continue;
+						syncState.mappings.push({
+							localId,
+							commanderId: parsed.taskIds[i],
+							lastSyncedStatus: (desiredStatusByLocalId.get(localId) as any) ?? "idle",
+						});
+					}
+					const mappedLocalIds = new Set(syncState.mappings.map(m => m.localId));
+					syncState.pendingCreates = (syncState.pendingCreates || []).filter(p => !mappedLocalIds.has(p.localId));
+				}).catch(() => {
+					// Parse/transport failure — leave pendingCreates untouched so the
+					// next reconcile tick retries the batched group:create.
+				}).finally(() => {
+					if (syncState) syncState.groupCreationInFlight = false;
+					for (const a of createActions) createInFlightLocalIds.delete(a.localId);
+				});
+
+				// Drain any status-update actions in the same tick; per-task creates
+				// are intentionally skipped now that the batched group:create owns
+				// the create path.
+				for (const action of actions) {
+					if (action.type !== "status-update") continue;
+					client.callTool("commander_task", {
+						operation: "update",
+						task_id: action.commanderId,
+						status: action.commanderStatus,
+					}).then(() => {
+						if (syncState) {
+							const mapping = syncState.mappings.find(m => m.localId === action.localId);
+							if (mapping) mapping.lastSyncedStatus = action.localStatus as any;
+						}
+					}).catch(() => {});
+				}
+				return;
+			}
+		}
+
 		for (const action of actions) {
 			if (action.type === "create") {
 				const groupId = syncState?.groupId;
 				createInFlightLocalIds.add(action.localId);
-				// When we have no group yet, the retry would otherwise land as a bare
-				// root task with no mission brief — then the Commander dashboard's
-				// InitiativeCard can't surface anything meaningful. Use the list's
-				// rich description (1-3 sentence work summary) as the mission brief
-				// for that fallback root so the UI has real content to show.
-				const listDescription = String(taskList.description || "").trim();
-				const listTitleStr = String(taskList.title || "").trim();
-				const missionBrief = groupId === undefined
-					? (listDescription || listTitleStr || undefined)
-					: undefined;
 				client.callTool("commander_task", {
 					operation: "create",
 					description: action.text,
 					working_directory: process.cwd(),
 					status: action.commanderStatus,
 					...(groupId !== undefined ? { group_id: groupId } : {}),
-					...(missionBrief ? { mission_brief: missionBrief } : {}),
 				}).then((res: any) => {
 					const cid = parseCommanderTaskId(res);
 					if (cid !== undefined && syncState) {
