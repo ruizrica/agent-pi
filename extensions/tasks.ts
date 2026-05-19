@@ -350,6 +350,16 @@ export default function (pi: ExtensionAPI) {
 		(globalThis as any).__piRefreshAgentTeamWidget?.();
 	};
 
+	// Republish the closure-local syncState to globalThis WITHOUT needing a ctx.
+	// Used by async syncToCommander lambdas (e.g. group:create) that mutate
+	// syncState after the registered tool's execute() has already returned and
+	// refreshUI has run; the commander-tracker reconciler and a fast-follow-up
+	// toggle both need to see the freshly populated mappings without waiting
+	// for the next UI event.
+	const publishSyncStateNow = () => {
+		publishCurrentTask(tasks, syncState, listTitle, listDescription, shouldSyncLocalTasksToCommander());
+	};
+
 	const refreshUI = (ctx: ExtensionContext) => {
 		const summaryOnly = !!(globalThis as any).__piSummaryModeActive;
 		const syncIndicator = isCommanderAvailable() ? "(synced)" : "(local)";
@@ -788,12 +798,15 @@ export default function (pi: ExtensionAPI) {
 									const parsed = parseGroupCreateResult(res);
 									if (parsed) {
 										syncState = applyGroupCreateResult(syncState, localIds, parsed);
+										publishSyncStateNow();
 										closeCommanderParentIfAllLocalTasksDone();
 									} else {
 										syncState = markGroupCreateSettled(syncState);
+										publishSyncStateNow();
 									}
 								} catch (err) {
 									syncState = markGroupCreateSettled(syncState);
+									publishSyncStateNow();
 									throw err;
 								}
 							});
@@ -872,12 +885,15 @@ export default function (pi: ExtensionAPI) {
 									const parsed = parseGroupCreateResult(res);
 									if (parsed) {
 										syncState = applyGroupCreateResult(syncState, localIds, parsed);
+										publishSyncStateNow();
 										closeCommanderParentIfAllLocalTasksDone();
 									} else {
 										syncState = markGroupCreateSettled(syncState);
+										publishSyncStateNow();
 									}
 								} catch (err) {
 									syncState = markGroupCreateSettled(syncState);
+									publishSyncStateNow();
 									throw err;
 								}
 							});
