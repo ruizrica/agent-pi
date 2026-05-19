@@ -57,18 +57,24 @@ Arguments: `$ARGUMENTS`
 agent-memory status --json
 agent-memory index
 agent-memory search "worktree save workflow" --json
-agent-memory add "Pi /handoff is the handoff-first place to preserve continuation context and can explicitly request native memory cycling" --source memory --tags "pi,handoff,memory"
+agent-memory add "Pi uses /handoff for standalone continuation notes and /cycle-context for Project Memory Pack checkpoints plus optional native memory cycling" --source memory --tags "pi,handoff,memory"
 agent-memory code-index ./src
 agent-memory code-tree --json
 agent-memory code-nav "memory cycle extension" --json
 ```
 
+## Project Memory Pack boundary
+
+The Project Memory Pack (`CLAUDE.md`, `STATE.md`, `journal/`, `BACKLOG.md`, `FEATURES.md`) is the human-readable continuity layer. `agent-memory` is the indexed retrieval layer for concise durable facts and code navigation. Do not copy full handoffs, cmd task state, diffs, or transcripts into `agent-memory`.
+
+`journal/milestones/` contains raw milestone notes that are eligible for wiki/Obsidian raw ingestion only after review and readiness marking. Routine `.context/project-memory/changes/` entries are local change summaries and should not be ingested into the wiki.
+
 ## Workflow integration
 
-- `/setup` is the preferred first-time place to validate `agent-memory`, refresh the memory index, and offer `code-index` for the current repo/worktree.
-- At the start of substantial work, search memory for prior decisions before rediscovering them from files.
+- `/setup` is the preferred first-time place to validate `agent-memory`, refresh the memory index, and offer `code-index` for the current repo/worktree after Project Memory Pack orientation.
+- At the start of substantial work, read Project Memory Pack state first, then search memory for prior decisions before rediscovering them from files.
 - When locating code, prefer `code-nav`/`code-tree` if a code index exists, then fall back to normal file reads and grep.
-- At handoff/save boundaries, add only concise durable memories when there is a reusable lesson.
+- At `/cycle-context` or `/save` boundaries, add only concise durable memories when there is a reusable lesson. `/handoff` alone should not copy full continuation notes into memory.
 
 ## Memory write rubric
 

@@ -31,6 +31,7 @@ import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import {
 	localToCommander,
 	parseCommanderTaskId,
+	handleTaskCreateResponse,
 	lookupMapping,
 	addMapping,
 	removeMapping,
@@ -54,6 +55,7 @@ import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
+import { recordLifecycleIntent } from "./lib/commander/lifecycle-intents.ts";
 import { resolveCommanderTaskSyncPolicyFromEnv } from "./lib/commander/task-ownership-policy.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import { addRetry, isFullySynced } from "./lib/commander/commander-tracker.ts";
@@ -907,11 +909,7 @@ export default function (pi: ExtensionAPI) {
 										working_directory: process.cwd(),
 										group_id: syncState.groupId,
 									});
-									const cid = parseCommanderTaskId(res);
-									if (cid !== undefined) {
-										syncState = addMapping(syncState, t.id, cid);
-										syncState = updateMappingStatus(syncState, t.id, "idle");
-									}
+									syncState = handleTaskCreateResponse(syncState, t.id, t.text, res, "idle");
 								});
 							}
 						} else if (syncState.groupCreationInFlight && syncState.groupId === undefined) {
@@ -1116,15 +1114,26 @@ export default function (pi: ExtensionAPI) {
 					saveSharedStateIfNeeded("remove", `Removed task #${removed.id}.`);
 
 					// Sync: cancel Commander task only when this session owns local task-board sync.
+					// On rejection we record a durable cancel intent so the cancellation is
+					// reconciled on next session even if the retry tracker drops the work.
 					if (shouldSyncLocalTasksToCommander()) {
 						syncToCommander("task-remove", async (client) => {
 							const cid = lookupMapping(syncState, removed.id);
 							if (cid === undefined) return;
-							await client.callTool("commander_task", {
-								operation: "update",
-								task_id: cid,
-								status: "cancelled",
-							});
+							try {
+								await client.callTool("commander_task", {
+									operation: "update",
+									task_id: cid,
+									status: "cancelled",
+								});
+							} catch (err: any) {
+								recordLifecycleIntent({
+									taskId: cid,
+									action: "cancel",
+									message: `local task #${removed.id} (${removed.text}) removed — Commander cancel pending`,
+								});
+								throw err;
+							}
 						});
 					}
 					syncState = removeMapping(syncState, removed.id);

@@ -5,11 +5,31 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { renderSubagentWidget, type SubRenderState } from "../lib/subagent-render.ts";
+import { resolveTimeout } from "../subagent-widget.ts";
 
 // ── Timeout resolution tests ─────────────────────────────────────────────────
-// We can't import resolveTimeout directly (it's a module-scoped function inside
-// the extension default export), so we test the behavior via the render output
-// and validate the constants match our expectations.
+
+describe("subagent timeout resolution", () => {
+	it("uses role defaults when no explicit timeout is provided", () => {
+		expect(resolveTimeout("SCOUT")).toBe(600_000);
+		expect(resolveTimeout("REVIEWER")).toBe(900_000);
+		expect(resolveTimeout("UNKNOWN_ROLE")).toBe(1_200_000);
+	});
+
+	it("preserves zero as watchdog disabled", () => {
+		expect(resolveTimeout("SCOUT", 0)).toBe(0);
+	});
+
+	it("treats small positive explicit timeouts as seconds", () => {
+		expect(resolveTimeout("SCOUT", 600)).toBe(600_000);
+		expect(resolveTimeout("REVIEWER", 900)).toBe(900_000);
+	});
+
+	it("preserves larger explicit timeout values as milliseconds", () => {
+		expect(resolveTimeout("BUILDER", 600_000)).toBe(600_000);
+		expect(resolveTimeout("TESTER", 1_200_000)).toBe(1_200_000);
+	});
+});
 
 describe("timeout render warnings", () => {
 	function makeFakeTheme() {

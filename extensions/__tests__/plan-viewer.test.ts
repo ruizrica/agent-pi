@@ -19,7 +19,8 @@ describe("plan-viewer implementation", () => {
 
 	it("passes project context into the browser plan viewer header", () => {
 		expect(source).toContain('import { getProjectContext } from "./lib/project-context.ts"');
-		expect(source).toContain("const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);");
+		expect(source).toContain("const revision = getNextReportRevision({ category: purpose, title, sourcePath: filePath, viewerPath: filePath });");
+		expect(source).toContain("const projectContext = getProjectContext(ctx.cwd || process.cwd(), revision);");
 		expect(source).toContain("projectContext,");
 	});
 

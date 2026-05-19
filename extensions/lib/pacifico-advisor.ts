@@ -41,7 +41,6 @@ export interface PacificoAdvisorPacket {
 
 const DEFAULT_MAX_FILE_BYTES = 12_000;
 const DEFAULT_MAX_CONTEXT_BYTES = 60_000;
-const PROJECT_HINT_FILES = ["CLAUDE.md", ".context/todo.md"];
 
 function safeRole(role: string | undefined): string {
 	const trimmed = role?.trim() ?? "";
@@ -114,18 +113,10 @@ export function collectPacificoAdvisorContext(args: PacificoAdvisorArgs, ctx: Pa
 	sections.push("");
 	sections.push("## Working Directory");
 	sections.push(ctx.cwd);
-
-	for (const hint of PROJECT_HINT_FILES) {
-		const read = readContextFile(ctx.cwd, hint, Math.min(maxFileBytes, 8_000), allowTruncation);
-		if (read.diagnostic.status === "included" || read.diagnostic.status === "truncated") {
-			sections.push("");
-			sections.push(`## Project Context: ${read.heading}`);
-			sections.push("```text");
-			sections.push(read.body);
-			sections.push("```");
-		}
-		diagnostics.push(read.diagnostic);
-	}
+	sections.push("");
+	sections.push("## Context Packaging Guidance");
+	sections.push("Include concise summaries, known concerns, constraints, and targeted file excerpts explicitly in `task_context` and `files`.");
+	sections.push("Do not assume Pacifico can inspect project rules, plans, git state, shell output, or hidden session context unless they are provided in this prompt.");
 
 	if (args.task_context?.trim()) {
 		sections.push("");

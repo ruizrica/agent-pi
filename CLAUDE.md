@@ -89,6 +89,87 @@ Structure: `raw/` (ingested content) → `wiki/` (compiled articles with `[[wiki
 
 ---
 
+## Project Memory Pack — Repo-Checked Continuity
+
+This repository uses a small markdown memory pack so future agents can resume without a long re-brief. These files are human-readable project continuity docs; they complement, but do not replace, cmd tasks, `.context` handoffs/session state, Obsidian, or `agent-memory`.
+
+### Files and ownership
+
+- `CLAUDE.md` — standing project rules, architecture guardrails, safety policies, and update-docs contracts.
+- `STATE.md` — the current in-flight state only: active focus, branch/worktree, active plan/task IDs, last completed step, next step, blockers, and key files. Keep it short and current.
+- `journal/YYYY-MM-DD.md` — dated session log entries: what changed, decisions made, failed attempts, verification, and lessons worth keeping.
+- `BACKLOG.md` — prioritized deferred work and ideas not yet materialized as cmd tasks. cmd remains the source of truth for active executable work.
+- `FEATURES.md` — shipped feature inventory with entry points, verification notes, and follow-up links.
+- `.context/project-memory/changes/YYYY-MM-DD.md` — generated local post-commit change summaries. These are raw local logs, not curated docs.
+- `journal/milestones/YYYY-MM-DD-<slug>.md` — durable raw milestone notes eligible for wiki/Obsidian raw ingestion. Routine commits must not create wiki raw files.
+
+### Which memory goes where?
+
+| Layer | Purpose | Canonical owner | Update trigger |
+|---|---|---|---|
+| Standing rules | Non-negotiable agent behavior | `CLAUDE.md` | Rare policy/process changes |
+| Current state | Fast resume now | `STATE.md` | `/cycle-context`, before stopping, major focus changes |
+| Session history | Plain-English chronology | `journal/YYYY-MM-DD.md` | `/cycle-context`, meaningful work slices, save boundaries |
+| Milestones | Durable raw wiki candidates | `journal/milestones/` | Explicit `[milestone]` / `[wiki]`, milestone marker, or deliberate test-write |
+| Active execution | Source of truth for work | cmd tasks | Task creation/progress/completion |
+| Operational restore | Machine/session restore | `.context/handoffs/`, `.context/session-state.json`, native memory cycle | `/handoff`, `/cycle-context --compact`, `/compact-min` |
+| Local hook telemetry | Raw local commit summary | `.context/project-memory/changes/` | Post-commit hook; never wiki-ingested |
+| Indexed retrieval | Searchable durable facts and code navigation | `agent-memory` | Concise durable decisions/root causes/workflows only |
+| Knowledge base | Curated raw/wiki knowledge | Obsidian via `obsidian_memory` | Reviewed milestone/postmortem/wiki-worthy updates |
+
+### Lifecycle rules
+
+- Idea or deferred follow-up → `BACKLOG.md` until it becomes executable work.
+- Executable active work → cmd task; cmd is the source of truth for status.
+- Meaningful in-flight status → `STATE.md` via `/cycle-context`.
+- Session decisions/verification/failed attempts worth preserving → `journal/YYYY-MM-DD.md`.
+- Shipped user-visible or agent-visible capability → `FEATURES.md`.
+- Large durable update/postmortem/process change → `journal/milestones/` as a draft raw note, then Obsidian only after review.
+- Standalone continuation pointer → `/handoff` and `.context/handoffs/`.
+- Full context checkpoint or native compaction request → `/cycle-context`.
+
+### Session-start read order
+
+For substantial work, orient in this order before broad exploration:
+
+1. Global rules/profile if available.
+2. Project `CLAUDE.md`.
+3. `STATE.md`.
+4. Latest `journal/YYYY-MM-DD.md` entry.
+5. Active plan/spec/task artifacts, such as `.context/todo.md` or cmd context.
+6. `agent-memory search` / code navigation when prior decisions or code structure matter.
+
+### Checkpoint and update-docs contract
+
+When the user says `checkpoint`, `update docs`, `session checkpoint`, `cycle context`, or asks to preserve state for the next session, use `/cycle-context` semantics:
+
+1. Update `STATE.md` to reflect only the latest in-flight status.
+2. Append a concise entry to today’s `journal/YYYY-MM-DD.md` with decisions, attempts, verification, and next steps.
+3. Write/update a pointer-based handoff under `.context/handoffs/`.
+4. Update `BACKLOG.md` only for deferred work that is not already represented as a cmd task.
+5. Update `FEATURES.md` only when a user-visible feature or notable capability has shipped.
+6. Trigger native `cycle_memory` only when compaction/memory cycling is explicitly requested.
+7. Keep `.context/handoffs/` and `.context/session-state.json` as operational recovery artifacts, not replacements for the memory pack.
+
+`/handoff` alone remains standalone and pointer-based; it does not update the Project Memory Pack or compact memory.
+
+Do not paste full transcripts, full diffs, secrets, credentials, noisy logs, or unverified hypotheses into memory-pack files. Prefer pointers to commits, tasks, plans, PRs, and files.
+
+### Milestone wiki raw notes
+
+Create or ingest wiki raw notes only for large updates and milestones, such as:
+
+- shipped multi-file features or user-visible capabilities
+- architecture decisions or migrations
+- major debugging postmortems with verified root causes
+- workflow/process changes that future agents should know
+
+Routine commits should only produce local change summaries. They should not create milestone raw files and should not be ingested into Obsidian/wiki unless explicitly marked as a milestone.
+
+Before Obsidian ingestion, milestone notes must be reviewed, have TODO placeholders resolved, and be marked ready (for example `status: ready`, `ready_for_wiki: true`, `wiki_ingested: false`). Draft notes and routine `.context/project-memory/changes/` entries are not wiki inputs.
+
+---
+
 ## Advisor Strategy (Default Pattern)
 
 - Use the `claude_advisor` tool to consult an Opus-level advisor **only** for hard decisions: ambiguous architecture, high-impact tradeoffs, or when stuck after a reasonable attempt.

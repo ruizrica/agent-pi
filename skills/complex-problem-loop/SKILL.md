@@ -100,7 +100,7 @@ After recon, write down:
 - Which files are likely involved
 - What the next slice of work should accomplish
 
-For longer efforts, persist a loop state artifact in `.context/` using the template from `references/state-template.md`.
+For longer efforts, persist a loop state artifact in `.context/` using the template from `references/state-template.md`. This loop state is investigation/execution state, not the repo-wide Project Memory Pack. When preserving cross-session project continuity, use `/cycle-context` so `STATE.md` and `journal/YYYY-MM-DD.md` stay current.
 
 ### Phase 4: Plan Before Execution
 
@@ -140,8 +140,9 @@ After each slice:
 
 If the task is likely to exceed the available context window or span multiple sessions:
 
-- Keep concise state in `.context/`
-- Use `cycle_memory` proactively when needed
+- Keep concise loop state in `.context/`
+- Use `/cycle-context` for Project Memory Pack updates, pointer-based handoff, and optional native `cycle_memory`
+- Use `/handoff` only when a standalone continuation note is enough
 - Queue follow-up work to persistent subagents when that keeps context localized
 
 ## Rules
@@ -160,6 +161,6 @@ If the task is likely to exceed the available context window or span multiple se
 - Use the planner format already established in this repository
 - Use subagents for focused recon or follow-up execution
 - Use pipeline/team workflows when they are the best fit, not by default
-- Use memory cycling for continuity instead of inventing a second memory system
+- Use `/cycle-context` and native memory cycling for continuity instead of inventing a second memory system
 
 This skill is a practical operating model for complex problem solving inside Pi.

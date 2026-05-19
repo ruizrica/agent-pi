@@ -16,7 +16,7 @@ import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from "node
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generatePlanViewerHTML } from "./lib/viewers/plan-viewer-html.ts";
 import { createPlanStandaloneExport, saveStandaloneExport } from "./lib/viewer-standalone-export.ts";
-import { upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
+import { getNextReportRevision, upsertPersistedReport, readRawPayload } from "./lib/report-index.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { getPlanTargetMode } from "./lib/plan-complexity.ts";
 import { materializeApprovedTasksToCommander, summarizeMaterialization, type CommanderTaskMaterializationResult } from "./lib/approval-task-materialization.ts";
@@ -225,7 +225,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult, markdownContent?: string) {
+	function persistViewerResult(filePath: string, title: string, purpose: ViewerPurpose, result: ViewerResult, markdownContent?: string, revision = 1) {
 		try {
 			const actualMarkdown = markdownContent ?? result.markdown;
 			const parsedTasks = purpose === "plan" ? parsePlainTasksFromMarkdown(actualMarkdown) : [];
@@ -269,6 +269,7 @@ export default function (pi: ExtensionAPI) {
 				metadata: {
 					action: result.action,
 					modified: result.modified,
+					revision,
 				},
 				payload,
 			});
@@ -350,15 +351,17 @@ export default function (pi: ExtensionAPI) {
 					markdown: updatedMarkdown,
 					modified: updatedMarkdown !== markdown,
 				};
+				const revision = getNextReportRevision({ category: purpose, title, sourcePath: filePath, viewerPath: filePath });
 				saveModifiedMarkdown(filePath, result);
-				persistViewerResult(filePath, title, purpose, result);
+				persistViewerResult(filePath, title, purpose, result, undefined, revision);
 				return result;
 			}
 			// Fall through to browser if Commander is unavailable, unhealthy, or times out.
 		}
 
 		// Start HTTP server
-		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		const revision = getNextReportRevision({ category: purpose, title, sourcePath: filePath, viewerPath: filePath });
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), revision);
 		const { port, server, waitForResult } = await startViewerServer(markdown, title, purpose, projectContext, filePath);
 		activeServer = server;
 
@@ -408,7 +411,7 @@ export default function (pi: ExtensionAPI) {
 			// and we don't re-persist as a new report entry.
 			if (!options.readonly) {
 				saveModifiedMarkdown(filePath, result);
-				persistViewerResult(filePath, title, purpose, result);
+				persistViewerResult(filePath, title, purpose, result, undefined, revision);
 			}
 
 			return result;

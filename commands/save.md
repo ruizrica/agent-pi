@@ -38,18 +38,25 @@ If uncommitted related work exists and no message is provided, derive a message 
    - stop
    - report conflicting files
    - preserve the worktree and branch
-   - suggest `/handoff` if the user needs to pause; mention an explicit memory-cycle request when native compaction is needed
+   - suggest `/handoff` if the user only needs a continuation note
+   - suggest `/cycle-context` if the user needs Project Memory Pack updates or native memory compaction
 8. Run post-merge verification when practical.
 9. Push if a remote/upstream is configured.
-10. After successful merge/push, optionally preserve durable knowledge:
+10. Before declaring the work saved, perform a docs-memory check:
+    - update `FEATURES.md` when a user-visible or agent-visible capability shipped
+    - update `BACKLOG.md` for deferred follow-ups that are not already cmd tasks
+    - ensure `STATE.md` does not claim completed work is still in-flight
+    - append a concise `journal/YYYY-MM-DD.md` entry when the save closes a meaningful milestone
+    - if `journal/milestones/` contains a reviewed milestone note marked ready for wiki/Obsidian and access is available, ingest only that ready milestone note into the raw wiki store; do not ingest draft notes or routine `.context/project-memory/changes/` entries
+11. After successful merge/push, optionally preserve durable knowledge:
     - add one concise `agent-memory` entry if the work produced a reusable decision, root cause, architecture convention, or workflow pattern
     - run or suggest `agent-memory index` if docs/architecture memories changed significantly
     - treat memory add/index failure as non-fatal and report it
-11. Only after merge and push succeed:
+12. Only after merge and push succeed:
     - remove the clean worktree with Git’s normal worktree removal
     - delete the local feature branch only when Git confirms it is merged
     - prune stale worktree metadata
-12. Show final status on `main`.
+13. Show final status on `main`.
 
 ## Guardrails
 
@@ -57,8 +64,9 @@ If uncommitted related work exists and no message is provided, derive a message 
 - Do not delete an unmerged branch.
 - Do not clean up after merge conflicts or push failures.
 - Do not silently include unrelated changes.
-- Do not store secrets, full diffs, or noisy transient state in `agent-memory`.
-- If the user needs to stop mid-save, run `/handoff` to preserve state; explicitly ask it to cycle memory when native compaction is needed.
+- Do not store secrets, full diffs, or noisy transient state in `agent-memory`, Project Memory Pack files, or wiki raw notes.
+- Do not ingest routine `.context/project-memory/changes/` files into the wiki; only explicit milestone raw notes are eligible.
+- If the user needs to stop mid-save, run `/handoff` for a standalone continuation note or `/cycle-context` when Project Memory Pack updates/native compaction are needed.
 
 ## Success output
 

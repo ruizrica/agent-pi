@@ -81,7 +81,8 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 				const thinking = thinkingIndicator(pi.getThinkingLevel?.(), theme);
 				const sep = theme.fg("dim", " | ");
 				const modelStr = theme.fg("accent", theme.bold(model));
-				const leftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr) + sep + theme.fg("dim", cwd);
+				const baseLeftContent = ` ` + modelStr + sep + theme.fg("dim", usageStr);
+				const leftContentWithPath = baseLeftContent + sep + theme.fg("dim", cwd);
 
 				const stats = getSessionStats();
 				let agentTimeStr = "";
@@ -92,10 +93,23 @@ function setupFooter(pi: ExtensionAPI, ctx: any, onUnsub: (unsub: () => void) =>
 					agentTimeStr = theme.fg(timeColor, elapsed);
 				}
 				const rightContent = (agentTimeStr ? agentTimeStr + sep : "") + thinking + ` `;
+				const rightWidth = visibleWidth(rightContent);
+
+				// Keep the right-side status readable on narrow terminals. The cwd is
+				// useful context, but elapsed time + thinking state are more important;
+				// hide the cwd when the full footer cannot fit, and show it again as soon
+				// as resize width allows.
+				const minGap = 1;
+				const fullFooterWidth = visibleWidth(leftContentWithPath) + minGap + rightWidth;
+				let leftContent = fullFooterWidth <= width ? leftContentWithPath : baseLeftContent;
+
+				const availableLeftWidth = Math.max(0, width - rightWidth - minGap);
+				if (visibleWidth(leftContent) > availableLeftWidth) {
+					leftContent = truncateToWidth(leftContent, availableLeftWidth, "");
+				}
 
 				const leftWidth = visibleWidth(leftContent);
-				const rightWidth = visibleWidth(rightContent);
-				const gap = Math.max(1, width - leftWidth - rightWidth);
+				const gap = Math.max(minGap, width - leftWidth - rightWidth);
 				const line = leftContent + " ".repeat(gap) + rightContent;
 				return [truncateToWidth(line, width, "")];
 			},

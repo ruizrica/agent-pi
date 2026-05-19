@@ -66,12 +66,16 @@ Before calling `set_mode`, check whether the mode requires prior setup:
 
 ## Memory-First Context
 
-For substantial `plan`, `spec`, `investigate`, `debug`, `implement`, `pipeline`, `team`, and `chain` tasks, use `agent-memory` as a recon accelerator when available:
+For substantial `plan`, `spec`, `investigate`, `debug`, `implement`, `pipeline`, `team`, and `chain` tasks, use the Project Memory Pack first for human-readable continuity, then use `agent-memory` as a recon accelerator when available:
 
-1. Search prior decisions and context: `agent-memory search "<task/topic>" --json`.
-2. If code navigation has been indexed, locate likely files with `agent-memory code-nav "<feature/module/symptom>" --json` or inspect structure with `agent-memory code-tree --json`.
-3. Continue gracefully if `agent-memory` is missing or the code index has not been built; do not block mode activation.
-4. Do not run this memory-first step for trivial commands or `normal` mode.
+1. Read project `CLAUDE.md` for standing rules and the update-docs contract.
+2. Read `STATE.md` if present for current in-flight status.
+3. Read the latest `journal/YYYY-MM-DD.md` entry if present for recent decisions, attempts, and verification.
+4. Inspect active plan/spec/task artifacts such as `.context/todo.md` or cmd context.
+5. Search prior decisions and context: `agent-memory search "<task/topic>" --json`.
+6. If code navigation has been indexed, locate likely files with `agent-memory code-nav "<feature/module/symptom>" --json` or inspect structure with `agent-memory code-tree --json`.
+7. Continue gracefully if memory-pack files, `agent-memory`, or the code index are missing; do not block mode activation.
+8. Do not run these memory-first steps for trivial commands or `normal` mode.
 
 ## After Activation
 

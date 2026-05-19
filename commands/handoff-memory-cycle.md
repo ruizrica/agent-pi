@@ -1,32 +1,27 @@
 ---
 name: handoff-memory-cycle
-description: "Reference helper for the former local compact workflow; use /handoff for memory-aware handoffs."
+description: "Compatibility reference for the former memory-aware handoff flow; use /cycle-context."
 argument-hint: "[focus for continuation]"
-allowed-tools: '["bash", "read", "write", "cycle_memory"]'
+allowed-tools: '["read"]'
 context: inline
 ---
 
-# /handoff-memory-cycle — Former Compact Workflow Reference
+# /handoff-memory-cycle — Compatibility Reference
 
-The repository no longer registers a local `/compact` command because that name conflicts with Pi's native/system compact behavior.
+This name is kept only for discovery by users who remember the former memory-aware handoff flow.
 
-Use `/handoff` instead:
+Use the clearer commands instead:
 
-- Run `/handoff` for a standalone handoff document.
-- Run `/handoff <focus>` with an explicit request such as "handoff and compact" or "cycle memory after handoff" when you want the handoff written first and then Pi's native `cycle_memory` path triggered.
+- `/handoff <focus>` — standalone pointer-based handoff only.
+- `/cycle-context <focus>` — Project Memory Pack checkpoint/update-docs flow, pointer-based handoff, milestone/wiki readiness checks, and optional native `cycle_memory` when explicitly requested.
 
-This file keeps the former memory-aware workflow discoverable under a non-conflicting command name, but `/handoff` is the canonical entry point.
+## Why this changed
 
-## Memory-aware handoff model
-
-1. Create or update a concise handoff in `.context/handoffs/` using the `/handoff` structure.
-2. Optionally extract one durable memory only for lasting decisions, verified root causes, architecture boundaries, reusable workflows, or project-specific gotchas.
-3. Trigger Pi's native `cycle_memory` compaction path only when explicitly requested and available.
-4. Report the handoff path, memory-compaction status, and restore hint.
+There should not be two competing handoff flows. `/handoff` is for concise continuation pointers. `/cycle-context` is for preserving context across the broader memory system.
 
 ## Guardrails
 
-- Do not duplicate plans, specs, diffs, logs, or transcripts; reference artifacts by path or URL.
-- Do not include secrets or credentials.
-- Do not claim memory was compacted unless the native compaction path was actually triggered.
+- Do not implement a separate compact or handoff workflow here.
+- Do not update `STATE.md`, `journal/`, `BACKLOG.md`, or `FEATURES.md` from this compatibility command; use `/cycle-context`.
+- Do not claim memory was compacted unless the native compaction path was actually triggered by `/cycle-context`.
 - Do not reintroduce a local command or skill named `compact`.

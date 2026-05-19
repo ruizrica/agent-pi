@@ -298,6 +298,44 @@ export function loadReportIndex(): PersistedReportIndex {
 	return { version: 1, updatedAt: nowIso(), entries };
 }
 
+export function calculateNextReportRevision(entries: PersistedReportEntry[], input: {
+	category: PersistedReportCategory;
+	title: string;
+	sourcePath?: string;
+	viewerPath?: string;
+}): number {
+	const sourcePath = input.sourcePath ? resolve(input.sourcePath) : undefined;
+	const viewerPath = input.viewerPath ? resolve(input.viewerPath) : undefined;
+	const logicalPath = viewerPath || sourcePath || "";
+	const matching = entries
+		.filter((entry) =>
+			entry.category === input.category &&
+			entry.title === input.title &&
+			(entry.viewerPath || entry.sourcePath || "") === logicalPath,
+		)
+		.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+	const latest = matching[0];
+	if (!latest) return 1;
+
+	const rawRevision = Number(latest.metadata?.revision);
+	const revision = Number.isFinite(rawRevision) && rawRevision > 0 ? Math.floor(rawRevision) : 1;
+	return latest.metadata?.action === "changes_requested" ? revision + 1 : revision;
+}
+
+export function getNextReportRevision(input: {
+	category: PersistedReportCategory;
+	title: string;
+	sourcePath?: string;
+	viewerPath?: string;
+}): number {
+	try {
+		return calculateNextReportRevision(loadReportIndex().entries, input);
+	} catch {
+		return 1;
+	}
+}
+
 export function saveReportIndex(index: PersistedReportIndex): void {
 	const database = getDb();
 	if (!database) {

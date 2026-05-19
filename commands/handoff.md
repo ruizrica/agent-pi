@@ -1,8 +1,8 @@
 ---
 name: handoff
-description: "Create/update a concise Pi handoff document; optionally trigger native memory-cycle compaction when explicitly requested."
+description: "Create or update a concise standalone Pi handoff document."
 argument-hint: "[focus for the next session]"
-allowed-tools: '["bash", "read", "write", "show_report", "cycle_memory"]'
+allowed-tools: '["bash", "read", "write", "show_report"]'
 context: inline
 ---
 
@@ -10,7 +10,9 @@ context: inline
 
 Write a short, pointer-based handoff so a fresh agent, another mode, or a future session can continue the work without re-reading the full transcript.
 
-By default, `/handoff` is **standalone**: it writes or updates a handoff document, prints the path plus a brief preview, and stops. Only trigger Pi's native memory-cycle compaction when the user explicitly asks for memory-aware compaction, for example: "handoff and compact", "cycle memory after handoff", or "prepare for context compaction".
+By default and by design, `/handoff` is **standalone**: it writes or updates a handoff document, prints the path plus a brief preview, and stops. It does not update the Project Memory Pack and does not trigger Pi's native memory-cycle compaction.
+
+Use `/cycle-context` when the user asks for a checkpoint, update-docs pass, memory-pack preservation, or native context/memory cycling.
 
 ## Input
 
@@ -50,7 +52,7 @@ Keep the handoff high-signal. The next agent should be able to resume in under 6
 ## Active artifacts
 - Plan: `.context/todo.md` (or link to spec / brainstorm, or `none`)
 - Active tasks: <IDs and titles if known>
-- Active fp/bd/cmd issues: <IDs if any>
+- Active fp/cmd issues: <IDs if any>
 - Branch/worktree: <branch and path if available>
 - Open branches / PRs: <names + URLs>
 - Modified but uncommitted files: <short status>
@@ -87,51 +89,31 @@ The handoff should be **pointers + delta**, not a transcript snapshot.
 Arguments: `$ARGUMENTS`
 
 1. Resolve the focus from `$ARGUMENTS` or recent work.
-2. Determine whether this is standalone or memory-aware:
-   - **Standalone default:** write/update the handoff only.
-   - **Memory-aware optional path:** if the user explicitly requested compaction/memory cycling, write/update the handoff first, then trigger native memory cycling if available.
-3. Gather only high-signal inputs:
+2. Gather only high-signal inputs:
    - `git status --short` and `git log --oneline -5` when in a git repo.
    - Active task state if available (`cmd task list --status working --json` or the current task UI); skip silently if unavailable.
    - The current plan path if `.context/todo.md` exists.
    - Relevant branch/worktree and PR/issue links if already known.
-4. Compose the handoff using the structure above.
-5. Write to `$HANDOFF_PATH`, or append an `## Update — <timestamp>` section to the latest recent handoff when appropriate.
-6. Optionally extract one durable memory if the session produced a lasting decision, reusable workflow, verified root cause, architecture boundary, or project-specific gotcha.
-   - Add only a concise durable fact when a memory tool is available.
-   - Do not add the full handoff, transcript, diffs, noisy logs, secrets, or unverified hypotheses.
-   - If memory add fails or no memory tool is available, continue; the handoff remains the source of truth.
-7. If memory-aware compaction was explicitly requested:
-   - If `cycle_memory` is available, call it with instructions that mention the handoff path, focus, and any durable memory already added.
-   - If `cycle_memory` is unavailable, tell the user to use Pi's native compact/cycle action next.
-   - Do not claim memory was compacted unless the native compaction path was actually triggered.
-8. Print the absolute handoff path, a 2-3 line preview, and memory-compaction status.
+3. Compose the handoff using the structure above.
+4. Write to `$HANDOFF_PATH`, or append an `## Update — <timestamp>` section to the latest recent handoff when appropriate.
+5. Print the absolute handoff path and a 2-3 line preview.
 
 ## Output
 
-Standalone default:
-
 ```text
 Handoff written: <path>
-Memory compaction: not requested
+Memory pack update: not requested; use /cycle-context for checkpoint/update-docs
+Memory compaction: not requested; use /cycle-context with explicit compaction wording
 Restore hint: read the handoff, then continue from Suggested next steps.
-```
-
-Memory-aware optional path:
-
-```text
-Handoff written: <path>
-Memory compaction: <triggered | manual native compact needed>
-Restore hint: read the handoff, then use /restore or Pi's native memory restore path if starting fresh.
 ```
 
 ## Conventions and guardrails
 
 - Keep the handoff short and pointer-based; do not paste large diffs.
-- Do not start new implementation work after a handoff/compact request.
-- Do not replace Pi's native memory-cycle compaction with a manual-only summary.
-- Native memory-cycle extension owns daily logs and `.context/session-state.json` during compaction.
-- Use durable memory only for searchable durable facts and code-navigation hints.
+- Do not start new implementation work after a handoff request.
+- Do not update `STATE.md`, `journal/`, `BACKLOG.md`, or `FEATURES.md` from `/handoff`; use `/cycle-context` for that workflow.
+- Do not trigger native `cycle_memory` from `/handoff`; use `/cycle-context` with explicit compaction wording.
+- Use durable memory only for searchable durable facts and code-navigation hints at save/checkpoint boundaries, not for full handoffs.
 - No emojis.
 - No "what I would do if I had more time"; list concrete next steps only.
 - If there is an active parent task in `cmd`, leave a final progress comment when possible:

@@ -551,8 +551,8 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
           <div class="board-col-body" id="bw-cards"></div>
         </div>
         <div class="board-col col-done">
-          <div class="board-col-header"><span class="col-dot"></span>Done<span class="col-num" id="bd-count">0</span></div>
-          <div class="board-col-body" id="bd-cards"></div>
+          <div class="board-col-header"><span class="col-dot"></span>Done<span class="col-num" id="done-count">0</span></div>
+          <div class="board-col-body" id="done-cards"></div>
         </div>
       </div>
       <div class="board-add-row">
@@ -1209,10 +1209,10 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
   const boardTaskCount = document.getElementById('board-task-count');
   const bpCards = document.getElementById('bp-cards');
   const bwCards = document.getElementById('bw-cards');
-  const bdCards = document.getElementById('bd-cards');
+  const doneCards = document.getElementById('done-cards');
   const bpCount = document.getElementById('bp-count');
   const bwCount = document.getElementById('bw-count');
-  const bdCount = document.getElementById('bd-count');
+  const doneCount = document.getElementById('done-count');
 
   window.toggleBoard = function() {
     boardOpen = !boardOpen;
@@ -1245,11 +1245,11 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
     boardTaskCount.textContent = tasks.length + ' task' + (tasks.length !== 1 ? 's' : '');
     bpCount.textContent = pending.length;
     bwCount.textContent = working.length;
-    bdCount.textContent = done.length;
+    doneCount.textContent = done.length;
 
     renderBoardCol(bpCards, pending);
     renderBoardCol(bwCards, working);
-    renderBoardCol(bdCards, done);
+    renderBoardCol(doneCards, done);
   }
 
   function renderBoardCol(container, tasks) {

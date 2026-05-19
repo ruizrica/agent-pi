@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# ABOUTME: Git post-commit wrapper for Project Memory Pack change capture.
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+exec "$ROOT/scripts/project-memory-hook.sh" post-commit

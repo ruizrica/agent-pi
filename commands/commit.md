@@ -67,7 +67,12 @@ If empty, derive a clear message from the changed files and current task, then c
 6. Stage only reviewed related files.
 7. Create one focused commit with the confirmed message.
 8. Show post-commit status and recent commit hash.
-9. If the commit establishes a durable decision, project convention, verified root cause, or reusable workflow, optionally add one concise memory with `agent-memory add "..." --source memory --tags "..."`.
+9. If the commit changes durable project state, check whether `/cycle-context` should be run or whether a small Project Memory Pack update is needed:
+   - `FEATURES.md` for shipped user-visible or agent-visible capabilities
+   - `journal/YYYY-MM-DD.md` for decisions, failed attempts worth preserving, verification, or lessons
+   - `BACKLOG.md` for deferred follow-ups not already represented as cmd tasks
+   - `journal/milestones/` only for explicit large milestones, not routine commits; generated notes start as draft and must be reviewed before Obsidian/wiki ingestion
+10. If the commit establishes a durable decision, project convention, verified root cause, or reusable workflow, optionally add one concise memory with `agent-memory add "..." --source memory --tags "..."`.
    - Skip memory writes for routine commits.
    - Do not block the commit if `agent-memory` is unavailable.
 

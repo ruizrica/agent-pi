@@ -13,7 +13,7 @@ import { discoverSpecDocuments } from "./lib/spec-documents.ts";
 import { ensureKiroSpecScaffold, type SpecScaffoldResult } from "./lib/spec-scaffold.ts";
 import { generateSpecViewerHTML, type SpecDocument } from "./lib/viewers/spec-viewer-html.ts";
 import { createSpecStandaloneExport, loadVisualAsExportAsset, saveStandaloneExport, type SpecExportDocument } from "./lib/viewer-standalone-export.ts";
-import { upsertPersistedReport } from "./lib/report-index.ts";
+import { getNextReportRevision, upsertPersistedReport } from "./lib/report-index.ts";
 import { buildSpecSnapshot, loadValidatedSnapshot, type SpecSnapshot } from "./lib/viewer-snapshots.ts";
 import { registerActiveViewer, clearActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
 import { createViewerServer, openBrowser, type ViewerServerHandle } from "./lib/viewer-server.ts";
@@ -417,7 +417,8 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Start browser-based server
-		const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);
+		const revision = getNextReportRevision({ category: "spec", title, sourcePath: folderPath, viewerPath: folderPath });
+		const projectContext = getProjectContext(ctx.cwd || process.cwd(), revision);
 		const handle = await startSpecViewerServer(
 			folderPath,
 			documents,
@@ -541,6 +542,7 @@ export default function (pi: ExtensionAPI) {
 					metadata: {
 						action: result.action,
 						modified: result.modified,
+						revision,
 						commentCount: result.comments.length,
 						editedDocCount,
 						documentCount: documents.length,

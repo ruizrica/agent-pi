@@ -49,6 +49,41 @@ function getCommanderClient(): any | undefined {
 	return getCommanderCliClient();
 }
 
+// Post-dispatch reconciliation: route a finished subagent's terminal state to
+// Commander (complete/fail) and guarantee a recoverable lifecycle intent is
+// persisted on any failure path. postCompleteTask/postFailTask already record
+// and clear intents internally; this wrapper adds defense-in-depth for the
+// fire-and-forget call sites and the no-client fallback.
+export async function reconcileSubagentToCommander(
+	state: { status: string },
+	cmdTaskId: number | undefined,
+	agentLabel: string,
+	summary: string,
+	client: any | null,
+): Promise<void> {
+	if (cmdTaskId === undefined) return;
+
+	const action: "complete" | "fail" = state.status === "done" ? "complete" : "fail";
+	const message = state.status === "done" ? summary : (summary || "Agent exited with error");
+
+	if (!client) {
+		recordLifecycleIntent({ taskId: cmdTaskId, action, owner: agentLabel, message });
+		return;
+	}
+
+	try {
+		const ok = state.status === "done"
+			? await postCompleteTask(client, cmdTaskId, agentLabel, summary)
+			: await postFailTask(client, cmdTaskId, message);
+		if (!ok) {
+			recordLifecycleIntent({ taskId: cmdTaskId, action, owner: agentLabel, message });
+		}
+	} catch (err: any) {
+		console.error(`[subagent] reconcileSubagentToCommander failed for task ${cmdTaskId}:`, err?.message || err);
+		recordLifecycleIntent({ taskId: cmdTaskId, action, owner: agentLabel, message });
+	}
+}
+
 // ── Graceful kill helper ─────────────────────────────────────────────────────
 
 /** Send SIGTERM and wait up to `timeoutMs` for exit; escalate to SIGKILL. */
@@ -87,6 +122,14 @@ const ROLE_TIMEOUT_MS: Record<string, number> = {
 };
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
+/**
+ * Backward-compatible safety window for explicit timeout values that look like
+ * human-entered seconds rather than milliseconds. Subagents are long-running
+ * background workers, so values like 600 or 900 should mean minutes-scale
+ * limits, not sub-second watchdog kills.
+ */
+const SECONDS_STYLE_TIMEOUT_MAX = 60 * 60; // 1 hour, expressed in seconds
+
 /** Grace period after SIGTERM before escalating to SIGKILL. */
 const TIMEOUT_KILL_GRACE_MS = 30_000;
 
@@ -97,8 +140,16 @@ const SUBAGENT_DISMISS_MS = 2_000;
 const SUBAGENT_SWEEP_MS = 750;
 
 /** Resolve the timeout for a subagent based on role name or explicit override. */
-function resolveTimeout(name: string, explicitTimeout?: number): number {
-	if (explicitTimeout !== undefined && explicitTimeout > 0) return explicitTimeout;
+export function resolveTimeout(name: string, explicitTimeout?: number): number {
+	if (explicitTimeout === 0) return 0;
+	if (explicitTimeout !== undefined && explicitTimeout > 0) {
+		// Tool callers frequently provide human-scale values such as 600 or 900
+		// intending seconds. Treat those as seconds so the watchdog does not kill
+		// useful subagents after 0.6–0.9 seconds. Larger values remain raw ms for
+		// compatibility with the documented API.
+		if (explicitTimeout <= SECONDS_STYLE_TIMEOUT_MAX) return explicitTimeout * 1000;
+		return explicitTimeout;
+	}
 	return ROLE_TIMEOUT_MS[name.toUpperCase()] || DEFAULT_TIMEOUT_MS;
 }
 
@@ -631,33 +682,13 @@ export default function (pi: ExtensionAPI) {
 				const result = normalizedOutput.displayText;
 				const summary = normalizedOutput.summary || agentLabel;
 
-				// Post-dispatch: reconcile Commander task to terminal state
-				// Re-evaluate Commander availability NOW (not at spawn time) to handle
-				// transient connectivity issues during agent lifetime
-				if (cmdTaskId !== undefined && isCommanderAvailable()) {
-					const client = getCommanderClient();
-					if (client) {
-						if (state.status === "done") {
-							postCompleteTask(client, cmdTaskId, agentLabel, summary).catch((err) => {
-								console.error(`[subagent] postCompleteTask failed for task ${cmdTaskId}:`, err?.message || err);
-							});
-						} else {
-							const errMsg = summary || "Agent exited with error";
-							postFailTask(client, cmdTaskId, errMsg).catch((err) => {
-								console.error(`[subagent] postFailTask failed for task ${cmdTaskId}:`, err?.message || err);
-							});
-						}
-					}
-				} else if (cmdTaskId !== undefined) {
-					const action = state.status === "done" ? "complete" : "fail";
-					recordLifecycleIntent({
-						taskId: cmdTaskId,
-						action,
-						owner: agentLabel,
-						message: state.status === "done" ? summary : (summary || "Agent exited with error"),
-					});
-					console.error(`[subagent] Commander unavailable at finish for task ${cmdTaskId} (SA-${state.id}-${state.name}) — recorded recoverable lifecycle intent`);
-				}
+				// Post-dispatch: reconcile Commander task to terminal state.
+				// Re-evaluate Commander availability NOW (not at spawn time) so transient
+				// outages during agent lifetime still record a recoverable intent.
+				const reconcileClient = isCommanderAvailable() ? getCommanderClient() ?? null : null;
+				reconcileSubagentToCommander(state, cmdTaskId, agentLabel, summary, reconcileClient).catch((err) => {
+					console.error(`[subagent] reconcile dispatch error for task ${cmdTaskId}:`, err?.message || err);
+				});
 
 				// Standby spawns (warmup) suppress notification and follow-up message.
 				if (!state.standby) {
@@ -790,7 +821,7 @@ export default function (pi: ExtensionAPI) {
 			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~2s after done (default: true)" })),
-			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
+			timeout: Type.Optional(Type.Number({ description: "Max runtime override. Values 1-3600 are interpreted as seconds for safety; larger values are milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;
@@ -838,7 +869,7 @@ export default function (pi: ExtensionAPI) {
 			groupName: Type.Optional(Type.String({ description: "Commander task group name (only used when createCommanderTasks=true)" })),
 			createCommanderTasks: Type.Optional(Type.Boolean({ description: "Explicitly pre-create Commander tasks for this batch. Default false; use only for durable executable board work." })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widgets ~2s after done (default: true)" })),
-			timeout: Type.Optional(Type.Number({ description: "Max runtime in ms for all agents in this batch. Defaults by role." })),
+			timeout: Type.Optional(Type.Number({ description: "Max runtime override for all agents in this batch. Values 1-3600 are interpreted as seconds for safety; larger values are milliseconds. Defaults by role. Set 0 to disable." })),
 			force: Type.Optional(Type.Boolean({ description: "Force spawn even if agents are already running (default: false)" })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {

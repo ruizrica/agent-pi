@@ -55,4 +55,46 @@ describe("report-index", () => {
 			expect(text).toContain("tag1");
 		});
 	});
+
+	describe("calculateNextReportRevision (pure function)", () => {
+		it("increments after a matching plan report was sent back for changes", async () => {
+			const { calculateNextReportRevision } = await import("../lib/report-index.js");
+			const sourcePath = resolve(".context/todo.md");
+
+			expect(calculateNextReportRevision([
+				{
+					id: "plan-rev-1",
+					category: "plan",
+					title: "Implementation Plan",
+					summary: "summary",
+					searchText: "",
+					createdAt: "2026-05-18T00:00:00.000Z",
+					updatedAt: "2026-05-18T00:00:01.000Z",
+					sourcePath,
+					viewerPath: sourcePath,
+					metadata: { action: "changes_requested", revision: 1 },
+				},
+			], { category: "plan", title: "Implementation Plan", sourcePath })).toBe(2);
+		});
+
+		it("keeps the latest approved revision stable instead of incrementing forever", async () => {
+			const { calculateNextReportRevision } = await import("../lib/report-index.js");
+			const sourcePath = resolve(".context/todo.md");
+
+			expect(calculateNextReportRevision([
+				{
+					id: "plan-rev-2",
+					category: "plan",
+					title: "Implementation Plan",
+					summary: "summary",
+					searchText: "",
+					createdAt: "2026-05-18T00:00:00.000Z",
+					updatedAt: "2026-05-18T00:00:02.000Z",
+					sourcePath,
+					viewerPath: sourcePath,
+					metadata: { action: "approved", revision: 2 },
+				},
+			], { category: "plan", title: "Implementation Plan", sourcePath })).toBe(2);
+		});
+	});
 });

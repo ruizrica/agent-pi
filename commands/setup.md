@@ -46,9 +46,31 @@ After creation, inspect the worktree for common project setup files:
 
 Report likely install/test commands, but ask before running expensive dependency installation.
 
+## Project Memory Pack bootstrap
+
+Before `agent-memory` search or code navigation, inspect the worktree for the repo-local Project Memory Pack:
+
+- `CLAUDE.md` — standing rules, ownership matrix, and project update-docs contract
+- `STATE.md` — current in-flight state
+- `journal/` — dated session logs, especially the latest `journal/YYYY-MM-DD.md`
+- `BACKLOG.md` — deferred work not yet materialized as cmd tasks
+- `FEATURES.md` — shipped feature inventory
+
+If any files are missing, report them and ask whether to scaffold them from the approved project templates. Do not silently create memory-pack files in every repository. If the user approves scaffolding, create only the missing template files and keep them concise.
+
+Print this session-start orientation checklist:
+
+1. Read project `CLAUDE.md`, especially the memory ownership matrix.
+2. Read `STATE.md` if present.
+3. Read the latest `journal/YYYY-MM-DD.md` entry if present.
+4. Inspect active plan/spec/task artifacts such as `.context/todo.md` or cmd context.
+5. Run `agent-memory search` or code navigation when prior decisions or code structure matter.
+
+Use `/handoff` for standalone continuation notes. Use `/cycle-context` for checkpoint/update-docs behavior, Project Memory Pack updates, and optional native compaction.
+
 ## Agent-memory bootstrap
 
-Include `agent-memory` as part of setup when it is available:
+Include `agent-memory` as part of setup when it is available, after Project Memory Pack orientation:
 
 1. Check whether `agent-memory` is on PATH.
    - If missing, report that memory search/code navigation is unavailable and point the user to the trusted local/bundled installer for their Pi setup.
@@ -64,6 +86,18 @@ Include `agent-memory` as part of setup when it is available:
    - `agent-memory code-nav "<feature area>" --json`
 
 Use `agent-memory` for durable decisions and code navigation; Pi native memory-cycle remains responsible for compaction/session-state logs.
+
+## Project-memory git hooks
+
+Mention project-memory git hooks when present:
+
+- `scripts/install-project-memory-hooks.sh` detects the active `core.hooksPath` and installs/chains the post-commit change-summary hook there.
+- `.githooks/project-memory-post-commit` is a reusable wrapper, but the active hooks path may be something else such as `.beads/hooks`.
+- Routine commits write local raw summaries under `.context/project-memory/changes/`.
+- Only milestone commits or markers create `journal/milestones/` notes eligible for wiki/Obsidian ingestion.
+- Verify with `scripts/project-memory-hook.sh dry-run HEAD`; dry-run should preview without writing.
+
+Use the Project Memory Pack for human-readable continuity. Use `agent-memory` for indexed durable facts and code navigation. Use cmd for active executable task state. Use Obsidian only for reviewed milestone/postmortem/wiki-worthy knowledge.
 
 ## Guardrails
 

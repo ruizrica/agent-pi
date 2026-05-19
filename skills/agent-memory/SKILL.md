@@ -5,7 +5,7 @@ description: Search and manage local agent memories with hybrid vector + BM25 re
 
 # Agent Memory
 
-`agent-memory` is a local CLI for durable agent memory and code navigation. It complements Pi native memory-cycle: Pi compaction keeps daily/session continuity, while `agent-memory` makes decisions, patterns, root causes, and code structure searchable.
+`agent-memory` is a local CLI for durable agent memory and code navigation. It complements the Project Memory Pack and Pi native memory-cycle: `/cycle-context` keeps workspace continuity current, native compaction preserves session/runtime state, and `agent-memory` makes decisions, patterns, root causes, and code structure searchable.
 
 ## Quick start
 
@@ -28,13 +28,19 @@ agent-memory code-refs <id> --json
 agent-memory code-summarize
 ```
 
+## Project Memory Pack boundary
+
+The Project Memory Pack (`CLAUDE.md`, `STATE.md`, `journal/`, `BACKLOG.md`, `FEATURES.md`) is the human-readable continuity layer. `agent-memory` is the indexed retrieval layer for concise durable facts and code navigation. Keep the two layers complementary: markdown files preserve narrative context; `agent-memory` preserves short searchable decisions, root causes, conventions, and code-navigation hints.
+
+`journal/milestones/` contains raw milestone notes eligible for wiki/Obsidian raw ingestion only after review and readiness marking. Routine `.context/project-memory/changes/` entries are local-only change summaries and should not be promoted into the wiki.
+
 ## Workflow integration
 
-- **`/setup`** — check `agent-memory status`, run `agent-memory index` when needed, and offer `code-index <repo-or-worktree>` for tree navigation.
+- **`/setup`** — read the Project Memory Pack first, then check `agent-memory status`, run `agent-memory index` when needed, and offer `code-index <repo-or-worktree>` for tree navigation.
 - **Recon / planning** — search memory before rediscovering past decisions; use `code-nav` before broad file reads when the index exists.
 - **Diagnose / investigate** — search prior incidents and root causes; use `code-nav` to find likely seams; add one verified root-cause memory after the fix.
 - **Complex loops** — search at recon start; add durable decisions after reflection milestones.
-- **Handoff / compact / save** — preserve Pi native memory-cycle, then add only concise durable memories when there is a reusable lesson.
+- **`/cycle-context` / save** — preserve Project Memory Pack and native memory-cycle state when requested, then add only concise durable memories when there is a reusable lesson. `/handoff` alone stays a standalone continuation note.
 
 ## Memory write rubric
 
@@ -50,7 +56,7 @@ Do not store:
 
 - secrets, credentials, tokens, or private env values
 - noisy logs, full diffs, or full handoffs/transcripts
-- transient task state already captured by `/handoff`, `.context/session-state.json`, or `cmd`
+- transient task state already captured by `/handoff`, `/cycle-context`, `.context/session-state.json`, or `cmd`
 - unverified hypotheses or speculation
 
 ## Pi integration

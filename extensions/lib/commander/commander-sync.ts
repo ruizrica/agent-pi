@@ -166,6 +166,31 @@ export function pendingCreateLocalIds(state: SyncState): number[] {
 }
 
 /**
+ * Apply the result of a single `commander_task create` call. When the response
+ * carries a parseable task_id, register the local→cmd mapping. When it does
+ * not (malformed JSON, missing field, unexpected shape), queue the local task
+ * in pendingCreates so reconciliation can retry the create — the local task
+ * is never silently orphaned.
+ *
+ * If the local task is already mapped, returns state unchanged.
+ */
+export function handleTaskCreateResponse(
+	state: SyncState,
+	localId: number,
+	text: string,
+	result: any,
+	desiredStatus: LocalStatus = "idle",
+): SyncState {
+	if (lookupMapping(state, localId) !== undefined) return state;
+	const cid = parseCommanderTaskId(result);
+	if (cid !== undefined) {
+		const next = addMapping(state, localId, cid);
+		return updateMappingStatus(next, localId, desiredStatus);
+	}
+	return addPendingCreate(state, { id: localId, text, status: desiredStatus }, "single");
+}
+
+/**
  * Classify the Commander-sync state for a single local task ID, used by the
  * tasks tool toggle message. Distinguishes a missing mapping (unexpected drop —
  * the agent or user should know something went wrong) from a pending create

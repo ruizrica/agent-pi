@@ -37,6 +37,8 @@ Create `.context/` if needed.
   "focus": "<original request or continuation focus>",
   "current_task": "<what is actively being worked on>",
   "handoff_path": "<latest handoff path if one exists, otherwise null>",
+  "state_path": "STATE.md if present, otherwise null",
+  "latest_journal_path": "latest journal/YYYY-MM-DD.md if present, otherwise null",
   "key_files": ["<max 8 important paths>"],
   "branch": "<current branch if in a git repo>",
   "worktree": "<repo/worktree root if in a git repo>",
@@ -57,6 +59,8 @@ Create `.context/` if needed.
    - current branch if available
    - short modified-file summary if available
    - latest handoff path under `.context/handoffs/` if one exists
+   - `STATE.md` if present
+   - latest `journal/YYYY-MM-DD.md` if present
    - key files recently edited/read from the conversation
    - whether `agent-memory` appears available
    - last useful `agent-memory search`/`code-nav` query if known
@@ -69,13 +73,13 @@ Create `.context/` if needed.
 ```text
 Minimal restore state written: .context/session-state.json
 For a fuller human handoff, run /handoff.
-For memory-aware handoff plus native compaction, run /handoff with an explicit request to cycle memory after the handoff.
-To resume in a fresh session, read .context/session-state.json and continue from continuation_prompt.
+For Project Memory Pack checkpointing or native compaction, run /cycle-context with an explicit request to cycle memory.
+To resume in a fresh session, read .context/session-state.json, STATE.md, and the latest journal entry, then continue from continuation_prompt.
 ```
 
 ## Guardrails
 
 - Keep `continuation_prompt` specific enough for a fresh Pi agent to resume without rereading the transcript.
-- Do not write daily logs here; `/handoff` with an explicit memory-cycle request and native compaction handle memory persistence.
+- Do not write daily logs here; `/cycle-context` owns `STATE.md` and `journal/YYYY-MM-DD.md`, while explicit memory-cycle requests and native compaction handle memory persistence.
 - Do not add broad `agent-memory` entries here; this command only records restore hints.
 - Do not include secrets or credentials.

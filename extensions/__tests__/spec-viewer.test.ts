@@ -23,7 +23,8 @@ describe("spec-viewer Commander approval flow", () => {
 
 	it("passes project context into the browser spec viewer header", () => {
 		expect(source).toContain('import { getProjectContext } from "./lib/project-context.ts"');
-		expect(source).toContain("const projectContext = getProjectContext(ctx.cwd || process.cwd(), 1);");
+		expect(source).toContain('const revision = getNextReportRevision({ category: "spec", title, sourcePath: folderPath, viewerPath: folderPath });');
+		expect(source).toContain("const projectContext = getProjectContext(ctx.cwd || process.cwd(), revision);");
 		expect(source).toContain("projectContext,");
 	});
 

@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe("pacifico advisor context packet", () => {
-	it("states Pacifico has no filesystem access and embeds requested files", () => {
+	it("states Pacifico has no filesystem access and embeds only requested files", () => {
 		const prompt = buildPacificoAdvisorPrompt({
 			question: "What validation boundaries should we use?",
 			task_context: "CLI allows free-form task creation.",
@@ -34,8 +34,14 @@ describe("pacifico advisor context packet", () => {
 
 		expect(prompt).toContain("Pacifico has no access to the local filesystem");
 		expect(prompt).toContain("Reason only from the context included in this prompt");
+		expect(prompt).toContain("## Context Packaging Guidance");
+		expect(prompt).toContain("Include concise summaries, known concerns, constraints, and targeted file excerpts explicitly");
 		expect(prompt).toContain("## File: task.add.ts");
 		expect(prompt).toContain("export function addTask");
+		expect(prompt).not.toContain("## Project Context: CLAUDE.md");
+		expect(prompt).not.toContain("## Project Context: .context/todo.md");
+		expect(prompt).not.toContain("Project rules here");
+		expect(prompt).not.toContain("# Plan: Test Plan");
 		expect(prompt).toContain("Summary:");
 		expect(prompt).toContain("Recommended decision:");
 		expect(prompt).toContain("Risks:");

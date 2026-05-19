@@ -764,7 +764,7 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
     <div class="status-dot" id="statusDot"></div>
     <span id="statusText">Connecting…</span>
   </div>
-  <span class="refresh-timer" id="refreshTimer">3</span>
+  <span class="refresh-timer" id="refreshTimer">5</span>
   <button class="btn-refresh" onclick="fetchNow()" title="Refresh (R)">↻ Refresh</button>
 </div>
 
@@ -831,6 +831,30 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
         <div class="column-empty">No failed tasks</div>
       </div>
     </div>
+
+    <!-- Needs Review Column -->
+    <div class="column col-needs-review">
+      <div class="column-header col-needs-review">
+        <div class="col-icon"></div>
+        <span class="col-title">Needs Review</span>
+        <span class="col-count" id="countNeedsReview">0</span>
+      </div>
+      <div class="column-body" id="colNeedsReview">
+        <div class="column-empty">No tasks awaiting review</div>
+      </div>
+    </div>
+
+    <!-- Cancelled Column -->
+    <div class="column col-cancelled">
+      <div class="column-header col-cancelled">
+        <div class="col-icon"></div>
+        <span class="col-title">Cancelled</span>
+        <span class="col-count" id="countCancelled">0</span>
+      </div>
+      <div class="column-body" id="colCancelled">
+        <div class="column-empty">No cancelled tasks</div>
+      </div>
+    </div>
   </div>
 
   <!-- Sidebar -->
@@ -872,7 +896,7 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
   'use strict';
 
   const API = 'http://127.0.0.1:${port}';
-  const POLL_INTERVAL = 3; // seconds
+  const POLL_INTERVAL = 5; // seconds
   let countdown = POLL_INTERVAL;
   let pollTimer = null;
   let selectedAgent = null;
@@ -896,10 +920,12 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
   const groupSection = document.getElementById('groupSection');
 
   const columns = {
-    pending:   { body: document.getElementById('colPending'),   count: document.getElementById('countPending') },
-    working:   { body: document.getElementById('colWorking'),   count: document.getElementById('countWorking') },
-    completed: { body: document.getElementById('colCompleted'), count: document.getElementById('countCompleted') },
-    failed:    { body: document.getElementById('colFailed'),    count: document.getElementById('countFailed') },
+    pending:       { body: document.getElementById('colPending'),      count: document.getElementById('countPending') },
+    working:       { body: document.getElementById('colWorking'),      count: document.getElementById('countWorking') },
+    completed:     { body: document.getElementById('colCompleted'),    count: document.getElementById('countCompleted') },
+    failed:        { body: document.getElementById('colFailed'),       count: document.getElementById('countFailed') },
+    needs_review:  { body: document.getElementById('colNeedsReview'),  count: document.getElementById('countNeedsReview') },
+    cancelled:     { body: document.getElementById('colCancelled'),    count: document.getElementById('countCancelled') },
   };
 
   // ── Data Fetching ────────────────────
@@ -1001,10 +1027,11 @@ export function generateBoardViewerHTML(opts: BoardViewerOptions): string {
   function renderTasks(tasks, readyTaskIds) {
     const readySet = new Set(readyTaskIds.map(t => typeof t === 'object' ? t.task_id : t));
 
-    // Bucket tasks by status
-    const buckets = { pending: [], working: [], completed: [], failed: [] };
+    // Bucket tasks by status — every status gets its own lane so cancelled and
+    // needs_review do not silently fall back into pending.
+    const buckets = { pending: [], working: [], completed: [], failed: [], needs_review: [], cancelled: [] };
     for (const task of tasks) {
-      const status = (task.status || 'pending').toLowerCase();
+      const status = (task.status || 'pending').toLowerCase().replace(/-/g, '_');
       // Map 'backlog' to pending
       const bucket = status === 'backlog' ? 'pending' : (buckets[status] ? status : 'pending');
 

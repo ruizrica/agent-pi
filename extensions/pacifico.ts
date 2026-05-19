@@ -1704,10 +1704,10 @@ export default function pacificoExtension(pi: ExtensionAPI) {
 		name: "pacifico_advisor",
 		label: "Pacifico Advisor",
 		description:
-			"Ask Pacifico for advisor-style async review using only context provided by this tool call. Pacifico has no filesystem access; include relevant task_context and files explicitly.",
+			"Ask Pacifico for advisor-style async review using only context provided by this tool call. Pacifico has no filesystem access; provide concise task_context and targeted files explicitly.",
 		parameters: Type.Object({
 			question: Type.String({ description: "Question or decision to ask Pacifico to review" }),
-			task_context: Type.Optional(Type.String({ description: "All relevant context/findings to include directly in the Pacifico prompt" })),
+			task_context: Type.Optional(Type.String({ description: "Concise relevant context/findings, constraints, known concerns, and review goals to include directly in the Pacifico prompt" })),
 			files: Type.Optional(Type.Array(Type.String({ description: "Local files to read and embed into the Pacifico prompt; Pacifico cannot read them itself" }))),
 			model: Type.Optional(Type.String({ description: "Optional Pacifico model override" })),
 			mode: Type.Optional(Type.Union([Type.Literal("sync"), Type.Literal("async"), Type.Literal("auto")], { description: "Routing hint; defaults to auto" })),

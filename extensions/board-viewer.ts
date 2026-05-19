@@ -81,37 +81,66 @@ function getLocalTasks(): { tasks: any[]; title?: string } {
 	return { tasks, title: taskList?.title };
 }
 
+// ── Refresh cache ────────────────────────────────────────────────────
+// Short-TTL cache for the cmd task list — the browser polls every few seconds
+// and back-to-back refreshes within the TTL window reuse the last result so
+// we don't spawn a cmd subprocess for every poll.
+const BOARD_DATA_CACHE_TTL_MS = 1000;
+let boardDataCache: { ts: number; data: BoardData | null } = { ts: 0, data: null };
+
+/** Test-only hook for clearing the module-level cache between cases. */
+export function __resetBoardViewerCacheForTests(): void {
+	boardDataCache = { ts: 0, data: null };
+}
+
 /**
  * Gather board data — tries Commander first, falls back to local tasks.
  * When Commander is available, returns full data (tasks, agents, messages, groups).
  * When Commander is unavailable, returns local tasks from the Pi tasks extension.
+ *
+ * Stub fields (agents, messages, groups, readyTasks) are inlined as empty
+ * arrays — the matching cmd ops are stubs that always return empty, so we
+ * skip the subprocess spawn entirely. See plan Wave 2.
  */
-async function gatherBoardData(): Promise<BoardData> {
+export async function gatherBoardData(): Promise<BoardData> {
+	const now = Date.now();
+	if (boardDataCache.data && now - boardDataCache.ts < BOARD_DATA_CACHE_TTL_MS) {
+		return boardDataCache.data;
+	}
+
 	const local = getLocalTasks();
 
 	// Try Commander if `cmd` CLI is available on PATH
 	if (isCommanderAvailable()) {
 		try {
-			const [taskResult, agentResult, messageResult, readyResult, groupResult] = await Promise.all([
-				callCommander("commander_task", { operation: "list" }),
-				callCommander("commander_orchestration", { operation: "agent:list", active_only: true }),
-				callCommander("commander_mailbox", { operation: "inbox", agent_name: "@all" }),
-				callCommander("commander_dependency", { operation: "ready_tasks" }),
-				callCommander("commander_task", { operation: "group:list" }),
-			]);
+			const taskResult = await callCommander("commander_task", { operation: "list" });
 
 			// If we got tasks back, Commander is connected
 			const commanderTasks = Array.isArray(taskResult) ? taskResult : taskResult?.tasks;
 			if (Array.isArray(commanderTasks)) {
-				return {
-					tasks: commanderTasks || [],
-					agents: agentResult?.agents || [],
-					messages: messageResult?.messages || [],
-					groups: groupResult?.groups || [],
-					readyTasks: readyResult?.tasks || [],
+				// Merge: overlay local-only tasks (no Commander mapping yet) on top of
+				// Commander tasks so in-flight unsynced work is visible. Tasks whose
+				// id already appears in commanderTasks are not duplicated.
+				const remoteIds = new Set<number>(
+					commanderTasks
+						.map((t: any) => (typeof t?.task_id === "number" ? t.task_id : typeof t?.id === "number" ? t.id : undefined))
+						.filter((id: any): id is number => typeof id === "number"),
+				);
+				const localOnly = local.tasks
+					.filter((t) => !remoteIds.has(t.task_id))
+					.map((t) => ({ ...t, synced: false }));
+
+				const data: BoardData = {
+					tasks: [...commanderTasks, ...localOnly],
+					agents: [],
+					messages: [],
+					groups: [],
+					readyTasks: [],
 					connected: true,
 					timestamp: new Date().toISOString(),
 				};
+				boardDataCache = { ts: now, data };
+				return data;
 			}
 		} catch {
 			// Commander call failed — fall through to local mode
@@ -119,7 +148,7 @@ async function gatherBoardData(): Promise<BoardData> {
 	}
 
 	// Fallback: local tasks only
-	return {
+	const fallback: BoardData = {
 		tasks: local.tasks,
 		agents: [],
 		messages: [],
@@ -130,6 +159,8 @@ async function gatherBoardData(): Promise<BoardData> {
 		localTitle: local.title,
 		timestamp: new Date().toISOString(),
 	};
+	boardDataCache = { ts: now, data: fallback };
+	return fallback;
 }
 
 // ── HTTP Server ──────────────────────────────────────────────────────

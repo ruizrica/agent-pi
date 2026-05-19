@@ -5,8 +5,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@earendil-works/pi-tui", () => ({
-	truncateToWidth: (s: string) => s,
+	truncateToWidth: (s: string, width: number) => s.slice(0, Math.max(0, width)),
 	visibleWidth: (s: string) => s.length,
+}));
+
+vi.mock("../lib/session-stats.ts", () => ({
+	getSessionStats: () => ({ startedAt: Date.now() - 60_000 }),
+	formatElapsed: () => "1m",
 }));
 
 vi.mock("node:fs", () => ({
@@ -106,7 +111,35 @@ describe("footer rendering", () => {
 		expect(lines[0]).toContain("opus 4 | 42% / 200K");
 		expect(lines[0]).toContain("GitHub/agent-pi");
 		expect(lines[0]).not.toContain("/Users/ricardo/Workshop/GitHub/agent-pi");
-		expect(lines[0]).toContain("thinking: off");
+		expect(lines[0]).toContain("1m | thinking: off");
+	});
+
+	it("hides the path before truncating right-side status on narrow widths", async () => {
+		const { handlers, pi } = createExtension();
+		const extension = await import("../footer.ts");
+		extension.default(pi);
+		const ctx = createCtx();
+		await handlers["session_start"]({}, ctx);
+		const render = ctx.getFooterRenderer();
+
+		const lines = render(45);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toContain("opus 4 | 42% / 200K");
+		expect(lines[0]).not.toContain("GitHub/agent-pi");
+		expect(lines[0]).toContain("1m | thinking: off");
+	});
+
+	it("shows the path again when resized wide enough", async () => {
+		const { handlers, pi } = createExtension();
+		const extension = await import("../footer.ts");
+		extension.default(pi);
+		const ctx = createCtx();
+		await handlers["session_start"]({}, ctx);
+		const render = ctx.getFooterRenderer();
+
+		expect(render(45)[0]).not.toContain("GitHub/agent-pi");
+		expect(render(120)[0]).toContain("GitHub/agent-pi");
+		expect(render(120)[0]).toContain("1m | thinking: off");
 	});
 });
 
