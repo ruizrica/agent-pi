@@ -244,6 +244,17 @@ cmd housekeep --doctor --no-color --no-banner   # Lifecycle audit (no CLI logo);
 - Use `cmd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, raw backend commands, or markdown TODO lists
 - Run `cmd guide agent` (or `cmd guide overview`) for the canonical command reference
 
+### Validation cards — rule of thumb
+
+If a `cmd task add` (or `tasks new-list`) exists only to **test the board itself** — hierarchy display, schema enforcement, lifecycle metadata, dashboard rendering — it's a **validation card**, not real work. Treat it differently from shipping work:
+
+1. **Keep the count small.** 1 parent + 1 child proves hierarchy + schema + lifecycle in one shot. 2 children is fine if you're explicitly testing "multiple children render side-by-side." 3+ is almost always over-creation — the extras add no new validation signal, just board pollution.
+2. **Tag with `test-only`.** Use Pi's `tasks new-list ... test_only=true`, or pass `--labels test-only` on `cmd task add`. The label is the audit hook: `cmd task list --label test-only` later surfaces every scaffold card you (or any agent) left behind.
+3. **Cancel after verification — do not mark completed.** Validation cards didn't ship real work. The honest terminal state is `cancelled`, not `completed`. Future audits read `completed` as "real work that landed"; validation cards completing pollutes that signal. Use `cmd task update <id> --status cancelled --runtime claude-code --model <m>` once the test passes.
+4. **The Pi `tasks` tool will warn you** when `new-list` looks like a validation scaffold (validate/verify/harmless/dummy/placeholder/etc.) and you're creating more than one child. The warning is soft — it won't block — but if you see it, double-check whether 1 child would have done the job.
+
+Reference: `.context/todo-prevent-task-overcreation.md` captures the 2026-05-19 audit that prompted this guidance (1 parent + 4 byte-similar children created where 2 cards would have sufficed).
+
 ### Skills (Default)
 
 These skills ship with the project under `skills/` and are loaded by default. Tracker-aware skills route through `cmd`.
