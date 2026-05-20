@@ -47,6 +47,7 @@ commands/private/
 # Generated tooling / IDE drafts (not product source)
 .gopher/
 .kiro/
+.antigravitycli/
 tests/*.spec.ts
 
 # Beads / Dolt files (added by bd init)
