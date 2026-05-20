@@ -50,6 +50,7 @@ import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
 import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "./lib/tasks-progress-comment.ts";
 import { buildParentMetadataUpdate } from "./lib/tasks-list-metadata.ts";
+import { looksLikeTestList } from "./lib/tasks-test-list-detector.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
@@ -819,6 +820,14 @@ export default function (pi: ExtensionAPI) {
 						if (!shouldSyncLocalTasksToCommander()) {
 							msg += `\n(${commanderSyncSuppressedMessage()})`;
 						}
+					}
+
+					// Soft warning when the brief reads like a validation/test scaffold
+					// and the agent is materializing more than one child upfront. See the
+					// 2026-05-19 audit (5 cards where 1-2 would do) — this is the nudge
+					// that should have fired then. Never blocks; pure UX.
+					if (initialTasks.length > 1 && looksLikeTestList(listTitle, listDescription)) {
+						msg += `\n⚠ Heads up: this brief reads like a validation/test scaffold. Consider 1-2 children instead of ${initialTasks.length}, and cancel them after verification (don't mark them completed — they didn't ship real work).`;
 					}
 
 					const result = {
