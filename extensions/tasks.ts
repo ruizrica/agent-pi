@@ -1235,8 +1235,30 @@ export default function (pi: ExtensionAPI) {
 					toUpdate.text = params.text;
 					toUpdate.lastUpdatedAt = nowIso();
 					toUpdate.lastUpdatedBy = currentActor();
+
+					// Sync the new label to the Commander child task. We update --title
+					// only (not description) because child task descriptions are the
+					// CodeRabbit-form wrappers synthesized at create-time and changing
+					// them would require re-synthesis without giving the user any
+					// additional visible signal — title is the dashboard label.
+					let msg = `Updated #${toUpdate.id}: "${oldText}" → "${toUpdate.text}"`;
+					if (shouldSyncLocalTasksToCommander()) {
+						const cid = lookupMapping(syncState, toUpdate.id);
+						if (cid !== undefined) {
+							const newTitle = params.text;
+							syncToCommander("task-text-update", async (client) => {
+								await client.callTool("commander_task", {
+									operation: "update",
+									task_id: cid,
+									title: newTitle,
+								});
+							});
+							msg += ` (Commander #${cid} title update queued)`;
+						}
+					}
+
 					const result = {
-						content: [{ type: "text" as const, text: `Updated #${toUpdate.id}: "${oldText}" → "${toUpdate.text}"` }],
+						content: [{ type: "text" as const, text: msg }],
 						details: makeDetails("update"),
 					};
 					refreshUI(ctx);
