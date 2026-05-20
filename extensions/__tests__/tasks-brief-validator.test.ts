@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { validateNewListBrief } from "../lib/tasks-brief-validator.ts";
 
-describe("validateNewListBrief — slice #1: presence + minimum length", () => {
+describe("validateNewListBrief — slice #1 + #6: presence + minimum length", () => {
 	it("rejects undefined description", () => {
 		const result = validateNewListBrief(undefined);
 		expect(result.ok).toBe(false);
@@ -23,22 +23,33 @@ describe("validateNewListBrief — slice #1: presence + minimum length", () => {
 		expect(result.ok).toBe(false);
 	});
 
-	it("rejects descriptions shorter than 30 characters", () => {
+	it("rejects descriptions shorter than 60 characters (slice #6 raised the bar)", () => {
 		const result = validateNewListBrief("too short");
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.reason).toMatch(/30|short|length/i);
+			expect(result.reason).toMatch(/60|short|length/i);
 		}
 	});
 
-	it("accepts descriptions of 30+ characters", () => {
-		const brief = "Harden the signup flow by adding duplicate-email checks.";
+	it("rejects label-grade descriptions between 30 and 60 characters", () => {
+		// Slice #1 would have accepted this; slice #6 explicitly rejects it
+		// because a 35-char "brief" is still just a thicker label.
+		const labelGrade = "Refactor the auth middleware module";
+		expect(labelGrade.length).toBeGreaterThanOrEqual(30);
+		expect(labelGrade.length).toBeLessThan(60);
+		const result = validateNewListBrief(labelGrade);
+		expect(result.ok).toBe(false);
+	});
+
+	it("accepts descriptions of 60+ characters", () => {
+		const brief = "Harden the signup flow by adding duplicate-email checks and rate-limit guards.";
+		expect(brief.length).toBeGreaterThanOrEqual(60);
 		const result = validateNewListBrief(brief);
 		expect(result.ok).toBe(true);
 	});
 
 	it("trims leading/trailing whitespace before measuring length", () => {
-		const padded = "   " + "a".repeat(30) + "   ";
+		const padded = "   " + "a".repeat(60) + "   ";
 		const result = validateNewListBrief(padded);
 		expect(result.ok).toBe(true);
 	});

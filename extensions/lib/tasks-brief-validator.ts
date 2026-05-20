@@ -5,7 +5,7 @@ export type BriefValidationResult =
 	| { ok: true }
 	| { ok: false; reason: string };
 
-const MIN_BRIEF_CHARS = 30;
+const MIN_BRIEF_CHARS = 60;
 
 const CONTRACT_HINT =
 	"Pass a 1-3 sentence mission brief explaining the what & why "
