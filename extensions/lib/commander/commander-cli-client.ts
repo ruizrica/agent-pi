@@ -223,6 +223,8 @@ export class CommanderCliClient {
 				if (params.priority) args.push("--priority", String(params.priority));
 				if (params.description) args.push("--description", String(params.description));
 				if (params.title) args.push("--title", String(params.title));
+				const missionBrief = params.mission_brief ?? params.missionBrief;
+				if (missionBrief) args.push("--mission-brief", String(missionBrief));
 				const updated = await this.runJson(args, timeoutMs, {});
 				return { ...normalizeTask(updated), task_id: Number((updated as any).task_id ?? (updated as any).id ?? id) };
 			}

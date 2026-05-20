@@ -49,6 +49,7 @@ import {
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
 import { buildParentProgressComment, shouldPostParentProgress } from "./lib/tasks-progress-comment.ts";
+import { buildParentMetadataUpdate } from "./lib/tasks-list-metadata.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
@@ -88,7 +89,7 @@ interface CompletionPresentation {
 }
 
 const TasksParams = Type.Object({
-	action: StringEnum(["new-list", "add", "claim", "toggle", "remove", "update", "list", "clear"] as const),
+	action: StringEnum(["new-list", "update-list", "add", "claim", "toggle", "remove", "update", "list", "clear"] as const),
 	text: Type.Optional(Type.String({ description: "Task text (for add/update), or list title (for new-list)" })),
 	texts: Type.Optional(Type.Array(Type.String(), { description: "Multiple task texts (for add). Use this to batch-add several tasks at once." })),
 	description: Type.Optional(Type.String({ description: "Rich 1-3 sentence work summary for the list (for new-list)" })),
@@ -716,7 +717,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Tasks",
 		description:
 			"Manage your task list. You MUST add tasks before using any other tools. " +
-			"Actions: new-list (text=title, description, optional texts[] for initial tasks), add (text or texts[] for batch), claim (id, optional text=agent name), toggle (id) — cycles idle→inprogress→done and auto-claims on inprogress, remove (id), update (id + text), list, clear. " +
+			"Actions: new-list (text=title, description, optional texts[] for initial tasks), update-list (refines text=title and/or description on the existing list — syncs to the Commander parent's mission brief), add (text or texts[] for batch), claim (id, optional text=agent name), toggle (id) — cycles idle→inprogress→done and auto-claims on inprogress, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and rich 1-3 sentence work summary in description, not just a short label. " +
 			"The work summary is shown when starting/listing tasks. " +
@@ -823,6 +824,68 @@ export default function (pi: ExtensionAPI) {
 					const result = {
 						content: [{ type: "text" as const, text: msg }],
 						details: makeDetails("new-list"),
+					};
+					refreshUI(ctx);
+					return result;
+				}
+
+				case "update-list": {
+					if (params.text === undefined && params.description === undefined) {
+						return {
+							content: [{ type: "text" as const, text: "Error: at least one of text (title) or description must be provided for update-list" }],
+							details: makeDetails("update-list", "nothing to update"),
+						};
+					}
+
+					if (params.description !== undefined) {
+						const briefCheck = validateNewListBrief(params.description);
+						if (!briefCheck.ok) {
+							return {
+								content: [{ type: "text" as const, text: `Error: ${briefCheck.reason}` }],
+								details: makeDetails("update-list", briefCheck.reason),
+							};
+						}
+					}
+
+					const parentUpdate = buildParentMetadataUpdate({
+						currentTitle: listTitle,
+						currentDescription: listDescription,
+						newTitle: params.text,
+						newDescription: params.description,
+					});
+
+					if (parentUpdate === null) {
+						return {
+							content: [{ type: "text" as const, text: "No changes to list title or description." }],
+							details: makeDetails("update-list", "no-op"),
+						};
+					}
+
+					if (parentUpdate.title !== undefined) listTitle = parentUpdate.title;
+					if (parentUpdate.description !== undefined) listDescription = parentUpdate.description;
+
+					let msg = `Updated list metadata`;
+					if (parentUpdate.title !== undefined) msg += `\n  title: "${listTitle}"`;
+					if (parentUpdate.description !== undefined) msg += `\n  work summary: ${listDescription}`;
+
+					// Sync to the Commander parent task when one exists and sync is enabled.
+					if (shouldSyncLocalTasksToCommander() && syncState.groupId !== undefined) {
+						const parentId = syncState.groupId;
+						syncToCommander("update-list-metadata", async (client) => {
+							await client.callTool("commander_task", {
+								operation: "update",
+								task_id: parentId,
+								...parentUpdate,
+							});
+						});
+						msg += `\n(Commander parent #${parentId} update queued)`;
+					} else if (!shouldSyncLocalTasksToCommander()) {
+						msg += `\n(${commanderSyncSuppressedMessage()})`;
+					}
+
+					const result = {
+						content: [{ type: "text" as const, text: msg }],
+						details: makeDetails("update-list"),
 					};
 					refreshUI(ctx);
 					return result;
@@ -1262,6 +1325,12 @@ export default function (pi: ExtensionAPI) {
 						msg += `\n${theme.fg("accent", "Work Summary:")} ${theme.fg("muted", details.listDescription)}`;
 					}
 					return new Text(outputLine(theme, "success", msg), 0, 0);
+				}
+
+				case "update-list": {
+					const text = result.content[0];
+					const msg = text?.type === "text" ? text.text : "";
+					return new Text(outputLine(theme, "accent", msg), 0, 0);
 				}
 
 				case "list": {

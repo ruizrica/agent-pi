@@ -160,8 +160,17 @@ describe("cmd-bridge: contract owner for commander-v2", () => {
 				priority: 3,
 				title: "x",
 				description: "y",
+				mission_brief: "z",
 			};
 			expect(req.priority).toBe(3);
+		});
+
+		it("accepts mission_brief on update (cmd task update --mission-brief is supported)", () => {
+			const req: CmdTaskUpdateRequest = {
+				task_id: 42,
+				mission_brief: "Refine the parent mission brief mid-flight.",
+			};
+			expect(req.mission_brief).toBe("Refine the parent mission brief mid-flight.");
 		});
 	});
 

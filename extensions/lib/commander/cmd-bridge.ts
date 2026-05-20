@@ -157,6 +157,7 @@ export interface CmdTaskUpdateRequest {
 	priority?: number;
 	title?: string;
 	description?: string;
+	mission_brief?: string;
 }
 
 // Claim is `update {status: "working"}` per commander-cli-client.ts:218. The
