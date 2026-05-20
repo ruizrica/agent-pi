@@ -48,6 +48,7 @@ import {
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
+import { buildParentProgressComment, shouldPostParentProgress } from "./lib/tasks-progress-comment.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
@@ -1036,6 +1037,26 @@ export default function (pi: ExtensionAPI) {
 									status: "pending",
 								});
 								syncState = updateMappingStatus(syncState, d.id, "idle");
+							});
+						}
+
+						// Mid-progress comment to the parent so the dashboard's mission card
+						// has visible M/N progress between group:create and auto-close.
+						if (shouldPostParentProgress({ prevStatus: prev, nextStatus: task.status, groupId: syncState.groupId })) {
+							const doneCount = tasks.filter((t) => t.status === "done").length;
+							const body = buildParentProgressComment({
+								done: doneCount,
+								total: tasks.length,
+								justCompletedText: task.text,
+							});
+							const parentId = syncState.groupId;
+							syncToCommander("parent-progress", async (client) => {
+								await client.callTool("commander_task", {
+									operation: "comment:add",
+									task_id: parentId,
+									body,
+									type: "progress",
+								});
 							});
 						}
 					} else {
