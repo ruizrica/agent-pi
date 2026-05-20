@@ -3,7 +3,7 @@
 // ABOUTME: signal between create and auto-close.
 
 import { describe, it, expect } from "vitest";
-import { buildParentProgressComment, shouldPostParentProgress } from "../lib/tasks-progress-comment.ts";
+import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "../lib/tasks-progress-comment.ts";
 
 describe("buildParentProgressComment", () => {
 	it("formats progress as M/N complete with the just-finished task text", () => {
@@ -71,6 +71,62 @@ describe("shouldPostParentProgress", () => {
 			prevStatus: "idle",
 			nextStatus: "inprogress",
 			groupId: 42,
+		})).toBe(false);
+	});
+});
+
+describe("shouldReopenParent — slice #5: undo of mission-complete close", () => {
+	it("returns true when a done task moves back to idle and parent was previously closed", () => {
+		expect(shouldReopenParent({
+			prevStatus: "done",
+			nextStatus: "idle",
+			groupId: 42,
+			parentClosedAt: 1_700_000_000_000,
+		})).toBe(true);
+	});
+
+	it("returns true when done → inprogress (treated as un-done too)", () => {
+		expect(shouldReopenParent({
+			prevStatus: "done",
+			nextStatus: "inprogress",
+			groupId: 42,
+			parentClosedAt: 1_700_000_000_000,
+		})).toBe(true);
+	});
+
+	it("returns false when the parent was never closed (parentClosedAt undefined)", () => {
+		expect(shouldReopenParent({
+			prevStatus: "done",
+			nextStatus: "idle",
+			groupId: 42,
+			parentClosedAt: undefined,
+		})).toBe(false);
+	});
+
+	it("returns false when there is no parent groupId yet", () => {
+		expect(shouldReopenParent({
+			prevStatus: "done",
+			nextStatus: "idle",
+			groupId: undefined,
+			parentClosedAt: 1_700_000_000_000,
+		})).toBe(false);
+	});
+
+	it("returns false for any non-done → X transition (it's only an un-done that warrants reopen)", () => {
+		expect(shouldReopenParent({
+			prevStatus: "idle",
+			nextStatus: "inprogress",
+			groupId: 42,
+			parentClosedAt: 1_700_000_000_000,
+		})).toBe(false);
+	});
+
+	it("returns false when status didn't actually change (done → done is a no-op)", () => {
+		expect(shouldReopenParent({
+			prevStatus: "done",
+			nextStatus: "done",
+			groupId: 42,
+			parentClosedAt: 1_700_000_000_000,
 		})).toBe(false);
 	});
 });

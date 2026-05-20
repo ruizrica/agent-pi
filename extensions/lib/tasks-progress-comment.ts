@@ -37,3 +37,24 @@ export function shouldPostParentProgress(args: ShouldPostParentProgressArgs): bo
 	if (args.prevStatus === "done") return false;
 	return true;
 }
+
+export interface ShouldReopenParentArgs {
+	prevStatus: "idle" | "inprogress" | "done";
+	nextStatus: "idle" | "inprogress" | "done";
+	groupId: number | undefined;
+	parentClosedAt: number | undefined;
+}
+
+/**
+ * Gate for re-opening a previously-completed Commander parent task. Fires
+ * when a child task moves OUT of done (an "un-toggle" after mission-complete),
+ * but only if the parent was actually closed by Pi before — otherwise there's
+ * nothing to undo.
+ */
+export function shouldReopenParent(args: ShouldReopenParentArgs): boolean {
+	if (args.groupId === undefined) return false;
+	if (args.parentClosedAt === undefined) return false;
+	if (args.prevStatus !== "done") return false;
+	if (args.nextStatus === "done") return false;
+	return true;
+}

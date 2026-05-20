@@ -48,7 +48,7 @@ import {
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
 import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
-import { buildParentProgressComment, shouldPostParentProgress } from "./lib/tasks-progress-comment.ts";
+import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "./lib/tasks-progress-comment.ts";
 import { buildParentMetadataUpdate } from "./lib/tasks-list-metadata.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
@@ -1101,6 +1101,28 @@ export default function (pi: ExtensionAPI) {
 								});
 								syncState = updateMappingStatus(syncState, d.id, "idle");
 							});
+						}
+
+						// Reopen the parent if a previously-completed mission was un-toggled.
+						// Without this, marking a done child back to idle/inprogress leaves
+						// the parent stuck in completed state, contradicting the new local
+						// reality.
+						if (shouldReopenParent({
+							prevStatus: prev,
+							nextStatus: task.status,
+							groupId: syncState.groupId,
+							parentClosedAt: syncState.parentClosedAt,
+						})) {
+							const parentId = syncState.groupId;
+							syncToCommander("parent-reopen", async (client) => {
+								await client.callTool("commander_task", {
+									operation: "update",
+									task_id: parentId,
+									status: "working",
+								});
+							});
+							syncState = { ...syncState, parentClosedAt: undefined };
+							msg += `\n(Commander parent #${parentId} reopened — un-done child)`;
 						}
 
 						// Mid-progress comment to the parent so the dashboard's mission card
