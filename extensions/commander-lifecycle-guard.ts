@@ -8,11 +8,12 @@ import {
 	clearLifecycleIntent,
 	listOpenLifecycleIntents,
 	recordLifecycleIntent,
+	MAX_INTENT_ATTEMPTS,
 	type LifecycleIntent,
 } from "./lib/commander/lifecycle-intents.ts";
+import { alignPointerOnSessionStart } from "./lib/commander/project-pointer-sync.ts";
 
 const RECONCILE_OP_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_INTENT_ATTEMPTS = 5;
 const REAP_OP_TIMEOUT_MS = 15_000;
 const DOCTOR_CACHE_TTL_MS = 60_000;
 
@@ -101,7 +102,7 @@ export async function reconcileOpenLifecycleIntents(
 	client: any | null,
 	options: { maxAttempts?: number } = {},
 ): Promise<{ reconciled: number; retained: number; exhausted: number }> {
-	const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_INTENT_ATTEMPTS;
+	const maxAttempts = options.maxAttempts ?? MAX_INTENT_ATTEMPTS;
 	const open = listOpenLifecycleIntents();
 	if (open.length === 0) return { reconciled: 0, retained: 0, exhausted: 0 };
 	if (!client) return { reconciled: 0, retained: open.length, exhausted: 0 };
@@ -234,6 +235,27 @@ export default function (pi: ExtensionAPI) {
 				console.error("[lifecycle-guard] deferred warning collection error:", err?.message || err);
 			});
 		}, 0);
+
+		// Project-pointer alignment: commander-v2 fd6ce08 made the CLI cwd-blind
+		// while the dashboard still reads currentProjectId from mock-state.json.
+		// Without this reconcile, tasks land in bd but never appear on the
+		// dashboard's active board. Cost Ricardo a full day on 2026-05-19.
+		// See docs/adr/0001-cmd-contract.md.
+		if (isCommanderAvailable()) {
+			setTimeout(() => {
+				alignPointerOnSessionStart().then((action) => {
+					if (action.kind === "switch") {
+						const name = action.targetProjectName ?? `#${action.targetProjectId}`;
+						ctx.ui.notify(
+							`Commander: switched dashboard to ${name} (was #${action.previousProjectId ?? "none"})`,
+							"info",
+						);
+					}
+				}).catch((err: any) => {
+					console.error("[lifecycle-guard] project-pointer sync error:", err?.message || err);
+				});
+			}, 0);
+		}
 	});
 
 	pi.on("agent_end", async (_event, _ctx) => {

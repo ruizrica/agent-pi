@@ -41,27 +41,37 @@ function lambdaBodies(source: string): string[] {
 }
 
 describe("group:create lambdas republish syncState to globalThis", () => {
+	// Post-Phase-1 (lifecycle consolidation): the duplicated lambdas now route through
+	// executeGroupCreate in commander-sync.ts. The republish-on-resolve contract is
+	// expressed via the onResolved callback both call sites pass. The success/parse-failure
+	// branching itself is covered by commander-sync-execute-group-create.test.ts.
+	//
+	// All three tests below are structural — they assert that tasks.ts wires the
+	// executeGroupCreate helper with an onResolved callback that calls
+	// publishSyncStateNow(). The publish hook lives inside the default-exported
+	// extension closure and is not independently importable, so the wiring is the
+	// only observable surface from outside the closure. Helper behavior itself is
+	// covered behaviorally in commander-sync-execute-group-create.test.ts.
 	const bodies = lambdaBodies(tasksSource);
 
+	// structural — asserts file wiring; helper behavior is covered by commander-sync-execute-group-create.test.ts.
 	it("finds at least two group:create lambdas in tasks.ts", () => {
 		expect(bodies.length).toBeGreaterThanOrEqual(2);
 	});
 
-	it("each lambda republishes after applyGroupCreateResult (success path)", () => {
+	// structural — asserts the call sites route through executeGroupCreate; helper behavior is covered separately.
+	it("each lambda routes through the executeGroupCreate helper", () => {
 		for (const body of bodies) {
-			expect(body).toContain("applyGroupCreateResult(syncState, localIds, parsed)");
-			const applyIdx = body.indexOf("applyGroupCreateResult(syncState, localIds, parsed)");
-			const remainder = body.slice(applyIdx);
-			expect(remainder).toMatch(/publishCurrentTask\(|refreshWidget\(|publishSyncStateNow\(/);
+			expect(body).toContain("executeGroupCreate(");
 		}
 	});
 
-	it("each lambda republishes on the markGroupCreateSettled (parse-failure) path", () => {
+	// structural — asserts the onResolved callback in tasks.ts calls the closure-local publishSyncStateNow(); the helper's onResolved invariant is covered behaviorally.
+	it("each lambda's onResolved callback republishes syncState", () => {
 		for (const body of bodies) {
-			const settledIdx = body.indexOf("markGroupCreateSettled(syncState)");
-			expect(settledIdx).toBeGreaterThan(-1);
-			const remainder = body.slice(settledIdx);
-			expect(remainder).toMatch(/publishCurrentTask\(|refreshWidget\(|publishSyncStateNow\(/);
+			// onResolved is the single republish hook the helper invokes on success,
+			// parse-failure, AND catch paths — so one assertion covers all three.
+			expect(body).toMatch(/onResolved:\s*\(next\)\s*=>\s*\{[^}]*publishSyncStateNow\(\)/);
 		}
 	});
 });

@@ -23,27 +23,22 @@
 
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Key, matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { Type } from "@sinclair/typebox";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import {
 	localToCommander,
-	parseCommanderTaskId,
 	handleTaskCreateResponse,
 	lookupMapping,
-	addMapping,
 	removeMapping,
 	clearMappings,
 	emptySyncState,
 	shouldCreateGroup,
 	isExternalSyncActive,
 	markGroupCreationInFlight,
-	parseGroupCreateResult,
 	buildGroupCreatePayload,
-	applyGroupCreateResult,
-	markGroupCreateSettled,
+	executeGroupCreate,
 	updateMappingStatus,
 	addPendingCreates,
 	addPendingCreate,
@@ -318,19 +313,21 @@ export default function (pi: ExtensionAPI) {
 		if (!isCommanderAvailable()) return;
 		const g = globalThis as any;
 		const client = getCommanderCliClient();
-		fn(client).catch(() => {
+		fn(client).catch((err: any) => {
+			// Phase 3.0.1: un-swallow + file-log. Prior code threw away the error
+			// message, which hid Phase 3.0's atomicity throws + every cmd response
+			// shape mismatch behind a "Commander sync pending forever" toggle UI.
+			try {
+				// eslint-disable-next-line @typescript-eslint/no-var-requires
+				const { appendFileSync } = require("node:fs");
+				appendFileSync(".commander/logs/pi-sync-debug.log",
+					`${new Date().toISOString()} [syncToCommander] ${label} failed: ${err?.message || String(err)}\n`);
+			} catch { /* best-effort */ }
 			const tracker = g.__piCommanderTracker;
 			if (tracker?._state) {
 				tracker._state = addRetry(tracker._state, label, fn);
 			}
 		});
-	}
-
-	function saveSharedStateIfNeeded(_action: string, _body?: string): void {
-	}
-
-	function hydrateFromSharedStateIfAvailable(): boolean {
-		return false;
 	}
 
 	// ── Snapshot for details ───────────────────────────────────────────
@@ -499,11 +496,6 @@ export default function (pi: ExtensionAPI) {
 		listTitle = undefined;
 		listDescription = undefined;
 		syncState = emptySyncState();
-
-		if (hydrateFromSharedStateIfAvailable()) {
-			refreshUI(ctx);
-			return;
-		}
 
 		for (const entry of ctx.sessionManager.getBranch()) {
 			if (entry.type !== "message") continue;
@@ -780,8 +772,6 @@ export default function (pi: ExtensionAPI) {
 						initialTasks.push(t);
 					}
 
-					saveSharedStateIfNeeded("new-list", `Started shared list "${listTitle}".`);
-
 					// Sync initial tasks to Commander if any were provided
 					if (initialTasks.length > 0 && shouldSyncLocalTasksToCommander()) {
 						syncState = addPendingCreates(syncState, initialTasks, "group");
@@ -794,24 +784,18 @@ export default function (pi: ExtensionAPI) {
 								initialTasks.map((t) => t.text),
 								process.cwd(),
 							);
-							syncToCommander("group-create", async (client) => {
-								try {
-									const res = await client.callTool("commander_task", payload, 30_000);
-									const parsed = parseGroupCreateResult(res);
-									if (parsed) {
-										syncState = applyGroupCreateResult(syncState, localIds, parsed);
-										publishSyncStateNow();
-										closeCommanderParentIfAllLocalTasksDone();
-									} else {
-										syncState = markGroupCreateSettled(syncState);
-										publishSyncStateNow();
-									}
-								} catch (err) {
-									syncState = markGroupCreateSettled(syncState);
-									publishSyncStateNow();
-									throw err;
-								}
-							});
+							syncToCommander("group-create", (client) => executeGroupCreate({
+								client,
+								payload,
+								localIds,
+								getState: () => syncState,
+								onResolved: (next) => { syncState = next; publishSyncStateNow(); },
+								onSuccess: closeCommanderParentIfAllLocalTasksDone,
+								// Fix 1: catch up local status that drifted during the ~8s
+								// emulated group:create in-flight window — without this, a
+								// toggle during the window leaves the child task orphaned.
+								getCurrentStatuses: () => new Map(tasks.map((t) => [t.id, t.status])),
+							}));
 						}
 					}
 
@@ -866,8 +850,6 @@ export default function (pi: ExtensionAPI) {
 						tasks.push(t);
 						added.push(t);
 					}
-					saveSharedStateIfNeeded("add", `Added ${added.length === 1 ? 'task' : 'tasks'} ${added.map((t) => `#${t.id}`).join(', ')}.`);
-
 					// Sync: create Commander tasks only when this session owns local task-board sync.
 					if (shouldSyncLocalTasksToCommander()) {
 						syncState = addPendingCreates(syncState, added, syncState.groupId === undefined ? "group" : "single");
@@ -881,24 +863,18 @@ export default function (pi: ExtensionAPI) {
 								added.map((t) => t.text),
 								process.cwd(),
 							);
-							syncToCommander("group-create", async (client) => {
-								try {
-									const res = await client.callTool("commander_task", payload, 30_000);
-									const parsed = parseGroupCreateResult(res);
-									if (parsed) {
-										syncState = applyGroupCreateResult(syncState, localIds, parsed);
-										publishSyncStateNow();
-										closeCommanderParentIfAllLocalTasksDone();
-									} else {
-										syncState = markGroupCreateSettled(syncState);
-										publishSyncStateNow();
-									}
-								} catch (err) {
-									syncState = markGroupCreateSettled(syncState);
-									publishSyncStateNow();
-									throw err;
-								}
-							});
+							syncToCommander("group-create", (client) => executeGroupCreate({
+								client,
+								payload,
+								localIds,
+								getState: () => syncState,
+								onResolved: (next) => { syncState = next; publishSyncStateNow(); },
+								onSuccess: closeCommanderParentIfAllLocalTasksDone,
+								// Fix 1: catch up local status that drifted during the ~8s
+								// emulated group:create in-flight window — without this, a
+								// toggle during the window leaves the child task orphaned.
+								getCurrentStatuses: () => new Map(tasks.map((t) => [t.id, t.status])),
+							}));
 						} else if (syncState.groupId !== undefined) {
 							// Path B: group exists — add individual tasks with group_id
 							for (const t of added) {
@@ -1057,8 +1033,6 @@ export default function (pi: ExtensionAPI) {
 						msg += ` (${commanderSyncSuppressedMessage()})`;
 					}
 
-					saveSharedStateIfNeeded("toggle", `Changed task #${task.id} from ${prev} to ${task.status}.`);
-
 					const result = {
 						content: [{
 							type: "text" as const,
@@ -1087,7 +1061,6 @@ export default function (pi: ExtensionAPI) {
 					}
 					const actor = params.text?.trim() || currentActor();
 					claimTask(task, actor);
-					saveSharedStateIfNeeded("claim", `Claimed task #${task.id} for ${actor}.`);
 					const result = {
 						content: [{ type: "text" as const, text: `Task #${task.id} claimed by ${actor}` }],
 						details: makeDetails("claim"),
@@ -1111,7 +1084,6 @@ export default function (pi: ExtensionAPI) {
 						};
 					}
 					const removed = tasks.splice(idx, 1)[0];
-					saveSharedStateIfNeeded("remove", `Removed task #${removed.id}.`);
 
 					// Sync: cancel Commander task only when this session owns local task-board sync.
 					// On rejection we record a durable cancel intent so the cancellation is
@@ -1170,7 +1142,6 @@ export default function (pi: ExtensionAPI) {
 					toUpdate.text = params.text;
 					toUpdate.lastUpdatedAt = nowIso();
 					toUpdate.lastUpdatedBy = currentActor();
-					saveSharedStateIfNeeded("update", `Updated task #${toUpdate.id}.`);
 					const result = {
 						content: [{ type: "text" as const, text: `Updated #${toUpdate.id}: "${oldText}" → "${toUpdate.text}"` }],
 						details: makeDetails("update"),
@@ -1215,7 +1186,6 @@ export default function (pi: ExtensionAPI) {
 					listTitle = undefined;
 					listDescription = undefined;
 					syncState = { ...clearMappings(syncState), parentClosedAt: undefined };
-					saveSharedStateIfNeeded("clear", "Cleared the shared task list.");
 
 					const result = {
 						content: [{ type: "text" as const, text: `Cleared ${count} task(s)` }],

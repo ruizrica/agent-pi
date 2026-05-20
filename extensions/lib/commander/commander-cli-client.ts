@@ -6,6 +6,7 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveRuntimeLabel, resolveModelName } from "../../agent-identity.js";
 import { parseHousekeepDoctorOutput } from "./commander-housekeep.ts";
+import { validateChildTaskPayload, validateStatus, CmdContractError } from "./cmd-bridge.ts";
 
 /**
  * Walks up from `cwd` looking for `scripts/cmd` (the project-local wrapper that
@@ -187,11 +188,36 @@ export class CommanderCliClient {
 				if (lifecycleOwner) args.push("--lifecycle-owner", String(lifecycleOwner));
 				if (params.accept_lifecycle === true || params.acceptLifecycle === true) args.push("--accept-lifecycle");
 				if (params.confirm_wrapper === true || params.confirmWrapper === true || synthetic?.confirmWrapper) args.push("--confirm-wrapper");
+				// Fix 3 / Option 3: validate the cmd contract BEFORE spawning subprocess.
+				// commander-v2's task-registration validator enforces CodeRabbit-style
+				// descriptions + required body sections (## Steps/## Tests/## References)
+				// on every --parent task. Failing here gives a typed CmdContractError
+				// instead of a silent task_registration_rejected response.
+				if (groupId !== undefined) {
+					const bodyText = String(body ?? "");
+					const violations = validateChildTaskPayload(description, bodyText);
+					if (violations.length > 0) {
+						throw new CmdContractError(violations,
+							`Cmd contract violation on child task add: ${violations.map((v) => v.kind === "description-format" ? `description not CodeRabbit-form (got: ${v.got.slice(0, 60)}...)` : `body missing section: ${v.section}`).join(" | ")}`,
+						);
+					}
+				}
 				const created = normalizeTask(await this.runJson(args, timeoutMs, {}));
 				return { ...created, task_id: Number((created as any).task_id ?? (created as any).id) };
 			}
 			case "update": {
 				const id = required(params.task_id, "task_id");
+				// Fix 3 / Option 3 (extended): validate status against commander-v2's
+				// STATUS_ALIAS set BEFORE spawning subprocess. Covers update + the
+				// claim/complete/fail/cancel aliases below (all route through here).
+				if (params.status !== undefined) {
+					const statusViolations = validateStatus(String(params.status));
+					if (statusViolations.length > 0) {
+						throw new CmdContractError(statusViolations,
+							`Cmd contract violation on task update: unknown status "${String(params.status)}" (not in commander-v2 STATUS_ALIAS)`,
+						);
+					}
+				}
 				const args = ["task", "update", String(id), "--json", "--no-color"];
 				if (params.status) args.push("--status", String(params.status));
 				if (params.priority) args.push("--priority", String(params.priority));
@@ -257,6 +283,15 @@ export class CommanderCliClient {
 			confirm_wrapper: params.confirm_wrapper ?? params.confirmWrapper ?? true,
 		}, timeoutMs) as any;
 		const groupId = Number(parent.task_id ?? parent.id);
+		// Phase 3.0 (contract owner): refuse to return a partial group. If the parent's
+		// id is missing/NaN, fail loudly so callers see the actual cmd response shape
+		// instead of silently mapping local task #1 → groupId-undefined and hanging on
+		// "Commander sync pending forever".
+		if (!Number.isFinite(groupId)) {
+			throw new Error(
+				`group:create atomicity: parent response missing id/task_id — cmd returned: ${JSON.stringify(parent)}`,
+			);
+		}
 		const tasks = Array.isArray(params.tasks) ? params.tasks as any[] : [];
 		const taskIds: number[] = [];
 		for (const task of tasks) {
@@ -278,7 +313,16 @@ export class CommanderCliClient {
 				confirm_wrapper: task?.confirm_wrapper ?? task?.confirmWrapper ?? true,
 			}, timeoutMs) as any;
 			const id = Number(created.task_id ?? created.id);
-			if (Number.isFinite(id)) taskIds.push(id);
+			// Phase 3.0: if a child create returns without a usable id, throw immediately
+			// with the actual response. Previously this skipped silently and produced a
+			// partial { group_id, task_ids: [shorter] } that Pi mapped to "groupId set but
+			// no mappings", which is what created the "pending forever" toggle bug.
+			if (!Number.isFinite(id)) {
+				throw new Error(
+					`group:create atomicity: child task_id missing for "${truncateForTitle(description)}" — cmd returned: ${JSON.stringify(created)}`,
+				);
+			}
+			taskIds.push(id);
 		}
 		return { group_id: groupId, task_ids: taskIds, emulated: true };
 	}
@@ -376,8 +420,17 @@ export class CommanderCliClient {
 	}
 
 	private runCommand(finalArgs: string[], timeoutMs = this.defaultTimeoutMs): Promise<ExecResult> {
+		// Skip the bd-adapter's `bd list --all` preflight dedupe (~1.4s/call) on every
+		// cmd invocation. Pi never relies on commander-v2's fingerprint-based duplicate
+		// detection — group:create batches make N+1 sequential creates and the preflight
+		// dominates the in-flight window. Opt-out for debugging via PI_CMD_KEEP_PREFLIGHT.
+		// See commander-v2 commit 9bfb62b (2026-05-19) for the upstream opt-out flag.
+		const childEnv: NodeJS.ProcessEnv = { ...process.env };
+		if (!process.env.PI_CMD_KEEP_PREFLIGHT) {
+			childEnv.CMD_SKIP_DUPLICATE_PREFLIGHT = "1";
+		}
 		return new Promise((resolve, reject) => {
-			execFile(this.bin, finalArgs, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8" }, (error, stdout, stderr) => {
+			execFile(this.bin, finalArgs, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8", env: childEnv }, (error, stdout, stderr) => {
 				if (error) {
 					const subcommand = finalArgs.slice(0, 2).join(" ") || "(no args)";
 					// Surface the real failure shape (signal/code/killed) instead of dumping

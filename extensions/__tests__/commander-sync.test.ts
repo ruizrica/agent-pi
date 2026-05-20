@@ -514,7 +514,19 @@ describe("applyGroupCreateResult", () => {
 		]);
 	});
 
-	it("records desired pending status when tasks changed before group mapping resolved", () => {
+	it("sets lastSyncedStatus to 'idle' regardless of pending desiredStatus drift (FIX: was pinning a lie)", () => {
+		// PRIOR BEHAVIOR (BUG): applyGroupCreateResult used pending.desiredStatus
+		// as lastSyncedStatus, which means a mapping created right after the user
+		// toggled would claim the new status was already synced even though cmd's
+		// `task add` always creates with status: "pending" (local: "idle"). The
+		// downstream toggle drift detection (executeGroupCreate's catch-up + the
+		// commander-tracker reconciler) then saw "no drift" because lastSyncedStatus
+		// === task.status — and never fired the actual update. Result: orphaned
+		// children on the board.
+		//
+		// CORRECT BEHAVIOR: lastSyncedStatus reflects what cmd actually persisted
+		// (which is "idle"), so drift detection correctly sees current="done" !=
+		// lastSyncedStatus="idle" and fires the catch-up update.
 		let state = emptySyncState();
 		state = addPendingCreates(state, [
 			{ id: 1, text: "Already done", status: "idle" },
@@ -526,8 +538,8 @@ describe("applyGroupCreateResult", () => {
 		const updated = applyGroupCreateResult(state, [1, 2], { groupId: 7, taskIds: [101, 102] });
 
 		expect(updated.mappings).toEqual([
-			{ localId: 1, commanderId: 101, lastSyncedStatus: "done" },
-			{ localId: 2, commanderId: 102, lastSyncedStatus: "inprogress" },
+			{ localId: 1, commanderId: 101, lastSyncedStatus: "idle" },
+			{ localId: 2, commanderId: 102, lastSyncedStatus: "idle" },
 		]);
 		expect(updated.pendingCreates).toEqual([]);
 	});

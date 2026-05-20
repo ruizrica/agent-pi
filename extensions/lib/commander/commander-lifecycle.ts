@@ -2,11 +2,18 @@
 // ABOUTME: Shared by agent-team.ts and subagent-widget.ts to avoid duplicating MCP call logic.
 // ABOUTME: Includes single retry with 2s delay, final comments, and recoverable intent logging.
 
-import { clearLifecycleIntent, recordLifecycleIntent } from "./lifecycle-intents.ts";
+import { clearLifecycleIntent, recordLifecycleIntent, MAX_INTENT_ATTEMPTS } from "./lifecycle-intents.ts";
 
 const RETRY_DELAY_MS = 2000;
-const MAX_ATTEMPTS = 2;
+// Transient-fault retry within a single in-process lifecycle method call.
+// Kept small so a failing cmd subprocess does not block the user-facing tool
+// result for more than ~RETRY_DELAY_MS * (IN_PROCESS_RETRY_LIMIT - 1) seconds.
+// The cross-session persistent-failure budget is MAX_INTENT_ATTEMPTS (imported
+// from lifecycle-intents.ts) — that axis is enforced by the lifecycle guard's
+// reconcileOpenLifecycleIntents, not here.
+const IN_PROCESS_RETRY_LIMIT = 2;
 const LIFECYCLE_TIMEOUT_MS = 30_000;
+void MAX_INTENT_ATTEMPTS;  // exported for documentation cross-reference; consumed by commander-lifecycle-guard.ts
 
 let lifecycleQueue: Promise<unknown> = Promise.resolve();
 
@@ -20,15 +27,15 @@ function callCommanderTask(client: any, params: Record<string, unknown>): Promis
 	return client.callTool("commander_task", params, LIFECYCLE_TIMEOUT_MS);
 }
 
-/** Helper: retry an async operation up to MAX_ATTEMPTS times with RETRY_DELAY_MS between attempts. */
+/** Helper: retry an async operation up to IN_PROCESS_RETRY_LIMIT times with RETRY_DELAY_MS between attempts. */
 async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
-	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+	for (let attempt = 1; attempt <= IN_PROCESS_RETRY_LIMIT; attempt++) {
 		try {
 			return await fn();
 		} catch (err: any) {
 			const msg = err?.message || String(err);
-			console.error(`[commander-lifecycle] ${label} failed (attempt ${attempt}/${MAX_ATTEMPTS}): ${msg}`);
-			if (attempt < MAX_ATTEMPTS) {
+			console.error(`[commander-lifecycle] ${label} failed (attempt ${attempt}/${IN_PROCESS_RETRY_LIMIT}): ${msg}`);
+			if (attempt < IN_PROCESS_RETRY_LIMIT) {
 				await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
 			} else {
 				throw err; // re-throw on final attempt so callers can handle

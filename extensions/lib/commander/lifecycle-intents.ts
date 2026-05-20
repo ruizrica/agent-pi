@@ -4,6 +4,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+// Cross-session lifecycle retry budget. Counts how many sessions can pick up
+// an open intent before the reconciler force-fails it. This is the persistent-
+// failure budget (sessions), NOT the in-process transient-fault retry bound
+// (see IN_PROCESS_RETRY_LIMIT in commander-lifecycle.ts for that axis).
+export const MAX_INTENT_ATTEMPTS = 5;
+
 export type LifecycleIntentAction = "claim" | "comment" | "complete" | "fail" | "cancel";
 export type LifecycleIntentStatus = "pending" | "succeeded";
 

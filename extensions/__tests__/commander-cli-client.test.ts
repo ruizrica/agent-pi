@@ -581,4 +581,55 @@ describe("CommanderCliClient", () => {
 			expect(caught?.message).toBe("cmd task update failed: exit 1");
 		});
 	});
+
+	describe("CMD_SKIP_DUPLICATE_PREFLIGHT env injection", () => {
+		const savedKeep = process.env.PI_CMD_KEEP_PREFLIGHT;
+		const savedPath = process.env.PATH;
+
+		beforeEach(() => {
+			delete process.env.PI_CMD_KEEP_PREFLIGHT;
+		});
+
+		afterEach(() => {
+			if (savedKeep === undefined) delete process.env.PI_CMD_KEEP_PREFLIGHT;
+			else process.env.PI_CMD_KEEP_PREFLIGHT = savedKeep;
+			// PATH is read-only in spread; ensure we didn't mutate it
+			if (savedPath !== undefined) process.env.PATH = savedPath;
+		});
+
+		it("sets CMD_SKIP_DUPLICATE_PREFLIGHT=1 on every execFile call by default", async () => {
+			mockExec([]);
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			await client.callTool("commander_task", { operation: "list" });
+
+			expect(execFileMock).toHaveBeenCalledWith(
+				"cmd-test",
+				expect.any(Array),
+				expect.objectContaining({
+					env: expect.objectContaining({ CMD_SKIP_DUPLICATE_PREFLIGHT: "1" }),
+				}),
+				expect.any(Function),
+			);
+		});
+
+		it("preserves inherited PATH/HOME in the spawned child env", async () => {
+			mockExec([]);
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			await client.callTool("commander_task", { operation: "list" });
+
+			const opts = execFileMock.mock.calls[0][2];
+			expect(opts.env.PATH).toBe(process.env.PATH);
+			expect(opts.env.HOME).toBe(process.env.HOME);
+		});
+
+		it("omits CMD_SKIP_DUPLICATE_PREFLIGHT when PI_CMD_KEEP_PREFLIGHT is set", async () => {
+			process.env.PI_CMD_KEEP_PREFLIGHT = "1";
+			mockExec([]);
+			const client = new CommanderCliClient({ bin: "cmd-test" });
+			await client.callTool("commander_task", { operation: "list" });
+
+			const opts = execFileMock.mock.calls[0][2];
+			expect(opts.env.CMD_SKIP_DUPLICATE_PREFLIGHT).toBeUndefined();
+		});
+	});
 });

@@ -295,10 +295,17 @@ export function applyGroupCreateResult(
 	const newMappings = Array.from({ length: len }, (_, i) => {
 		const localId = localIds[i];
 		const pending = pendingByLocalId.get(localId);
+		// CORRECTION: cmd's `task add` always creates with status "pending" (local
+		// equivalent: "idle"), independent of what pending.desiredStatus says. The
+		// prior code optimistically wrote desiredStatus here, which is a LIE — it
+		// claims we synced the user's latest toggle when in fact we only synced
+		// "pending". Downstream drift detection then saw lastSyncedStatus === task.status
+		// and never fired the actual catch-up update. Always recording "idle" (the
+		// true sync state) restores Fix 1 / reconciler drift detection.
 		return {
 			localId,
 			commanderId: result.taskIds[i],
-			...(pending ? { lastSyncedStatus: pending.desiredStatus } : {}),
+			...(pending ? { lastSyncedStatus: "idle" as LocalStatus } : {}),
 		};
 	});
 	const mappedLocalIds = new Set(newMappings.map(m => m.localId));
@@ -317,4 +324,91 @@ export function markGroupCreateSettled(state: SyncState): SyncState {
 
 export function isExternalSyncActive(): boolean {
 	return (globalThis as any).__piCommanderPlanGroupId !== undefined;
+}
+
+// ── Group:create orchestration ───────────────────────────────────────
+
+// Phase 3.0.1 diagnostic: append-to-file logger so runtime diagnostics are
+// inspectable even when stderr is redirected by the Pi TUI. Disable by deleting
+// the file path; the helper no-ops on any fs error.
+function debugLog(line: string): void {
+	try {
+		// Lazy require to avoid pulling node:fs into pure tests.
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const { appendFileSync } = require("node:fs");
+		const ts = new Date().toISOString();
+		appendFileSync(".commander/logs/pi-sync-debug.log", `${ts} ${line}\n`);
+	} catch {
+		// best-effort logging; never throw from the diagnostic itself
+	}
+}
+
+export interface ExecuteGroupCreateOptions {
+	client: { callTool: (name: string, params: any, timeoutMs?: number) => Promise<any> };
+	payload: unknown;
+	localIds: number[];
+	getState: () => SyncState;
+	onResolved: (next: SyncState) => void;
+	onSuccess?: () => void;
+	// Fix 1: catch up local status drift. group:create takes ~8s emulating N+1
+	// subprocess calls; the user often toggles tasks during the in-flight window.
+	// If provided, executeGroupCreate compares each newly mapped task's local
+	// status against its lastSyncedStatus (the desiredStatus snapshot from
+	// addPendingCreates time) and fires status-update calls for drifted entries
+	// — eliminating the "Commander sync pending forever" symptom for the
+	// race-condition path. Each catch-up update is fire-and-forget; the 15s
+	// reconciler tick recovers any that fail.
+	getCurrentStatuses?: () => Map<number, LocalStatus>;
+}
+
+// Drives one Commander group:create round-trip. Reads getState() AFTER the
+// callTool await so concurrent state mutations during the in-flight subprocess
+// are observed — preserves the closure-read semantics of the original lambdas.
+export async function executeGroupCreate(opts: ExecuteGroupCreateOptions): Promise<void> {
+	const { client, payload, localIds, getState, onResolved, onSuccess, getCurrentStatuses } = opts;
+	debugLog(`executeGroupCreate ENTER localIds=[${localIds.join(",")}]`);
+	try {
+		const res = await client.callTool("commander_task", payload, 30_000);
+		const parsed = parseGroupCreateResult(res);
+		const current = getState();
+		if (parsed) {
+			debugLog(`executeGroupCreate SUCCESS groupId=${parsed.groupId} taskIds=[${parsed.taskIds.join(",")}] localIds=[${localIds.join(",")}]`);
+			const nextState = applyGroupCreateResult(current, localIds, parsed);
+			onResolved(nextState);
+			onSuccess?.();
+			// Fix 1: catch up status drift accumulated during the in-flight window.
+			// Without this, the user toggling during group:create's ~8s wait would
+			// see "Commander sync pending forever" because lookupMapping returned
+			// undefined when the toggle path ran, and no later code updates the
+			// child task's status until the 15s reconciler tick.
+			if (getCurrentStatuses) {
+				const statuses = getCurrentStatuses();
+				const freshLocalIds = new Set(localIds);
+				const drifted = nextState.mappings.filter((m) => {
+					if (!freshLocalIds.has(m.localId)) return false;
+					const current = statuses.get(m.localId);
+					return current !== undefined && current !== m.lastSyncedStatus;
+				});
+				for (const mapping of drifted) {
+					const status = statuses.get(mapping.localId)!;
+					debugLog(`executeGroupCreate CATCH_UP localId=${mapping.localId} commanderId=${mapping.commanderId} status=${status}`);
+					// Fire-and-forget; reconciler picks up failures on its 15s tick.
+					client.callTool("commander_task", {
+						operation: "update",
+						task_id: mapping.commanderId,
+						status: localToCommander(status),
+					}).catch(() => { /* reconciler retry path handles this */ });
+				}
+			}
+		} else {
+			const previewText = (res as any)?.content?.[0]?.text;
+			const preview = typeof previewText === "string" ? previewText.slice(0, 600) : JSON.stringify(res).slice(0, 600);
+			debugLog(`executeGroupCreate PARSE_FAILURE cmd response preview: ${preview}`);
+			onResolved(markGroupCreateSettled(current));
+		}
+	} catch (err: any) {
+		debugLog(`executeGroupCreate THROW ${err?.message || String(err)}`);
+		onResolved(markGroupCreateSettled(getState()));
+		throw err;
+	}
 }
