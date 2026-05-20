@@ -47,6 +47,7 @@ import {
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
 import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
+import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
 import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
@@ -728,6 +729,14 @@ export default function (pi: ExtensionAPI) {
 						return {
 							content: [{ type: "text" as const, text: "Error: text (title) required for new-list" }],
 							details: makeDetails("new-list", "text required"),
+						};
+					}
+
+					const briefCheck = validateNewListBrief(params.description);
+					if (!briefCheck.ok) {
+						return {
+							content: [{ type: "text" as const, text: `Error: ${briefCheck.reason}` }],
+							details: makeDetails("new-list", briefCheck.reason),
 						};
 					}
 
