@@ -95,6 +95,7 @@ const TasksParams = Type.Object({
 	texts: Type.Optional(Type.Array(Type.String(), { description: "Multiple task texts (for add). Use this to batch-add several tasks at once." })),
 	description: Type.Optional(Type.String({ description: "Rich 1-3 sentence work summary for the list (for new-list)" })),
 	id: Type.Optional(Type.Number({ description: "Task ID (for toggle/remove/update)" })),
+	test_only: Type.Optional(Type.Boolean({ description: "When true on new-list/add, tags every resulting Commander task with the 'test-only' label so it surfaces as a cleanup candidate. Validation/scaffold cards should set this; real shipping work should NOT." })),
 });
 
 // ── Status helpers ─────────────────────────────────────────────────────
@@ -718,7 +719,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Tasks",
 		description:
 			"Manage your task list. You MUST add tasks before using any other tools. " +
-			"Actions: new-list (text=title, description, optional texts[] for initial tasks), update-list (refines text=title and/or description on the existing list — syncs to the Commander parent's mission brief), add (text or texts[] for batch), claim (id, optional text=agent name), toggle (id) — cycles idle→inprogress→done and auto-claims on inprogress, remove (id), update (id + text), list, clear. " +
+			"Actions: new-list (text=title, description, optional texts[] for initial tasks, optional test_only=true for validation scaffolds), update-list (refines text=title and/or description on the existing list — syncs to the Commander parent's mission brief), add (text or texts[] for batch, optional test_only=true), claim (id, optional text=agent name), toggle (id) — cycles idle→inprogress→done and auto-claims on inprogress, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and rich 1-3 sentence work summary in description, not just a short label. " +
 			"The work summary is shown when starting/listing tasks. " +
@@ -795,6 +796,7 @@ export default function (pi: ExtensionAPI) {
 								listDescription || listTitle || "Tasks",
 								initialTasks.map((t) => t.text),
 								process.cwd(),
+								params.test_only ? ["test-only"] : undefined,
 							);
 							syncToCommander("group-create", (client) => executeGroupCreate({
 								client,
@@ -825,9 +827,10 @@ export default function (pi: ExtensionAPI) {
 					// Soft warning when the brief reads like a validation/test scaffold
 					// and the agent is materializing more than one child upfront. See the
 					// 2026-05-19 audit (5 cards where 1-2 would do) — this is the nudge
-					// that should have fired then. Never blocks; pure UX.
-					if (initialTasks.length > 1 && looksLikeTestList(listTitle, listDescription)) {
-						msg += `\n⚠ Heads up: this brief reads like a validation/test scaffold. Consider 1-2 children instead of ${initialTasks.length}, and cancel them after verification (don't mark them completed — they didn't ship real work).`;
+					// that should have fired then. Never blocks; pure UX. Skipped when
+					// test_only is already set (agent has explicitly declared intent).
+					if (!params.test_only && initialTasks.length > 1 && looksLikeTestList(listTitle, listDescription)) {
+						msg += `\n⚠ Heads up: this brief reads like a validation/test scaffold. Consider 1-2 children instead of ${initialTasks.length}, set test_only=true to tag them as cleanup candidates, and cancel after verification (don't mark them completed — they didn't ship real work).`;
 					}
 
 					const result = {
@@ -944,6 +947,7 @@ export default function (pi: ExtensionAPI) {
 								listDescription || listTitle || "Tasks",
 								added.map((t) => t.text),
 								process.cwd(),
+								params.test_only ? ["test-only"] : undefined,
 							);
 							syncToCommander("group-create", (client) => executeGroupCreate({
 								client,
@@ -959,6 +963,7 @@ export default function (pi: ExtensionAPI) {
 							}));
 						} else if (syncState.groupId !== undefined) {
 							// Path B: group exists — add individual tasks with group_id
+							const childLabels = params.test_only ? ["test-only"] : undefined;
 							for (const t of added) {
 								syncToCommander("task-create", async (client) => {
 									const res = await client.callTool("commander_task", {
@@ -966,6 +971,7 @@ export default function (pi: ExtensionAPI) {
 										description: t.text,
 										working_directory: process.cwd(),
 										group_id: syncState.groupId,
+										...(childLabels ? { labels: childLabels } : {}),
 									});
 									syncState = handleTaskCreateResponse(syncState, t.id, t.text, res, "idle");
 								});

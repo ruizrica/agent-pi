@@ -464,6 +464,31 @@ describe("buildGroupCreatePayload", () => {
 		const payload = buildGroupCreatePayload("My Tasks", "", ["A"], "/cwd");
 		expect(payload.initiative_summary).toBe("My Tasks");
 	});
+
+	it("should attach labels to the parent and every child when labels are provided (slice D)", () => {
+		const payload = buildGroupCreatePayload(
+			"My Tasks", "Desc", ["A", "B"], "/cwd",
+			["test-only"],
+		);
+		expect(payload.labels).toEqual(["test-only"]);
+		expect(payload.tasks[0].labels).toEqual(["test-only"]);
+		expect(payload.tasks[1].labels).toEqual(["test-only"]);
+	});
+
+	it("should omit labels entirely when none are provided (preserves existing behavior)", () => {
+		const payload = buildGroupCreatePayload("My Tasks", "Desc", ["A"], "/cwd");
+		expect((payload as any).labels).toBeUndefined();
+		expect((payload.tasks[0] as any).labels).toBeUndefined();
+	});
+
+	it("should support multiple labels", () => {
+		const payload = buildGroupCreatePayload(
+			"My Tasks", "Desc", ["A"], "/cwd",
+			["test-only", "audit-2026-05-19"],
+		);
+		expect(payload.labels).toEqual(["test-only", "audit-2026-05-19"]);
+		expect(payload.tasks[0].labels).toEqual(["test-only", "audit-2026-05-19"]);
+	});
 });
 
 describe("applyGroupCreateResult", () => {

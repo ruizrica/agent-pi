@@ -269,18 +269,22 @@ export function buildGroupCreatePayload(
 	description: string,
 	taskTexts: string[],
 	workingDir: string,
+	labels?: string[],
 ) {
+	const hasLabels = labels !== undefined && labels.length > 0;
 	return {
 		operation: "group:create" as const,
 		group_name: groupName,
 		initiative_summary: description || groupName,
 		total_waves: 1,
 		working_directory: workingDir,
+		...(hasLabels ? { labels } : {}),
 		tasks: taskTexts.map((text) => ({
 			description: text,
 			task_prompt: text,
 			context: "",
 			dependency_order: 0,
+			...(hasLabels ? { labels } : {}),
 		})),
 	};
 }
