@@ -24,14 +24,17 @@ describe("buildNormalPrompt", () => {
 		}
 	});
 
-	it("with commanderAvailable: true, contains commander_task", () => {
+	it("with commanderAvailable: true, includes the gated Commander Integration section (marked REQUIRED)", () => {
 		const result = buildNormalPrompt({ commanderAvailable: true, activeChain: null, activePipeline: null });
-		expect(result).toContain("commander_task");
+		expect(result).toContain("Commander Integration (REQUIRED)");
+		expect(result).toContain("cmd CLI is connected");
 	});
 
-	it("with commanderAvailable: false, does NOT contain commander_task", () => {
+	it("with commanderAvailable: false, does NOT include the gated REQUIRED section (inline guidance still present)", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
-		expect(result).not.toContain("commander_task");
+		expect(result).not.toContain("Commander Integration (REQUIRED)");
+		// Inline mode-body guidance is unconditional; it still references tasks.
+		expect(result).toContain("tasks");
 	});
 
 	it("with activeChain set, contains chain name", () => {
@@ -86,9 +89,9 @@ describe("buildNormalPrompt — WARDEN task confirmation", () => {
 });
 
 describe("buildNormalPrompt — Commander task guidance", () => {
-	it("with commanderAvailable: true, mentions commander_mailbox in task guidance", () => {
+	it("with commanderAvailable: true, points agents at `cmd mailbox send` for cross-agent signals", () => {
 		const result = buildNormalPrompt({ commanderAvailable: true, activeChain: null, activePipeline: null });
-		expect(result).toContain("commander_mailbox");
+		expect(result).toContain("cmd mailbox send");
 	});
 
 	it("with commanderAvailable: false, includes Commander-offline note", () => {
@@ -105,16 +108,24 @@ describe("buildCommanderSection", () => {
 		expect(result.length).toBeGreaterThan(0);
 	});
 
-	it("contains commander_task", () => {
-		expect(buildCommanderSection()).toContain("commander_task");
+	it("directs agents at the local `tasks` tool for task tracking", () => {
+		expect(buildCommanderSection()).toContain("`tasks`");
 	});
 
-	it("contains commander_task", () => {
-		expect(buildCommanderSection()).toContain("commander_task");
+	it("directs agents at `cmd mailbox send` for cross-agent signals", () => {
+		expect(buildCommanderSection()).toContain("cmd mailbox send");
 	});
 
-	it("contains commander_mailbox", () => {
-		expect(buildCommanderSection()).toContain("commander_mailbox");
+	it("does NOT advertise the removed MCP-style commander_* tools as callable", () => {
+		const result = buildCommanderSection();
+		expect(result).not.toContain("commander_task");
+		expect(result).not.toContain("commander_mailbox");
+		expect(result).not.toContain("commander_session");
+	});
+
+	it("reminds agents to pass --runtime / --model on cmd writes", () => {
+		expect(buildCommanderSection()).toContain("--runtime");
+		expect(buildCommanderSection()).toContain("--model");
 	});
 });
 

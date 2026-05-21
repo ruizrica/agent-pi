@@ -103,8 +103,8 @@ export function buildCommanderTaskOwnershipPolicy(opts: CommanderTaskOwnershipPr
 
 ## Commander Task Ownership — No Phantom Tasks
 ${assignedLine}
-- Use \`commander_mailbox\` for cross-agent signals: status, discoveries, questions, blockers, handoffs, and worker_done/result messages.
-- Use \`commander_task comment:add\` or \`commander_task log\` for updates on an existing claimed/assigned task.
+- Use \`bash\` running \`cmd mailbox send <to> "<subject>" "<body>" --type <kind>\` for cross-agent signals: status, discoveries, questions, blockers, handoffs, and worker_done/result messages.
+- Use \`bash\` running \`cmd task comment <id> "<note>" --type progress\` (or \`--type info\`) for updates on an existing claimed/assigned task.
 - Every Commander board task you create or claim is your responsibility. Before final output, it must be completed, failed, cancelled, or explicitly handed off with a current status and owner.
 - Never leave pending/working tasks behind as placeholders. If the work is not actionable right now, send mailbox/status context instead of making a task.`;
 }

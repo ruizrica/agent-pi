@@ -67,14 +67,19 @@ If a subagent errors, dispatch a **new subagent** with corrected context — do 
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
 	return `\n## Commander Integration (REQUIRED)
-Commander CLI is connected. ALWAYS use these CLI-backed tools for dashboard visibility:
-- \`commander_task\` — track durable, executable work in Commander; every board task needs a lifecycle owner and must be completed, failed, cancelled, or explicitly handed off
-- \`commander_mailbox\` — ALWAYS send status updates, discoveries, questions, blockers, handoffs, and worker_done/result messages through mailbox instead of creating coordination tasks
+The cmd CLI is connected; the local \`tasks\` tool auto-syncs to the Commander board. Use these surfaces:
+- \`tasks\` — all task tracking (new-list, update-list, add, toggle, etc.). Commander syncs happen automatically when the CLI is reachable.
+- \`bash\` with the cmd CLI — for mailbox messages and ad-hoc board ops the \`tasks\` tool does not cover:
+  - \`cmd mailbox send <to> "<subject>" "<body>" --type status\` — cross-agent signals at start, milestones, completion
+  - \`cmd task comment <id> "<note>" --type progress\` — progress notes on a claimed task
+  - \`cmd task list --json\` — one-off board queries (filter via --status, --label, etc.)
+- ALWAYS pass \`--runtime <name> --model <name>\` on cmd writes (per CLAUDE.md cmd section).
+- Prefer \`tasks\` for ownership and cmd mailbox for cross-agent signals — do NOT spawn coordination wrapper tasks.
 
-### Mailbox Protocol
-- Check your inbox periodically: \`commander_mailbox { operation: "inbox", agent_name: "<your-name>" }\`
-- Send status at start, milestones, and completion
-- Use task comments/logs for progress on an existing claimed task; use mailbox for cross-agent signals
+### Communication Protocol
+- Check your inbox periodically via \`bash\` running \`cmd mailbox inbox --json\`
+- Send status at start, milestones, and completion through \`cmd mailbox send\`
+- Use \`cmd task comment\` for progress on an existing claimed task; use mailbox for cross-agent signals
 - Warm, professional, collaborative tone — no emojis anywhere${buildCommanderTaskOwnershipPolicy()}`;
 }
 
@@ -549,8 +554,8 @@ Example:
 - Use \`subagent_cleanup {}\` to clear stale/zombie agents if needed
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
-- ALWAYS broadcast status with \`commander_mailbox\` at plan start, approval, and completion when connected
+- ALWAYS track tasks locally with \`tasks\`; Commander syncs happen automatically when the cmd CLI is connected
+- ALWAYS broadcast status with \`bash\` running \`cmd mailbox send\` at plan start, approval, and completion when connected
 `;
 }
 
@@ -677,8 +682,8 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 - Handoff approved remediation into IMPLEMENT after Commander tasks are created.
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
-- ALWAYS broadcast status with \`commander_mailbox\` at investigation start, approval, and completion when connected
+- ALWAYS track tasks locally with \`tasks\`; Commander syncs happen automatically when the cmd CLI is connected
+- ALWAYS broadcast status with \`bash\` running \`cmd mailbox send\` at investigation start, approval, and completion when connected
 `;
 }
 
@@ -766,7 +771,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS track debug slices locally with \`tasks\`; when the Commander CLI is connected, use Commander tasks for approved remediation execution
-- ALWAYS broadcast status with \`commander_mailbox\` at debug start, log-visibility confirmation, major findings, report approval, and completion when connected
+- ALWAYS broadcast status with \`bash\` running \`cmd mailbox send\` at debug start, log-visibility confirmation, major findings, report approval, and completion when connected
 `;
 }
 
@@ -839,8 +844,8 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 - Prefer one focused slice over broad unfocused context gathering.
 
 ## Commander Integration (ALWAYS use when connected)
-- ALWAYS track tasks locally with \`tasks\`; when the Commander CLI is connected, \`commander_task\` provides cross-session sync
-- ALWAYS broadcast status with \`commander_mailbox\` at goal start, major loop milestones, blocking questions, and GOAL MET completion when connected
+- ALWAYS track tasks locally with \`tasks\`; Commander syncs happen automatically when the cmd CLI is connected
+- ALWAYS broadcast status with \`bash\` running \`cmd mailbox send\` at goal start, major loop milestones, blocking questions, and GOAL MET completion when connected
 `;
 }
 
@@ -1006,7 +1011,7 @@ Once all three Kiro documents are ready and approved, do not implement directly 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS use local spec documents first; when the Commander CLI-backed tools are connected, use commander_spec operations for cross-session tracking
 - ALWAYS use commander_workflow template:get with workflow \`kiro\` for requirements, design, and tasks templates when available
-- ALWAYS use commander_mailbox when connected: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
+- ALWAYS use \`bash\` running \`cmd mailbox send\` when connected: send status at spec creation, requirements completion, spec drafting, task drafting, and approval
 `;
 }
 

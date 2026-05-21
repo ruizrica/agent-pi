@@ -30,8 +30,9 @@ describe("PLAN_PROMPT", () => {
 		expect(PLAN_PROMPT.toLowerCase()).toContain("implement");
 	});
 
-	it("contains 'commander_task'", () => {
-		expect(PLAN_PROMPT).toContain("commander_task");
+	it("teaches that the local `tasks` tool auto-syncs to Commander (replaces the removed MCP commander_task)", () => {
+		expect(PLAN_PROMPT).toContain("tasks");
+		expect(PLAN_PROMPT).toContain("Commander syncs happen automatically");
 	});
 
 	it("contains '.context/todo.md'", () => {
@@ -333,8 +334,8 @@ describe("SPEC_PROMPT", () => {
 		expect(SPEC_PROMPT).toContain("template:get");
 	});
 
-	it("contains 'commander_mailbox'", () => {
-		expect(SPEC_PROMPT).toContain("commander_mailbox");
+	it("routes cross-agent signals through `cmd mailbox send` (replaces the removed MCP commander_mailbox)", () => {
+		expect(SPEC_PROMPT).toContain("cmd mailbox send");
 	});
 });
 

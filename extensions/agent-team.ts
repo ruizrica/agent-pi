@@ -1259,16 +1259,16 @@ export default function (pi: ExtensionAPI) {
 		const commanderSection = commanderAvailable ? `
 
 ## Commander Integration (REQUIRED)
-Commander is connected. ALWAYS use these tools for dashboard visibility:
-- \`commander_session { operation: "file:open", file_path: <path> }\` — display key files in Commander's floating viewer
-- \`commander_task\` — track tasks in the Commander dashboard
-- \`commander_mailbox\` — send status updates to the dashboard
+The cmd CLI is connected. The local \`tasks\` tool auto-syncs to the Commander board; use \`bash\` + cmd for surfaces \`tasks\` doesn't cover:
+- \`tasks\` — track work (new-list, add, toggle); Commander syncs happen automatically
+- \`bash\` running \`cmd mailbox send <to> "<subject>" "<body>" --type status\` — send status updates to the dashboard
+- \`bash\` running \`cmd task comment <id> "<note>" --type progress\` — progress notes on a claimed task
 
-### Mailbox Protocol
-- Check your inbox periodically: \`commander_mailbox { operation: "inbox", agent_name: "coordinator" }\`
-- Send status at start, milestones, and completion
-- Warm, professional, collaborative tone — no emojis anywhere
-- Use file:open to show dispatched agent results or task lists` : "";
+### Communication Protocol
+- Check your inbox periodically: \`bash\` running \`cmd mailbox inbox --json\`
+- Send status at start, milestones, and completion via \`cmd mailbox send\`
+- Always pass \`--runtime <name> --model <name>\` on cmd writes
+- Warm, professional, collaborative tone — no emojis anywhere` : "";
 
 		// Check if scout is on the team for delegation instructions
 		const hasScout = agentStates.has("scout");
