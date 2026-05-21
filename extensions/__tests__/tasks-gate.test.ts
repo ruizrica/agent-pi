@@ -130,10 +130,6 @@ describe("viewer/UI tool bypass", () => {
 		expect(shouldBypassTaskGate("show_report")).toBe(true);
 	});
 
-	it("should bypass for 'show_board' tool", () => {
-		expect(shouldBypassTaskGate("show_board")).toBe(true);
-	});
-
 	it("should bypass for 'show_file' tool", () => {
 		expect(shouldBypassTaskGate("show_file")).toBe(true);
 	});
