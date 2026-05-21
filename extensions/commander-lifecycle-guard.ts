@@ -11,7 +11,13 @@ import {
 	MAX_INTENT_ATTEMPTS,
 	type LifecycleIntent,
 } from "./lib/commander/lifecycle-intents.ts";
-import { alignPointerOnSessionStart } from "./lib/commander/project-pointer-sync.ts";
+// Note: alignPointerOnSessionStart deliberately not imported here anymore.
+// The dashboard's currentProjectId is a UI-only filter owned by the user via
+// the projects button (see desktop handoff 2026-05-20-handoff-commander-cross-
+// project-dashboard.md). Pi must not auto-switch it on session start — the
+// commander-v2 dashboard is being moved to a cross-project default view where
+// the pointer becomes opt-in. The helper itself is retained in
+// project-pointer-sync.ts in case a manual command wants to invoke it.
 
 const RECONCILE_OP_TIMEOUT_MS = 30_000;
 const REAP_OP_TIMEOUT_MS = 15_000;
@@ -236,26 +242,13 @@ export default function (pi: ExtensionAPI) {
 			});
 		}, 0);
 
-		// Project-pointer alignment: commander-v2 fd6ce08 made the CLI cwd-blind
-		// while the dashboard still reads currentProjectId from mock-state.json.
-		// Without this reconcile, tasks land in bd but never appear on the
-		// dashboard's active board. Cost Ricardo a full day on 2026-05-19.
-		// See docs/adr/0001-cmd-contract.md.
-		if (isCommanderAvailable()) {
-			setTimeout(() => {
-				alignPointerOnSessionStart().then((action) => {
-					if (action.kind === "switch") {
-						const name = action.targetProjectName ?? `#${action.targetProjectId}`;
-						ctx.ui.notify(
-							`Commander: switched dashboard to ${name} (was #${action.previousProjectId ?? "none"})`,
-							"info",
-						);
-					}
-				}).catch((err: any) => {
-					console.error("[lifecycle-guard] project-pointer sync error:", err?.message || err);
-				});
-			}, 0);
-		}
+		// Project-pointer auto-alignment removed 2026-05-20. Pi must not change
+		// the dashboard's currentProjectId — it's a UI-only filter owned by the
+		// user via the projects button. The commander-v2 dashboard is moving to
+		// a cross-project default view; pointer drift stops being a bug there.
+		// See: Desktop/2026-05-20-handoff-commander-cross-project-dashboard.md
+		// Prior context: docs/adr/0001-cmd-contract.md (pointer-alignment ADR,
+		// now superseded by the cross-project default design).
 	});
 
 	pi.on("agent_end", async (_event, _ctx) => {
