@@ -1,5 +1,8 @@
-// ABOUTME: Stop/start guard for Commander lifecycle recovery.
-// ABOUTME: Surfaces cmd housekeep findings and Pi pending lifecycle intents before agents finish.
+// ABOUTME: Silent lifecycle recovery layer for Commander.
+// ABOUTME: Replays pending intents on session_start and reaps stale claims on
+// ABOUTME: agent_end. Does not surface findings to the user — observability was
+// ABOUTME: deliberately removed 2026-05-20 (Ricardo's call: too noisy, recovery
+// ABOUTME: should be invisible until something actually fails).
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
@@ -21,13 +24,6 @@ import {
 
 const RECONCILE_OP_TIMEOUT_MS = 30_000;
 const REAP_OP_TIMEOUT_MS = 15_000;
-const DOCTOR_CACHE_TTL_MS = 60_000;
-
-// Module-scoped cache for the cmd housekeep --doctor warning collection.
-// Repeated Pi launches (or agent_end fires) within the TTL reuse the prior
-// result instead of re-running the ~1.9s board-wide bd scan.
-let cachedWarnings: string[] | undefined;
-let lastDoctorAt = 0;
 
 /**
  * Invoke cmd housekeep reap:stale-claims to release claims left dangling by
@@ -44,12 +40,6 @@ export async function runReapStaleClaims(client: any | null): Promise<void> {
 	} catch (err: any) {
 		console.error("[lifecycle-guard] reap:stale-claims dispatch error:", err?.message || err);
 	}
-}
-
-function parseWrappedJson(result: any): any | undefined {
-	const text = result?.content?.[0]?.text;
-	if (typeof text !== "string") return undefined;
-	try { return JSON.parse(text); } catch { return undefined; }
 }
 
 async function dispatchIntent(client: any, intent: LifecycleIntent): Promise<void> {
@@ -152,58 +142,7 @@ export async function reconcileOpenLifecycleIntents(
 	return { reconciled, retained, exhausted };
 }
 
-async function collectLifecycleWarnings(): Promise<string[]> {
-	// Cache hit: reuse the prior result if it is still inside the TTL window.
-	// Pi launches and rapid agent_end fires shouldn't each pay the ~1.9s
-	// board-wide bd scan that backs cmd housekeep --doctor.
-	const now = Date.now();
-	if (cachedWarnings && now - lastDoctorAt < DOCTOR_CACHE_TTL_MS) {
-		// Refresh the intents portion (cheap, file-only) on every call so the
-		// cache doesn't hide a newly-opened intent. The expensive doctor part
-		// stays cached.
-		const intents = listOpenLifecycleIntents();
-		const refreshed = cachedWarnings.filter(w => !w.startsWith("Pi has ") || !w.includes("pending Commander lifecycle intent"));
-		if (intents.length > 0) {
-			refreshed.unshift(`Pi has ${intents.length} pending Commander lifecycle intent(s): ${intents.map(i => `${i.taskId}:${i.action}`).join(", ")}.`);
-		}
-		return refreshed;
-	}
-
-	const warnings: string[] = [];
-	const intents = listOpenLifecycleIntents();
-	if (intents.length > 0) {
-		warnings.push(`Pi has ${intents.length} pending Commander lifecycle intent(s): ${intents.map(i => `${i.taskId}:${i.action}`).join(", ")}.`);
-	}
-	if (isCommanderAvailable()) {
-		try {
-			const client = getCommanderCliClient();
-			const doctor = parseWrappedJson(await client.callTool("commander_housekeep", { operation: "doctor" }, 15_000));
-			const findings = Array.isArray(doctor?.findings) ? doctor.findings : [];
-			if (findings.length > 0) {
-				warnings.push(`cmd housekeep reports ${findings.length} lifecycle finding(s): ${findings.slice(0, 5).map((f: any) => `${f.category}: ${f.line}`).join("; ")}.`);
-			}
-		} catch {
-			// Housekeep is advisory; pending intents still surface recovery requirements.
-		}
-	}
-	cachedWarnings = warnings;
-	lastDoctorAt = now;
-	return warnings;
-}
-
 export default function (pi: ExtensionAPI) {
-	let lastAgentEndFingerprint = "";
-	let lastAgentEndNotifiedAt = 0;
-
-	function shouldNotifyAgentEnd(warnings: string[]): boolean {
-		const fingerprint = warnings.join("\n");
-		const now = Date.now();
-		if (fingerprint === lastAgentEndFingerprint && now - lastAgentEndNotifiedAt < 60_000) return false;
-		lastAgentEndFingerprint = fingerprint;
-		lastAgentEndNotifiedAt = now;
-		return true;
-	}
-
 	pi.on("session_start", async (_event, ctx) => {
 		applyExtensionDefaults(import.meta.url, ctx);
 
@@ -215,32 +154,15 @@ export default function (pi: ExtensionAPI) {
 		if (hasOpenIntents && isCommanderAvailable()) {
 			try {
 				const client = getCommanderCliClient();
-				const summary = await reconcileOpenLifecycleIntents(client);
+				await reconcileOpenLifecycleIntents(client);
 				await runReapStaleClaims(client);
-				if (summary.reconciled + summary.exhausted > 0) {
-					ctx.ui.notify(
-						`Lifecycle reconciler: ${summary.reconciled} recovered, ${summary.retained} retained, ${summary.exhausted} auto-failed.`,
-						"info",
-					);
-				}
+				// Recovery is silent — no ctx.ui.notify. If something is wrong the
+				// errors above log to stderr; the user finds out via cmd housekeep
+				// --doctor when they explicitly ask.
 			} catch (err: any) {
 				console.error("[lifecycle-guard] reconciler dispatch error:", err?.message || err);
 			}
 		}
-
-		// Background the doctor warning collection so session_start completes
-		// without waiting on the ~1.9s board-wide scan. A finding still surfaces
-		// to the user via ctx.ui.notify, just on the next event-loop tick rather
-		// than blocking startup.
-		setTimeout(() => {
-			collectLifecycleWarnings().then((warnings) => {
-				if (warnings.length > 0) {
-					ctx.ui.notify(`Commander lifecycle recovery needed: ${warnings[0]}`, "warning");
-				}
-			}).catch((err: any) => {
-				console.error("[lifecycle-guard] deferred warning collection error:", err?.message || err);
-			});
-		}, 0);
 
 		// Project-pointer auto-alignment removed 2026-05-20. Pi must not change
 		// the dashboard's currentProjectId — it's a UI-only filter owned by the
@@ -252,30 +174,14 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, _ctx) => {
+		// Silent reap of stale claims at agent_end. No warning surface anymore
+		// (removed 2026-05-20). If reap fails the error logs to stderr.
 		if (isCommanderAvailable()) {
 			try {
 				await runReapStaleClaims(getCommanderCliClient());
 			} catch (err: any) {
 				console.error("[lifecycle-guard] reap dispatch error on agent_end:", err?.message || err);
 			}
-		}
-		const warnings = await collectLifecycleWarnings();
-		if (warnings.length === 0) {
-			lastAgentEndFingerprint = "";
-			lastAgentEndNotifiedAt = 0;
-			return;
-		}
-		if (!shouldNotifyAgentEnd(warnings)) return;
-		try {
-			pi.sendMessage({
-				customType: "commander-lifecycle-validation",
-				content: `Commander lifecycle responsibilities remain open. Before stopping, resolve them through cmd: add a current task comment/handoff, then complete/fail/cancel/delete or adopt stale work.\n\n${warnings.map(w => `- ${w}`).join("\n")}`,
-				display: true,
-			}, { triggerTurn: false });
-		} catch {
-			// Short-lived/replaced sessions can make the extension API stale before
-			// this advisory message is delivered. Do not surface lifecycle advice as
-			// a startup/shutdown artifact.
 		}
 	});
 }

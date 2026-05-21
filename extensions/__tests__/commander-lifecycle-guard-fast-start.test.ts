@@ -1,8 +1,9 @@
-// ABOUTME: Verifies that session_start is no longer dominated by synchronous
-// ABOUTME: Commander housekeep work. The reconcile/reap path runs only when
-// ABOUTME: there are open lifecycle intents to handle; the doctor warning
-// ABOUTME: collection is deferred off the hot path so cold Pi launches finish
-// ABOUTME: session_start without waiting on two ~2s board-wide bd scans.
+// ABOUTME: Verifies that session_start is not dominated by synchronous Commander
+// ABOUTME: housekeep work. The reconcile/reap path runs only when there are open
+// ABOUTME: lifecycle intents to handle — every other cold launch must pay zero
+// ABOUTME: board-wide bd scan cost. Doctor-warning observability was removed
+// ABOUTME: 2026-05-20 (option 2: keep recovery, drop noisy notifications); the
+// ABOUTME: tests that pinned its presence are gone too.
 
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -37,22 +38,5 @@ describe("commander lifecycle guard — fast session_start", () => {
 		const reapIdx = sessionStartBlock.indexOf("runReapStaleClaims");
 		expect(reconcileIdx).toBeGreaterThan(intentsCheckIdx);
 		expect(reapIdx).toBeGreaterThan(intentsCheckIdx);
-	});
-
-	it("defers collectLifecycleWarnings off the synchronous session_start path", () => {
-		// The warning collection runs a cmd housekeep --doctor (board-wide scan,
-		// ~1.9s). It must not block session_start; it should be scheduled
-		// asynchronously (setTimeout / queueMicrotask / Promise.resolve().then).
-		const warningsCallIdx = sessionStartBlock.indexOf("collectLifecycleWarnings");
-		expect(warningsCallIdx).toBeGreaterThan(-1);
-		const localContext = sessionStartBlock.slice(Math.max(0, warningsCallIdx - 80), warningsCallIdx + 60);
-		expect(localContext).toMatch(/setTimeout|queueMicrotask|Promise\.resolve\(\)\.then/);
-	});
-
-	it("caches recent doctor results with a TTL guard", () => {
-		// A 60s cache prevents repeated Pi launches from re-scanning the board
-		// every time. The implementation may hold the result in a module-scoped
-		// variable along with a timestamp.
-		expect(source).toMatch(/lastDoctorAt|doctorCacheTtl|DOCTOR_CACHE_TTL_MS|doctorCacheUntil/);
 	});
 });
