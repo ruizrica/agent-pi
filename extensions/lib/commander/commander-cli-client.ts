@@ -431,6 +431,11 @@ export class CommanderCliClient {
 		if (!process.env.PI_CMD_KEEP_PREFLIGHT) {
 			childEnv.CMD_SKIP_DUPLICATE_PREFLIGHT = "1";
 		}
+		// Route all Pi task writes to the central bd at ~/.commander/.beads/ so
+		// tasks created from any project (ff-chat, agent-pi, etc.) land in the
+		// single central store instead of per-folder .beads/ databases.
+		// Override via PI_CMD_BACKEND env for testing/debugging (e.g. PI_CMD_BACKEND=bd).
+		childEnv.CMD_BACKEND = process.env.PI_CMD_BACKEND ?? "central";
 		return new Promise((resolve, reject) => {
 			execFile(this.bin, finalArgs, { cwd: this.cwd, timeout: timeoutMs, encoding: "utf8", env: childEnv }, (error, stdout, stderr) => {
 				if (error) {
