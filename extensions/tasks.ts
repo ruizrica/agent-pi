@@ -46,13 +46,253 @@ import {
 	describeToggleCommanderState,
 	type SyncState,
 } from "./lib/commander/commander-sync.ts";
-import { shouldConfirmNewList } from "./lib/tasks-confirm.ts";
-import { validateNewListBrief } from "./lib/tasks-brief-validator.ts";
-import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "./lib/tasks-progress-comment.ts";
-import { buildParentMetadataUpdate } from "./lib/tasks-list-metadata.ts";
-import { looksLikeTestList } from "./lib/tasks-test-list-detector.ts";
 import { stripLeadingNumber } from "./lib/task-list-render.ts";
-import { renderTaskModalWorkSummary } from "./lib/task-modal-render.ts";
+
+// ── Inlined from tasks-confirm.ts ──────────────────────────────────
+
+type TaskStatusForConfirm = "idle" | "inprogress" | "done";
+
+interface TaskEntryForConfirm {
+	id: number;
+	text: string;
+	status: TaskStatusForConfirm;
+}
+
+/** Returns true if the user should be asked before replacing the task list.
+ *  A fully-completed list (all tasks done) or empty list does not need confirmation. */
+export function shouldConfirmNewList(tasks: TaskEntryForConfirm[], _listTitle: string | null): boolean {
+	if (tasks.length === 0) return false;
+	return tasks.some(t => t.status !== "done");
+}
+
+// ── Inlined from tasks-brief-validator.ts ──────────────────────────────
+
+export type BriefValidationResult =
+	| { ok: true }
+	| { ok: false; reason: string };
+
+const MIN_BRIEF_CHARS = 60;
+
+const CONTRACT_HINT =
+	"Pass a 1-3 sentence mission brief explaining the what & why "
+	+ "(see CLAUDE.md cmd section: `--mission-brief` is required for root tasks).";
+
+/**
+ * Validate a `tasks new-list --description` value. Pi-side gate that mirrors
+ * cmd's root-task `--mission-brief` requirement so we never push a thin brief
+ * (or no brief) to the Commander parent task.
+ */
+export function validateNewListBrief(description: string | undefined): BriefValidationResult {
+	if (description === undefined) {
+		return { ok: false, reason: `description is required. ${CONTRACT_HINT}` };
+	}
+	const trimmed = description.trim();
+	if (trimmed.length === 0) {
+		return { ok: false, reason: `description is required. ${CONTRACT_HINT}` };
+	}
+	if (trimmed.length < MIN_BRIEF_CHARS) {
+		return {
+			ok: false,
+			reason: `description is too short (${trimmed.length} chars, need at least ${MIN_BRIEF_CHARS}). ${CONTRACT_HINT}`,
+		};
+	}
+	return { ok: true };
+}
+
+// ── Inlined from tasks-list-metadata.ts ────────────────────────────────
+
+export interface ParentMetadataDiffArgs {
+	currentTitle?: string;
+	currentDescription?: string;
+	newTitle?: string;
+	newDescription?: string;
+}
+
+export interface ParentMetadataUpdate {
+	title?: string;
+	description?: string;
+	mission_brief?: string;
+}
+
+/**
+ * Diff the proposed list metadata against the current state and return only the
+ * fields that actually changed. When the description changes, both `description`
+ * and `mission_brief` are emitted so the parent's two fields stay aligned with
+ * how they were paired at group:create time (commander-cli-client.ts:272-284).
+ *
+ * Returns null when no meaningful change is present — the caller can skip the
+ * Commander round-trip entirely.
+ */
+export function buildParentMetadataUpdate(args: ParentMetadataDiffArgs): ParentMetadataUpdate | null {
+	const update: ParentMetadataUpdate = {};
+	const newTitle = args.newTitle?.trim();
+	const newDescription = args.newDescription?.trim();
+
+	if (newTitle !== undefined && newTitle !== (args.currentTitle ?? "").trim()) {
+		update.title = newTitle;
+	}
+	if (newDescription !== undefined && newDescription !== (args.currentDescription ?? "").trim()) {
+		update.description = newDescription;
+		update.mission_brief = newDescription;
+	}
+
+	return Object.keys(update).length === 0 ? null : update;
+}
+
+// ── Inlined from tasks-progress-comment.ts ─────────────────────────────
+
+export interface BuildParentProgressArgs {
+	done: number;
+	total: number;
+	justCompletedText: string;
+}
+
+/**
+ * Build the comment body posted to the Commander parent task when a child
+ * transitions to done. Mirrors the agent's local display by stripping any
+ * leading "N." prefix so the parent comment isn't double-numbered.
+ */
+export function buildParentProgressComment(args: BuildParentProgressArgs): string {
+	const cleanText = stripLeadingNumber(args.justCompletedText.trim());
+	return `${args.done}/${args.total} complete: ${cleanText}`;
+}
+
+export interface ShouldPostParentProgressArgs {
+	prevStatus: "idle" | "inprogress" | "done";
+	nextStatus: "idle" | "inprogress" | "done";
+	groupId: number | undefined;
+}
+
+/**
+ * Gate for the parent progress comment. Fires only on a transition INTO done
+ * from a non-done state, and only when a Commander parent task exists (no
+ * groupId means group:create is still in flight or sync is suppressed).
+ */
+export function shouldPostParentProgress(args: ShouldPostParentProgressArgs): boolean {
+	if (args.groupId === undefined) return false;
+	if (args.nextStatus !== "done") return false;
+	if (args.prevStatus === "done") return false;
+	return true;
+}
+
+export interface ShouldReopenParentArgs {
+	prevStatus: "idle" | "inprogress" | "done";
+	nextStatus: "idle" | "inprogress" | "done";
+	groupId: number | undefined;
+	parentClosedAt: number | undefined;
+}
+
+/**
+ * Gate for re-opening a previously-completed Commander parent task. Fires
+ * when a child task moves OUT of done (an "un-toggle" after mission-complete),
+ * but only if the parent was actually closed by Pi before — otherwise there's
+ * nothing to undo.
+ */
+export function shouldReopenParent(args: ShouldReopenParentArgs): boolean {
+	if (args.groupId === undefined) return false;
+	if (args.parentClosedAt === undefined) return false;
+	if (args.prevStatus !== "done") return false;
+	if (args.nextStatus === "done") return false;
+	return true;
+}
+
+// ── Inlined from tasks-test-list-detector.ts ──────────────────────────
+
+/**
+ * Strong signals: a single match in the title or description is enough to
+ * conclude the list is test/validation work. These are words that don't
+ * legitimately appear in real shipping work descriptions.
+ */
+const STRONG_TEST_PATTERNS: readonly RegExp[] = [
+	/\bdummy\b/i,
+	/\bplaceholder\b/i,
+	/\bharmless\b/i,
+	/\bsmoke test\b/i,
+	/\btest artifact\b/i,
+	/\btest[- ]only\b/i,
+	/\bauditable\b/i,
+];
+
+/**
+ * Moderate signals: each individually appears in real work too, so we require
+ * 2+ different patterns to match before concluding test-list. Each pattern
+ * contributes at most 1 to the count regardless of how many times it appears.
+ */
+const MODERATE_TEST_PATTERNS: readonly RegExp[] = [
+	/\bvalidat\w*\b/i,
+	/\bverif\w+\b/i,
+	/\bhierarchy\b/i,
+	/\bexercise\b/i,
+	/\bschema enforcement\b/i,
+	/\bboard.{0,30}(test|display|behavior)\b/i,
+];
+
+/**
+ * Returns true when the brief reads like a validation/test scaffold rather than
+ * real shipping work. False-positive friendly by design — the consumer only
+ * emits a soft warning, never blocks.
+ */
+export function looksLikeTestList(title: string | undefined, description: string | undefined): boolean {
+	const text = `${title ?? ""}\n${description ?? ""}`;
+	if (STRONG_TEST_PATTERNS.some((p) => p.test(text))) return true;
+	const matchCount = MODERATE_TEST_PATTERNS.reduce(
+		(n, p) => n + (p.test(text) ? 1 : 0),
+		0,
+	);
+	return matchCount >= 2;
+}
+
+// ── Inlined from task-modal-render.ts ──────────────────────────────────
+
+export interface TaskModalTheme {
+	fg: (color: string, text: string) => string;
+}
+
+function wrapWordsForWidth(text: string, maxWidth: number): string[] {
+	const words = text.trim().split(/\s+/).filter(Boolean);
+	if (words.length === 0) return [];
+	const safeWidth = Math.max(1, maxWidth);
+	const lines: string[] = [];
+	let current = "";
+
+	for (const word of words) {
+		if (current.length === 0) {
+			current = word;
+		} else if (current.length + 1 + word.length <= safeWidth) {
+			current += ` ${word}`;
+		} else {
+			lines.push(current);
+			current = word;
+		}
+
+		while (current.length > safeWidth) {
+			lines.push(current.slice(0, safeWidth));
+			current = current.slice(safeWidth);
+		}
+	}
+
+	if (current.length > 0) lines.push(current);
+	return lines;
+}
+
+export function renderTaskModalWorkSummary(description: string, width: number, theme: TaskModalTheme): string[] {
+	const label = "Work Summary:";
+	const firstLinePrefix = `  ${label} `;
+	const continuationPrefix = "    ";
+	const firstLineWidth = Math.max(12, width - firstLinePrefix.length);
+	const continuationWidth = Math.max(12, width - continuationPrefix.length);
+	const wrapped = wrapWordsForWidth(description, firstLineWidth);
+	const [first = "", ...rest] = wrapped;
+	const lines = [`${theme.fg("accent", `  ${label}`)} ${theme.fg("muted", first)}`];
+
+	for (const line of rest.flatMap(part => wrapWordsForWidth(part, continuationWidth))) {
+		lines.push(`${continuationPrefix}${theme.fg("muted", line)}`);
+	}
+
+	return lines;
+}
+
+
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { recordLifecycleIntent } from "./lib/commander/lifecycle-intents.ts";
 import { resolveCommanderTaskSyncPolicyFromEnv } from "./lib/commander/task-ownership-policy.ts";

@@ -2,7 +2,7 @@
 // ABOUTME: on the brief actually being a real 1-3 sentence explanation, per CLAUDE.md.
 
 import { describe, it, expect } from "vitest";
-import { validateNewListBrief } from "../lib/tasks-brief-validator.ts";
+import { validateNewListBrief } from "../tasks.ts";
 
 describe("validateNewListBrief — slice #1 + #6: presence + minimum length", () => {
 	it("rejects undefined description", () => {

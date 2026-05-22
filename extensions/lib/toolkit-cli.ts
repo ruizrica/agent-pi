@@ -19,6 +19,36 @@ import { buildDroidCliArgs } from "./droid-cli.ts";
 import { buildGeminiCliArgs } from "./gemini-cli.ts";
 import { buildOpenCodeCliArgs } from "./opencode-cli.ts";
 
+// ─────────────────────────────────────────────────────────────────────
+// ProviderAdapter Interface
+// ─────────────────────────────────────────────────────────────────────
+
+export interface ProviderAdapter {
+  command: string;
+  buildArgs: (task: string, cwd?: string) => string[];
+  normalizeOutput?: (result: { exitCode: number | null; stdout: string; stderr: string; signal?: string | null }) => { exitCode: number; output: string; stderr: string };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Provider Adapters Registry
+// ─────────────────────────────────────────────────────────────────────
+
+export const PROVIDER_ADAPTERS = new Map<string, ProviderAdapter>([
+  ["cursor-worker", { command: "cursor-agent", buildArgs: buildCursorCliArgs }],
+  ["codex-worker", { command: "codex", buildArgs: buildCodexCliArgs }],
+  ["droid-worker", { command: "droid", buildArgs: buildDroidCliArgs, normalizeOutput: normalizeDroidCliResult }],
+  ["gemini-worker", { command: "gemini", buildArgs: (task) => buildGeminiCliArgs(task) }],
+  ["opencode-worker", { command: "opencode", buildArgs: buildOpenCodeCliArgs }],
+  ["qwen-agent", { command: "qwen", buildArgs: (task) => [task] }],
+  ["opencode-agent", { command: "opencode", buildArgs: (task) => ["-p", task] }],
+  ["groq-agent", { command: "groq", buildArgs: (task) => [task] }],
+  ["crush-agent", { command: "crush", buildArgs: (task) => [task] }],
+]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Legacy Alias Mapping (for backward compatibility)
+// ─────────────────────────────────────────────────────────────────────
+
 export const TOOLKIT_CLI_AGENT_ALIASES = new Map<string, string>([
   ["cursor-agent", "cursor-worker"],
   ["codex-agent", "codex-worker"],
@@ -27,20 +57,13 @@ export const TOOLKIT_CLI_AGENT_ALIASES = new Map<string, string>([
   ["opencode-agent", "opencode-worker"],
 ]);
 
-export const TOOLKIT_CLI_AGENTS = new Set([
-  "cursor-worker",
-  "cursor-agent",
-  "codex-worker",
-  "codex-agent",
-  "gemini-worker",
-  "gemini-agent",
-  "qwen-agent",
-  "opencode-worker",
-  "opencode-agent",
-  "groq-agent",
-  "droid-worker",
-  "droid-agent",
-  "crush-agent",
+// ─────────────────────────────────────────────────────────────────────
+// Agent Registry (derived from PROVIDER_ADAPTERS)
+// ─────────────────────────────────────────────────────────────────────
+
+export const TOOLKIT_CLI_AGENTS = new Set<string>([
+  ...PROVIDER_ADAPTERS.keys(),
+  ...TOOLKIT_CLI_AGENT_ALIASES.keys(),
 ]);
 
 export const TOOLKIT_WORKER_MODEL = "anthropic/claude-haiku-4-5-20251001";
@@ -74,11 +97,6 @@ export interface ToolkitWorkerSpawnOptions {
   onStdoutLine?: (line: string) => void;
   onStderr?: (chunk: string) => void;
   onSpawn?: (proc: any) => void;
-}
-
-interface ToolkitCliCommand {
-  command: string;
-  args: (task: string, cwd?: string) => string[];
 }
 
 export interface ToolkitWorkerResult {
@@ -185,58 +203,6 @@ export function getToolkitWorkerArgs(
   return args;
 }
 
-function getToolkitCliCommand(agentName: string): ToolkitCliCommand | null {
-  switch (normalizeToolkitAgentName(agentName)) {
-    case "cursor-worker":
-      return {
-        command: "cursor-agent",
-        args: (task: string, cwd?: string) => buildCursorCliArgs(task, cwd),
-      };
-    case "codex-worker":
-      return {
-        command: "codex",
-        args: (task: string, cwd?: string) => buildCodexCliArgs(task, cwd),
-      };
-    case "droid-worker":
-      return {
-        command: "droid",
-        args: (task: string, cwd?: string) => buildDroidCliArgs(task, cwd),
-      };
-    case "gemini-worker":
-      return {
-        command: "gemini",
-        args: (task: string) => buildGeminiCliArgs(task),
-      };
-    case "opencode-worker":
-      return {
-        command: "opencode",
-        args: (task: string, cwd?: string) => buildOpenCodeCliArgs(task, cwd),
-      };
-    case "qwen-agent":
-      return {
-        command: "qwen",
-        args: (task: string) => [task],
-      };
-    case "opencode-agent":
-      return {
-        command: "opencode",
-        args: (task: string) => ["-p", task],
-      };
-    case "groq-agent":
-      return {
-        command: "groq",
-        args: (task: string) => [task],
-      };
-    case "crush-agent":
-      return {
-        command: "crush",
-        args: (task: string) => [task],
-      };
-    default:
-      return null;
-  }
-}
-
 export function spawnToolkitWorker(
   agentDef: ToolkitWorkerAgentDef,
   options: ToolkitWorkerSpawnOptions,
@@ -296,12 +262,13 @@ export function spawnToolkitWorker(
   }
 
   return new Promise((resolve) => {
-    const cliCommand = getToolkitCliCommand(agentDef.name);
-    const command = cliCommand?.command || "pi";
-    const args = cliCommand
-      ? cliCommand.args(options.task, options.cwd)
+    const normalizedAgentName = normalizeToolkitAgentName(agentDef.name);
+    const adapter = PROVIDER_ADAPTERS.get(normalizedAgentName);
+    const command = adapter?.command || "pi";
+    const args = adapter
+      ? adapter.buildArgs(options.task, options.cwd)
       : getToolkitWorkerArgs(agentDef, options);
-    const isDroidWorker = agentDef.name === "droid-worker";
+    
     const proc = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ...options.env, PI_SUBAGENT: "1" },
@@ -332,7 +299,7 @@ export function spawnToolkitWorker(
       output += chunk;
       stderrOutput += chunk;
       if (chunk) options.onStderr?.(chunk);
-      if (!isDroidWorker) {
+      if (!adapter?.normalizeOutput) {
         const lines = chunk.split("\n");
         for (const line of lines) {
           if (line.trim()) options.onStdoutLine?.(line);
@@ -355,8 +322,8 @@ export function spawnToolkitWorker(
     proc.on("close", (code, signal) => {
       if (buffer.trim()) options.onStdoutLine?.(buffer);
 
-      if (isDroidWorker) {
-        const normalized = normalizeDroidCliResult({
+      if (adapter?.normalizeOutput) {
+        const normalized = adapter.normalizeOutput({
           exitCode: code,
           signal: signal ?? null,
           stdout: stdoutOutput,

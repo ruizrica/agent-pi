@@ -28,7 +28,7 @@ import {
 	type ThreatResult,
 	type ClassifiedThreat,
 	type ToolBudget,
-} from "../lib/security/security-engine.ts";
+} from "../lib/security/runtime-policy-engine.ts";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test Policy (minimal but covers all categories)

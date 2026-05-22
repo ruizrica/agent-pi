@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../spec-viewer.ts", import.meta.url), "utf-8");
 const htmlSource = readFileSync(new URL("../lib/viewers/spec-viewer-html.ts", import.meta.url), "utf-8");
-const legacyHtmlSource = readFileSync(new URL("../lib/spec-viewer-html.ts", import.meta.url), "utf-8");
+const legacyHtmlSource = readFileSync(new URL("../lib/viewers/spec-viewer-html.ts", import.meta.url), "utf-8");
 
 describe("spec-viewer Commander approval flow", () => {
 	it("uses openAndWaitInCommander for Commander-backed spec review", () => {

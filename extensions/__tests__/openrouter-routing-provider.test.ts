@@ -4,7 +4,7 @@ vi.mock("@earendil-works/pi-ai", () => ({
 	streamSimpleOpenAICompletions: vi.fn((_model: any, _context: any, options: any) => options),
 }));
 
-import { createStreamFactory } from "../lib/openrouter-routing-provider.ts";
+import { createStreamFactory } from "../openrouter-routing.ts";
 
 describe("openrouter-routing-provider", () => {
 	it("passes through non-variant models unchanged", () => {

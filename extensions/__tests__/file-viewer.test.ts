@@ -14,9 +14,9 @@ describe("file-viewer implementation", () => {
 		expect(source).toContain("launchEditor(String(data.editor || \"\"), opts.filePath)");
 	});
 
-	it("delegates shared HTTP boilerplate to createViewerServer", () => {
-		expect(source).toContain("createViewerServer({");
-		expect(source).toContain("Uses shared viewer server factory for HTTP server boilerplate");
+	it("delegates shared HTTP boilerplate to launchViewer from viewer-framework", () => {
+		expect(source).toContain("launchViewer({");
+		expect(source).toContain("Uses the deep viewer framework module for server lifecycle, session, and browser wiring");
 	});
 
 	it("passes language metadata into generateFileViewerHTML", () => {

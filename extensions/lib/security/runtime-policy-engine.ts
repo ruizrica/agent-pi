@@ -1,4 +1,4 @@
-// ABOUTME: Pure-function security detection engine — pattern matching for threats, injection, and exfiltration.
+// ABOUTME: Pure-function runtime policy engine — pattern matching for threats, injection, and exfiltration.
 // ABOUTME: Loaded by security-guard.ts; all functions are stateless and testable in isolation.
 // NOTE: This engine protects Pi's own operations. Not to be confused with vuln-scanner-engine.ts which scans external projects.
 
@@ -349,7 +349,7 @@ export function loadPolicy(projectRoot: string): SecurityPolicy {
 				const raw = readFileSync(path, "utf-8");
 				return parseSecurityYaml(raw);
 			} catch (err) {
-				console.error(`[security-engine] Failed to parse ${path}: ${err}`);
+				console.error(`[runtime-policy-engine] Failed to parse ${path}: ${err}`);
 			}
 		}
 	}

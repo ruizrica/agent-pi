@@ -3,7 +3,7 @@
 // ABOUTME: when the user edits the list title/description mid-flight.
 
 import { describe, it, expect } from "vitest";
-import { buildParentMetadataUpdate } from "../lib/tasks-list-metadata.ts";
+import { buildParentMetadataUpdate } from "../tasks.ts";
 
 describe("buildParentMetadataUpdate", () => {
 	it("returns null when nothing changed", () => {

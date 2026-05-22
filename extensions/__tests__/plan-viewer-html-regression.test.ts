@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generatePlanViewerHTML } from "../lib/plan-viewer-html.ts";
+import { generatePlanViewerHTML } from "../lib/viewers/plan-viewer-html.ts";
 
 describe("plan viewer HTML regression guards", () => {
   it("defines a safe projectContext default so stale metadata access cannot blank the UI", () => {

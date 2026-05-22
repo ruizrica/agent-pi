@@ -78,6 +78,6 @@ describe("extension inventory guard", () => {
 	it("pins sorted root adapter fingerprint (update when adapters are intentionally added/removed)", () => {
 		const files = rootExtensionFiles();
 		const digest = createHash("sha256").update(files.join("\n")).digest("hex");
-		expect(digest).toBe("ee5f5e46466d54c3e39e0a751ff6d681f89406f3ab5c1291b7c203c48ed279cd");
+		expect(digest).toBe("43ee4e9856b2c8a1136c0c3382db8248ac21f4aa3c209fa9bb1a88cd41e4b142");
 	});
 });

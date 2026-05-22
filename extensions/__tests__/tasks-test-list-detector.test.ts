@@ -4,7 +4,7 @@
 // ABOUTME: are tolerated since the consumer only nudges, never blocks.
 
 import { describe, it, expect } from "vitest";
-import { looksLikeTestList } from "../lib/tasks-test-list-detector.ts";
+import { looksLikeTestList } from "../tasks.ts";
 
 describe("looksLikeTestList — strong-signal matches (single occurrence is enough)", () => {
 	it("flags 'dummy' anywhere in the text", () => {

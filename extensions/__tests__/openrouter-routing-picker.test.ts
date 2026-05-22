@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rankModelsForQuery } from "../lib/openrouter-routing-picker.ts";
+import { rankModelsForQuery } from "../openrouter-routing.ts";
 
 describe("openrouter-routing-picker", () => {
 	const models = [

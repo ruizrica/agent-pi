@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderTaskModalWorkSummary } from "../lib/task-modal-render.ts";
+import { renderTaskModalWorkSummary } from "../tasks.ts";
 
 const theme = {
 	fg: (_color: string, text: string) => text,

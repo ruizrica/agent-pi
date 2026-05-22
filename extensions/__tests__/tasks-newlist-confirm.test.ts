@@ -2,7 +2,7 @@
 // ABOUTME: Only incomplete lists should require confirmation; finished lists clear silently.
 
 import { describe, it, expect } from "vitest";
-import { shouldConfirmNewList } from "../lib/tasks-confirm.ts";
+import { shouldConfirmNewList } from "../tasks.ts";
 
 describe("shouldConfirmNewList", () => {
 	it("returns false when there are no tasks and no title", () => {

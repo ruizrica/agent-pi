@@ -1,18 +1,17 @@
 // ABOUTME: Lightweight local file viewer/editor that opens in the browser without Commander.
 // ABOUTME: Serves a local web UI for viewing and optionally editing a single file directly from the CLI.
-// ABOUTME: Uses shared viewer server factory for HTTP server boilerplate.
+// ABOUTME: Uses the deep viewer framework module for server lifecycle, session, and browser wiring.
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { execSync, spawn } from "node:child_process";
-import { createViewerServer, openBrowser } from "./lib/viewer-server.ts";
-import type { Server } from "node:http";
+import { spawn } from "node:child_process";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { generateFileViewerHTML } from "./lib/viewers/file-viewer-html.ts";
-import { registerActiveViewer, clearActiveViewer, closeActiveViewer, getActiveViewer, notifyViewerOpen } from "./lib/viewer-session.ts";
+import { launchViewer, closeActiveViewer, getActiveViewer } from "./lib/viewer-framework.ts";
+import type { LaunchedViewer } from "./lib/viewer-framework.ts";
 
 interface FileViewerResult {
 	action: "done" | "approved" | "rejected" | "cancelled";
@@ -99,7 +98,8 @@ async function startFileViewerServer(opts: {
 	lineRange?: string;
 	language?: string;
 	mode?: "view" | "approve";
-}): Promise<{ port: number; server: Server; waitForResult: () => Promise<FileViewerResult> }> {
+	ctx: ExtensionContext;
+}): Promise<{ viewer: LaunchedViewer; waitForResult: () => Promise<FileViewerResult> }> {
 	let initialContent = "";
 	try {
 		initialContent = readFileSync(opts.filePath, "utf-8");
@@ -163,7 +163,10 @@ async function startFileViewerServer(opts: {
 		},
 	];
 
-	const handle = await createViewerServer({
+	const viewer = await launchViewer({
+		kind: "file",
+		title: "File viewer",
+		ctx: opts.ctx,
 		getHtml: (port) => {
 			const html = generateFileViewerHTML({
 				title: opts.title,
@@ -179,7 +182,7 @@ async function startFileViewerServer(opts: {
 		},
 		routes,
 		onResult: (data) => {
-			resolveResult!({
+			resolveResult({
 				action: data?.action === "approved" || data?.action === "rejected" || data?.action === "cancelled"
 					? data.action
 					: "done",
@@ -190,9 +193,8 @@ async function startFileViewerServer(opts: {
 	});
 
 	return {
-		port: handle.port,
-		server: handle.server,
-		waitForResult: handle.waitForResult,
+		viewer,
+		waitForResult: () => resultPromise,
 	};
 }
 
@@ -205,23 +207,17 @@ const ShowFileParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
-	let activeServer: Server | null = null;
-	let activeSession: { kind: "file"; title: string; url: string; server: Server; onClose: () => void } | null = null;
+	let activeViewer: LaunchedViewer | null = null;
 
-	function cleanupServer() {
-		const server = activeServer;
-		activeServer = null;
-		if (server) {
-			try { server.close(); } catch {}
-		}
-		if (activeSession) {
-			clearActiveViewer(activeSession);
-			activeSession = null;
+	function cleanupViewer() {
+		if (activeViewer) {
+			activeViewer.close();
+			activeViewer = null;
 		}
 	}
 
 	async function runViewer(ctx: ExtensionContext, params: { file_path: string; title?: string; line_range?: string; editable?: boolean; mode?: string; }) {
-		cleanupServer();
+		cleanupViewer();
 
 		const filePath = resolve(params.file_path);
 		const editable = params.editable === true;
@@ -229,34 +225,21 @@ export default function (pi: ExtensionAPI) {
 
 		const language = detectLanguage(filePath);
 		const viewerMode = params.mode === "approve" ? "approve" : "view";
-		const { port, server, waitForResult } = await startFileViewerServer({
+		const { viewer, waitForResult } = await startFileViewerServer({
 			filePath,
 			title,
 			editable,
 			lineRange: params.line_range,
 			language,
 			mode: viewerMode,
+			ctx,
 		});
-		activeServer = server;
-		const url = `http://127.0.0.1:${port}`;
-		activeSession = {
-			kind: "file",
-			title: "File viewer",
-			url,
-			server,
-			onClose: () => {
-				activeServer = null;
-				activeSession = null;
-			},
-		};
-		registerActiveViewer(activeSession);
-		openBrowser(url);
-		notifyViewerOpen(ctx, activeSession);
+		activeViewer = viewer;
 
 		try {
 			return await waitForResult();
 		} finally {
-			cleanupServer();
+			cleanupViewer();
 		}
 	}
 

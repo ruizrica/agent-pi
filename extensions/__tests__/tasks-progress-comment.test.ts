@@ -3,7 +3,7 @@
 // ABOUTME: signal between create and auto-close.
 
 import { describe, it, expect } from "vitest";
-import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "../lib/tasks-progress-comment.ts";
+import { buildParentProgressComment, shouldPostParentProgress, shouldReopenParent } from "../tasks.ts";
 
 describe("buildParentProgressComment", () => {
 	it("formats progress as M/N complete with the just-finished task text", () => {
