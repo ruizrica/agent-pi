@@ -356,7 +356,7 @@ export default function (pi: ExtensionAPI) {
 				persistViewerResult(filePath, title, purpose, result, undefined, revision);
 				return result;
 			}
-			// Fall through to browser if Commander is unavailable, unhealthy, or times out.
+			// Fall through to browser if cmd/Commander is unreachable, unhealthy, or times out.
 		}
 
 		// Start HTTP server

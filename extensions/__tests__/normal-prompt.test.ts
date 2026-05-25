@@ -24,17 +24,16 @@ describe("buildNormalPrompt", () => {
 		}
 	});
 
-	it("with commanderAvailable: true, includes the gated Commander Integration section (marked REQUIRED)", () => {
+	it("with commanderAvailable: true, includes required Commander cmd workflow", () => {
 		const result = buildNormalPrompt({ commanderAvailable: true, activeChain: null, activePipeline: null });
 		expect(result).toContain("Commander Integration (REQUIRED)");
-		expect(result).toContain("cmd CLI is connected");
+		expect(result).toContain("Use cmd/Commander for task tracking by default");
 	});
 
-	it("with commanderAvailable: false, does NOT include the gated REQUIRED section (inline guidance still present)", () => {
+	it("with commanderAvailable: false, still includes required Commander cmd workflow", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
-		expect(result).not.toContain("Commander Integration (REQUIRED)");
-		// Inline mode-body guidance is unconditional; it still references tasks.
-		expect(result).toContain("tasks");
+		expect(result).toContain("Commander Integration (REQUIRED)");
+		expect(result).toContain("Only fall back to local-only `tasks` tracking when the `cmd` binary is not present");
 	});
 
 	it("with activeChain set, contains chain name", () => {
@@ -94,10 +93,11 @@ describe("buildNormalPrompt — Commander task guidance", () => {
 		expect(result).toContain("cmd mailbox send");
 	});
 
-	it("with commanderAvailable: false, includes Commander-offline note", () => {
+	it("with commanderAvailable: false, still enforces cmd Commander workflow", () => {
 		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null });
 		expect(result.toLowerCase()).toContain("commander");
-		expect(result.toLowerCase()).toContain("offline");
+		expect(result).toContain("cmd mailbox send");
+		expect(result).toContain("cmd task");
 	});
 });
 

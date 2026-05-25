@@ -97,7 +97,7 @@ Role-based kill timers stop zombie widgets from stacking up:
 
 - **`/pi` skill** — unified entry point to every operational mode, configurable write scope and agent count
 - **`/sounds`** — browser UI to browse and assign soundcn.xyz sounds to Pi lifecycle events (plus a local image cache)
-- **Board Viewer** — browser Kanban board polling Commander CLI-backed tools; works local-first when Commander is offline
+- **Task Tracking** — use Pi `tasks` as the task surface (synced through `cmd` when available); no local Kanban workflow
 - **Dream system** (`dream-scheduler`) — global-first memory consolidation with freshness tracking in `~/.pi/dream/`
 - **`/learn`** — delta-aware codebase snapshots written to Obsidian as `raw/` + `wiki/` artifacts
 - **Security extensions** — `vuln-scanner`, `security-news`, `security-report`, `safe-port-scan`, `network-inspect`
@@ -164,7 +164,7 @@ agent-pi/
 │   ├── agent-chain.ts        Sequential chain runner
 │   ├── pipeline-team.ts      5-phase hybrid pipeline
 │   ├── web-chat.ts           LAN / tunnel chat server
-│   ├── board-viewer.ts       Kanban board (Commander-backed, local-first)
+│   ├── board-viewer.ts       Legacy board viewer module (not the task-tracking workflow)
 │   ├── plan-viewer.ts        Browser plan approval
 │   ├── spec-viewer.ts        Browser spec review (Kiro-style)
 │   ├── completion-report.ts  Unified diffs + per-file rollback

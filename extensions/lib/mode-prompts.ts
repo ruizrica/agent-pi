@@ -67,7 +67,7 @@ If a subagent errors, dispatch a **new subagent** with corrected context — do 
 /** Shared Commander integration section appended to mode prompts when Commander is available. */
 export function buildCommanderSection(): string {
 	return `\n## Commander Integration (REQUIRED)
-The cmd CLI is connected; the local \`tasks\` tool auto-syncs to the Commander board. Use these surfaces:
+Use cmd/Commander for task tracking by default. Only fall back to local-only \`tasks\` tracking when the \`cmd\` binary is not present in the environment. Use these surfaces:
 - \`tasks\` — all task tracking (new-list, update-list, add, toggle, etc.). Commander syncs happen automatically when the CLI is reachable.
 - \`bash\` with the cmd CLI — for mailbox messages and ad-hoc board ops the \`tasks\` tool does not cover:
   - \`cmd mailbox send <to> "<subject>" "<body>" --type status\` — cross-agent signals at start, milestones, completion
@@ -103,10 +103,7 @@ export function buildNormalPrompt(opts: NormalPromptOpts): string {
 		? `Active: "${opts.activePipeline}" — ready to use`
 		: "Not active — use /pipeline to activate first";
 
-	const commanderSection = opts.commanderAvailable
-		? buildCommanderSection()
-		: `\n## Commander Integration
-Commander CLI is offline/unavailable. Tasks are tracked locally only; continue using the local \`tasks\` tool as the fallback.`;
+	const commanderSection = buildCommanderSection();
 	const advisorModel = opts.selectedAdvisorModel?.trim() || DEFAULT_ADVISOR_MODEL;
 	const secondOpinion = resolveCrossProviderSecondOpinion(advisorModel);
 	const secondOpinionModelId = `${secondOpinion.provider}/${secondOpinion.model}`;
@@ -534,7 +531,7 @@ Example:
 - When the user approves, the viewer records approved tasks into Commander; Commander tasks are the source of truth for implementation work.
 - Approved complete/multi-phase plans auto-switch to \`IMPLEMENT\` mode.
 - In the next turn, do not re-plan or start ad-hoc coding; use IMPLEMENT to drain the Commander pending/working/failed lanes created from the approved plan.
-- If Commander task materialization is unavailable or warns, create/repair Commander tasks first before coding.
+- If Commander task materialization is unreachable, missing, or warns, create/repair Commander tasks first before coding.
 
 ### Phase 5: Completion Report (when plan has 3+ phases)
 - After all implementation phases are done, call \`show_report\` to open the completion report viewer
@@ -850,9 +847,7 @@ Use "/claude" to toggle a provider-specific overlay on top of the current mode.
 }
 
 export function buildImplementPrompt(opts: ModePromptOpts): string {
-	const commanderSection = opts.commanderAvailable
-		? buildCommanderSection()
-		: `\n## Commander Integration\nCommander CLI is offline/unavailable. Use the local \`tasks\` tool as the fallback, keep the same pending → working → done discipline, and stop only when local project-folder work is complete or blocked with explicit notes.`;
+	const commanderSection = buildCommanderSection();
 
 	return `You are in IMPLEMENT mode. Use an autonomous task-board implementation loop for existing project-folder work. The goal is already known: drain all eligible tasks in the current project folder without overstepping into other agents' work.
 
@@ -1006,7 +1001,7 @@ Once all three Kiro documents are ready and approved, do not implement directly 
 - Ensure \`tasks.md\` is complete and implementation-ready before opening \`show_spec\` for approval.
 - On approval, \`tasks.md\` is recorded as Commander parent/child tasks; Commander tasks become the source of truth.
 - The session switches to \`IMPLEMENT\`, where the agent drains the Commander pending/working/failed lanes.
-- If Commander task materialization is unavailable or warns, create/repair Commander tasks before coding.
+- If Commander task materialization is unreachable, missing, or warns, create/repair Commander tasks before coding.
 
 ## Commander Integration (ALWAYS use when connected)
 - ALWAYS use local spec documents first; when the Commander CLI-backed tools are connected, use commander_spec operations for cross-session tracking

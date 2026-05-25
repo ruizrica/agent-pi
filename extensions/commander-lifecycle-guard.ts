@@ -91,7 +91,7 @@ async function dispatchIntent(client: any, intent: LifecycleIntent): Promise<voi
  * `maxAttempts` (default 5) failures the task is force-marked failed and the
  * intent is cleared so it stops haunting subsequent sessions.
  *
- * When `client` is null (Commander unavailable), intents are retained as-is
+ * When `client` is null (Commander not reachable), intents are retained as-is
  * for the next session — never silently dropped.
  */
 export async function reconcileOpenLifecycleIntents(

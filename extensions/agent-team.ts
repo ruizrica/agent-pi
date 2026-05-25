@@ -668,7 +668,7 @@ export default function (pi: ExtensionAPI) {
 						owner: canonicalName,
 						message: state.status === "done" ? (state.summary || canonicalName) : (stderrBuf.trim() || state.summary || "Agent exited with error"),
 					});
-					console.error(`[agent-team] Commander unavailable at finish for task ${taskId} (${canonicalName}) — recorded recoverable lifecycle intent`);
+					console.error(`[agent-team] Commander not reachable at finish for task ${taskId} (${canonicalName}) — recorded recoverable lifecycle intent`);
 				}
 
 				ctx.ui.notify(

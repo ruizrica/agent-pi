@@ -332,7 +332,7 @@ If the user chooses to implement:
 
 ## Commander Tracking
 
-All Commander integration is **optional** — if Commander is unavailable, skip these calls silently and never let a Commander error interrupt the loop.
+Commander integration is expected by default via `cmd`; only skip Commander calls when the `cmd` binary is not present, and never let transient Commander errors interrupt the loop.
 
 ### Lifecycle Summary
 

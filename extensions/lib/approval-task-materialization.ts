@@ -149,7 +149,7 @@ export async function materializeApprovedTasksToCommander(
 			ok: false,
 			taskCount: tasks.length,
 			source: input.sourcePath,
-			warning: "Commander is unavailable; approved tasks were not recorded as source-of-truth board tasks.",
+			warning: "Commander task materialization was unreachable or cmd is missing; approved tasks were not recorded as source-of-truth board tasks.",
 		};
 	}
 

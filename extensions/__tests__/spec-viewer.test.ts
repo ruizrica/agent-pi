@@ -18,7 +18,7 @@ describe("spec-viewer Commander approval flow", () => {
 	});
 
 	it("keeps browser fallback when Commander cannot provide a final action", () => {
-		expect(source).toContain("Fall through to browser if Commander is unavailable, times out, or disconnects");
+		expect(source).toContain("Fall through to browser if cmd/Commander is unreachable, times out, or disconnects");
 	});
 
 	it("passes project context into the browser spec viewer header", () => {

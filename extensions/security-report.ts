@@ -235,7 +235,7 @@ export default function (pi: ExtensionAPI) {
 						details: { findings: report.findings.length, mitigations: report.mitigations.length },
 					};
 				}
-				// Fall through to browser if Commander unavailable or failed
+				// Fall through to browser if cmd/Commander is unreachable or failed
 			}
 
 			cleanup();

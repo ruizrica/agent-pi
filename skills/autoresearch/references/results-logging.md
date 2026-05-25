@@ -20,7 +20,7 @@ iteration	commit	metric	delta	status	description	commander_task_id
 | delta | float | Change from previous best (negative = improved for "lower is better") |
 | status | enum | `baseline`, `keep`, `discard`, `crash` |
 | description | string | One-sentence description of what was tried |
-| commander_task_id | int | Commander task ID for this iteration, "-" if Commander unavailable |
+| commander_task_id | int | Commander task ID for this iteration, "-" only when the `cmd` binary is not present |
 
 ### Example
 

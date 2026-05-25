@@ -126,7 +126,7 @@ export async function openInCommander(
 		return false;
 	} catch (err: any) {
 		// Commander failed, fall back to browser
-		ctx.ui.notify(`Commander unavailable, falling back to browser`, "warning");
+		ctx.ui.notify(`Commander not reachable, falling back to browser`, "warning");
 		return false;
 	}
 }
@@ -201,7 +201,7 @@ export async function getCommanderViewerStatus(includeContent?: boolean): Promis
 
 /**
  * Open a Commander viewer and wait for a real user action.
- * Falls back to the local browser viewer when Commander is unavailable,
+ * Falls back to the local browser viewer when Commander is not reachable,
  * fails to open the viewer, never reaches an open state, or disconnects.
  */
 export async function openAndWaitInCommander(
@@ -241,7 +241,7 @@ export async function openAndWaitInCommander(
 			return { inCommander: false, reason: "open_failed" };
 		}
 	} catch {
-		if (ctx.hasUI) ctx.ui.notify("Commander unavailable, falling back to browser", "warning");
+		if (ctx.hasUI) ctx.ui.notify("Commander not reachable, falling back to browser", "warning");
 		return { inCommander: false, reason: "open_failed" };
 	}
 

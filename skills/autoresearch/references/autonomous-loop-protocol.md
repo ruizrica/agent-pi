@@ -238,7 +238,7 @@ Applies to both modes:
 
 ## Commander Graceful Degradation
 
-All Commander integration (task tracking, mailbox broadcasts, comments) is **optional**. If Commander is unavailable:
+Commander integration (task tracking, mailbox broadcasts, comments) is default when `cmd` is present. Only use local-only fallback when the `cmd` binary is not present:
 
 - Skip all `commander_task` and `commander_mailbox` calls silently
 - Never let a Commander error interrupt or break the autonomous loop

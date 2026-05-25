@@ -1331,7 +1331,7 @@ export default function (pi: ExtensionAPI) {
 								}
 							}
 						} else {
-							// Commander unavailable: fire-and-forget (existing behavior)
+							// Commander not reachable: fire-and-forget (existing behavior)
 							syncToCommander("task-toggle", async (client) => {
 								const cid = lookupMapping(syncState, task.id);
 								if (cid === undefined) return;

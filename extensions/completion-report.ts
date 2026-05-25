@@ -622,7 +622,7 @@ export default function (pi: ExtensionAPI) {
 
 			// Prefer Commander's native report experience when available. Rollback
 			// controls are handled by Commander for native reports; the local browser
-			// viewer remains the fallback when Commander is unavailable.
+			// viewer remains the fallback when cmd/Commander is unreachable.
 			if (isCommanderAvailable()) {
 				const filesSummary = report.files
 					.map((f) => `- \`${f.path}\` (${f.status}) — +${f.additions} / -${f.deletions}`)
@@ -688,7 +688,7 @@ export default function (pi: ExtensionAPI) {
 						},
 					};
 				}
-				// Fall through to browser if Commander unavailable or failed
+				// Fall through to browser if cmd/Commander is unreachable or failed
 			}
 
 			// Clean up any previous server

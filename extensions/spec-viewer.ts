@@ -413,7 +413,7 @@ export default function (pi: ExtensionAPI) {
 					feedback: undefined,
 				};
 			}
-			// Fall through to browser if Commander is unavailable, times out, or disconnects
+			// Fall through to browser if cmd/Commander is unreachable, times out, or disconnects
 		}
 
 		// Start browser-based server

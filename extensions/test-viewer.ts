@@ -381,7 +381,7 @@ export default function (pi: ExtensionAPI) {
 					modified: false,
 				};
 			}
-			// Fall through to browser if Commander unavailable or failed
+			// Fall through to browser if cmd/Commander is unreachable or failed
 		}
 
 		const { port, server, waitForResult } = await startTestViewerServer(features, title);

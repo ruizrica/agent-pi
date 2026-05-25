@@ -137,7 +137,7 @@ export default function (pi: ExtensionAPI) {
 			);
 
 			if (opened) return;
-			// Fall through to browser if Commander unavailable or failed
+			// Fall through to browser if cmd/Commander is unreachable or failed
 		}
 
 		const { port, server, waitForResult } = await startResearchServer(title);
