@@ -1,4 +1,4 @@
-// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/PIPELINE/TEAM/CHAIN) via Shift+Tab.
+// ABOUTME: Cycles operational modes (NORMAL/PLAN/SPEC/PIPELINE/TEAM/CHAIN) via F5.
 // ABOUTME: Gates which extension's before_agent_start fires and injects PLAN/SPEC prompts.
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -79,9 +79,9 @@ export default function (pi: ExtensionAPI) {
 		updateWidgets(mode, ctx);
 	}
 
-	// ── Shift+Tab: cycle forward ──────────────────
+	// ── F5: cycle forward ─────────────────────────
 
-	pi.registerShortcut("shift+tab", {
+	pi.registerShortcut("f5", {
 		description: "Cycle operational mode",
 		handler: async (ctx) => {
 			setMode(nextMode(currentMode), ctx);

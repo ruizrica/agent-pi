@@ -72,7 +72,7 @@ This is a power-user configuration for **Pi**, a terminal-based AI coding agent 
 │  ┌────────── Theme Engine ──────────┐                        │
 │  │  11 themes × 60+ color tokens   │                        │
 │  │  JSON schema w/ vars + colors    │                        │
-│  │  Live cycling: Ctrl+X / Ctrl+Q  │                        │
+│  │  Live cycling: F6 / F7          │                        │
 │  └──────────────────────────────────┘                        │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -110,7 +110,7 @@ Extensions are TypeScript files loaded via the `packages` array in `settings.jso
 
 - **Register tools** — custom tools the LLM can invoke
 - **Register commands** — slash commands (`/theme`, `/tasks`, `/mode`, etc.)
-- **Register shortcuts** — keyboard shortcuts (`Ctrl+G`, `Shift+Tab`, etc.)
+- **Register shortcuts** — keyboard shortcuts (`Ctrl+G`, `F5`, etc.)
 - **Set widgets** — UI components above/below the editor
 - **Listen to events** — `session_start`, `input`, `tool_call`, `agent_end`, `before_agent_start`
 - **Inject system prompts** — modify the agent's instructions per mode
@@ -158,14 +158,14 @@ export default function (pi: ExtensionAPI) {
 | Extension | File | Description |
 |-----------|------|-------------|
 | **Agent Banner** | `agent-banner.ts` | ASCII art banner above editor on startup; auto-hides on first input |
-| **Mode Cycler** | `mode-cycler.ts` | Cycles operational modes (NORMAL/PLAN/SPEC/PIPELINE/TEAM/CHAIN) via `Shift+Tab` |
+| **Mode Cycler** | `mode-cycler.ts` | Cycles operational modes (NORMAL/PLAN/SPEC/PIPELINE/TEAM/CHAIN) via `F5` |
 | **Agent Chain** | `agent-chain.ts` | Sequential pipeline orchestrator — chains agent steps with prompt templates |
 | **Agent Team** | `agent-team.ts` | Multi-agent dispatcher with specialist agents and grid dashboard |
 | **Pipeline Team** | `pipeline-team.ts` | Hybrid sequential + parallel pipeline (UNDERSTAND → GATHER → PLAN → EXECUTE → REVIEW) |
 | **Session Replay** | `session-replay.ts` | Scrollable session timeline replay via `/replay` command |
 | **Subagent Widget** | `subagent-widget.ts` | Spawns background subagent processes with live status widgets (`/sub`, `/subcont`) |
 | **System Select** | `system-select.ts` | Switch system prompts by selecting agent definitions via `/system` |
-| **Theme Cycler** | `theme-cycler.ts` | Cycle themes with `Ctrl+X`/`Ctrl+Q`, color swatch preview, persists selection |
+| **Theme Cycler** | `theme-cycler.ts` | Cycle themes with `F6`/`F7`, color swatch preview, persists selection |
 | **Tasks** | `tasks.ts` | Task discipline — gates agent tools until tasks are defined; 3-state lifecycle |
 | **Commander MCP** | `commander-mcp.ts` | Bridge to Commander dashboard via MCP; exposes task/mailbox/orchestration tools |
 | **Commander Tracker** | `commander-tracker.ts` | Tracks and retries failed Commander sync operations |
@@ -256,8 +256,8 @@ Themes are JSON files in `agent/themes/` following the Pi theme schema. Each the
 ### Switching Themes
 
 ```
-Ctrl+X          → Cycle forward through themes
-Ctrl+Q          → Cycle backward
+F6              → Cycle forward through themes
+F7              → Cycle backward
 /theme          → Open theme picker
 /theme nord     → Switch directly by name
 ```
@@ -268,7 +268,7 @@ Theme selection persists to `settings.json` automatically.
 
 ## 🔀 Operational Modes
 
-The **Mode Cycler** extension (`Shift+Tab`) rotates through six operational modes, each injecting a tailored system prompt:
+The **Mode Cycler** extension (`F5`) rotates through six operational modes, each injecting a tailored system prompt:
 
 | Mode | Color | Purpose |
 |------|-------|---------|
@@ -419,9 +419,9 @@ Defines custom model providers beyond the built-in ones:
 
 | Shortcut | Action | Extension |
 |----------|--------|-----------|
-| `Shift+Tab` | Cycle operational mode | mode-cycler |
-| `Ctrl+X` | Next theme | theme-cycler |
-| `Ctrl+Q` | Previous theme | theme-cycler |
+| `F5` | Cycle operational mode | mode-cycler |
+| `F6` | Next theme | theme-cycler |
+| `F7` | Previous theme | theme-cycler |
 | `Ctrl+G` | Toggle compact/expanded agent view | agent-team |
 | `Ctrl+Shift+T` | Cycle thinking level | built-in (keybindings.json) |
 | `F1` | Select previous agent/task | agent-nav |

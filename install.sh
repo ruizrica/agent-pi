@@ -282,34 +282,6 @@ else
     fi
 fi
 
-# Free Shift+Tab for mode-cycler by unbinding cycleThinkingLevel
-KEYBINDINGS_FILE="$PI_AGENT_DIR/keybindings.json"
-KEYBINDINGS_FILE_WIN="$(to_win_path "$KEYBINDINGS_FILE")"
-
-SHIFT_TAB_FREE=$(node -e "
-    const fs = require('fs');
-    if (!fs.existsSync('$KEYBINDINGS_FILE_WIN')) { console.log('no'); process.exit(); }
-    const k = JSON.parse(fs.readFileSync('$KEYBINDINGS_FILE_WIN', 'utf-8'));
-    console.log(Array.isArray(k.cycleThinkingLevel) && k.cycleThinkingLevel.length === 0 ? 'yes' : 'no');
-" 2>/dev/null || echo "no")
-
-if [ "$SHIFT_TAB_FREE" = "yes" ]; then
-    success "Shift+Tab already freed for mode cycling"
-else
-    if [ "$DRY_RUN" -eq 1 ]; then
-        info "[dry-run] Would unbind ${DIM}cycleThinkingLevel${NC} in ${DIM}$KEYBINDINGS_FILE${NC} to free Shift+Tab"
-    else
-        node -e "
-        const fs = require('fs');
-        const file = '$KEYBINDINGS_FILE_WIN';
-        const k = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
-        k.cycleThinkingLevel = [];
-        fs.writeFileSync(file, JSON.stringify(k, null, 2) + '\n');
-    "
-        success "Freed Shift+Tab for mode cycling ${DIM}(unbound cycleThinkingLevel)${NC}"
-    fi
-fi
-
 # ═══════════════════════════════════════════════════════════════════
 # Step 5: Validate Agent Configs
 # ═══════════════════════════════════════════════════════════════════
@@ -446,7 +418,7 @@ step "Verifying themes"
 
 THEME_COUNT=$(ls themes/*.json 2>/dev/null | wc -l | xargs)
 if [ "$THEME_COUNT" -gt 0 ]; then
-    success "$THEME_COUNT themes available ${DIM}(Ctrl+X to cycle)${NC}"
+    success "$THEME_COUNT themes available ${DIM}(F6/F7 to cycle)${NC}"
 else
     fail "No themes found in themes/"
     ERRORS=$((ERRORS + 1))
@@ -490,7 +462,7 @@ else
     echo -e "  ${BOLD}Verify anytime:${NC}"
     echo -e "    ${CYAN}./pi-doctor.sh${NC}"
     echo ""
-    echo -e "  ${BOLD}Modes:${NC} ${DIM}Ctrl+Shift+M to cycle NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN${NC}"
-    echo -e "  ${BOLD}Themes:${NC} ${DIM}Ctrl+X to cycle through $THEME_COUNT themes${NC}"
+    echo -e "  ${BOLD}Modes:${NC} ${DIM}F5 to cycle NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN${NC}"
+    echo -e "  ${BOLD}Themes:${NC} ${DIM}F6/F7 to cycle through $THEME_COUNT themes${NC}"
     echo ""
 fi
