@@ -47,8 +47,8 @@ Pi discovers all extensions, themes, and skills automatically.
 ### First Steps
 
 1. **Type a task** — Pi operates in plan-first mode. It will ask you to define tasks before using tools.
-2. **Shift+Tab** — Cycle through operational modes (NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN)
-3. **Ctrl+X** — Cycle themes
+2. **F5** — Cycle through operational modes (NORMAL → PLAN → SPEC → PIPELINE → TEAM → CHAIN)
+3. **F6/F7** — Cycle themes
 4. **`/agents-team`** — Switch between agent teams
 5. **`/chain`** — Switch between chain workflows
 6. **`/tex`** — Open Text Tools in the browser
@@ -75,7 +75,7 @@ Pi discovers all extensions, themes, and skills automatically.
 | **agent-banner** | ASCII art banner on startup, auto-hides on first input |
 | **footer** | Status bar — model name, context %, working directory |
 | **agent-nav** | F1-F4 navigation shared across agent widgets |
-| **theme-cycler** | Ctrl+X to cycle through installed themes |
+| **theme-cycler** | F6/F7 to cycle through installed themes |
 | **escape-cancel** | Double-ESC cancels all running operations |
 
 ### Task Management
@@ -90,7 +90,7 @@ Pi discovers all extensions, themes, and skills automatically.
 
 | Extension | Description |
 |-----------|-------------|
-| **mode-cycler** | Shift+Tab cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN |
+| **mode-cycler** | F5 cycles NORMAL / PLAN / SPEC / PIPELINE / TEAM / CHAIN |
 
 Each mode injects a tailored system prompt. PLAN mode enforces plan-first workflow. SPEC mode drives spec-driven development. TEAM/CHAIN/PIPELINE modes activate their respective orchestration systems.
 
@@ -156,11 +156,11 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | Mode | Trigger | Behavior |
 |------|---------|----------|
 | **NORMAL** | Default | Standard coding assistant |
-| **PLAN** | Shift+Tab | Plan-first workflow — analyze → plan → approve → implement → report |
-| **SPEC** | Shift+Tab | Spec-driven — shape → requirements → tasks → implement |
-| **TEAM** | Shift+Tab | Dispatcher mode — primary delegates, specialists execute |
-| **CHAIN** | Shift+Tab | Sequential pipeline — step outputs chain into next step |
-| **PIPELINE** | Shift+Tab | 5-phase hybrid with parallel dispatch |
+| **PLAN** | F5 | Plan-first workflow — analyze → plan → approve → implement → report |
+| **SPEC** | F5 | Spec-driven — shape → requirements → tasks → implement |
+| **TEAM** | F5 | Dispatcher mode — primary delegates, specialists execute |
+| **CHAIN** | F5 | Sequential pipeline — step outputs chain into next step |
+| **PIPELINE** | F5 | 5-phase hybrid with parallel dispatch |
 
 ## Multi-Agent Orchestration
 
@@ -207,7 +207,7 @@ The `/secure` command runs a comprehensive AI security sweep on any project and 
 
 ## Themes
 
-11 themes included. Cycle with **Ctrl+X**:
+11 themes included. Cycle with **F6/F7**:
 
 Catppuccin Mocha · Cyberpunk · Dracula · Everforest · Gruvbox · Midnight Ocean · Nord · Ocean Breeze · Rose Pine · Synthwave · Tokyo Night
 
@@ -226,7 +226,7 @@ A lightweight, zero-dependency text manipulation app bundled in `tex/`. Open it 
 |---------|-----|
 | Extensions not loading | `pi install git:github.com/ruizrica/agent-pi` — reinstall the package |
 | No themes available | Same as above — themes are auto-discovered from the package |
-| Shift+Tab not working | Ensure mode-cycler extension loaded — check `pi config` |
+| F5 not working | Ensure mode-cycler extension loaded — check `pi config` |
 | No chains/pipelines | Agent configs at `agents/` are loaded automatically by extensions |
 
 ## Built on Pi
