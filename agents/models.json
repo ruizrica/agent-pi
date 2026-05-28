@@ -10,11 +10,11 @@
     },
     "builder": {
       "provider": "openai-codex",
-      "model": "gpt-5.4-mini"
+      "model": "gpt-5.3-codex-spark"
     },
     "reviewer": {
-      "provider": "openrouter",
-      "model": "qwen/qwen3.6-plus"
+      "provider": "openai-codex",
+      "model": "gpt-5.3-codex"
     },
     "planner": {
       "provider": "openai-codex",
