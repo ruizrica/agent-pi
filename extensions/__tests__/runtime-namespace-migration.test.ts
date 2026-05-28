@@ -6,7 +6,6 @@ const repoRoot = resolve(__dirname, "..", "..");
 
 const rootsToScan = [
 	"README.md",
-	"README-v2.md",
 	"README-v3.md",
 	"package.json",
 	"install.sh",
