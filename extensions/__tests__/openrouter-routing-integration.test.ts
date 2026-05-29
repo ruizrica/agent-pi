@@ -38,7 +38,7 @@ describe("openrouter-routing-integration", () => {
 		await commands["openrouter-sync"].handler("", ctx);
 		expect(pi.registerProvider).toHaveBeenCalledWith("openrouter", expect.objectContaining({
 			baseUrl: "https://openrouter.ai/api/v1",
-			apiKey: "OPENROUTER_API_KEY",
+			apiKey: "$OPENROUTER_API_KEY",
 			api: "openai-completions",
 		}));
 	});

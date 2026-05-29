@@ -967,7 +967,7 @@ export default function openrouterRoutingExtension(pi: ExtensionAPI) {
 	function registerWithSnapshot(models: OpenRouterProviderModelConfig[], routes: ReadonlyMap<string, OpenRouterRouteVariant>) {
 		pi.registerProvider(OPENROUTER_PROVIDER_NAME, {
 			baseUrl: OPENROUTER_BASE_URL,
-			apiKey: "OPENROUTER_API_KEY",
+			apiKey: "$OPENROUTER_API_KEY",
 			api: "openai-completions",
 			models,
 			headers: {
