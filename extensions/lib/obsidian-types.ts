@@ -14,11 +14,18 @@ export interface SearchResult {
 	file: string;
 	matches: SearchMatch[];
 	matchCount: number;
+	score?: number;
+	matchedTerms?: string[];
+	coverage?: number;
+	rawMatchCount?: number;
 }
 
 export interface SearchMatch {
 	line: number;
 	text: string;
+	matchedTerms?: string[];
+	score?: number;
+	duplicateCount?: number;
 }
 
 // ── Article / File Metadata ──────────────────────────────────────────

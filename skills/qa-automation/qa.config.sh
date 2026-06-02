@@ -39,8 +39,8 @@ export SIMULATOR_DEVICE_NAME="${SIMULATOR_DEVICE_NAME:-iPhone 16 Pro}"
 # Android AVD name
 export ANDROID_AVD="${ANDROID_AVD:-Pixel_8}"
 
-# Android serial (usually emulator-5554)
-export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+# Android serial — set to "auto" to detect the first running emulator
+export ANDROID_SERIAL="${ANDROID_SERIAL:-auto}"
 
 # Android SDK paths
 export ANDROID_SDK="${ANDROID_SDK:-$HOME/Library/Android/sdk}"
@@ -164,16 +164,77 @@ export APP_SETTLE_TIME="${APP_SETTLE_TIME:-6}"
 # agent-device command timeout (seconds)
 export DEVICE_CMD_TIMEOUT="${DEVICE_CMD_TIMEOUT:-5}"
 
-# ── agent-device Sessions ───────────────────────────────────────────
+# ── Native Platform Selection / agent-device Sessions ───────────────
 # iOS session name
 export IOS_SESSION="${IOS_SESSION:-default}"
-
 # Android session name
 export ANDROID_SESSION="${ANDROID_SESSION:-android}"
+# Android emulator boot timeout (seconds)
+export ANDROID_BOOT_TIMEOUT="${ANDROID_BOOT_TIMEOUT:-90}"
+# Platform for a single native test run: ios or android.
+export QA_PLATFORM="${QA_PLATFORM:-ios}"
+# Platforms run by skill entrypoints by default. Use "ios", "android", or "both"/"ios android".
+export QA_PLATFORMS="${QA_PLATFORMS:-ios android}"
 
-# Active session (set at runtime)
-export ACTIVE_SESSION="${ACTIVE_SESSION:-$IOS_SESSION}"
+qa_normalize_platform() {
+case "$(echo "${1:-ios}" | tr '[:upper:]' '[:lower:]')" in
+ios|iphone|simulator) echo "ios" ;;
+android|emulator) echo "android" ;;
+*) echo "Unsupported QA platform: ${1:-}" >&2; return 1 ;;
+esac
+}
 
+qa_expand_platforms() {
+local requested="${1:-${QA_PLATFORMS:-ios android}}"
+requested="$(echo "$requested" | tr ',' ' ' | tr '[:upper:]' '[:lower:]')"
+case "$requested" in
+both|all) echo "ios android"; return 0 ;;
+esac
+local item normalized platforms=""
+for item in $requested; do
+case "$item" in
+both|all)
+platforms="${platforms:+$platforms }ios android"
+;;
+*)
+normalized=$(qa_normalize_platform "$item") || return 1
+platforms="${platforms:+$platforms }$normalized"
+;;
+esac
+done
+if [ -z "$platforms" ]; then
+platforms="ios android"
+fi
+echo "$platforms"
+}
+
+qa_platform_session() {
+local platform
+platform=$(qa_normalize_platform "${1:-$QA_PLATFORM}") || return 1
+case "$platform" in
+android) echo "$ANDROID_SESSION" ;;
+*) echo "$IOS_SESSION" ;;
+esac
+}
+
+_QA_NORMALIZED_PLATFORM=$(qa_normalize_platform "$QA_PLATFORM") || exit 1
+export QA_PLATFORM="$_QA_NORMALIZED_PLATFORM"
+unset _QA_NORMALIZED_PLATFORM
+
+qa_is_ios() { [ "${QA_PLATFORM:-ios}" = "ios" ]; }
+qa_is_android() { [ "${QA_PLATFORM:-ios}" = "android" ]; }
+
+# Active agent-device session. If the caller did not set ACTIVE_SESSION,
+# choose the platform-specific default.
+if [ -z "${ACTIVE_SESSION+x}" ]; then
+if qa_is_android; then
+export ACTIVE_SESSION="$ANDROID_SESSION"
+else
+export ACTIVE_SESSION="$IOS_SESSION"
+fi
+else
+export ACTIVE_SESSION
+fi
 # ── Web Testing (agent-browser) ─────────────────────────────────────
 # Base URL for web testing
 export WEB_BASE_URL="${WEB_BASE_URL:-http://localhost:3000}"
@@ -207,6 +268,30 @@ qa_detect_simulator_udid() {
     return 1
 }
 
+# Auto-detect Android emulator serial (finds first running emulator)
+qa_detect_android_serial() {
+if [ "$ANDROID_SERIAL" != "auto" ]; then
+echo "$ANDROID_SERIAL"
+return 0
+fi
+local adb_bin="$ADB_PATH"
+if [ ! -x "$adb_bin" ]; then
+adb_bin=$(command -v adb 2>/dev/null || echo "")
+fi
+if [ -z "$adb_bin" ]; then
+echo ""
+return 1
+fi
+local serial
+serial=$("$adb_bin" devices 2>/dev/null | awk '$2 == "device" && $1 ~ /^emulator-/ { print $1; exit }' || echo "")
+if [ -n "$serial" ]; then
+export ANDROID_SERIAL="$serial"
+echo "$serial"
+return 0
+fi
+echo ""
+return 1
+}
 # Auto-detect CDP WebSocket URL from Metro /json endpoint
 qa_detect_cdp_ws_url() {
     if [ "$CDP_WS_URL" != "auto" ]; then

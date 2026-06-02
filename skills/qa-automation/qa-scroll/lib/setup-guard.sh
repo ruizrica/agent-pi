@@ -22,11 +22,11 @@ set -euo pipefail
 
 # ── Source configuration and helpers ─────────────────────────────────
 SETUP_GUARD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-QA_ROOT_SG="$(cd "$SETUP_GUARD_DIR/../.." && pwd 2>/dev/null || cd "$SETUP_GUARD_DIR/.." && pwd)"
+QA_ROOT_SG="$(cd "$SETUP_GUARD_DIR/.." && pwd)"
 
 # Source config if not already loaded
 if [ -z "${QA_AUTOMATION_DIR:-}" ]; then
-    source "$QA_ROOT_SG/qa.config.sh" 2>/dev/null || source "$SETUP_GUARD_DIR/../../qa.config.sh"
+    source "$QA_ROOT_SG/qa.config.sh"
 fi
 
 # Track state
@@ -46,21 +46,33 @@ _setup_fixing()  { _setup_log "FIXING"  "$1"; }
 _setup_failed()  { _setup_log "FAILED"  "$1"; }
 _setup_skip()    { _setup_log "SKIP"    "$1"; }
 
-# ── 1. Check/Boot iOS Simulator ─────────────────────────────────────
+# ── 1. Check/Boot Native Device ─────────────────────────────────────
 
-_check_simulator() {
+_android_adb_bin() {
+    local adb_bin="$ADB_PATH"
+    if [ ! -x "$adb_bin" ]; then
+        adb_bin=$(command -v adb 2>/dev/null || echo "")
+    fi
+    if [ -z "$adb_bin" ]; then
+        return 1
+    fi
+    echo "$adb_bin"
+}
+
+_check_ios_simulator() {
     # Auto-detect UDID if needed
     if [ "$SIMULATOR_UDID" = "auto" ]; then
         local detected
         detected=$(qa_detect_simulator_udid 2>/dev/null || echo "")
         if [ -n "$detected" ]; then
             SIMULATOR_UDID="$detected"
+            export SIMULATOR_UDID
             _setup_ok "iOS Simulator auto-detected: $SIMULATOR_UDID"
             return 0
         fi
 
         # No booted simulator — try to find any available one and boot it
-        _setup_fixing "No booted simulator — finding one to boot..."
+        _setup_fixing "No booted iOS simulator — finding one to boot..."
         local first_sim
         first_sim=$(xcrun simctl list devices available 2>/dev/null | grep "iPhone" | head -1 | grep -oE '[A-F0-9-]{36}' || echo "")
 
@@ -69,6 +81,7 @@ _check_simulator() {
             open -a Simulator 2>/dev/null || true
             sleep 5
             SIMULATOR_UDID="$first_sim"
+            export SIMULATOR_UDID
             _setup_ok "iOS Simulator booted: $SIMULATOR_UDID"
             return 0
         fi
@@ -99,6 +112,85 @@ _check_simulator() {
 
     _setup_failed "iOS Simulator could not be booted"
     return 1
+}
+
+_check_android_emulator() {
+    local adb_bin
+    adb_bin=$(_android_adb_bin) || {
+        _setup_failed "adb not found (set ADB_PATH or install Android platform-tools)"
+        return 1
+    }
+    ADB_PATH="$adb_bin"
+    export ADB_PATH
+
+    "$adb_bin" start-server >/dev/null 2>&1 || true
+
+    local detected=""
+    if [ "$ANDROID_SERIAL" = "auto" ]; then
+        detected=$(qa_detect_android_serial 2>/dev/null || echo "")
+        if [ -n "$detected" ]; then
+            ANDROID_SERIAL="$detected"
+            export ANDROID_SERIAL
+        fi
+    fi
+
+    local state=""
+    if [ "$ANDROID_SERIAL" != "auto" ]; then
+        state=$("$adb_bin" -s "$ANDROID_SERIAL" get-state 2>/dev/null || echo "")
+    fi
+
+    if [ "$state" != "device" ]; then
+        _setup_fixing "Android emulator not running — starting AVD: $ANDROID_AVD"
+        local emulator_bin="$EMULATOR_PATH"
+        if [ ! -x "$emulator_bin" ]; then
+            emulator_bin=$(command -v emulator 2>/dev/null || echo "")
+        fi
+        if [ -z "$emulator_bin" ]; then
+            _setup_failed "Android emulator binary not found (set EMULATOR_PATH)"
+            return 1
+        fi
+        if ! "$emulator_bin" -list-avds 2>/dev/null | grep -qx "$ANDROID_AVD"; then
+            _setup_failed "Android AVD not found: $ANDROID_AVD"
+            return 1
+        fi
+        nohup "$emulator_bin" -avd "$ANDROID_AVD" -netdelay none -netspeed full >/tmp/qa-android-emulator.log 2>&1 &
+        sleep 3
+    fi
+
+    local elapsed=0
+    local booted=""
+    while [ $elapsed -lt $ANDROID_BOOT_TIMEOUT ]; do
+        if [ "$ANDROID_SERIAL" = "auto" ]; then
+            detected=$(qa_detect_android_serial 2>/dev/null || echo "")
+            if [ -n "$detected" ]; then
+                ANDROID_SERIAL="$detected"
+                export ANDROID_SERIAL
+            fi
+        fi
+
+        if [ "$ANDROID_SERIAL" != "auto" ]; then
+            state=$("$adb_bin" -s "$ANDROID_SERIAL" get-state 2>/dev/null || echo "")
+            booted=$("$adb_bin" -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || echo "")
+            if [ "$state" = "device" ] && [ "$booted" = "1" ]; then
+                _setup_ok "Android emulator ready: $ANDROID_SERIAL"
+                return 0
+            fi
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    _setup_failed "Android emulator did not become ready within ${ANDROID_BOOT_TIMEOUT}s"
+    return 1
+}
+
+_check_simulator() {
+    case "${QA_PLATFORM:-ios}" in
+        android) _check_android_emulator ;;
+        ios)     _check_ios_simulator ;;
+        *)       _setup_failed "Unsupported QA platform: ${QA_PLATFORM:-}"; return 1 ;;
+    esac
 }
 
 # ── 2. Check/Start Dev Server ────────────────────────────────────────
@@ -136,28 +228,52 @@ _check_dev_server() {
 # ── 3. Check/Launch App in Foreground ────────────────────────────────
 
 _check_app_foreground() {
-    # Use xcrun simctl launch (idempotent: if already running, brings to front)
     local launch_result
+
+    if qa_is_android; then
+        local adb_bin
+        adb_bin=$(_android_adb_bin) || {
+            _setup_failed "adb not found for Android app launch"
+            return 1
+        }
+        ADB_PATH="$adb_bin"
+        export ADB_PATH
+
+        "$adb_bin" -s "$ANDROID_SERIAL" shell am force-stop "$APP_BUNDLE_ID" 2>/dev/null || true
+        sleep 1
+        launch_result=$("$adb_bin" -s "$ANDROID_SERIAL" shell monkey -p "$APP_BUNDLE_ID" -c android.intent.category.LAUNCHER 1 2>&1 || true)
+        sleep "$APP_SETTLE_TIME"
+
+        if echo "$launch_result" | grep -qi "Events injected: 1"; then
+            _setup_ok "Android app launched and in foreground ($APP_BUNDLE_ID)"
+            return 0
+        fi
+
+        _setup_failed "Could not launch Android app ($APP_BUNDLE_ID)"
+        return 1
+    fi
+
+    # Use xcrun simctl launch (idempotent: if already running, brings to front)
     launch_result=$(xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>&1 || true)
 
     if echo "$launch_result" | grep -q "$APP_BUNDLE_ID"; then
-        _setup_ok "App in foreground ($APP_BUNDLE_ID)"
+        _setup_ok "iOS app in foreground ($APP_BUNDLE_ID)"
         sleep 2
         return 0
     fi
 
-    _setup_fixing "App not launching — terminating and retrying..."
+    _setup_fixing "iOS app not launching — terminating and retrying..."
     xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
     sleep 2
     launch_result=$(xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>&1 || true)
     sleep "$APP_SETTLE_TIME"
 
     if echo "$launch_result" | grep -q "$APP_BUNDLE_ID"; then
-        _setup_ok "App launched and in foreground"
+        _setup_ok "iOS app launched and in foreground"
         return 0
     fi
 
-    _setup_failed "Could not launch app"
+    _setup_failed "Could not launch iOS app"
     return 1
 }
 
@@ -192,9 +308,18 @@ _check_cdp_target() {
         # If no CDP target after 10s, try relaunching the app
         if [ $elapsed -ge 10 ] && [ "$relaunched" = false ]; then
             _setup_fixing "No CDP target — relaunching app..."
-            xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
-            sleep 2
-            xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
+            if qa_is_android; then
+                adb_bin=$(_android_adb_bin 2>/dev/null || echo "")
+                if [ -n "$adb_bin" ]; then
+                    "$adb_bin" -s "$ANDROID_SERIAL" shell am force-stop "$APP_BUNDLE_ID" 2>/dev/null || true
+                    sleep 2
+                    "$adb_bin" -s "$ANDROID_SERIAL" shell monkey -p "$APP_BUNDLE_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+                fi
+            else
+                xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
+                sleep 2
+                xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
+            fi
             relaunched=true
             sleep "$APP_SETTLE_TIME"
         fi
@@ -379,7 +504,7 @@ run_setup_guard() {
 
     echo ""
     echo "┌─────────────────────────────────────────────┐"
-    echo "│  SETUP GUARD — Checking prerequisites...     │"
+    printf "│  SETUP GUARD — Checking %-8s prerequisites... │\n" "${QA_PLATFORM:-ios}"
     echo "└─────────────────────────────────────────────┘"
     echo ""
 

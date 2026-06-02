@@ -20,13 +20,31 @@ HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QA_ROOT="$(cd "$HELPERS_DIR/../.." && pwd)"
 source "$QA_ROOT/qa.config.sh"
 
-# ── Auto-detect simulator UDID if set to "auto" ─────────────────────
-if [ "$SIMULATOR_UDID" = "auto" ]; then
+# ── Auto-detect active native device if set to "auto" ───────────────
+if qa_is_ios && [ "$SIMULATOR_UDID" = "auto" ]; then
     _detected_udid=$(qa_detect_simulator_udid 2>/dev/null || echo "")
     if [ -n "$_detected_udid" ]; then
         SIMULATOR_UDID="$_detected_udid"
+        export SIMULATOR_UDID
+    fi
+elif qa_is_android && [ "$ANDROID_SERIAL" = "auto" ]; then
+    _detected_serial=$(qa_detect_android_serial 2>/dev/null || echo "")
+    if [ -n "$_detected_serial" ]; then
+        ANDROID_SERIAL="$_detected_serial"
+        export ANDROID_SERIAL
     fi
 fi
+
+qa_adb_cmd() {
+    local adb_bin="$ADB_PATH"
+    if [ ! -x "$adb_bin" ]; then
+        adb_bin=$(command -v adb 2>/dev/null || echo "")
+    fi
+    if [ -z "$adb_bin" ]; then
+        return 1
+    fi
+    "$adb_bin" "$@"
+}
 
 # ── Test State ───────────────────────────────────────────────────────
 TEST_NAME=""
@@ -112,8 +130,8 @@ log_warn() {
 
 # ── agent-device Wrappers ────────────────────────────────────────────
 
-# Take a screenshot using xcrun simctl (avoids agent-device focus issues)
-# Falls back to agent-device if xcrun isn't available.
+# Take a screenshot using the active platform-native tool where possible.
+# Falls back to agent-device if the native tool is unavailable.
 # Usage: take_screenshot "step_name" [session]
 take_screenshot() {
     local name="$1"
@@ -121,10 +139,15 @@ take_screenshot() {
     local path="$SCREENSHOT_DIR/$TEST_NAME/${name}.png"
     mkdir -p "$(dirname "$path")"
 
-    # Prefer xcrun simctl for iOS (doesn't steal focus)
-    if [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
+    if qa_is_android && [ "${ANDROID_SERIAL:-auto}" != "auto" ]; then
+        qa_adb_cmd -s "$ANDROID_SERIAL" exec-out screencap -p > "$path" 2>/dev/null || {
+            agent-device screenshot "$path" --session "$session" 2>/dev/null || {
+                log_warn "Screenshot failed for: $name"
+                return 1
+            }
+        }
+    elif qa_is_ios && [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
         xcrun simctl io "$SIMULATOR_UDID" screenshot "$path" 2>/dev/null || {
-            # Fallback to agent-device
             agent-device screenshot "$path" --session "$session" 2>/dev/null || {
                 log_warn "Screenshot failed for: $name"
                 return 1
@@ -242,16 +265,21 @@ go_back() {
     sleep 2
 }
 
-# Check if the app process is running on the simulator
+# Check if the app process is running on the active native device
 check_appstate() {
-    local session="${1:-$ACTIVE_SESSION}"
-    if [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
-        xcrun simctl spawn "$SIMULATOR_UDID" launchctl list 2>/dev/null | grep "UIKitApplication:${APP_BUNDLE_ID}" || echo ""
-    else
-        agent-device appstate --session "$session" 2>/dev/null || echo ""
-    fi
+local session="${1:-$ACTIVE_SESSION}"
+if qa_is_android && [ "${ANDROID_SERIAL:-auto}" != "auto" ]; then
+if qa_adb_cmd -s "$ANDROID_SERIAL" shell pidof "$APP_BUNDLE_ID" >/dev/null 2>&1; then
+echo "$APP_BUNDLE_ID"
+else
+echo ""
+fi
+elif qa_is_ios && [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
+xcrun simctl spawn "$SIMULATOR_UDID" launchctl list 2>/dev/null | grep "UIKitApplication:${APP_BUNDLE_ID}" || echo ""
+else
+agent-device appstate --session "$session" 2>/dev/null || echo ""
+fi
 }
-
 # Get accessibility snapshot
 get_snapshot() {
     local session="${1:-$ACTIVE_SESSION}"
@@ -359,44 +387,52 @@ tap_tab() {
 
 # Launch the app fresh
 launch_app() {
-    local session="${1:-$ACTIVE_SESSION}"
-    step "Launching app ($APP_BUNDLE_ID)"
-
-    if [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
-        xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
-        sleep 1
-        xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || {
-            log_fail "Failed to launch app via xcrun"
-            return 1
-        }
-    else
-        agent-device open "$APP_BUNDLE_ID" --session "$session" --relaunch 2>/dev/null || {
-            log_fail "Failed to launch app"
-            return 1
-        }
-    fi
-
-    sleep "$APP_SETTLE_TIME"
-    log_pass "App launched"
+local session="${1:-$ACTIVE_SESSION}"
+step "Launching app ($APP_BUNDLE_ID) on ${QA_PLATFORM:-ios}"
+if qa_is_android && [ "${ANDROID_SERIAL:-auto}" != "auto" ]; then
+qa_adb_cmd -s "$ANDROID_SERIAL" shell am force-stop "$APP_BUNDLE_ID" 2>/dev/null || true
+sleep 1
+qa_adb_cmd -s "$ANDROID_SERIAL" shell monkey -p "$APP_BUNDLE_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || {
+log_fail "Failed to launch Android app via adb"
+return 1
 }
-
+elif qa_is_ios && [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
+xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || true
+sleep 1
+xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || {
+log_fail "Failed to launch iOS app via xcrun"
+return 1
+}
+else
+agent-device open "$APP_BUNDLE_ID" --session "$session" --relaunch 2>/dev/null || {
+log_fail "Failed to launch app"
+return 1
+}
+fi
+sleep "$APP_SETTLE_TIME"
+log_pass "App launched on ${QA_PLATFORM:-ios}"
+}
 # Close the app
 close_app() {
-    local session="${1:-$ACTIVE_SESSION}"
-    if [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
-        xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || {
-            log_warn "Could not terminate app via xcrun"
-            return 1
-        }
-    else
-        agent-device close --session "$session" 2>/dev/null || {
-            log_warn "Could not close app"
-            return 1
-        }
-    fi
-    sleep 2
+local session="${1:-$ACTIVE_SESSION}"
+if qa_is_android && [ "${ANDROID_SERIAL:-auto}" != "auto" ]; then
+qa_adb_cmd -s "$ANDROID_SERIAL" shell am force-stop "$APP_BUNDLE_ID" 2>/dev/null || {
+log_warn "Could not terminate Android app via adb"
+return 1
 }
-
+elif qa_is_ios && [ "$SIMULATOR_UDID" != "auto" ] && command -v xcrun >/dev/null 2>&1; then
+xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" 2>/dev/null || {
+log_warn "Could not terminate iOS app via xcrun"
+return 1
+}
+else
+agent-device close --session "$session" 2>/dev/null || {
+log_warn "Could not close app"
+return 1
+}
+fi
+sleep 2
+}
 # Wait for app to settle
 wait_settle() {
     local seconds="${1:-3}"
@@ -450,4 +486,4 @@ export -f assert_app_foreground assert_screenshot assert_text_visible assert_ele
 export -f tap_tab tap_tab_by_index launch_app close_app wait_settle 2>/dev/null || true
 export -f print_test_summary log_debug save_snapshot 2>/dev/null || true
 
-echo "Test helpers loaded. Session: $ACTIVE_SESSION | App: $APP_BUNDLE_ID"
+echo "Test helpers loaded. Platform: $QA_PLATFORM | Session: $ACTIVE_SESSION | App: $APP_BUNDLE_ID"

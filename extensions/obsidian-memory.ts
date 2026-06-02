@@ -10,16 +10,20 @@ import {
 	wikiPath,
 	indexPath,
 	masterIndexPath,
-	sanitizeFilename,
-	titleFromFilename,
 	buildFrontmatter,
 	parseLines,
 	parseSearchContext,
 	parseVaultInfo,
-	groupByFile,
 	VAULT_NAME,
 	VAULT_PATH,
 } from "./lib/obsidian-cli.ts";
+import {
+	dedupeSearchMatches,
+	formatRankedSearchResults,
+	rankSearchMatches,
+	resolveSearchPath,
+	tokenizeSearchQuery,
+} from "./lib/obsidian-search.ts";
 import type { ObsidianToolParams } from "./lib/obsidian-types.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -105,38 +109,84 @@ async function handleSearch(p: ObsidianToolParams) {
 	const query = str(p.query);
 	if (!query) return err("'query' is required for search.");
 
-	const scope = str(p.scope);
-	const limit = num(p.limit, 20);
+	const searchPath = resolveSearchPath({
+		path: str(p.path),
+		wiki: str(p.wiki),
+		scope: str(p.scope),
+	});
+	const limit = Math.max(1, Math.min(num(p.limit, 20), 50));
+	const perFileLimit = 5;
+	const cliLimit = Math.max(limit * perFileLimit * 4, 50);
 
 	const args: Record<string, string | number | boolean | undefined> = {
 		query,
-		limit,
+		limit: cliLimit,
 	};
-	if (scope === "raw" || scope === "wiki") args.path = scope;
+	if (searchPath) args.path = searchPath;
 
 	const result = await obsidianExec("search:context", args);
+	let rawMatches = result.stdout ? parseSearchContext(result.stdout) : [];
+	let fallbackUsed = false;
+	let fallbackQueries: string[] = [];
 
-	if (!result.stdout) {
-		return ok(`No results found for: "${query}"`, { query, results: [], count: 0 });
+	if (rawMatches.length === 0) {
+		fallbackQueries = tokenizeSearchQuery(query).slice(0, 6);
+		const normalizedQuery = tokenizeSearchQuery(query).join(" ");
+		if (fallbackQueries.length > 0 && (fallbackQueries.length > 1 || fallbackQueries[0] !== normalizedQuery)) {
+			fallbackUsed = true;
+			const fallbackResults = await Promise.all(fallbackQueries.map((term) => {
+				const fallbackArgs: Record<string, string | number | boolean | undefined> = {
+					query: term,
+					limit: cliLimit,
+				};
+				if (searchPath) fallbackArgs.path = searchPath;
+				return obsidianExec("search:context", fallbackArgs);
+			}));
+			rawMatches = fallbackResults.flatMap((fallbackResult) => (
+				fallbackResult.stdout ? parseSearchContext(fallbackResult.stdout) : []
+			));
+		}
 	}
 
-	const matches = parseSearchContext(result.stdout);
-	const grouped = groupByFile(matches);
+	const rawMatchCount = rawMatches.length;
+	const uniqueMatches = dedupeSearchMatches(rawMatches);
+	const ranked = rankSearchMatches(uniqueMatches, query, { perFileLimit });
+	const shown = ranked.slice(0, limit);
+	const text = formatRankedSearchResults(query, ranked, {
+		path: searchPath,
+		limit,
+		perFileLimit,
+		fallbackUsed,
+		fallbackQueries,
+		rawMatchCount,
+		uniqueMatchCount: uniqueMatches.length,
+	});
 
-	const lines: string[] = [`Search results for "${query}" (${grouped.size} files, ${matches.length} matches):\n`];
-
-	for (const [file, fileMatches] of grouped) {
-		lines.push(`📄 ${file}`);
-		for (const m of fileMatches.slice(0, 5)) {
-			lines.push(`  L${m.line}: ${m.text}`);
-		}
-		if (fileMatches.length > 5) {
-			lines.push(`  ... and ${fileMatches.length - 5} more matches`);
-		}
-		lines.push("");
-	}
-
-	return ok(lines.join("\n"), { query, fileCount: grouped.size, matchCount: matches.length });
+	return ok(text, {
+		query,
+		path: searchPath,
+		fileCount: shown.length,
+		totalFileCount: ranked.length,
+		uniqueMatchCount: uniqueMatches.length,
+		rawMatchCount,
+		fallbackUsed,
+		fallbackQueries,
+		results: shown.map((file) => ({
+			file: file.file,
+			score: file.score,
+			coverage: file.coverage,
+			matchedTerms: file.matchedTerms,
+			uniqueMatchCount: file.uniqueMatchCount,
+			rawMatchCount: file.rawMatchCount,
+			matches: file.matches.map((match) => ({
+				line: match.line,
+				text: match.text,
+				matchedTerms: match.matchedTerms,
+				score: match.score,
+				duplicateCount: match.duplicateCount,
+			})),
+		})),
+	});
 }
 
 async function handleSearchTags(p: ObsidianToolParams) {
@@ -614,7 +664,7 @@ export default function (pi: ExtensionAPI) {
 			'- "ingest:daily": Add to today\'s daily note (requires content)',
 			"",
 			"SEARCH:",
-			'- "search": Full-text search with context (requires query; optional scope=raw|wiki, limit)',
+			'- "search": Ranked full-text search with deduped context (requires query; optional scope=raw|wiki, path=wiki/<topic>, wiki=<topic>, limit)',
 			'- "search:tags": Search/list tags (optional query to filter)',
 			"",
 			"READ/NAVIGATE:",
@@ -663,11 +713,11 @@ export default function (pi: ExtensionAPI) {
 			tags: Type.Optional(Type.String({ description: "Comma-separated tags (for ingest)" })),
 			category: Type.Optional(Type.String({ description: "Sub-folder category (for ingest)" })),
 			query: Type.Optional(Type.String({ description: "Search query" })),
-			scope: Type.Optional(Type.String({ description: "Scope filter: raw, wiki, or all" })),
-			limit: Type.Optional(Type.Number({ description: "Max results (default: 20)" })),
-			path: Type.Optional(Type.String({ description: "File path (relative to vault root)" })),
+			scope: Type.Optional(Type.String({ description: "Scope filter for search/list: raw, wiki, or all" })),
+			limit: Type.Optional(Type.Number({ description: "Max ranked files to return (default: 20)" })),
+			path: Type.Optional(Type.String({ description: "File or folder path relative to vault root; search supports folders like wiki/codebase-reco" })),
 			file: Type.Optional(Type.String({ description: "File name (wiki-link style resolution)" })),
-			wiki: Type.Optional(Type.String({ description: "Wiki topic name (for write operations)" })),
+			wiki: Type.Optional(Type.String({ description: "Wiki topic name (for write operations or search scoping)" })),
 			links: Type.Optional(Type.String({ description: "Comma-separated related article titles" })),
 			overwrite: Type.Optional(Type.Boolean({ description: "Overwrite existing file" })),
 			name: Type.Optional(Type.String({ description: "Property name" })),
