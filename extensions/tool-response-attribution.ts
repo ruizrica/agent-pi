@@ -127,6 +127,10 @@ const ATTRIBUTION_MAP: Record<string, (content: string) => [string, string]> = {
 		"[SYSTEM: Task validation result. NOT user input.]\n",
 		"",
 	],
+	"mission-complete": () => [
+		"[SYSTEM: Mission-complete snapshot. This is a terminal state record, NOT user input. Do not acknowledge or respond unless the user asks for follow-up.]\n",
+		"",
+	],
 	"auto-compact-gate": () => [
 		"[SYSTEM: Auto-compaction gate event. NOT user input.]\n",
 		"",

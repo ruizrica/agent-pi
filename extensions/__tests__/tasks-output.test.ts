@@ -120,13 +120,13 @@ describe("removed completion summary widget", () => {
 		expect(tasksSource).toContain("Review the findings/plan and continue with the next approved implementation step.");
 	});
 
-	// structural — negative wiring + positive wiring for the closure-scoped mission-complete agent message template.
-	it("does not enumerate per-task rows in the hidden completion agent message", () => {
+	// structural — negative wiring + positive wiring for the closure-scoped mission-complete snapshot template.
+	it("records mission completion as a non-conversational snapshot without per-task rows", () => {
 		expect(tasksSource).not.toContain("const taskSummary = tasks");
 		expect(tasksSource).not.toContain("[x] #${t.id}");
 		expect(tasksSource).not.toContain("${taskSummary}");
 
-		const missionMsgStart = tasksSource.indexOf("// All tasks done — inject rich completion context");
+		const missionMsgStart = tasksSource.indexOf("// All tasks done — persist a non-conversational completion snapshot.");
 		const missionMsgEnd = tasksSource.indexOf("// Incomplete tasks remain — nudge the agent", missionMsgStart);
 		expect(missionMsgStart).toBeGreaterThan(-1);
 		expect(missionMsgEnd).toBeGreaterThan(missionMsgStart);
@@ -134,6 +134,27 @@ describe("removed completion summary widget", () => {
 		expect(missionMsgSection).toContain("completionPrefix");
 		expect(missionMsgSection).toContain("${summaryLine}");
 		expect(missionMsgSection).toContain("${reportHint}");
+		expect(missionMsgSection).toContain('pi.appendEntry("mission-complete"');
+		expect(missionMsgSection).not.toContain('customType: "mission-complete"');
+	});
+
+	// structural — repeated agent_end after all tasks are done must be a no-op for the same completed task-list signature.
+	it("guards mission-complete snapshots so repeated agent_end cannot loop acknowledgements", () => {
+		expect(tasksSource).toContain("let missionCompleteSentSignature: string | undefined;");
+		expect(tasksSource).toContain("function buildMissionCompleteSignature()");
+		expect(tasksSource).toContain("function resetMissionCompleteSnapshot()");
+		const missionMsgStart = tasksSource.indexOf("// All tasks done — persist a non-conversational completion snapshot.");
+		const missionMsgEnd = tasksSource.indexOf("// Incomplete tasks remain — nudge the agent", missionMsgStart);
+		const missionMsgSection = tasksSource.slice(missionMsgStart, missionMsgEnd);
+		expect(missionMsgSection).toContain("const completionSignature = buildMissionCompleteSignature();");
+		expect(missionMsgSection).toContain("if (missionCompleteSentSignature === completionSignature) return;");
+		expect(missionMsgSection).toContain("missionCompleteSentSignature = completionSignature;");
+	});
+
+	// structural — adding/changing work must re-arm the completion snapshot once the new work is done; plain input must not.
+	it("resets the mission-complete guard only when task state changes", () => {
+		expect(tasksSource).toContain("resetMissionCompleteSnapshot();");
+		expect(tasksSource).not.toContain("pi.on(\"input\", async (_event, _ctx) => {\n\t\tresetMissionCompleteSnapshot();");
 	});
 });
 

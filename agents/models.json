@@ -34,7 +34,7 @@
     },
     "test-reviewer": {
       "provider": "anthropic",
-      "model": "claude-opus-4-7"
+      "model": "claude-opus-4-8"
     },
     "documenter": {
       "provider": "openai-codex",
@@ -46,7 +46,7 @@
     },
     "claude-advisor": {
       "provider": "anthropic",
-      "model": "claude-opus-4-7"
+      "model": "claude-opus-4-8"
     },
     "tool-advisor": {
       "provider": "openai-codex",

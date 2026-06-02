@@ -27,6 +27,28 @@
         ],
         "matcher": ""
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "scripts/cmd-task-hooks/cmd-task-hook.sh start claude",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "scripts/cmd-task-hooks/cmd-task-hook.sh stop claude",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
     ]
   }
 }

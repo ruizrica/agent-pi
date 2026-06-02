@@ -37,7 +37,7 @@ const interfazeModel = createInterfazeModel("interfaze-beta");
 const stream = streamInterfaze("interfaze-beta", context, options);
 ```
 
-`INTERFAZE_API_KEY` is the provider auth key used by `pi.registerProvider("interfaze", ...)`.
+`$INTERFAZE_API_KEY` is the provider auth key reference used by `pi.registerProvider("interfaze", ...)`.
 
 ### Demo script
 

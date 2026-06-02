@@ -42,6 +42,15 @@ describe("wrapContent", () => {
 		expect(result).toContain("Pacifico job completed with output");
 	});
 
+	it("wraps mission-complete as a terminal snapshot, not a fresh request", () => {
+		const result = wrapContent("All 3 tasks complete", "mission-complete");
+		expect(result).toContain("[SYSTEM: Mission-complete snapshot");
+		expect(result).toContain("terminal state record");
+		expect(result).toContain("NOT user input");
+		expect(result).toContain("Do not acknowledge or respond");
+		expect(result).toContain("All 3 tasks complete");
+	});
+
 	it("uses default framing for unknown custom types", () => {
 		const result = wrapContent("Some content", "unknown-type-xyz");
 		expect(result).toContain("[SYSTEM:");
@@ -96,6 +105,7 @@ describe("ATTRIBUTION_MAP", () => {
 			"swagbucks-config",
 			"security-guard-event",
 			"task-validation",
+			"mission-complete",
 			"auto-compact-gate",
 			"dream-config",
 			"dream-reminder",

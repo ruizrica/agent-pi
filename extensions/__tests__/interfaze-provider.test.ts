@@ -9,7 +9,7 @@ vi.mock("../interfaze.ts", () => ({
 	default: (pi: { registerProvider: typeof registerProvider }) => {
 		pi.registerProvider("interfaze", {
 			baseUrl: "https://api.interfaze.ai/v1",
-			apiKey: "INTERFAZE_API_KEY",
+			apiKey: "$INTERFAZE_API_KEY",
 			api: "openai-completions",
 			models: [
 				{
@@ -35,7 +35,7 @@ describe("interfaze provider extension", () => {
 			"interfaze",
 			expect.objectContaining({
 				baseUrl: "https://api.interfaze.ai/v1",
-				apiKey: "INTERFAZE_API_KEY",
+				apiKey: "$INTERFAZE_API_KEY",
 				api: "openai-completions",
 				models: expect.arrayContaining([
 					expect.objectContaining({

@@ -538,6 +538,7 @@ export default function (pi: ExtensionAPI) {
 	let listDescription: string | undefined;
 	let nudgedThisCycle = false;
 	let syncState: SyncState = emptySyncState();
+	let missionCompleteSentSignature: string | undefined;
 
 	// ── Commander sync (gate-aware) ─────────────────────────────────────
 
@@ -625,6 +626,18 @@ export default function (pi: ExtensionAPI) {
 
 	g.__piMissionCompleteVisible = false;
 	g.__piCompletedTaskUiDismissed = false;
+
+	function resetMissionCompleteSnapshot(): void {
+		missionCompleteSentSignature = undefined;
+	}
+
+	function buildMissionCompleteSignature(): string {
+		return JSON.stringify({
+			listTitle: listTitle || "",
+			listDescription: listDescription || "",
+			tasks: tasks.map((task) => ({ id: task.id, text: task.text, status: task.status })),
+		});
+	}
 
 	function auditCommanderBoardForMissionComplete(): void {
 		if (!shouldSyncLocalTasksToCommander()) return;
@@ -741,6 +754,7 @@ export default function (pi: ExtensionAPI) {
 		listTitle = undefined;
 		listDescription = undefined;
 		syncState = emptySyncState();
+		resetMissionCompleteSnapshot();
 
 		for (const entry of ctx.sessionManager.getBranch()) {
 			if (entry.type !== "message") continue;
@@ -871,13 +885,18 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// All tasks done — inject rich completion context for the agent
+		// All tasks done — persist a non-conversational completion snapshot.
 		//
 		// We intentionally do NOT enumerate each completed task here. The full
 		// list (with IDs and Commander mappings) is already available via the
-		// Ctrl+Alt+T task overlay and via Commander itself, and re-injecting it
-		// as hidden context bloats long-running sessions for no benefit.
+		// Ctrl+Alt+T task overlay and via Commander itself. This must also stay
+		// out of the agent prompt stream: an unguarded mission-complete custom
+		// message on every agent_end can create an acknowledgement loop.
 		if (tasks.length > 0 && incomplete.length === 0) {
+			const completionSignature = buildMissionCompleteSignature();
+			if (missionCompleteSentSignature === completionSignature) return;
+			missionCompleteSentSignature = completionSignature;
+
 			const stats = getSessionStats();
 
 			const statsParts: string[] = [];
@@ -913,14 +932,17 @@ export default function (pi: ExtensionAPI) {
 			const completionPrefix = completion.variant === "interim"
 				? `Task complete -- ${listTitle || "Tasks"}`
 				: `All ${tasks.length} tasks complete -- ${listTitle || "Tasks"}`;
+			const content = `${completionPrefix}${summaryLine}${nextStepLine}${statsLine}${reportHint}`;
 
-			pi.sendMessage(
-				{
-					customType: "mission-complete",
-					content: `${completionPrefix}${summaryLine}${nextStepLine}${statsLine}${reportHint}`,
-					display: false, // Hidden completion context for the agent; no completion widget is shown
-				},
-			);
+			pi.appendEntry("mission-complete", {
+				content,
+				completionSignature,
+				completedAt: nowIso(),
+				listTitle,
+				listDescription,
+				taskCount: tasks.length,
+				variant: completion.variant,
+			});
 			return;
 		}
 
@@ -1015,6 +1037,7 @@ export default function (pi: ExtensionAPI) {
 					listTitle = params.text;
 					listDescription = params.description || undefined;
 					syncState = emptySyncState();
+					resetMissionCompleteSnapshot();
 
 					// Support initial tasks: new-list with texts[] creates the list AND adds tasks in one call
 					const initialItems = params.texts?.length ? params.texts : [];
@@ -1228,6 +1251,8 @@ export default function (pi: ExtensionAPI) {
 					if (!shouldSyncLocalTasksToCommander()) {
 						msg += `\n(${commanderSyncSuppressedMessage()})`;
 					}
+					resetMissionCompleteSnapshot();
+
 					const result = {
 						content: [{ type: "text" as const, text: msg }],
 						details: makeDetails("add"),
@@ -1281,6 +1306,9 @@ export default function (pi: ExtensionAPI) {
 					}
 					if (demoted.length > 0) {
 						msg += `\n(Auto-paused ${demoted.map((t) => `#${t.id}`).join(", ")} → idle. Only one task can be in progress at a time.)`;
+					}
+					if (task.status !== "done" || demoted.length > 0) {
+						resetMissionCompleteSnapshot();
 					}
 
 					// Sync: update Commander task status only when this session owns local task-board sync.
@@ -1454,6 +1482,7 @@ export default function (pi: ExtensionAPI) {
 						};
 					}
 					const removed = tasks.splice(idx, 1)[0];
+					resetMissionCompleteSnapshot();
 
 					// Sync: cancel Commander task only when this session owns local task-board sync.
 					// On rejection we record a durable cancel intent so the cancellation is
@@ -1511,6 +1540,7 @@ export default function (pi: ExtensionAPI) {
 					const oldText = toUpdate.text;
 					toUpdate.text = params.text;
 					toUpdate.lastUpdatedAt = nowIso();
+					resetMissionCompleteSnapshot();
 					toUpdate.lastUpdatedBy = currentActor();
 
 					// Sync the new label to the Commander child task. We update --title
@@ -1578,6 +1608,7 @@ export default function (pi: ExtensionAPI) {
 					listTitle = undefined;
 					listDescription = undefined;
 					syncState = { ...clearMappings(syncState), parentClosedAt: undefined };
+					resetMissionCompleteSnapshot();
 
 					const result = {
 						content: [{ type: "text" as const, text: `Cleared ${count} task(s)` }],
