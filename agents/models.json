@@ -1,56 +1,56 @@
 {
   "default": {
-    "provider": "anthropic",
-    "model": "claude-haiku-4-5-20251001"
+    "provider": "ollama",
+    "model": "gemma4-31b-max.Modelfile:latest"
   },
   "agents": {
     "scout": {
-      "provider": "x-ai",
-      "model": "grok-4.1-fast"
+      "provider": "ollama",
+      "model": "gemma-4-e4b-it:latest"
     },
     "ranger": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "builder": {
-      "provider": "anthropic",
-      "model": "claude-haiku-4-5"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "paladin": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "provider": "ollama",
+      "model": "gemma4-31b-max.Modelfile:latest"
     },
     "reviewer": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "provider": "ollama",
+      "model": "gemma4-31b-max.Modelfile:latest"
     },
     "warden": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-6"
+      "provider": "ollama",
+      "model": "gemma4-31b-max.Modelfile:latest"
     },
     "planner": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "tester": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "herald": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "red-team": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "gemma4-31b-max.Modelfile:latest"
     },
     "knight": {
-      "provider": "openai-codex",
-      "model": "gpt-5.4"
+      "provider": "ollama",
+      "model": "qwen3.6-35b-a3b-max:latest"
     },
     "rlm-subcall": {
-      "provider": "anthropic",
-      "model": "claude-haiku-4-5"
+      "provider": "ollama",
+      "model": "gemma-4-e4b-it:latest"
     }
   }
 }

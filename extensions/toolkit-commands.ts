@@ -20,6 +20,7 @@ import { spawn } from "child_process";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { TOOLKIT_WORKER_MODEL } from "./lib/toolkit-cli.ts";
+import { appendInstalledPiExtension, resolveIntercomPresenceName } from "./lib/pi-extension-paths.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -221,11 +222,27 @@ export default function (pi: ExtensionAPI) {
 						const model = TOOLKIT_WORKER_MODEL || DEFAULT_SUBAGENT_MODEL;
 
 						const tasksExtPath = join(dirname(fileURLToPath(import.meta.url)), "tasks.ts");
+						const extensions = ["-e", tasksExtPath];
+						appendInstalledPiExtension(extensions, "pi-intercom");
+						const parentSessionId = _ctx.sessionManager?.getSessionId?.();
+						const parentIntercomTarget = resolveIntercomPresenceName(pi.getSessionName(), parentSessionId);
+						const childIntercomName = `toolkit-${cmdName}`;
+						const spawnEnv: Record<string, string | undefined> = {
+							...process.env,
+							PI_SUBAGENT: "1",
+							PI_SUBAGENT_INTERCOM_SESSION_NAME: childIntercomName,
+							PI_SUBAGENT_RUN_ID: parentSessionId ? `${parentSessionId}:${childIntercomName}` : childIntercomName,
+							PI_SUBAGENT_CHILD_AGENT: cmdName,
+							PI_SUBAGENT_CHILD_INDEX: "toolkit",
+						};
+						if (parentIntercomTarget) {
+							spawnEnv.PI_SUBAGENT_ORCHESTRATOR_TARGET = parentIntercomTarget;
+						}
 						const proc = spawn("pi", [
 							"--mode", "json",
 							"-p",
 							"--no-extensions",
-							"-e", tasksExtPath,
+							...extensions,
 							"--model", model,
 							"--tools", tools,
 							"--thinking", "off",
@@ -233,7 +250,7 @@ export default function (pi: ExtensionAPI) {
 							userArgs || "",
 						], {
 							stdio: ["ignore", "pipe", "pipe"],
-							env: { ...process.env, PI_SUBAGENT: "1" },
+							env: spawnEnv,
 						});
 
 						let output = "";
@@ -243,14 +260,14 @@ export default function (pi: ExtensionAPI) {
 
 						await new Promise<void>((res) => proc.on("close", () => res()));
 
-						const truncated = output.length > 8000
-							? output.slice(0, 8000) + "\n\n... [truncated]"
+						const digest = output.length > 1200
+							? output.slice(0, 1200) + `\n\n... [truncated; full output was ${output.length} chars]`
 							: output;
 
 						pi.sendMessage(
 							{
 								customType: "toolkit-command-result",
-								content: truncated || "(no output)",
+								content: digest ? `Toolkit command finished.\n\nResult digest:\n${digest}` : "Toolkit command finished with no output.",
 								display: true,
 							},
 							{ deliverAs: "followUp", triggerTurn: true },
