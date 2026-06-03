@@ -41,6 +41,7 @@ import { buildCommanderPrompt } from "./lib/commander-prompt.ts";
 import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-lifecycle.ts";
 import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, type TaskListState } from "./lib/task-list-render.ts";
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
+import { appendInstalledPiExtension, resolveIntercomPresenceName } from "./lib/pi-extension-paths.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -522,13 +523,18 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-			...(commanderAvailable ? ["-e", commanderExtPath] : []),
+		];
+		appendInstalledPiExtension(args, "pi-intercom");
+		if (commanderAvailable) {
+			args.push("-e", commanderExtPath);
+		}
+		args.push(
 			"--model", model,
 			"--tools", tools,
 			"--thinking", "off",
 			"--append-system-prompt", systemPrompt,
 			"--session", agentSessionFile,
-		];
+		);
 
 		// Continue existing session if we have one
 		if (state.sessionFile) {
@@ -541,7 +547,20 @@ export default function (pi: ExtensionAPI) {
 
 		return new Promise((resolve) => {
 			// Build env — include Commander task ID when available
-			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+			const parentSessionId = ctx.sessionManager?.getSessionId?.();
+			const parentIntercomTarget = resolveIntercomPresenceName(pi.getSessionName(), parentSessionId);
+			const childIntercomName = `team-${key}`;
+			const spawnEnv: Record<string, string | undefined> = {
+				...process.env,
+				PI_SUBAGENT: "1",
+				PI_SUBAGENT_INTERCOM_SESSION_NAME: childIntercomName,
+				PI_SUBAGENT_RUN_ID: parentSessionId ? `${parentSessionId}:${childIntercomName}` : childIntercomName,
+				PI_SUBAGENT_CHILD_AGENT: agentName,
+				PI_SUBAGENT_CHILD_INDEX: key,
+			};
+			if (parentIntercomTarget) {
+				spawnEnv.PI_SUBAGENT_ORCHESTRATOR_TARGET = parentIntercomTarget;
+			}
 			if (commanderAvailable) {
 				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
 				if (currentTask?.commanderTaskId !== undefined) {
@@ -711,22 +730,23 @@ export default function (pi: ExtensionAPI) {
 
 				const result = await dispatchAgent(agent, task, ctx);
 
-				const truncated = result.output.length > 8000
-					? result.output.slice(0, 8000) + "\n\n... [truncated]"
+				const digest = result.output.length > 1200
+					? result.output.slice(0, 1200) + `\n\n... [truncated; full output was ${result.output.length} chars]`
 					: result.output;
 
 				const status = result.exitCode === 0 ? "done" : "error";
 				const summary = `[${agent}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
 
 				return {
-					content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
+					content: [{ type: "text", text: `${summary}\n\nResult digest:\n${digest}` }],
 					details: {
 						agent,
 						task,
 						status,
 						elapsed: result.elapsed,
 						exitCode: result.exitCode,
-						fullOutput: result.output,
+						fullOutput: digest,
+						outputLength: result.output.length,
 						model: result.model,
 					},
 				};

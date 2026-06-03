@@ -38,6 +38,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConfig } from "./lib/parse-pipeline-yaml.ts";
+import { appendInstalledPiExtension, resolveIntercomPresenceName } from "./lib/pi-extension-paths.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -365,20 +366,37 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
+		];
+		appendInstalledPiExtension(args, "pi-intercom");
+		args.push(
 			"--model", model,
 			"--tools", agentDef.tools,
 			"--thinking", "off",
 			"--append-system-prompt", agentDef.systemPrompt,
 			"--session", agentSessionFile,
 			task,
-		];
+		);
 
 		const textChunks: string[] = [];
 
 		return new Promise((resolvePromise) => {
+			const parentSessionId = ctx.sessionManager?.getSessionId?.();
+			const parentIntercomTarget = resolveIntercomPresenceName(pi.getSessionName(), parentSessionId);
+			const childIntercomName = agentKey;
+			const spawnEnv: Record<string, string | undefined> = {
+				...process.env,
+				PI_SUBAGENT: "1",
+				PI_SUBAGENT_INTERCOM_SESSION_NAME: childIntercomName,
+				PI_SUBAGENT_RUN_ID: parentSessionId ? `${parentSessionId}:${childIntercomName}` : childIntercomName,
+				PI_SUBAGENT_CHILD_AGENT: agentDef.name,
+				PI_SUBAGENT_CHILD_INDEX: String(agentState.index),
+			};
+			if (parentIntercomTarget) {
+				spawnEnv.PI_SUBAGENT_ORCHESTRATOR_TARGET = parentIntercomTarget;
+			}
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 			});
 
 			// Track for escape-cancel integration
@@ -761,19 +779,20 @@ export default function (pi: ExtensionAPI) {
 				reviewLoopCount++;
 			}
 
-			const truncated = mergedOutput.length > 8000
-				? mergedOutput.slice(0, 8000) + "\n\n... [truncated]"
+			const digest = mergedOutput.length > 1200
+				? mergedOutput.slice(0, 1200) + `\n\n... [truncated; full output was ${mergedOutput.length} chars]`
 				: mergedOutput;
 
 			const status = result.success ? "done" : "error";
 
 			return {
-				content: [{ type: "text", text: `[${phase.def.name}] ${status} — ${agents.length} agent(s)\n\n${truncated}` }],
+				content: [{ type: "text", text: `[${phase.def.name}] ${status} — ${agents.length} agent(s)\n\nResult digest:\n${digest}` }],
 				details: {
 					phase: phase.def.name,
 					agents: agents.map(a => a.role),
 					status,
-					fullOutput: mergedOutput,
+					fullOutput: digest,
+					outputLength: mergedOutput.length,
 					reviewLoop: reviewLoopCount,
 				},
 			};

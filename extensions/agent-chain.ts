@@ -39,6 +39,7 @@ import { DEFAULT_SUBAGENT_MODEL } from "./lib/defaults.ts";
 import { resolveToolkitWorkerModel } from "./lib/toolkit-cli.ts";
 import { loadAgentModelsConfig, resolveAgentModelString, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { parseChainYaml, type ChainStep, type ChainDef } from "./lib/parse-chain-yaml.ts";
+import { appendInstalledPiExtension, resolveIntercomPresenceName } from "./lib/pi-extension-paths.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -312,12 +313,15 @@ export default function (pi: ExtensionAPI) {
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
+		];
+		appendInstalledPiExtension(args, "pi-intercom");
+		args.push(
 			"--model", model,
 			"--tools", agentDef.tools,
 			"--thinking", "off",
 			"--append-system-prompt", agentDef.systemPrompt,
 			"--session", agentSessionFile,
-		];
+		);
 
 		if (hasSession) {
 			args.push("-c");
@@ -330,9 +334,23 @@ export default function (pi: ExtensionAPI) {
 		const state = stepStates[stepIndex];
 
 		return new Promise((resolve) => {
+			const parentSessionId = ctx.sessionManager?.getSessionId?.();
+			const parentIntercomTarget = resolveIntercomPresenceName(pi.getSessionName(), parentSessionId);
+			const childIntercomName = `chain-${agentKey}`;
+			const spawnEnv: Record<string, string | undefined> = {
+				...process.env,
+				PI_SUBAGENT: "1",
+				PI_SUBAGENT_INTERCOM_SESSION_NAME: childIntercomName,
+				PI_SUBAGENT_RUN_ID: parentSessionId ? `${parentSessionId}:${childIntercomName}` : childIntercomName,
+				PI_SUBAGENT_CHILD_AGENT: agentDef.name,
+				PI_SUBAGENT_CHILD_INDEX: String(stepIndex),
+			};
+			if (parentIntercomTarget) {
+				spawnEnv.PI_SUBAGENT_ORCHESTRATOR_TARGET = parentIntercomTarget;
+			}
 			const proc = spawn("pi", args, {
 				stdio: ["ignore", "pipe", "pipe"],
-				env: { ...process.env, PI_SUBAGENT: "1" },
+				env: spawnEnv,
 				cwd: ctx.cwd,
 			});
 
@@ -514,21 +532,22 @@ export default function (pi: ExtensionAPI) {
 
 			const result = await runChain(task, ctx);
 
-			const truncated = result.output.length > 8000
-				? result.output.slice(0, 8000) + "\n\n... [truncated]"
+			const digest = result.output.length > 1200
+				? result.output.slice(0, 1200) + `\n\n... [truncated; full output was ${result.output.length} chars]`
 				: result.output;
 
 			const status = result.success ? "done" : "error";
 			const summary = `[chain:${activeChain?.name}] ${status} in ${Math.round(result.elapsed / 1000)}s`;
 
 			return {
-				content: [{ type: "text", text: `${summary}\n\n${truncated}` }],
+				content: [{ type: "text", text: `${summary}\n\nResult digest:\n${digest}` }],
 				details: {
 					chain: activeChain?.name,
 					task,
 					status,
 					elapsed: result.elapsed,
-					fullOutput: result.output,
+					fullOutput: digest,
+					outputLength: result.output.length,
 				},
 			};
 		},

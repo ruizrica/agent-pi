@@ -4,6 +4,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { Text } from "@mariozechner/pi-tui";
+import { McpClient } from "./lib/mcp-client.ts";
+import { commanderServerMissingMessage, resolveCommanderServerPath } from "./lib/commander-server.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -59,7 +61,7 @@ export default function (pi: ExtensionAPI) {
 
 			// Check if Commander is available
 			const gate = g.__piCommanderGate;
-			if (!gate || gate.status !== "available") {
+			if (!gate || gate.state !== "available") {
 				return {
 					content: [{ type: "text" as const, text: "Email sending failed: Commander is not connected. The send_email tool requires Commander with AgentMail configured." }],
 					details: { success: false, error: "commander_not_available" },
@@ -134,9 +136,14 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				// Last resort: use the MCP client directly
-				const McpClientModule = await import("./lib/mcp-client.ts");
-				const serverPath = "/Users/ricardo/Workshop/Github-Work/commander/services/commander-mcp/dist/server.js";
-				const client = new McpClientModule.McpClient(serverPath, {
+				const serverPath = resolveCommanderServerPath();
+				if (!serverPath) {
+					return {
+						content: [{ type: "text" as const, text: `Email sending failed: ${commanderServerMissingMessage()}` }],
+						details: { success: false, error: "commander_mcp_server_not_found" },
+					};
+				}
+				const client = new McpClient(serverPath, {
 					COMMANDER_WS_URL: process.env.COMMANDER_WS_URL || "ws://localhost:9002",
 					AGENTMAIL_API_KEY: process.env.AGENTMAIL_API_KEY || "",
 				});

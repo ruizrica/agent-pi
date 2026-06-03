@@ -104,6 +104,8 @@ Each mode injects a tailored system prompt. PLAN mode enforces plan-first workfl
 | **subagent-widget** | Background subagent management with live status widgets |
 | **toolkit-commands** | Dynamic slash commands from markdown files |
 
+For the current local-first long-run tuning profile, including compact heartbeat behavior, child intercom wiring, and Commander fallback rules, see [Orchestration Stability Profile](docs/orchestration-stability.md).
+
 ### Security
 
 | Extension | Description |
@@ -194,6 +196,12 @@ plan-build-review:
 ### Pipelines
 
 Pipelines are defined in `agents/pipeline-team.yaml` and combine sequential phases with parallel agent dispatch.
+
+### Current Runtime Profile
+
+This checkout is tuned for local Ollama-backed orchestration. `agents/models.json` routes the default agent and specialist roles to local models such as `gemma4-31b-max.Modelfile:latest`, `qwen3.6-35b-a3b-max:latest`, and `gemma-4-e4b-it:latest`.
+
+Child Pi launches keep `--no-extensions` for isolation, then explicitly re-add required plumbing like `pi-intercom`. Commander is treated as optional: when the local Commander MCP server is missing, it reports offline cleanly instead of using a stale machine-specific path.
 
 ## Security
 

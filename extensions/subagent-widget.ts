@@ -31,6 +31,7 @@ import { preClaimTask, postCompleteTask, postFailTask } from "./lib/commander-li
 import { parseGroupCreateResult, buildGroupCreatePayload } from "./lib/commander-sync.ts";
 import { scanAgentDefs, scanToolkitAgentDefs, resolveAgentByName, loadAgentModelsConfig, loadToolkitModelsConfig, resolveAgentModelString, type AgentDef, type AgentModelsConfig } from "./lib/agent-defs.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker } from "./lib/toolkit-cli.ts";
+import { appendInstalledPiExtension, resolveIntercomPresenceName } from "./lib/pi-extension-paths.ts";
 
 // ── Commander availability ───────────────────────────────────────────────────
 
@@ -75,13 +76,13 @@ function killGracefully(proc: any, timeoutMs = 3000): Promise<void> {
 
 /** Default timeout per agent role (ms). Prevents zombie subagents. */
 const ROLE_TIMEOUT_MS: Record<string, number> = {
-	SCOUT:    10 * 60 * 1000,   // 10 minutes
-	BUILDER:  30 * 60 * 1000,   // 30 minutes
-	REVIEWER: 15 * 60 * 1000,   // 15 minutes
-	TESTER:   20 * 60 * 1000,   // 20 minutes
-	PLANNER:  15 * 60 * 1000,   // 15 minutes
+	SCOUT:    60 * 60 * 1000,   // 15 min warmup + 45 min running
+	BUILDER:  60 * 60 * 1000,   // 15 min warmup + 45 min running
+	REVIEWER: 60 * 60 * 1000,   // 15 min warmup + 45 min running
+	TESTER:   60 * 60 * 1000,   // 15 min warmup + 45 min running
+	PLANNER:  60 * 60 * 1000,   // 15 min warmup + 45 min running
 };
-const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 15 min warmup + 45 min running
 
 /** Grace period after SIGTERM before escalating to SIGKILL. */
 const TIMEOUT_KILL_GRACE_MS = 30_000;
@@ -236,6 +237,7 @@ export default function (pi: ExtensionAPI) {
 		// Tools: use agent definition tools if available, else default set
 		let tools = agentDef?.tools || "read,bash,grep,find,ls";
 		const extensions = ["-e", tasksExtPath, "-e", footerExtPath, "-e", memoryCycleExtPath];
+		appendInstalledPiExtension(extensions, "pi-intercom");
 		if (commanderAvail) {
 			// Commander tools are extension-registered (not built-in), so they must NOT
 			// go in --tools (which only accepts built-in names and warns on unknowns).
@@ -266,7 +268,20 @@ export default function (pi: ExtensionAPI) {
 			}
 		}
 
-		const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1" };
+		const parentSessionId = ctx.sessionManager?.getSessionId?.();
+		const parentIntercomTarget = resolveIntercomPresenceName(pi.getSessionName(), parentSessionId);
+		const childIntercomName = `SA-${state.id}-${state.name}`;
+		const spawnEnv: Record<string, string | undefined> = {
+			...process.env,
+			PI_SUBAGENT: "1",
+			PI_SUBAGENT_INTERCOM_SESSION_NAME: childIntercomName,
+			PI_SUBAGENT_RUN_ID: parentSessionId ? `${parentSessionId}:${childIntercomName}` : childIntercomName,
+			PI_SUBAGENT_CHILD_AGENT: state.name,
+			PI_SUBAGENT_CHILD_INDEX: String(state.id),
+		};
+		if (parentIntercomTarget) {
+			spawnEnv.PI_SUBAGENT_ORCHESTRATOR_TARGET = parentIntercomTarget;
+		}
 		if (commanderAvail && cmdTaskId !== undefined) {
 			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
 		}
@@ -342,7 +357,7 @@ export default function (pi: ExtensionAPI) {
 
 					pi.sendMessage({
 						customType: "subagent-result",
-						content: `SA${state.id} (${state.name})${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} finished "${prompt}" in ${Math.round(state.elapsed / 1000)}s.\n\nResult:\n${result.slice(0, 8000)}${result.length > 8000 ? "\n\n... [truncated]" : ""}`,
+						content: `SA${state.id} (${state.name})${state.turnCount > 1 ? ` (Turn ${state.turnCount})` : ""} finished in ${Math.round(state.elapsed / 1000)}s. Check subagent status/output plus the project board/task files before choosing the next step.\n\nResult digest:\n${result.slice(0, 1200)}${result.length > 1200 ? "\n\n... [truncated]" : ""}`,
 						display: true,
 					}, { deliverAs: "followUp", triggerTurn: true });
 				} else {
@@ -447,7 +462,7 @@ export default function (pi: ExtensionAPI) {
 			model: Type.Optional(Type.String({ description: "Model override. Only set this to override the agent's default model. If omitted, uses the agent definition's model or the system default." })),
 			commanderTaskId: Type.Optional(Type.Number({ description: "Pre-assigned Commander task ID (avoids race conditions)" })),
 			autoRemove: Type.Optional(Type.Boolean({ description: "Auto-remove widget ~30s after done (default: true)" })),
-			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults by role: scout=10min, builder=30min, reviewer=15min, default=20min. Set 0 to disable." })),
+			timeout: Type.Optional(Type.Number({ description: "Max runtime in milliseconds. Defaults to 60min (15min warmup + 45min running). Set 0 to disable." })),
 		}),
 		execute: async (callId, args, _signal, _onUpdate, ctx) => {
 			widgetCtx = ctx;

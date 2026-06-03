@@ -5,10 +5,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { McpClient } from "./lib/mcp-client.ts";
 import { createReadyGate, resolveGate, resetGate } from "./lib/commander-ready.ts";
+import { commanderServerMissingMessage, resolveCommanderServerPath } from "./lib/commander-server.ts";
 
 // ── Configuration ───────────────────────────────────────────────────
 
-const SERVER_PATH = "/Users/ricardo/Workshop/Github-Work/commander/services/commander-mcp/dist/server.js";
 const SERVER_ENV: Record<string, string> = {
 	COMMANDER_WS_URL: process.env.COMMANDER_WS_URL || "ws://localhost:9002",
 	JIRA_URL: process.env.JIRA_URL || "",
@@ -418,7 +418,8 @@ const TOOL_PARAMS: Record<string, ReturnType<typeof Type.Object>> = {
 // ── Extension entry point ───────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
-	const client = new McpClient(SERVER_PATH, SERVER_ENV);
+	const serverPath = resolveCommanderServerPath();
+	const client = serverPath ? new McpClient(serverPath, SERVER_ENV) : undefined;
 	const g = globalThis as any;
 	let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -429,6 +430,7 @@ export default function (pi: ExtensionAPI) {
 
 	// Helper: drain queued ops after gate resolves to available
 	function drainGateQueue(ops: { fn: (client: any) => Promise<void>; label: string }[]): void {
+		if (!client) return;
 		for (const op of ops) {
 			op.fn(client).catch(() => {});
 		}
@@ -445,6 +447,9 @@ export default function (pi: ExtensionAPI) {
 
 	// Helper: ensure connected before calling
 	async function ensureConnected(): Promise<void> {
+		if (!client) {
+			throw new Error(commanderServerMissingMessage());
+		}
 		if (!client.isConnected()) {
 			await client.connect();
 		}
@@ -483,6 +488,9 @@ export default function (pi: ExtensionAPI) {
 
 	async function probeCommander(ctx: any) {
 		try {
+			if (!client) {
+				throw new Error(commanderServerMissingMessage());
+			}
 			await client.connect();
 			// Lightweight probe — 3s timeout
 			await client.callTool("commander_session", { operation: "list" }, 3000);
@@ -536,6 +544,6 @@ export default function (pi: ExtensionAPI) {
 		}
 		g.__piCommanderAvailable = false;
 		resetGate(gate);
-		client.disconnect();
+		client?.disconnect();
 	});
 }

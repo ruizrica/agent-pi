@@ -323,13 +323,13 @@ export default function (pi: ExtensionAPI) {
 		if (pending.length === 0) {
 			return {
 				block: true,
-				reason: "All tasks are done. You MUST use `tasks add` for new tasks or `tasks new-list` to start a fresh list before using any other tools.",
+				reason: "Task list is complete. Add a new task with `tasks add`, or start a fresh list with `tasks new-list` before continuing.",
 			};
 		}
 		if (active.length === 0) {
 			return {
 				block: true,
-				reason: "No task is in progress. You MUST use `tasks toggle` to mark a task as inprogress before doing any work.",
+				reason: "No task is marked in progress. Use `tasks toggle` to mark the next task in progress, then continue.",
 			};
 		}
 
@@ -349,13 +349,13 @@ export default function (pi: ExtensionAPI) {
 		nudgedThisCycle = true;
 
 		const taskList = incomplete
-			.map((t) => `  ${STATUS_ICON[t.status]} #${t.id} [${STATUS_LABEL[t.status]}]: ${t.text}`)
-			.join("\n");
+			.map((t) => `#${t.id} ${STATUS_LABEL[t.status]}`)
+			.join(", ");
 
 		pi.sendMessage(
 			{
 				customType: "task-validation",
-				content: `You still have ${incomplete.length} incomplete task(s):\n\n${taskList}\n\nEither continue working on them or mark them done with \`tasks toggle\`. Don't stop until it's done!`,
+				content: `Heartbeat: ${incomplete.length} task(s) still open (${taskList}). Check the task board/list and project files for current state. If work is ready, continue with the next step; if not, wait for the next heartbeat.`,
 				display: true,
 			},
 			{ triggerTurn: true },
@@ -373,11 +373,11 @@ export default function (pi: ExtensionAPI) {
 		name: "tasks",
 		label: "Tasks",
 		description:
-			"Manage your task list. You MUST add tasks before using any other tools. " +
+			"Manage the active task list. Add tasks before starting work. " +
 			"Actions: new-list (text=title, description), add (text or texts[] for batch), toggle (id) — cycles idle→inprogress→done, remove (id), update (id + text), list, clear. " +
 			"Always toggle a task to inprogress before starting work on it, and to done when finished. " +
 			"Use new-list to start a themed list with a title and description. " +
-			"IMPORTANT: If the user's new request does not fit the current list's theme, use clear to wipe the slate and new-list to start fresh.",
+			"If the user's new request does not fit the current list's theme, use clear to wipe the slate and new-list to start fresh.",
 		parameters: TasksParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

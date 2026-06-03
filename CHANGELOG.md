@@ -2,6 +2,17 @@
 
 All notable changes to agent-pi will be documented in this file.
 
+## [Unreleased] — 2026-06-03
+
+### Orchestration Stability
+
+- Tuned task validation and subagent completion messages toward compact heartbeat-style wakeups that point the orchestrator back to durable state instead of replaying full prompts or long task lists.
+- Routed child Pi launches through explicit `pi-intercom` loading after `--no-extensions`, with child metadata for supervisor contact when available.
+- Added local-first agent model routing in `agents/models.json` for Ollama-backed orchestration.
+- Replaced stale machine-specific Commander MCP paths with `COMMANDER_MCP_SERVER_PATH` plus local candidate discovery and clean offline behavior.
+- Fixed `send_email` Commander readiness checks and direct MCP fallback path resolution.
+- Documented the current long-run tuning profile in `docs/orchestration-stability.md`.
+
 ## [2.1.0] — 2026-03-25
 
 ### Web Chat — Remote Access from Any Device
