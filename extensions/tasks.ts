@@ -295,6 +295,7 @@ export function renderTaskModalWorkSummary(description: string, width: number, t
 
 import { getCommanderCliClient, isCommanderAvailable } from "./lib/commander/commander-cli-client.ts";
 import { recordLifecycleIntent } from "./lib/commander/lifecycle-intents.ts";
+import { completeCommanderTaskDurable } from "./lib/commander/commander-lifecycle.ts";
 import { resolveCommanderTaskSyncPolicyFromEnv } from "./lib/commander/task-ownership-policy.ts";
 import { getSessionStats, formatElapsed, topTools, sessionElapsedMs } from "./lib/session-stats.ts";
 import { addRetry, isFullySynced } from "./lib/commander/commander-tracker.ts";
@@ -653,14 +654,16 @@ export default function (pi: ExtensionAPI) {
 			if (task.status !== "done") continue;
 			const cid = lookupMapping(syncState, task.id);
 			if (cid === undefined) continue;
-			void client.callTool("commander_task", {
-				operation: "update",
-				task_id: cid,
-				status: localToCommander(task.status),
-			}).then(() => {
-				syncState = updateMappingStatus(syncState, task.id, "done");
-			}).catch(() => {
-				if (tracker?.reconcileNow) tracker.reconcileNow();
+			const localId = task.id;
+			// Durable child close: a retained `complete` intent on failure is
+			// recovered by the session_start reconciler, so a done child never
+			// lingers as an orphan under a completed parent.
+			void completeCommanderTaskDurable(client, cid, "Local task done.").then((ok) => {
+				if (ok) {
+					syncState = updateMappingStatus(syncState, localId, "done");
+				} else if (tracker?.reconcileNow) {
+					tracker.reconcileNow();
+				}
 			});
 		}
 	}
@@ -722,12 +725,12 @@ export default function (pi: ExtensionAPI) {
 		if (tasks.length === 0) return;
 		if (!tasks.every(t => t.status === "done")) return;
 		if (syncState.groupId === undefined || syncState.parentClosedAt) return;
+		const parentId = syncState.groupId;
+		// Durable close: records a `complete` intent synchronously, then closes via
+		// the canonical `complete` op. If it fails the intent persists and the
+		// session_start reconciler replays it, so the parent never orphans.
 		syncToCommander("mission-complete", async (client) => {
-			await client.callTool("commander_task", {
-				operation: "update",
-				task_id: syncState.groupId,
-				status: "completed",
-			});
+			await completeCommanderTaskDurable(client, parentId, "All local tasks complete.");
 		});
 		syncState = { ...syncState, parentClosedAt: Date.now() };
 	}

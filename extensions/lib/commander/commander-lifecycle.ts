@@ -111,6 +111,37 @@ export async function postCompleteTask(client: any, taskId: number, agentName: s
 	});
 }
 
+/**
+ * Durably mark a Commander task completed for the local-todo sync paths.
+ *
+ * Records a `complete` lifecycle intent, then closes the task via the canonical
+ * `complete` op — the SAME op that `reconcileOpenLifecycleIntents` replays via
+ * `dispatchIntent`. Keeping the direct and replayed paths byte-identical means a
+ * task that closes here and one recovered on the next session_start reach the
+ * exact same end state (no `update status=completed` vs `complete` drift, and so
+ * never a done task force-failed by an exhausted, mismatched replay).
+ *
+ * On success the intent is cleared. On failure the intent is RETAINED so the
+ * session_start reconciler can replay it. Never throws — fire-and-forget callers
+ * stay non-blocking; the durable intent is the recovery guarantee, not the
+ * in-memory tracker.
+ */
+export async function completeCommanderTaskDurable(
+	client: any,
+	taskId: number | string,
+	result = "",
+): Promise<boolean> {
+	recordLifecycleIntent({ taskId, action: "complete", message: result });
+	try {
+		await callCommanderTask(client, { operation: "complete", task_id: taskId, result });
+		clearLifecycleIntent(taskId, "complete");
+		return true;
+	} catch (err: any) {
+		console.error(`[commander-lifecycle] completeCommanderTaskDurable(${taskId}) failed; intent retained for replay: ${err?.message || err}`);
+		return false;
+	}
+}
+
 export async function postFailTask(client: any, taskId: number, errorMessage: string): Promise<boolean> {
 	return enqueueLifecycle(async () => {
 		const finalMessage = `FAILED: ${errorMessage || "Agent exited with error."}`;
