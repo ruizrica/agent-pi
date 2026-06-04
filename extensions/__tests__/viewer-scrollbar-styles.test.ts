@@ -71,7 +71,7 @@ describe("shared viewer scrollbar styles", () => {
 			["lib/viewers/research-viewer-html.ts", "../viewer-scrollbar-styles.ts"],
 			["lib/security/security-report-html.ts", "../viewer-scrollbar-styles.ts"],
 			["lib/viewers/test-viewer-html.ts", "../viewer-scrollbar-styles.ts"],
-			["private/extensions/lib/qa-rico-html.ts", "../../../lib/viewer-scrollbar-styles.ts"],
+			["lib/viewers/qa-reco-html.ts", "../viewer-scrollbar-styles.ts"],
 			["private/extensions/lib/swagbucks-viewer-html.ts", "../../../lib/viewer-scrollbar-styles.ts"],
 			["private/lib/pr-review-report-html.ts", "../../lib/viewer-scrollbar-styles.ts"],
 			["private/lib/pr-review-viewer-html.ts", "../../lib/viewer-scrollbar-styles.ts"],

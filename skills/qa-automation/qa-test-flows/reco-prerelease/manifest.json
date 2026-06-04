@@ -1,0 +1,89 @@
+{
+  "id": "reco-prerelease",
+  "name": "QA Reco Pre-release Automation",
+  "description": "Catalog-backed release checks for QA Automation v1: Basic Feed, Scrolling, Liking, and Commenting.",
+  "outputSchema": "QAReportData.sections",
+  "sections": [
+    {
+      "id": "basic-feed",
+      "name": "Basic Feed",
+      "priority": "P1",
+      "risk": "low",
+      "defaultEnabled": true,
+      "acceptanceCriteria": [
+        "Reco app is foregrounded on the target platform.",
+        "Feed route is reachable and exposes a current item summary.",
+        "At least one screenshot/snapshot captures the visible card and no redbox/error overlay."
+      ],
+      "checks": [
+        { "id": "basic-feed.app-foreground", "name": "App foreground", "requiredEvidence": ["foreground-state", "startup-log"], "defaultEnabled": true },
+        { "id": "basic-feed.navigate-feed", "name": "Navigate feed", "requiredEvidence": ["route-state", "navigation-log"], "defaultEnabled": true },
+        { "id": "basic-feed.feed-data-ready", "name": "Feed data ready", "requiredEvidence": ["__qaFeedState.dataLength", "current-item-id"], "defaultEnabled": true },
+        { "id": "basic-feed.first-card-visible", "name": "First card visible", "requiredEvidence": ["screenshot", "current-card-summary"], "defaultEnabled": true },
+        { "id": "basic-feed.no-error-overlay", "name": "No error overlay", "requiredEvidence": ["snapshot", "error-overlay-check"], "defaultEnabled": true },
+        { "id": "basic-feed.media-evidence", "name": "Media evidence", "requiredEvidence": ["screenshot"], "defaultEnabled": true }
+      ]
+    },
+    {
+      "id": "scrolling",
+      "name": "Scrolling",
+      "priority": "P1",
+      "risk": "medium",
+      "defaultEnabled": true,
+      "acceptanceCriteria": [
+        "Current feed index changes across forward scroll checks.",
+        "Gesture fallback is reported separately when CDP/dev hooks are unavailable.",
+        "App remains foregrounded and free of visible error overlays after a 3-5 card sequence."
+      ],
+      "checks": [
+        { "id": "scrolling.cdp-next", "name": "CDP next", "requiredEvidence": ["before-index", "after-index"], "defaultEnabled": true },
+        { "id": "scrolling.gesture-fallback", "name": "Gesture fallback", "requiredEvidence": ["gesture-log", "index-or-snapshot-change"], "defaultEnabled": true },
+        { "id": "scrolling.index-progression", "name": "Index progression", "requiredEvidence": ["index-sequence"], "defaultEnabled": true },
+        { "id": "scrolling.stress-5-items", "name": "3-5 item stress", "requiredEvidence": ["screenshots", "stability-log"], "defaultEnabled": true },
+        { "id": "scrolling.scroll-back", "name": "Scroll back", "requiredEvidence": ["target-index", "returned-index"], "defaultEnabled": true },
+        { "id": "scrolling.foreground-stability", "name": "Foreground stability", "requiredEvidence": ["foreground-state"], "defaultEnabled": true }
+      ]
+    },
+    {
+      "id": "liking",
+      "name": "Liking",
+      "priority": "P1",
+      "risk": "medium",
+      "defaultEnabled": true,
+      "acceptanceCriteria": [
+        "Like selector is discoverable through testID/accessibility snapshot.",
+        "Like state and/or count changes after the action.",
+        "Flow attempts cleanup back to the initial state or reports a blocked cleanup reason."
+      ],
+      "checks": [
+        { "id": "liking.initial-state", "name": "Initial state", "requiredEvidence": ["item-id", "isLiked", "likesCount"], "defaultEnabled": true },
+        { "id": "liking.action-rail-tap", "name": "Action rail tap", "requiredEvidence": ["selector-ref", "tap-log", "screenshot"], "defaultEnabled": true },
+        { "id": "liking.count-toggle", "name": "Count/state toggle", "requiredEvidence": ["before-state", "after-state"], "defaultEnabled": true },
+        { "id": "liking.double-tap-optional", "name": "Double-tap optional", "requiredEvidence": ["gesture-result-or-skip-reason"], "defaultEnabled": true },
+        { "id": "liking.scroll-persistence", "name": "Scroll persistence", "requiredEvidence": ["same-item-id", "state-after-return"], "defaultEnabled": true },
+        { "id": "liking.cleanup", "name": "Cleanup", "requiredEvidence": ["cleanup-result"], "defaultEnabled": true }
+      ]
+    },
+    {
+      "id": "commenting",
+      "name": "Commenting",
+      "priority": "P1",
+      "risk": "medium",
+      "defaultEnabled": true,
+      "acceptanceCriteria": [
+        "Comment selector opens the comments sheet.",
+        "Empty send is disabled or safely blocked before typing.",
+        "A unique QA comment is submitted or backend/auth blockers are reported accurately."
+      ],
+      "checks": [
+        { "id": "commenting.initial-state", "name": "Initial state", "requiredEvidence": ["item-id", "commentCount"], "defaultEnabled": true },
+        { "id": "commenting.open-sheet", "name": "Open sheet", "requiredEvidence": ["selector-ref", "sheet-snapshot"], "defaultEnabled": true },
+        { "id": "commenting.empty-send-disabled", "name": "Empty send disabled", "requiredEvidence": ["send-button-state"], "defaultEnabled": true },
+        { "id": "commenting.type-unique-comment", "name": "Type unique comment", "requiredEvidence": ["input-state", "unique-comment-id"], "defaultEnabled": true },
+        { "id": "commenting.submit", "name": "Submit", "requiredEvidence": ["submit-result"], "defaultEnabled": true },
+        { "id": "commenting.count-or-list-evidence", "name": "Count/list evidence", "requiredEvidence": ["after-count-or-list-snapshot"], "defaultEnabled": true },
+        { "id": "commenting.close-reopen-optional", "name": "Close/reopen optional", "requiredEvidence": ["persistence-result-or-skip-reason"], "defaultEnabled": true }
+      ]
+    }
+  ]
+}

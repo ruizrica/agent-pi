@@ -20,6 +20,7 @@ source "$RUNNER_DIR/../qa.config.sh"
 # ── Parse args ───────────────────────────────────────────────────────
 SUITE_FILTER=""
 LIST_ONLY=false
+SECTION_FILTER="${QA_RECO_SECTIONS_FILTER:-}"
 REQUESTED_PLATFORMS="${QA_PLATFORMS:-ios android}"
 
 while [ $# -gt 0 ]; do
@@ -32,6 +33,14 @@ while [ $# -gt 0 ]; do
             REQUESTED_PLATFORMS="${2:-}"
             if [ -z "$REQUESTED_PLATFORMS" ]; then
                 echo "Missing value for --platform (ios, android, or both)" >&2
+                exit 2
+            fi
+            shift 2
+            ;;
+        --sections)
+            SECTION_FILTER="${2:-}"
+            if [ -z "$SECTION_FILTER" ]; then
+                echo "Missing value for --sections (comma-separated reco-prerelease section ids)" >&2
                 exit 2
             fi
             shift 2
@@ -70,13 +79,31 @@ fi
 
 # ── Find all test scripts ───────────────────────────────────────────
 find_tests() {
+    local tests
     if [ -n "$SUITE_FILTER" ]; then
-        find "$FLOWS_DIR/$SUITE_FILTER" -name "*.sh" -type f 2>/dev/null | sort
+        tests=$(find "$FLOWS_DIR/$SUITE_FILTER" -name "*.sh" -type f 2>/dev/null | sort)
     else
-        find "$FLOWS_DIR" -name "*.sh" -type f 2>/dev/null | sort
+        tests=$(find "$FLOWS_DIR" -name "*.sh" -type f 2>/dev/null | sort)
+    fi
+
+    if [ -n "$SECTION_FILTER" ]; then
+        echo "$tests" | awk -v sections="$SECTION_FILTER" '
+            BEGIN {
+                n = split(sections, allowed, ",");
+                for (i = 1; i <= n; i++) keep[allowed[i] ".sh"] = 1;
+            }
+            {
+                file = $0;
+                sub(/^.*\//, "", file);
+                if (keep[file]) print $0;
+            }
+        '
+    else
+        echo "$tests"
     fi
 }
 
+export QA_RECO_SECTIONS_FILTER="$SECTION_FILTER"
 TESTS=$(find_tests)
 TEST_COUNT=$(echo "$TESTS" | grep -c "." || echo "0")
 
@@ -98,6 +125,7 @@ if [ "$LIST_ONLY" = true ]; then
         printf "  %-15s %s\n" "[$suite]" "$name"
     done <<< "$TESTS"
     echo ""
+    [ -n "$SECTION_FILTER" ] && echo "Section filter: $SECTION_FILTER"
     echo "Default native platforms: $PLATFORMS"
     echo ""
     exit 0
