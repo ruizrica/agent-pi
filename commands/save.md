@@ -2,7 +2,7 @@
 name: save
 description: "Finalize Pi work: commit related changes, merge the work branch to main, push when configured, and clean up the worktree safely."
 argument-hint: "[commit message]"
-allowed-tools: '["bash", "read", "ask_user"]'
+allowed-tools: ["bash", "read", "ask_user"]
 context: inline
 ---
 

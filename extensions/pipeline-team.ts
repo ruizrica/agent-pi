@@ -12,10 +12,10 @@
  *
  * Commands:
  *   /pipeline            — select pipeline config from YAML (opt-in activation)
- *   /pipeline-status     — full pipeline state notification
- *   /pipeline-reset      — reset pipeline to phase 1
- *   /pipeline-clear      — clear pipeline widget from screen (keeps pipeline active)
- *   /pipeline-off       — deactivate pipeline and hide UI
+ *   /pipeline status     — full pipeline state notification
+ *   /pipeline reset      — reset pipeline to phase 1
+ *   /pipeline clear      — clear pipeline widget from screen (keeps pipeline active)
+ *   /pipeline off        — deactivate pipeline and hide UI
  *
  * Usage: pi -e extensions/pipeline-team.ts
  */
@@ -24,7 +24,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
 	Box, Text, Container, Spacer, Markdown,
-	matchesKey, Key, truncateToWidth, visibleWidth,
+	matchesKey, Key, truncateToWidth, visibleWidth, type AutocompleteItem,
 } from "@earendil-works/pi-tui";
 import { DynamicBorder, getMarkdownTheme as getPiMdTheme } from "@earendil-works/pi-coding-agent";
 import { spawn } from "child_process";
@@ -977,96 +977,114 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Commands ──────────────────────────────────
 
-	pi.registerCommand("pipeline", {
-		description: "Select a pipeline configuration",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			if (pipelineConfigs.length === 0) {
-				ctx.ui.notify("No pipelines in .pi/agents/pipeline-team.yaml", "warning");
-				return;
-			}
+	async function selectPipeline(ctx: any) {
+		widgetCtx = ctx;
+		if (pipelineConfigs.length === 0) {
+			ctx.ui.notify("No pipelines in .pi/agents/pipeline-team.yaml", "warning");
+			return;
+		}
 
-			/** Shows pipeline name with its first phase (starting point) */
-			const options = pipelineConfigs.map(c => {
-				const firstPhase = c.phases[0] ? displayName(c.phases[0].name) : "No Phases";
-				return `${c.name} — ${firstPhase}`;
-			});
+		/** Shows pipeline name with its first phase (starting point) */
+		const options = pipelineConfigs.map(c => {
+			const firstPhase = c.phases[0] ? displayName(c.phases[0].name) : "No Phases";
+			return `${c.name} — ${firstPhase}`;
+		});
 
-			const choice = await ctx.ui.select("Select Pipeline", options);
-			if (choice === undefined) return;
+		const choice = await ctx.ui.select("Select Pipeline", options);
+		if (choice === undefined) return;
 
-			const idx = options.indexOf(choice);
-			activatePipeline(pipelineConfigs[idx]);
-			updateStatus();
-			ctx.ui.notify(`Pipeline: ${activeConfig!.name}\n${activeConfig!.description}`, "info");
-		},
-	});
+		const idx = options.indexOf(choice);
+		activatePipeline(pipelineConfigs[idx]);
+		updateStatus();
+		ctx.ui.notify(`Pipeline: ${activeConfig!.name}\n${activeConfig!.description}`, "info");
+	}
 
-	pi.registerCommand("pipeline-status", {
-		description: "Show full pipeline state",
-		handler: async (_args, ctx) => {
-			if (!activeConfig) {
-				ctx.ui.notify("No pipeline active", "warning");
-				return;
-			}
+	async function showPipelineStatus(ctx: any) {
+		if (!activeConfig) {
+			ctx.ui.notify("No pipeline active", "warning");
+			return;
+		}
 
-			const phases = phaseStates.map((ps, i) => {
-				const marker = i === currentPhaseIndex ? "→ " : "  ";
-				const agents = ps.agents.length > 0
-					? ` (${ps.agents.filter(a => a.status === "done").length}/${ps.agents.length} agents done)`
-					: "";
-				return `${marker}${ps.def.name.toUpperCase()} [${ps.status}]${agents}`;
-			}).join("\n");
+		const phases = phaseStates.map((ps, i) => {
+			const marker = i === currentPhaseIndex ? "→ " : "  ";
+			const agents = ps.agents.length > 0
+				? ` (${ps.agents.filter(a => a.status === "done").length}/${ps.agents.length} agents done)`
+				: "";
+			return `${marker}${ps.def.name.toUpperCase()} [${ps.status}]${agents}`;
+		}).join("\n");
 
-			ctx.ui.notify(
-				`Pipeline: ${activeConfig.name}\n\n${phases}\n\nReview loops: ${reviewLoopCount}/${activeConfig.review_max_loops}`,
-				"info",
-			);
-		},
-	});
+		ctx.ui.notify(
+			`Pipeline: ${activeConfig.name}\n\n${phases}\n\nReview loops: ${reviewLoopCount}/${activeConfig.review_max_loops}`,
+			"info",
+		);
+	}
 
+	async function resetPipelineCommand(ctx: any) {
+		widgetCtx = ctx;
+		resetPipeline();
+		ctx.ui.notify("Pipeline reset to phase 1", "info");
+		updateStatus();
+	}
 
-	pi.registerCommand("pipeline-reset", {
-		description: "Reset pipeline to phase 1",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			resetPipeline();
-			ctx.ui.notify("Pipeline reset to phase 1", "info");
-			updateStatus();
-		},
-	});
+	async function deactivatePipelineCommand(ctx: any) {
+		widgetCtx = ctx;
+		activeConfig = null;
+		(globalThis as any).__piActivePipeline = null;
+		phaseStates = [];
+		clearPipelineUI();
+		ctx.ui.notify("Pipeline deactivated. Use /pipeline to select one.", "info");
+	}
 
-	pi.registerCommand("pipeline-off", {
-		description: "Deactivate pipeline and hide UI",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			activeConfig = null;
-			(globalThis as any).__piActivePipeline = null;
-			phaseStates = [];
-			clearPipelineUI();
-			ctx.ui.notify("Pipeline deactivated. Use /pipeline to select one.", "info");
-		},
-	});
+	async function clearPipelineCommand(ctx: any) {
+		widgetCtx = ctx;
+		clearPipelineUI();
 
-	pi.registerCommand("pipeline-clear", {
-		description: "Clear pipeline widget from screen (keeps pipeline active)",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			clearPipelineUI();
-
-			// Reset agent states within each phase so the widget can reappear on next dispatch
-			for (const ps of phaseStates) {
-				for (const agent of ps.agents) {
-					if (agent.status === "done" || agent.status === "error") {
-						agent.status = "idle";
-						agent.lastWork = "";
-						agent.output = "";
-						agent.elapsed = 0;
-					}
+		// Reset agent states within each phase so the widget can reappear on next dispatch
+		for (const ps of phaseStates) {
+			for (const agent of ps.agents) {
+				if (agent.status === "done" || agent.status === "error") {
+					agent.status = "idle";
+					agent.lastWork = "";
+					agent.output = "";
+					agent.elapsed = 0;
 				}
 			}
+		}
 
-			ctx.ui.notify("Pipeline widget cleared. Pipeline remains active.", "info");
+		ctx.ui.notify("Pipeline widget cleared. Pipeline remains active.", "info");
+	}
+
+	const pipelineSubcommands = ["select", "status", "reset", "off", "clear"];
+
+	pi.registerCommand("pipeline", {
+		description: "Pipeline control: /pipeline [select|status|reset|off|clear]",
+		getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
+			const items = pipelineSubcommands.map(value => ({ value, label: value }));
+			const filtered = items.filter(item => item.value.startsWith(prefix.trim().toLowerCase()));
+			return filtered.length > 0 ? filtered : items;
+		},
+		handler: async (args, ctx) => {
+			const subcommand = (args ?? "").trim().split(/\s+/, 1)[0]?.toLowerCase() || "select";
+			switch (subcommand) {
+				case "select":
+					await selectPipeline(ctx);
+					return;
+				case "status":
+					await showPipelineStatus(ctx);
+					return;
+				case "reset":
+					await resetPipelineCommand(ctx);
+					return;
+				case "off":
+				case "deactivate":
+					await deactivatePipelineCommand(ctx);
+					return;
+				case "clear":
+					await clearPipelineCommand(ctx);
+					return;
+				default:
+					ctx.ui.notify("Usage: /pipeline [select|status|reset|off|clear]", "error");
+			}
 		},
 	});
 

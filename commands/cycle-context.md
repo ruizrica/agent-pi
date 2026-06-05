@@ -2,7 +2,7 @@
 name: cycle-context
 description: "Checkpoint Project Memory Pack state, write a pointer-based handoff, and optionally trigger native memory-cycle compaction."
 argument-hint: "[focus / checkpoint notes / --compact]"
-allowed-tools: '["bash", "read", "write", "show_report", "cycle_memory", "obsidian_memory"]'
+allowed-tools: ["bash", "read", "write", "show_report", "cycle_memory", "obsidian_memory"]
 context: inline
 ---
 

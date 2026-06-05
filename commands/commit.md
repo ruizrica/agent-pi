@@ -2,7 +2,7 @@
 name: commit
 description: "Commit the current related work to the current branch with safety checks and targeted verification."
 argument-hint: "[commit message]"
-allowed-tools: '["bash", "read", "ask_user"]'
+allowed-tools: ["bash", "read", "ask_user"]
 context: inline
 ---
 

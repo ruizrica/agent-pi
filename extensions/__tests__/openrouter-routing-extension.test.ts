@@ -35,7 +35,7 @@ describe("openrouter-routing extension", () => {
 		expect(pi.on).toHaveBeenCalledWith("context", expect.any(Function));
 	});
 
-	it("registers the openrouter-sync command", () => {
+	it("registers one canonical openrouter command", () => {
 		const pi = {
 			on: vi.fn(),
 			registerProvider: vi.fn(),
@@ -44,59 +44,10 @@ describe("openrouter-routing extension", () => {
 		};
 
 		openrouterRoutingExtension(pi);
-		const calls = pi.registerCommand.mock.calls;
-		expect(calls.some((call: any) => call[0] === "openrouter-sync")).toBe(true);
-	});
-
-	it("registers the openrouter-enrich command", () => {
-		const pi = {
-			on: vi.fn(),
-			registerProvider: vi.fn(),
-			registerCommand: vi.fn(),
-			sendMessage: vi.fn(),
-		};
-
-		openrouterRoutingExtension(pi);
-		const calls = pi.registerCommand.mock.calls;
-		expect(calls.some((call: any) => call[0] === "openrouter-enrich")).toBe(true);
-	});
-
-	it("registers the openrouter-preview command", () => {
-		const pi = {
-			on: vi.fn(),
-			registerProvider: vi.fn(),
-			registerCommand: vi.fn(),
-			sendMessage: vi.fn(),
-		};
-
-		openrouterRoutingExtension(pi);
-		const calls = pi.registerCommand.mock.calls;
-		expect(calls.some((call: any) => call[0] === "openrouter-preview")).toBe(true);
-	});
-
-	it("registers the openrouter-balance command", () => {
-		const pi = {
-			on: vi.fn(),
-			registerProvider: vi.fn(),
-			registerCommand: vi.fn(),
-			sendMessage: vi.fn(),
-		};
-
-		openrouterRoutingExtension(pi);
-		const calls = pi.registerCommand.mock.calls;
-		expect(calls.some((call: any) => call[0] === "openrouter-balance")).toBe(true);
-	});
-
-	it("registers the openrouter-status command", () => {
-		const pi = {
-			on: vi.fn(),
-			registerProvider: vi.fn(),
-			registerCommand: vi.fn(),
-			sendMessage: vi.fn(),
-		};
-
-		openrouterRoutingExtension(pi);
-		const calls = pi.registerCommand.mock.calls;
-		expect(calls.some((call: any) => call[0] === "openrouter-status")).toBe(true);
+		const commandNames = pi.registerCommand.mock.calls.map((call: any) => call[0]);
+		expect(commandNames).toContain("openrouter");
+		for (const retired of ["openrouter-sync", "openrouter-enrich", "openrouter-preview", "openrouter-balance", "openrouter-status"]) {
+			expect(commandNames).not.toContain(retired);
+		}
 	});
 });

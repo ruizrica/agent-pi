@@ -72,17 +72,12 @@ describe("subagent widget auto-dismiss", () => {
 		expect(cleanupBlock).toContain("removeSubagentWidget(id, ctx, \"manual_cleanup_terminal\")");
 		expect(cleanupBlock).toContain("clearDismissTimer(state)");
 
-		const subrmBlock = widgetSource.slice(
-			widgetSource.indexOf('registerCommand("subrm"'),
-			widgetSource.indexOf('registerCommand("subclear"'),
-		);
-		expect(subrmBlock).toContain("removeSubagentWidget(num, ctx, \"slash_subrm\")");
-
-		const subclearBlock = widgetSource.slice(
-			widgetSource.indexOf('registerCommand("subclear"'),
+		const subCommandBlock = widgetSource.slice(
+			widgetSource.indexOf("async function removeSubagentCommand"),
 			widgetSource.indexOf('pi.on("session_start"'),
 		);
-		expect(subclearBlock).toContain("clearDismissTimer(state)");
+		expect(subCommandBlock).toContain("removeSubagentWidget(num, ctx, \"slash_subrm\")");
+		expect(subCommandBlock).toContain("clearDismissTimer(state)");
 	});
 
 	it("the batch auto-cleanup loop uses the shared terminal removal helper", () => {

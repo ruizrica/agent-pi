@@ -4,6 +4,13 @@ All notable changes to agent-pi will be documented in this file.
 
 ## [Unreleased]
 
+### Slash Commands — Cleanup and Consolidation
+
+- Removed stale markdown commands `/claude` and `/claudemode`; `/claude` is now owned only by the mode-cycler extension, and `/claude-mode` remains the canonical Direct API command.
+- Hardened markdown command `allowed-tools` parsing and normalized command frontmatter arrays.
+- Consolidated noisy command families into canonical subcommands: `/pipeline <subcommand>`, `/agents <subcommand>`, `/openrouter <subcommand>`, and `/sub <subcommand>`.
+- Added cross-surface inventory tests to prevent extension/markdown command name collisions.
+
 ### GOAL Mode — Success-Condition Loop + Terminal Completion Card
 
 Added first-class GOAL operational mode for objective-driven work that loops until an explicit success condition is met. GOAL sessions persist under `.context/goal-sessions/` with `goal_loop_start`, `goal_loop_advance`, and `goal_loop_complete`, and completion renders a CLI/TUI `✓ GOAL MET` card in the terminal instead of opening a browser viewer.

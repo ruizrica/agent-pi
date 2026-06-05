@@ -112,6 +112,45 @@ describe("scanCommandDirs", () => {
 		expect(cmds).toHaveLength(1);
 		expect(cmds[0].name).toBe("foo-bar-baz");
 	});
+
+	it("should parse single-quoted JSON allowed-tools arrays", async () => {
+		writeMdFile(tmpDir, "implement.md", {
+			description: "Implement approved work",
+			"allowed-tools": `'["read", "bash", "edit", "write", "ask_user"]'`,
+		}, "Implement body");
+
+		const { scanCommandDirs } = await import("../toolkit-commands.ts");
+		const cmds = scanCommandDirs(tmpDir);
+
+		expect(cmds).toHaveLength(1);
+		expect(cmds[0].allowedTools).toEqual(["read", "bash", "edit", "write", "ask_user"]);
+	});
+
+	it("should parse unquoted JSON allowed-tools arrays", async () => {
+		writeMdFile(tmpDir, "research.md", {
+			description: "Run research",
+			"allowed-tools": `["Bash", "Read", "Write"]`,
+		}, "Research body");
+
+		const { scanCommandDirs } = await import("../toolkit-commands.ts");
+		const cmds = scanCommandDirs(tmpDir);
+
+		expect(cmds).toHaveLength(1);
+		expect(cmds[0].allowedTools).toEqual(["Bash", "Read", "Write"]);
+	});
+
+	it("should parse comma-separated allowed-tools fallback values", async () => {
+		writeMdFile(tmpDir, "legacy.md", {
+			description: "Legacy command",
+			"allowed-tools": "bash, read, ask_user",
+		}, "Legacy body");
+
+		const { scanCommandDirs } = await import("../toolkit-commands.ts");
+		const cmds = scanCommandDirs(tmpDir);
+
+		expect(cmds).toHaveLength(1);
+		expect(cmds[0].allowedTools).toEqual(["bash", "read", "ask_user"]);
+	});
 });
 
 describe("mapTools — legacy commander entries", () => {

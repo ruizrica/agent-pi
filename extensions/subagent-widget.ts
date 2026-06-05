@@ -1,17 +1,17 @@
 // ABOUTME: Spawns and manages background subagent processes with live status widgets.
-// ABOUTME: Provides /sub, /subcont, /subrm, /subclear commands and subagent_* tools.
+// ABOUTME: Provides the /sub command family and subagent_* tools.
 /**
- * Subagent Widget — /sub, /subclear, /subrm, /subcont commands with stacking live widgets
+ * Subagent Widget — /sub command family with stacking live widgets
  *
  * Each /sub spawns a background Pi subagent with its own persistent session,
- * enabling conversation continuations via /subcont.
+ * enabling conversation continuations via /sub continue.
  *
  * Usage: pi -e extensions/subagent-widget.ts
  * Then:
  *   /sub list files and summarize          — spawn a new subagent
- *   /subcont 1 now write tests for it      — continue subagent #1's conversation
- *   /subrm 2                               — remove subagent #2 widget
- *   /subclear                              — clear all subagent widgets
+ *   /sub continue 1 now write tests for it — continue subagent #1's conversation
+ *   /sub remove 2                          — remove subagent #2 widget
+ *   /sub clear                             — clear all subagent widgets
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -173,10 +173,10 @@ interface SubState {
 	textChunks: string[];
 	toolCount: number;
 	elapsed: number;
-	sessionFile: string;   // persistent JSONL session path — used by /subcont to resume
-	turnCount: number;     // increments each time /subcont continues this agent
+	sessionFile: string;   // persistent JSONL session path — used by /sub continue to resume
+	turnCount: number;     // increments each time /sub continue resumes this agent
 	summary?: string;      // pre-written summary shown in widget (no markdown)
-	proc?: any;            // active ChildProcess ref (for kill on /subrm)
+	proc?: any;            // active ChildProcess ref (for kill on /sub remove)
 	commanderTaskId?: number;  // pre-assigned Commander task ID
 	autoRemove?: boolean;      // auto-remove widget ~2s after done (default: true)
 	model?: string;            // resolved model string for display
@@ -188,7 +188,7 @@ interface SubState {
 	maxDurationMs: number;     // watchdog timeout — kills agent after this duration
 	watchdogTimer?: ReturnType<typeof setTimeout>; // reference to clear on normal exit
 	terminalAt?: number;      // Date.now() timestamp for done/error states; used by the stale widget sweeper
-	dismissTimer?: ReturnType<typeof setTimeout>;  // 2s auto-remove timer — cancelled on /subcont, /subrm, /subclear, cleanup, batch reuse
+	dismissTimer?: ReturnType<typeof setTimeout>;  // 2s auto-remove timer — cancelled on /sub continue, /sub remove, /sub clear, cleanup, batch reuse
 }
 
 export default function (pi: ExtensionAPI) {
@@ -1098,160 +1098,175 @@ export default function (pi: ExtensionAPI) {
 	});
 
 
-	// ── /sub <task> ───────────────────────────────────────────────────────────
+	// ── /sub command family ───────────────────────────────────────────────────
+
+	async function spawnSubagentCommand(args: string, ctx: any) {
+		widgetCtx = ctx;
+
+		const raw = args?.trim();
+		if (!raw) {
+			ctx.ui.notify("Usage: /sub [NAME] <task>", "error");
+			return;
+		}
+
+		const parsed = parseSubName(raw);
+		if (!parsed.task) {
+			ctx.ui.notify("Usage: /sub [NAME] <task>", "error");
+			return;
+		}
+
+		const id = nextId++;
+		const state: SubState = {
+			id,
+			status: "running",
+			name: parsed.name,
+			task: parsed.task,
+			textChunks: [],
+			toolCount: 0,
+			elapsed: 0,
+			sessionFile: makeSessionFile(id),
+			turnCount: 1,
+			maxDurationMs: resolveTimeout(parsed.name),
+		};
+		agents.set(id, state);
+		registerWidget(state);
+
+		// Fire-and-forget
+		spawnAgent(state, parsed.task, ctx);
+	}
+
+	async function continueSubagentCommand(args: string, ctx: any) {
+		widgetCtx = ctx;
+
+		const trimmed = args?.trim() ?? "";
+		const spaceIdx = trimmed.indexOf(" ");
+		if (spaceIdx === -1) {
+			ctx.ui.notify("Usage: /sub continue <number> <prompt>", "error");
+			return;
+		}
+
+		const num = parseInt(trimmed.slice(0, spaceIdx), 10);
+		const prompt = trimmed.slice(spaceIdx + 1).trim();
+
+		if (isNaN(num) || !prompt) {
+			ctx.ui.notify("Usage: /sub continue <number> <prompt>", "error");
+			return;
+		}
+
+		const state = agents.get(num);
+		if (!state) {
+			ctx.ui.notify(`No SA${num} found. Use /sub to create one.`, "error");
+			return;
+		}
+
+		if (state.status === "running") {
+			ctx.ui.notify(`SA${num} is still running — wait for it to finish first.`, "warning");
+			return;
+		}
+
+		// Resume: update state for a new turn
+		clearDismissTimer(state);
+		state.status = "running";
+		state.terminalAt = undefined;
+		state.task = prompt;
+		state.textChunks = [];
+		state.elapsed = 0;
+		state.turnCount++;
+
+		// Re-register widget if it was removed (e.g. after auto-remove)
+		if (!widgetBoxes.has(state.id)) {
+			registerWidget(state);
+		}
+		invalidateWidget(state.id);
+
+		ctx.ui.notify(`Continuing SA${num} (${state.name}) Turn ${state.turnCount}…`, "info");
+
+		// Fire-and-forget — reuses the same sessionFile for conversation history
+		spawnAgent(state, prompt, ctx);
+	}
+
+	async function removeSubagentCommand(args: string, ctx: any) {
+		widgetCtx = ctx;
+
+		const num = parseInt(args?.trim() ?? "", 10);
+		if (isNaN(num)) {
+			ctx.ui.notify("Usage: /sub remove <number>", "error");
+			return;
+		}
+
+		const state = agents.get(num);
+		if (!state) {
+			ctx.ui.notify(`No SA${num} found.`, "error");
+			return;
+		}
+
+		// Kill the process if still running
+		if (state.proc && state.status === "running") {
+			await killGracefully(state.proc);
+			ctx.ui.notify(`SA${num} killed and removed.`, "warning");
+		} else {
+			ctx.ui.notify(`SA${num} removed.`, "info");
+		}
+
+		removeSubagentWidget(num, ctx, "slash_subrm");
+	}
+
+	async function clearSubagentsCommand(ctx: any) {
+		widgetCtx = ctx;
+
+		let killed = 0;
+		const killPromises: Promise<void>[] = [];
+		for (const [id, state] of Array.from(agents.entries())) {
+			if (state.proc && state.status === "running") {
+				killPromises.push(killGracefully(state.proc));
+				killed++;
+			}
+			clearDismissTimer(state);
+			ctx.ui.setWidget(`sub-${id}`, undefined);
+		}
+		await Promise.all(killPromises);
+
+		const total = agents.size;
+		agents.clear();
+		widgetBoxes.clear();
+		nextId = 1;
+
+		const msg = total === 0
+			? "No subagents to clear."
+			: `Cleared ${total} subagent${total !== 1 ? "s" : ""}${killed > 0 ? ` (${killed} killed)` : ""}.`;
+		ctx.ui.notify(msg, total === 0 ? "info" : "success");
+	}
 
 	pi.registerCommand("sub", {
-		description: "Spawn a subagent with live widget: /sub <task>",
+		description: "Subagent control: /sub <task> | /sub continue <id> <prompt> | /sub remove <id> | /sub clear",
 		handler: async (args, ctx) => {
-			widgetCtx = ctx;
-
-			const raw = args?.trim();
+			const raw = args?.trim() ?? "";
 			if (!raw) {
-				ctx.ui.notify("Usage: /sub [NAME] <task>", "error");
+				ctx.ui.notify("Usage: /sub <task> | /sub continue <id> <prompt> | /sub remove <id> | /sub clear", "error");
 				return;
 			}
 
-			const parsed = parseSubName(raw);
-			if (!parsed.task) {
-				ctx.ui.notify("Usage: /sub [NAME] <task>", "error");
-				return;
+			const [rawSubcommand, ...rest] = raw.split(/\s+/);
+			const subcommand = rawSubcommand.toLowerCase();
+			const remainder = rest.join(" ");
+			switch (subcommand) {
+				case "continue":
+				case "cont":
+					await continueSubagentCommand(remainder, ctx);
+					return;
+				case "remove":
+				case "rm":
+					await removeSubagentCommand(remainder, ctx);
+					return;
+				case "clear":
+					await clearSubagentsCommand(ctx);
+					return;
+				case "spawn":
+					await spawnSubagentCommand(remainder, ctx);
+					return;
+				default:
+					await spawnSubagentCommand(raw, ctx);
 			}
-
-			const id = nextId++;
-			const state: SubState = {
-				id,
-				status: "running",
-				name: parsed.name,
-				task: parsed.task,
-				textChunks: [],
-				toolCount: 0,
-				elapsed: 0,
-				sessionFile: makeSessionFile(id),
-				turnCount: 1,
-				maxDurationMs: resolveTimeout(parsed.name),
-			};
-			agents.set(id, state);
-			registerWidget(state);
-
-			// Fire-and-forget
-			spawnAgent(state, parsed.task, ctx);
-		},
-	});
-
-	// ── /subcont <number> <prompt> ────────────────────────────────────────────
-
-	pi.registerCommand("subcont", {
-		description: "Continue an existing subagent's conversation: /subcont <number> <prompt>",
-		handler: async (args, ctx) => {
-			widgetCtx = ctx;
-
-			const trimmed = args?.trim() ?? "";
-			const spaceIdx = trimmed.indexOf(" ");
-			if (spaceIdx === -1) {
-				ctx.ui.notify("Usage: /subcont <number> <prompt>", "error");
-				return;
-			}
-
-			const num = parseInt(trimmed.slice(0, spaceIdx), 10);
-			const prompt = trimmed.slice(spaceIdx + 1).trim();
-
-			if (isNaN(num) || !prompt) {
-				ctx.ui.notify("Usage: /subcont <number> <prompt>", "error");
-				return;
-			}
-
-			const state = agents.get(num);
-			if (!state) {
-				ctx.ui.notify(`No SA${num} found. Use /sub to create one.`, "error");
-				return;
-			}
-
-			if (state.status === "running") {
-				ctx.ui.notify(`SA${num} is still running — wait for it to finish first.`, "warning");
-				return;
-			}
-
-			// Resume: update state for a new turn
-			clearDismissTimer(state);
-			state.status = "running";
-			state.terminalAt = undefined;
-			state.task = prompt;
-			state.textChunks = [];
-			state.elapsed = 0;
-			state.turnCount++;
-
-			// Re-register widget if it was removed (e.g. after auto-remove)
-			if (!widgetBoxes.has(state.id)) {
-				registerWidget(state);
-			}
-			invalidateWidget(state.id);
-
-			ctx.ui.notify(`Continuing SA${num} (${state.name}) Turn ${state.turnCount}…`, "info");
-
-			// Fire-and-forget — reuses the same sessionFile for conversation history
-			spawnAgent(state, prompt, ctx);
-		},
-	});
-
-	// ── /subrm <number> ───────────────────────────────────────────────────────
-
-	pi.registerCommand("subrm", {
-		description: "Remove a specific subagent widget: /subrm <number>",
-		handler: async (args, ctx) => {
-			widgetCtx = ctx;
-
-			const num = parseInt(args?.trim() ?? "", 10);
-			if (isNaN(num)) {
-				ctx.ui.notify("Usage: /subrm <number>", "error");
-				return;
-			}
-
-			const state = agents.get(num);
-			if (!state) {
-				ctx.ui.notify(`No SA${num} found.`, "error");
-				return;
-			}
-
-			// Kill the process if still running
-			if (state.proc && state.status === "running") {
-				await killGracefully(state.proc);
-				ctx.ui.notify(`SA${num} killed and removed.`, "warning");
-			} else {
-				ctx.ui.notify(`SA${num} removed.`, "info");
-			}
-
-			removeSubagentWidget(num, ctx, "slash_subrm");
-		},
-	});
-
-	// ── /subclear ─────────────────────────────────────────────────────────────
-
-	pi.registerCommand("subclear", {
-		description: "Clear all subagent widgets",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-
-			let killed = 0;
-			const killPromises: Promise<void>[] = [];
-			for (const [id, state] of Array.from(agents.entries())) {
-				if (state.proc && state.status === "running") {
-					killPromises.push(killGracefully(state.proc));
-					killed++;
-				}
-				clearDismissTimer(state);
-				ctx.ui.setWidget(`sub-${id}`, undefined);
-			}
-			await Promise.all(killPromises);
-
-			const total = agents.size;
-			agents.clear();
-			widgetBoxes.clear();
-			nextId = 1;
-
-			const msg = total === 0
-				? "No subagents to clear."
-				: `Cleared ${total} subagent${total !== 1 ? "s" : ""}${killed > 0 ? ` (${killed} killed)` : ""}.`;
-			ctx.ui.notify(msg, total === 0 ? "info" : "success");
 		},
 	});
 

@@ -563,7 +563,7 @@ function createStreamFactoryImpl(routes: ReadonlyMap<string, OpenRouterRouteVari
 		if (!route) {
 			if (model.id.startsWith(OPENROUTER_ENRICHED_MODEL_PREFIX)) {
 				throw new Error(
-					`Selected OpenRouter variant "${model.id}" is stale. Run /openrouter-enrich to refresh or /openrouter-sync to restore the plain list.`,
+					`Selected OpenRouter variant "${model.id}" is stale. Run /openrouter enrich to refresh or /openrouter sync to restore the plain list.`,
 				);
 			}
 			return streamSimpleOpenAICompletions(model as Model<"openai-completions">, context, options);
@@ -1028,7 +1028,7 @@ export default function openrouterRoutingExtension(pi: ExtensionAPI) {
 	async function pickModel(ctx: any, title: string): Promise<string | undefined> {
 		const cached = getCachedModelList();
 		if (!cached || cached.length === 0) {
-			ctx.ui.notify("No models cached. Run /openrouter-sync first.", "warning");
+			ctx.ui.notify("No models cached. Run /openrouter sync first.", "warning");
 			return undefined;
 		}
 		const result = await ctx.ui.custom((tui: any, theme: any, keybindings: any, done: (result: string | null) => void) => createModelPicker(tui, theme, keybindings, done, cached, title), {
@@ -1050,128 +1050,152 @@ export default function openrouterRoutingExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	pi.registerCommand("openrouter-sync", {
-		description: "Fetch latest OpenRouter models and restore the plain model list",
-		handler: async (_args, ctx) => {
-			invalidateAllCaches();
-			await syncPlain(ctx, false, true);
-			updateStatusBar(ctx);
-		},
-	});
+	async function openrouterSyncCommand(ctx: any) {
+		invalidateAllCaches();
+		await syncPlain(ctx, false, true);
+		updateStatusBar(ctx);
+	}
 
-	pi.registerCommand("openrouter-enrich", {
-		description: "Add provider/quantization variants for a model",
-		getArgumentCompletions: modelCompletions,
-		handler: async (args, ctx) => {
-			const modelId = args.trim();
-			if (!modelId) {
-				const picked = await pickModel(ctx, "Search models to enrich");
-				if (!picked) return;
-				await syncEnriched(ctx, picked);
-				updateStatusBar(ctx);
+	async function openrouterEnrichCommand(args: string, ctx: any) {
+		const modelId = args.trim();
+		if (!modelId) {
+			const picked = await pickModel(ctx, "Search models to enrich");
+			if (!picked) return;
+			await syncEnriched(ctx, picked);
+			updateStatusBar(ctx);
+			return;
+		}
+		await syncEnriched(ctx, modelId);
+		updateStatusBar(ctx);
+	}
+
+	async function openrouterPreviewCommand(args: string, ctx: any) {
+		let modelId = args.trim();
+		if (!modelId) {
+			const picked = await pickModel(ctx, "Search models to preview");
+			if (!picked) return;
+			modelId = picked;
+		}
+		try {
+			const apiKey = await ctx.modelRegistry.getApiKeyForProvider(OPENROUTER_PROVIDER_NAME);
+			ctx.ui.notify(`Fetching endpoints for ${modelId}...`, "info");
+			const models = await fetchModels(apiKey);
+			const target = models.find((m) => m.id === modelId);
+			if (!target) {
+				ctx.ui.notify(`Model not found: ${modelId}`, "error");
 				return;
 			}
-			await syncEnriched(ctx, modelId);
-			updateStatusBar(ctx);
-		},
-	});
-
-	pi.registerCommand("openrouter-preview", {
-		description: "Preview provider/quantization variants for a model without changing the model list",
-		getArgumentCompletions: modelCompletions,
-		handler: async (args, ctx) => {
-			let modelId = args.trim();
-			if (!modelId) {
-				const picked = await pickModel(ctx, "Search models to preview");
-				if (!picked) return;
-				modelId = picked;
+			const endpoints = await fetchModelEndpoints(modelId, apiKey, true);
+			if (endpoints.length === 0) {
+				ctx.ui.notify(`No endpoints found for ${modelId}`, "warning");
+				return;
 			}
-			try {
-				const apiKey = await ctx.modelRegistry.getApiKeyForProvider(OPENROUTER_PROVIDER_NAME);
-				ctx.ui.notify(`Fetching endpoints for ${modelId}...`, "info");
-				const models = await fetchModels(apiKey);
-				const target = models.find((m) => m.id === modelId);
-				if (!target) {
-					ctx.ui.notify(`Model not found: ${modelId}`, "error");
-					return;
-				}
-				const endpoints = await fetchModelEndpoints(modelId, apiKey, true);
-				if (endpoints.length === 0) {
-					ctx.ui.notify(`No endpoints found for ${modelId}`, "warning");
-					return;
-				}
-				const groups = groupEndpoints(target, endpoints);
-				const lines: string[] = [`**${target.name}** (${target.id})`, `${endpoints.length} endpoints across ${groups.length} provider/quantization variants:`, ""];
-				lines.push(...buildPreviewSearchInfo(target), "", "**Endpoint variants**", "");
-				for (const group of groups) {
-					const route = group.route;
-					const label = route.quantization ? `${route.providerName} · ${route.quantization}` : route.providerName;
-					const pricing = buildVariantPricingInfo(target, group.endpoints);
-					const health = formatEndpointHealth(route);
-					const details = [pricing, health].filter(Boolean).join(" · ");
-					lines.push(`• **${label}**${details ? ` — ${details}` : ""}`);
-				}
-				emitMessage(pi, lines.join("\n"));
-			} catch (err: any) {
-				ctx.ui.notify(`Preview failed: ${err?.message}`, "error");
+			const groups = groupEndpoints(target, endpoints);
+			const lines: string[] = [`**${target.name}** (${target.id})`, `${endpoints.length} endpoints across ${groups.length} provider/quantization variants:`, ""];
+			lines.push(...buildPreviewSearchInfo(target), "", "**Endpoint variants**", "");
+			for (const group of groups) {
+				const route = group.route;
+				const label = route.quantization ? `${route.providerName} · ${route.quantization}` : route.providerName;
+				const pricing = buildVariantPricingInfo(target, group.endpoints);
+				const health = formatEndpointHealth(route);
+				const details = [pricing, health].filter(Boolean).join(" · ");
+				lines.push(`• **${label}**${details ? ` — ${details}` : ""}`);
 			}
-		},
-	});
-
-	pi.registerCommand("openrouter-balance", {
-		description: "Show your OpenRouter credit balance and usage",
-		handler: async (_args, ctx) => {
-			try {
-				const apiKey = await ctx.modelRegistry.getApiKeyForProvider(OPENROUTER_PROVIDER_NAME);
-				if (!apiKey) {
-					ctx.ui.notify("No OpenRouter API key configured", "warning");
-					return;
-				}
-				const [info, credits] = await Promise.all([fetchKeyInfo(apiKey), fetchCredits(apiKey)]);
-				const lines: string[] = ["**OpenRouter Account**", ""];
-				if (credits && credits.total_credits !== undefined && credits.total_usage !== undefined) {
-					const balance = credits.total_credits - credits.total_usage;
-					lines.push(`Balance: $${balance.toFixed(4)}`);
-					lines.push(`Account credits: $${credits.total_credits.toFixed(4)} — Account used: $${credits.total_usage.toFixed(4)}`);
-				} else if (info.limit_remaining !== null && info.limit_remaining !== undefined) {
-					lines.push(`Remaining key limit: $${info.limit_remaining.toFixed(4)}`);
-				}
-				lines.push("");
-				if (info.is_free_tier) lines.push("Tier: Free");
-				if (info.limit !== null && info.limit !== undefined) {
-					const resetStr = info.limit_reset ? ` (resets ${info.limit_reset})` : "";
-					lines.push(`Key spend limit: $${info.limit.toFixed(2)}${resetStr}`);
-				}
-				if (info.usage !== undefined || info.usage_daily !== undefined || info.usage_monthly !== undefined) {
-					lines.push("", "**Current API key usage**");
-					if (info.usage_daily !== undefined) lines.push(`Today: $${info.usage_daily.toFixed(4)}`);
-					if (info.usage_monthly !== undefined) lines.push(`This month: $${info.usage_monthly.toFixed(4)}`);
-					if (info.usage !== undefined) lines.push(`All-time for this key: $${info.usage.toFixed(4)}`);
-				}
-				emitMessage(pi, lines.join("\n"));
-			} catch (err: any) {
-				ctx.ui.notify(`Balance check failed: ${err?.message}`, "error");
-			}
-		},
-	});
-
-	pi.registerCommand("openrouter-status", {
-		description: "Show current extension state: synced models, active enrichments, cache age",
-		handler: async (_args, _ctx) => {
-			const snapshot = getSnapshot();
-			const lines: string[] = ["**OpenRouter Extension Status**", ""];
-			lines.push(`Models registered: ${snapshot.models.length}`);
-			lines.push(`Base models: ${snapshot.baseModelCount}`);
-			lines.push(`Variants registered: ${snapshot.routes.size}`);
-			lines.push(`Sync mode: ${snapshot.syncMode}`);
-			lines.push(`Endpoint failures: ${snapshot.endpointFailures}`);
-			if (snapshot.enrichedModelIds.size > 0) lines.push(`Enriched models: ${Array.from(snapshot.enrichedModelIds).join(", ")}`);
-			else lines.push("Enriched models: none");
-			const ageMs = getCacheAgeMs();
-			if (ageMs !== null) lines.push(`Cache age: ${Math.round(ageMs / 60000)} minute(s)`);
-			if (snapshot.timestamp > 0) lines.push(`Last sync: ${Math.round((Date.now() - snapshot.timestamp) / 60000)} minute(s) ago`);
-			else lines.push("Last sync: never");
 			emitMessage(pi, lines.join("\n"));
+		} catch (err: any) {
+			ctx.ui.notify(`Preview failed: ${err?.message}`, "error");
+		}
+	}
+
+	async function openrouterBalanceCommand(ctx: any) {
+		try {
+			const apiKey = await ctx.modelRegistry.getApiKeyForProvider(OPENROUTER_PROVIDER_NAME);
+			if (!apiKey) {
+				ctx.ui.notify("No OpenRouter API key configured", "warning");
+				return;
+			}
+			const [info, credits] = await Promise.all([fetchKeyInfo(apiKey), fetchCredits(apiKey)]);
+			const lines: string[] = ["**OpenRouter Account**", ""];
+			if (credits && credits.total_credits !== undefined && credits.total_usage !== undefined) {
+				const balance = credits.total_credits - credits.total_usage;
+				lines.push(`Balance: $${balance.toFixed(4)}`);
+				lines.push(`Account credits: $${credits.total_credits.toFixed(4)} — Account used: $${credits.total_usage.toFixed(4)}`);
+			} else if (info.limit_remaining !== null && info.limit_remaining !== undefined) {
+				lines.push(`Remaining key limit: $${info.limit_remaining.toFixed(4)}`);
+			}
+			lines.push("");
+			if (info.is_free_tier) lines.push("Tier: Free");
+			if (info.limit !== null && info.limit !== undefined) {
+				const resetStr = info.limit_reset ? ` (resets ${info.limit_reset})` : "";
+				lines.push(`Key spend limit: $${info.limit.toFixed(2)}${resetStr}`);
+			}
+			if (info.usage !== undefined || info.usage_daily !== undefined || info.usage_monthly !== undefined) {
+				lines.push("", "**Current API key usage**");
+				if (info.usage_daily !== undefined) lines.push(`Today: $${info.usage_daily.toFixed(4)}`);
+				if (info.usage_monthly !== undefined) lines.push(`This month: $${info.usage_monthly.toFixed(4)}`);
+				if (info.usage !== undefined) lines.push(`All-time for this key: $${info.usage.toFixed(4)}`);
+			}
+			emitMessage(pi, lines.join("\n"));
+		} catch (err: any) {
+			ctx.ui.notify(`Balance check failed: ${err?.message}`, "error");
+		}
+	}
+
+	async function openrouterStatusCommand() {
+		const snapshot = getSnapshot();
+		const lines: string[] = ["**OpenRouter Extension Status**", ""];
+		lines.push(`Models registered: ${snapshot.models.length}`);
+		lines.push(`Base models: ${snapshot.baseModelCount}`);
+		lines.push(`Variants registered: ${snapshot.routes.size}`);
+		lines.push(`Sync mode: ${snapshot.syncMode}`);
+		lines.push(`Endpoint failures: ${snapshot.endpointFailures}`);
+		if (snapshot.enrichedModelIds.size > 0) lines.push(`Enriched models: ${Array.from(snapshot.enrichedModelIds).join(", ")}`);
+		else lines.push("Enriched models: none");
+		const ageMs = getCacheAgeMs();
+		if (ageMs !== null) lines.push(`Cache age: ${Math.round(ageMs / 60000)} minute(s)`);
+		if (snapshot.timestamp > 0) lines.push(`Last sync: ${Math.round((Date.now() - snapshot.timestamp) / 60000)} minute(s) ago`);
+		else lines.push("Last sync: never");
+		emitMessage(pi, lines.join("\n"));
+	}
+
+	const openrouterSubcommands = ["status", "sync", "enrich", "preview", "balance"];
+
+	pi.registerCommand("openrouter", {
+		description: "OpenRouter control: /openrouter [status|sync|enrich <model>|preview <model>|balance]",
+		getArgumentCompletions: (prefix: string) => {
+			const trimmed = prefix.trim();
+			const [subcommand, ...rest] = trimmed.split(/\s+/);
+			if ((subcommand === "enrich" || subcommand === "preview") && rest.length > 0) {
+				return modelCompletions(rest.join(" "))?.map(item => ({ ...item, value: `${subcommand} ${item.value}` })) ?? null;
+			}
+			const items = openrouterSubcommands.map(value => ({ value, label: value }));
+			const filtered = items.filter(item => item.value.startsWith(trimmed.toLowerCase()));
+			return filtered.length > 0 ? filtered : items;
+		},
+		handler: async (args, ctx) => {
+			const trimmed = args?.trim() ?? "";
+			const [rawSubcommand = "status", ...rest] = trimmed ? trimmed.split(/\s+/) : ["status"];
+			const subcommand = rawSubcommand.toLowerCase();
+			const remainder = rest.join(" ");
+			switch (subcommand) {
+				case "status":
+					await openrouterStatusCommand();
+					return;
+				case "sync":
+					await openrouterSyncCommand(ctx);
+					return;
+				case "enrich":
+					await openrouterEnrichCommand(remainder, ctx);
+					return;
+				case "preview":
+					await openrouterPreviewCommand(remainder, ctx);
+					return;
+				case "balance":
+					await openrouterBalanceCommand(ctx);
+					return;
+				default:
+					ctx.ui.notify("Usage: /openrouter [status|sync|enrich <model>|preview <model>|balance]", "error");
+			}
 		},
 	});
 

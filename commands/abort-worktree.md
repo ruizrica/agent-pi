@@ -2,7 +2,7 @@
 name: abort-worktree
 description: "Stop a Pi worktree workflow without merging, preserving dirty work by default."
 argument-hint: "[reason]"
-allowed-tools: '["bash", "ask_user", "read", "write"]'
+allowed-tools: ["bash", "ask_user", "read", "write"]
 context: inline
 ---
 

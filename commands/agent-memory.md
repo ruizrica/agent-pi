@@ -2,7 +2,7 @@
 name: agent-memory
 description: "Search and manage local agent memories with the agent-memory CLI, including hybrid search and code navigation."
 argument-hint: "<search|index|status|add|code-index|code-nav|code-tree|code-refs|code-summarize> [args]"
-allowed-tools: '["bash", "read"]'
+allowed-tools: ["bash", "read"]
 context: inline
 ---
 

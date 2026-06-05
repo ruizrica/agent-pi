@@ -2,7 +2,7 @@
 name: sync
 description: "Safely update the current Pi work branch against main/master."
 argument-hint: "[rebase|merge]"
-allowed-tools: '["bash", "ask_user"]'
+allowed-tools: ["bash", "ask_user"]
 context: inline
 ---
 

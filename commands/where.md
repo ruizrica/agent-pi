@@ -2,7 +2,7 @@
 name: where
 description: "Show current Pi git/worktree/session orientation without changing anything."
 argument-hint: ""
-allowed-tools: '["bash", "read"]'
+allowed-tools: ["bash", "read"]
 context: inline
 ---
 

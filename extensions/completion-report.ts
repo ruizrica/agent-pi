@@ -264,8 +264,7 @@ function getFileStatuses(cwd: string, baseRef: string): Map<string, { status: Ch
 function shouldSuppressReportFile(filePath: string): boolean {
 	const normalized = filePath.replace(/\\/g, "/");
 	return normalized.startsWith(".context/test-exports/") ||
-		normalized.startsWith(".context/reports/") ||
-		normalized === "agent/extensions/lib/marked.min.js";
+		normalized.startsWith(".context/reports/");
 }
 
 function summarizeSuppressedFile(filePath: string): string {

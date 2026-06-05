@@ -24,7 +24,6 @@ const ignoredSegments = new Set([
 ]);
 
 const ignoredFiles = new Set([
-	"extensions/lib/marked.min.js",
 	"extensions/package-lock.json",
 ]);
 

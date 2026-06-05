@@ -12,10 +12,10 @@
  * you pick which team to work with. Only team members are available for dispatch.
  *
  * Commands:
- *   /agents-team          — switch active team
- *   /agents-list          — list loaded agents
- *   /agents-grid N        — set column count (default 2)
- *   /agents-clear         — clear agent team widget from screen
+ *   /agents team          — switch active team
+ *   /agents list          — list loaded agents
+ *   /agents grid N        — set column count (default 2)
+ *   /agents clear         — clear agent team widget from screen
  *   Alt+G                 — toggle compact/expanded widget view
  *
  * Usage: pi -e extensions/agent-team.ts -e extensions/footer.ts
@@ -891,96 +891,117 @@ export default function (pi: ExtensionAPI) {
 
 	// ── Commands ─────────────────────────────────
 
-	pi.registerCommand("agents-team", {
-		description: "Select a team to work with",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			const teamNames = Object.keys(teams);
-			if (teamNames.length === 0) {
-				ctx.ui.notify("No teams defined in .pi/agents/teams.yaml", "warning");
-				return;
-			}
+	async function selectAgentTeam(ctx: any) {
+		widgetCtx = ctx;
+		const teamNames = Object.keys(teams);
+		if (teamNames.length === 0) {
+			ctx.ui.notify("No teams defined in .pi/agents/teams.yaml", "warning");
+			return;
+		}
 
-			const options = teamNames.map(name => {
-				const members = teams[name].map(m => displayName(m));
-				return `${name} — ${members.join(", ")}`;
-			});
+		const options = teamNames.map(name => {
+			const members = teams[name].map(m => displayName(m));
+			return `${name} — ${members.join(", ")}`;
+		});
 
-			const choice = await ctx.ui.select("Select Team", options);
-			if (choice === undefined) return;
+		const choice = await ctx.ui.select("Select Team", options);
+		if (choice === undefined) return;
 
-			const idx = options.indexOf(choice);
-			const name = teamNames[idx];
-			activateTeam(name);
+		const idx = options.indexOf(choice);
+		const name = teamNames[idx];
+		activateTeam(name);
+		updateWidget();
+		if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
+		ctx.ui.notify(`Team: ${name} — ${Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ")}`, "info");
+	}
+
+	async function listAgents(ctx: any) {
+		widgetCtx = ctx;
+		const names = Array.from(agentStates.values())
+			.map(s => {
+				const session = s.sessionFile ? "resumed" : "new";
+				return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
+			})
+			.join("\n");
+		ctx.ui.notify(names || "No agents loaded", "info");
+	}
+
+	async function setAgentsGrid(args: string, ctx: any) {
+		widgetCtx = ctx;
+		const n = parseInt(args?.trim() || "", 10);
+		if (n >= 1 && n <= 6) {
+			gridCols = n;
+			ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
 			updateWidget();
-			if (!(globalThis as any).__piSummaryModeActive) ctx.ui.setStatus("agent-team", `Team: ${name} (${agentStates.size})`);
-			ctx.ui.notify(`Team: ${name} — ${Array.from(agentStates.values()).map(s => displayName(s.def.name)).join(", ")}`, "info");
-		},
-	});
+		} else {
+			ctx.ui.notify("Usage: /agents grid <1-6>", "error");
+		}
+	}
 
-	pi.registerCommand("agents-list", {
-		description: "List all loaded agents",
-		handler: async (_args, _ctx) => {
-			widgetCtx = _ctx;
-			const names = Array.from(agentStates.values())
-				.map(s => {
-					const session = s.sessionFile ? "resumed" : "new";
-					return `${displayName(s.def.name)} (${s.status}, ${session}, runs: ${s.runCount}): ${s.def.description}`;
-				})
-				.join("\n");
-			_ctx.ui.notify(names || "No agents loaded", "info");
-		},
-	});
+	async function clearAgents(ctx: any) {
+		widgetCtx = ctx;
+		ctx.ui.setWidget("agent-team", undefined);
 
-	pi.registerCommand("agents-grid", {
-		description: "Set grid columns: /agents-grid <1-6>",
+		// Remove all individual agent widgets
+		removeAllAgentWidgets();
+
+		// Reset all agent states to idle so the widget can reappear on next dispatch
+		for (const state of agentStates.values()) {
+			if (state.status === "done" || state.status === "error") {
+				state.status = "idle";
+				state.task = "";
+				state.toolCount = 0;
+				state.elapsed = 0;
+				state.lastWork = "";
+				state.contextPct = 0;
+				state.resolvedModel = "";
+				state.textChunks = [];
+				state.summary = undefined;
+			}
+		}
+		selectedAgentIndex = -1;
+
+		ctx.ui.notify("Agent team widget cleared.", "info");
+	}
+
+	const agentsSubcommands = ["team", "list", "grid", "clear"];
+
+	pi.registerCommand("agents", {
+		description: "Agent team control: /agents [team|list|grid <1-6>|clear]",
 		getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
-			const items = ["1", "2", "3", "4", "5", "6"].map(n => ({
-				value: n,
-				label: `${n} columns`,
-			}));
-			const filtered = items.filter(i => i.value.startsWith(prefix));
+			const trimmed = prefix.trim().toLowerCase();
+			if (trimmed.startsWith("grid ")) {
+				return ["1", "2", "3", "4", "5", "6"].map(n => ({
+					value: `grid ${n}`,
+					label: `${n} columns`,
+				}));
+			}
+			const items = agentsSubcommands.map(value => ({ value, label: value }));
+			const filtered = items.filter(i => i.value.startsWith(trimmed));
 			return filtered.length > 0 ? filtered : items;
 		},
-		handler: async (args, _ctx) => {
-			widgetCtx = _ctx;
-			const n = parseInt(args?.trim() || "", 10);
-			if (n >= 1 && n <= 6) {
-				gridCols = n;
-				_ctx.ui.notify(`Grid set to ${gridCols} columns`, "info");
-				updateWidget();
-			} else {
-				_ctx.ui.notify("Usage: /agents-grid <1-6>", "error");
+		handler: async (args, ctx) => {
+			const trimmed = args?.trim() ?? "";
+			const [rawSubcommand = "team", ...rest] = trimmed ? trimmed.split(/\s+/) : ["team"];
+			const subcommand = rawSubcommand.toLowerCase();
+			const remainder = rest.join(" ");
+			switch (subcommand) {
+				case "team":
+				case "select":
+					await selectAgentTeam(ctx);
+					return;
+				case "list":
+					await listAgents(ctx);
+					return;
+				case "grid":
+					await setAgentsGrid(remainder, ctx);
+					return;
+				case "clear":
+					await clearAgents(ctx);
+					return;
+				default:
+					ctx.ui.notify("Usage: /agents [team|list|grid <1-6>|clear]", "error");
 			}
-		},
-	});
-
-	pi.registerCommand("agents-clear", {
-		description: "Clear agent team widget from screen",
-		handler: async (_args, ctx) => {
-			widgetCtx = ctx;
-			ctx.ui.setWidget("agent-team", undefined);
-
-			// Remove all individual agent widgets
-			removeAllAgentWidgets();
-
-			// Reset all agent states to idle so the widget can reappear on next dispatch
-			for (const state of agentStates.values()) {
-				if (state.status === "done" || state.status === "error") {
-					state.status = "idle";
-					state.task = "";
-					state.toolCount = 0;
-					state.elapsed = 0;
-					state.lastWork = "";
-					state.contextPct = 0;
-					state.resolvedModel = "";
-					state.textChunks = [];
-					state.summary = undefined;
-				}
-			}
-			selectedAgentIndex = -1;
-
-			ctx.ui.notify("Agent team widget cleared.", "info");
 		},
 	});
 
@@ -1429,7 +1450,7 @@ ${agentCatalog}${commanderSection}`,
 
 		loadAgents(_ctx.cwd);
 
-		// Default to first team — use /agents-team to switch
+		// Default to first team — use /agents team to switch
 		const teamNames = Object.keys(teams);
 		if (teamNames.length > 0) {
 			activateTeam(teamNames[0]);

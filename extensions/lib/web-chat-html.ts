@@ -746,7 +746,7 @@ export function generateWebChatHTML(opts: { port: number; logoDataUri?: string }
     { name: 'sounds', desc: 'Sound configuration' },
     { name: 'theme', desc: 'Cycle color theme' },
     { name: 'secure', desc: 'Security status' },
-    { name: 'agents-team', desc: 'Manage agent team' },
+    { name: 'agents', desc: 'Manage agent team' },
     { name: 'chain', desc: 'Run agent chain' },
     { name: 'pipeline', desc: 'Pipeline orchestration' },
     { name: 'spec', desc: 'Open spec viewer' },

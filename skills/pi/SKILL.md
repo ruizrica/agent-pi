@@ -59,7 +59,7 @@ cmd task comment "$PI_SESSION" "Mode complete: $SUBCOMMAND" --type progress
 
 Before calling `set_mode`, check whether the mode requires prior setup:
 
-- **TEAM**: Requires an active team. If no team is loaded, tell the user to run `/agents-team` first to select a team (e.g., "full", "plan-build", "quality").
+- **TEAM**: Requires an active team. If no team is loaded, tell the user to run `/agents team` first to select a team (e.g., "full", "plan-build", "quality").
 - **CHAIN**: Requires an active chain. If no chain is active, tell the user to run `/chain` first to select a chain (e.g., "plan-build-review", "investigate-fix", "audit").
 - **PIPELINE**: Requires an active pipeline config. If no pipeline is active, tell the user to run `/pipeline` first to select a pipeline.
 - **PLAN**, **SPEC**, **INVESTIGATE**, **DEBUG**, **GOAL**, **IMPLEMENT**, **NORMAL**: No prerequisites — activate immediately.

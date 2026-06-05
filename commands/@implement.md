@@ -2,7 +2,7 @@
 name: @implement
 description: "Process @implement comments in code files: perform the requested implementation, then convert the directive comments into durable documentation."
 argument-hint: "[file or directory to process]"
-allowed-tools: '["read", "bash", "edit", "write", "ask_user"]'
+allowed-tools: ["read", "bash", "edit", "write", "ask_user"]
 context: inline
 ---
 

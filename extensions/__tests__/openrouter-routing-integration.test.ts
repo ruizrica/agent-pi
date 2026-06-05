@@ -35,7 +35,7 @@ describe("openrouter-routing-integration", () => {
 		} as any;
 		openrouterRoutingExtension(pi);
 		const ctx = { modelRegistry: { getApiKeyForProvider: vi.fn(async () => "key") }, ui: { notify: vi.fn(), setStatus: vi.fn(), custom: vi.fn() } };
-		await commands["openrouter-sync"].handler("", ctx);
+		await commands["openrouter"].handler("sync", ctx);
 		expect(pi.registerProvider).toHaveBeenCalledWith("openrouter", expect.objectContaining({
 			baseUrl: "https://openrouter.ai/api/v1",
 			apiKey: "$OPENROUTER_API_KEY",

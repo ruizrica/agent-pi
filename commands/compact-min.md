@@ -2,7 +2,7 @@
 name: compact-min
 description: "Write a minimal handoff-derived restore state to .context/session-state.json for fast Pi session recovery."
 argument-hint: "[focus for restore]"
-allowed-tools: '["bash", "read", "write"]'
+allowed-tools: ["bash", "read", "write"]
 context: inline
 ---
 

@@ -2,7 +2,7 @@
 name: setup
 description: "Set up a Pi work session in an isolated git worktree and prepare the agent to work."
 argument-hint: "[task name or branch slug]"
-allowed-tools: '["bash", "read", "ask_user"]'
+allowed-tools: ["bash", "read", "ask_user"]
 context: inline
 ---
 

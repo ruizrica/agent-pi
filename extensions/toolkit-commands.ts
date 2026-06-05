@@ -102,6 +102,42 @@ export function mapTools(toolList: string[]): string[] {
 
 // ── Parser ───────────────────────────────────────
 
+function stripMatchingOuterQuotes(value: string): string {
+	const trimmed = value.trim();
+	if (
+		(trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+		(trimmed.startsWith('"') && trimmed.endsWith('"'))
+	) {
+		return trimmed.slice(1, -1).trim();
+	}
+	return trimmed;
+}
+
+export function parseAllowedTools(raw: string | undefined): string[] {
+	if (!raw) return [];
+
+	const normalized = stripMatchingOuterQuotes(raw);
+	const jsonCandidates = [normalized, normalized.replace(/'/g, '"')]
+		.filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
+
+	for (const candidate of jsonCandidates) {
+		try {
+			const parsed = JSON.parse(candidate);
+			const values = Array.isArray(parsed) ? parsed : [parsed];
+			return values.map((value) => String(value).trim()).filter(Boolean);
+		} catch {
+			// Try the next representation, then fall back to comma splitting.
+		}
+	}
+
+	return normalized
+		.replace(/^\[/, "")
+		.replace(/\]$/, "")
+		.split(",")
+		.map((part) => stripMatchingOuterQuotes(part).trim())
+		.filter(Boolean);
+}
+
 function parseCommandFile(filePath: string): CommandDef | null {
 	try {
 		const raw = readFileSync(filePath, "utf-8");
@@ -119,16 +155,7 @@ function parseCommandFile(filePath: string): CommandDef | null {
 		const desc = frontmatter.description;
 		if (!desc) return null;
 
-		const allowedToolsRaw = frontmatter["allowed-tools"];
-		let allowedTools: string[] = [];
-		if (allowedToolsRaw) {
-			try {
-				const parsed = JSON.parse(allowedToolsRaw.replace(/'/g, '"'));
-				allowedTools = Array.isArray(parsed) ? parsed : [parsed];
-			} catch {
-				allowedTools = allowedToolsRaw.split(",").map((s) => s.trim()).filter(Boolean);
-			}
-		}
+		const allowedTools = parseAllowedTools(frontmatter["allowed-tools"]);
 
 		const context = (frontmatter.context || "").toLowerCase() === "fork" ? "fork" : "inline";
 		const nameFromFrontmatter = !!frontmatter.name;

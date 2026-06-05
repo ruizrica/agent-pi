@@ -2,7 +2,7 @@
 name: handoff
 description: "Create or update a concise standalone Pi handoff document."
 argument-hint: "[focus for the next session]"
-allowed-tools: '["bash", "read", "write", "show_report"]'
+allowed-tools: ["bash", "read", "write", "show_report"]
 context: inline
 ---
 

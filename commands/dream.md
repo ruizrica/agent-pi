@@ -2,7 +2,7 @@
 name: dream
 description: "Global-first Pi memory consolidation and nightly self-improvement"
 argument-hint: "[--global] [--workspace <path>] [--dry-run] [--deep]"
-allowed-tools: '["run_chain", "read", "write", "bash", "obsidian_memory", "tasks", "show_report"]'
+allowed-tools: ["run_chain", "read", "write", "bash", "obsidian_memory", "tasks", "show_report"]
 context: inline
 ---
 

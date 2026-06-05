@@ -2,7 +2,7 @@
 name: handoff-memory-cycle
 description: "Compatibility reference for the former memory-aware handoff flow; use /cycle-context."
 argument-hint: "[focus for continuation]"
-allowed-tools: '["read"]'
+allowed-tools: ["read"]
 context: inline
 ---
 

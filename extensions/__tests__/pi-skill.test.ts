@@ -58,7 +58,7 @@ describe("/pi skill", () => {
 	});
 
 	it("documents prerequisites for modes that need setup", () => {
-		expect(body).toContain("/agents-team");
+		expect(body).toContain("/agents team");
 		expect(body).toContain("/chain");
 		expect(body).toContain("/pipeline");
 	});
