@@ -8,8 +8,7 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions",
-      "./pi-computer-use/extensions"
+      "./extensions"
     ],
     "skills": [
       "./skills",

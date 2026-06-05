@@ -67,10 +67,10 @@ describe("openOriginalReport routing", () => {
 		expect(() => openOriginalReport(entry)).not.toThrow();
 	});
 
-	it("dispatches 'qa_rico' category to /show-file (fallback)", () => {
+	it("dispatches 'qa_reco' category to /show-file (fallback)", () => {
 		const entry = {
 			id: "qa-222",
-			category: "qa_rico",
+			category: "qa_reco",
 			viewerPath: "/home/user/qa-report.md",
 			sourcePath: "/home/user/qa-report.md",
 		};
@@ -164,7 +164,7 @@ describe("openOriginalReport routing", () => {
 			{ category: "questions", hasPath: true },
 			{ category: "spec", hasPath: true },
 			{ category: "completion", hasPath: false },
-			{ category: "qa_rico", hasPath: true },
+			{ category: "qa_reco", hasPath: true },
 		];
 
 		for (const { category, hasPath } of categories) {

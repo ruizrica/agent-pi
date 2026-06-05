@@ -70,7 +70,7 @@ export function openOriginalReport(entry: any): void {
 		}
 
 		default: {
-			// Existing behavior for qa_rico, swagbucks, pr_review, and unknown categories
+			// Existing behavior for qa_reco, swagbucks, pr_review, and unknown categories
 			if (!path) throw new Error("No source path available for this report");
 			const safePath = validatePath(path);
 			args = ["/show-file", safePath];

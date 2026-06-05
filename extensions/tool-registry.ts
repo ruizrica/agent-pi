@@ -20,7 +20,7 @@ export interface ToolEntry {
 const CATEGORY_RULES: { category: string; names: string[]; keywords: string[] }[] = [
 	{
 		category: "filesystem",
-		names: ["read", "write", "edit", "ls", "find", "grep"],
+		names: ["read", "write", "edit", "ls", "find", "grep", "open_file"],
 		keywords: ["file", "directory", "path", "read", "write", "edit"],
 	},
 	{

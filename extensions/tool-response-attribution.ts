@@ -109,8 +109,8 @@ const ATTRIBUTION_MAP: Record<string, (content: string) => [string, string]> = {
 	],
 
 	// Viewer configs — these are system events
-	"qa-rico-config": () => [
-		"[SYSTEM: QA Rico viewer configuration event, NOT user input.]\n",
+	"qa-reco-config": () => [
+		"[SYSTEM: QA Reco viewer configuration event, NOT user input.]\n",
 		"",
 	],
 	"swagbucks-config": () => [

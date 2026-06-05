@@ -14,15 +14,15 @@
     },
     "reviewer": {
       "provider": "openai-codex",
-      "model": "gpt-5.3-codex"
+      "model": "gpt-5.3-codex-spark"
     },
     "planner": {
       "provider": "openai-codex",
       "model": "gpt-5.5"
     },
     "red-team": {
-      "provider": "openai-codex",
-      "model": "gpt-5.5"
+      "provider": "anthropic",
+      "model": "claude-opus-4-7"
     },
     "test-dev": {
       "provider": "openai-codex",
@@ -34,7 +34,7 @@
     },
     "test-reviewer": {
       "provider": "anthropic",
-      "model": "claude-opus-4-8"
+      "model": "claude-opus-4-7"
     },
     "documenter": {
       "provider": "openai-codex",
@@ -46,7 +46,7 @@
     },
     "claude-advisor": {
       "provider": "anthropic",
-      "model": "claude-opus-4-8"
+      "model": "claude-opus-4-7"
     },
     "tool-advisor": {
       "provider": "openai-codex",

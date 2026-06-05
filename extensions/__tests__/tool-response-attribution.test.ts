@@ -101,7 +101,7 @@ describe("ATTRIBUTION_MAP", () => {
 			"memory-restored",
 			"vulnerability-sweep-result",
 			"vulnerability-install-result",
-			"qa-rico-config",
+			"qa-reco-config",
 			"swagbucks-config",
 			"security-guard-event",
 			"task-validation",

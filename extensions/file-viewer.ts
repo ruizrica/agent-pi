@@ -6,9 +6,9 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "@sinclair/typebox";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { spawn } from "node:child_process";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
+import { launchFileInEditor } from "./lib/editor-launcher.ts";
 import { generateFileViewerHTML } from "./lib/viewers/file-viewer-html.ts";
 import { launchViewer, closeActiveViewer, getActiveViewer } from "./lib/viewer-framework.ts";
 import type { LaunchedViewer } from "./lib/viewer-framework.ts";
@@ -31,34 +31,6 @@ function parseRange(content: string, lineRange?: string): string {
 	out.push(...lines.slice(start, end));
 	if (end < lines.length) out.push("...");
 	return out.join("\n");
-}
-
-function launchEditor(editor: string, filePath: string): { ok: boolean; error?: string } {
-	const macAppMap: Record<string, string> = {
-		cursor: "Cursor",
-		windsurf: "Windsurf",
-		vscode: "Visual Studio Code",
-	};
-	const commandMap: Record<string, string[]> = {
-		cursor: ["cursor", filePath],
-		windsurf: ["windsurf", filePath],
-		vscode: ["code", filePath],
-	};
-	if (!commandMap[editor]) return { ok: false, error: `Unsupported editor: ${editor}` };
-	try {
-		if (process.platform === "darwin") {
-			const appName = macAppMap[editor];
-			const child = spawn("open", ["-a", appName, filePath], { detached: true, stdio: "ignore" });
-			child.unref();
-			return { ok: true };
-		}
-		const cmd = commandMap[editor];
-		const child = spawn(cmd[0], cmd.slice(1), { detached: true, stdio: "ignore" });
-		child.unref();
-		return { ok: true };
-	} catch (err: any) {
-		return { ok: false, error: err?.message || `Failed to launch ${editor}` };
-	}
 }
 
 function detectLanguage(filePath: string): string {
@@ -127,10 +99,10 @@ async function startFileViewerServer(opts: {
 			handler: (req: any, res: any) => {
 				let body = "";
 				req.on("data", (chunk: string) => { body += chunk; });
-				req.on("end", () => {
+				req.on("end", async () => {
 					try {
 						const data = JSON.parse(body || "{}");
-						const result = launchEditor(String(data.editor || ""), opts.filePath);
+						const result = await launchFileInEditor({ editor: String(data.editor || ""), filePath: opts.filePath });
 						res.writeHead(result.ok ? 200 : 400, { "Content-Type": "application/json" });
 						res.end(JSON.stringify(result));
 					} catch (err: any) {
@@ -247,8 +219,9 @@ export default function (pi: ExtensionAPI) {
 		name: "show_file",
 		label: "Show File",
 		description:
-			"Open a lightweight local file viewer/editor in the browser without Commander. " +
-			"Supports read-only viewing by default, optional editing/saving, simple line-range display, and an approval mode with approve/reject/cancel actions.",
+			"Open an explicit browser-based local file viewer/editor without Commander. " +
+			"Use this for browser preview, optional editing/saving, line-range display, or approval mode with approve/reject/cancel actions. " +
+			"Use `open_file` for ordinary requests to open a file directly in Cursor.",
 		parameters: ShowFileParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const p = params as { file_path: string; title?: string; line_range?: string; editable?: boolean; mode?: string };
@@ -293,7 +266,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("show-file", {
-		description: "Open a local file viewer/editor in the browser",
+		description: "Open the browser-based local file viewer/editor",
 		handler: async (args, ctx) => {
 			const filePath = String(args || "").trim();
 			if (!filePath) {
