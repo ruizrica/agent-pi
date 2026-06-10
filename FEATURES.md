@@ -8,6 +8,10 @@ Use this file to preserve a plain-English map of shipped capabilities and where 
 |---|---|---|---|---|
 | Project Memory Pack | Implemented 2026-05-18 | `CLAUDE.md`, `STATE.md`, `journal/`, `BACKLOG.md`, `FEATURES.md`, `commands/setup.md`, `commands/handoff.md`, `skills/pi/SKILL.md`, `scripts/project-memory-hook.sh` | `yarn check:cmd-guidance`, `git diff --check`, hook syntax/dry-run | Consider running `scripts/install-project-memory-hooks.sh` when ready to activate post-commit capture. |
 | Pi ↔ Commander task-sync hardening | Shipped 2026-05-19 | `extensions/tasks.ts` (`new-list`/`update-list`/`add`/`toggle`/`update` actions), `extensions/lib/tasks-*.ts` helpers, `CLAUDE.md` validation-card section | 255 vitest tests across 16 task/sync/cmd files; manual smoke per `STATE.md` Next Step | Background reaper for `test-only` cards (deferred). |
+| Toolkit skill consolidation (pi side) | Shipped 2026-06-10 | `~/.pi/agent/settings.json` packages entry for agent-toolkit; `skills/.migrated/`, `skills/.retired/` quarantines | `pi config` shows agent-toolkit (user) > Skills with `[x] diagnose`, `[x] a2a-link` etc. | Delete quarantine dirs once toolkit canon is proven in daily use. |
+| /onboard doc-pack command | Shipped 2026-06-10 | `commands/onboard.md` (delegates to toolkit `onboard.sh`) | Scratch + brownfield runs: 4-doc pack, scan manifest, `--absorb` backups, hook install | Run on real repos as needed. |
+| a2a-link v2 bridge (pi side) | Shipped 2026-06-10 | `extensions/claude-link.ts` (`claude_send` tool, session-start inbox check), `extensions/claudemode-toggle.ts` (honest toggle) | Mailbox round-trip (msg-297) + `pi -p` sync BRIDGE-OK; TS transpile clean | Inbox parsing tracks cmd CLI output format (no `--json` support yet). |
+| Doc-freshness guard (pi layer) | Shipped 2026-06-10 | `extensions/project-docs-guard.ts` | Runs toolkit `doc-sync.sh check` at session boundaries in doc-pack projects | — |
 
 ## Project Memory Pack
 

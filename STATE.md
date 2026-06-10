@@ -4,7 +4,8 @@ Keep this file short and current. It is the fastest human-readable restore point
 
 ## Current Focus
 
-- **Task:** None in-flight. Two coupled slices shipped this session:
+- **Task (2026-06-10):** Toolkit+Pi unification shipped — agent-toolkit is now the canonical home for 21 portable skills (+ cmd-cli, a2a-link); pi loads them via the toolkit package entry in `~/.pi/agent/settings.json`. agent-pi keeps only pi-internal/domain skills (`pi`, `pi-agent-orchestrator`, `agent-plan`, `agent-spec`, `agent-browser`, `cmd`, `qa-automation`, `reco-qa`, `reco-simulators`, `gopher-test-viewer`). 13 off-mission skills (11 Expo + nano-banana + slack-web) in `skills/.retired/`; 22 migrated skills quarantined in `skills/.migrated/` (recoverable; canon lives in toolkit). New: `/onboard` command, `project-docs-guard.ts`, `claude-link.ts` (a2a bridge), honest `/claude-mode` toggle. Verified via `pi config` resource listing. **Restart pi to load new extensions.**
+- **Previous session:** Two coupled slices shipped:
   1. **Parent ↔ children link strengthening** — 6 small slices closing seams identified in a tasks.ts audit (brief quality, brief edits, mid-progress visibility, child-edit drift, parent reopen).
   2. **Validation-card over-creation prevention** — 5 small slices (1 cleanup + 4 code/docs) preventing the failure mode that produced 5 dummy validation cards on the live board on 2026-05-19.
 - **Status:** 11 local commits on `main` (`9f7d0f4` → `bc2430e`). 255 tests green across 16 task/sync/cmd test files. Pre-existing repo-wide failures (send-email, dream-scheduler, learn, interfaze demos, etc.) are unchanged and unrelated.

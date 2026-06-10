@@ -4,6 +4,15 @@ All notable changes to agent-pi will be documented in this file.
 
 ## [Unreleased]
 
+### Toolkit + Pi Unification (2026-06-10)
+
+- agent-toolkit is now the canonical home for portable skills; pi consumes it as a user package (pi manifest in toolkit `package.json`). 22 portable skills migrated out of `skills/` (quarantined in `skills/.migrated/`), 13 off-mission skills retired (`skills/.retired/`): 11 Expo/RN + nano-banana + slack-web.
+- Added `/onboard` — project doc-pack onboarding (AGENTS.md hub, CLAUDE.md pointer, DESIGN.md, STATE.md) with brownfield scan + absorb; single implementation in toolkit `onboard.sh`.
+- Added `extensions/claude-link.ts` — a2a-link v2 pi side: `claude_send` tool (cmd-mailbox async + `claude -p` sync with nesting guard) and session-start inbox surfacing.
+- Added `extensions/project-docs-guard.ts` — session-boundary doc-freshness check for doc-pack projects.
+- `/claude-mode` is now an honest toggle (`direct-api` | `code-cli`); it no longer force-overwrites the persisted choice on session start.
+- Retired `commands/handoff-memory-cycle.md` (compat alias) and removed broken `commands/commander`/`commands/toolkit` symlinks.
+
 ### Slash Commands — Cleanup and Consolidation
 
 - Removed stale markdown commands `/claude` and `/claudemode`; `/claude` is now owned only by the mode-cycler extension, and `/claude-mode` remains the canonical Direct API command.
