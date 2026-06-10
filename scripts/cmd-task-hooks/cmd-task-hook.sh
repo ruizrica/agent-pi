@@ -82,6 +82,27 @@ resolve_runtime() {
   esac
 }
 
+# Export a stable CMD_SESSION_ID so every cmd call below lands in cmd's session
+# ledger (`cmd session tasks/reconcile`). For claude the RAW session id is used
+# — it must match CLAUDE_CODE_SESSION_ID, which the agent's own shell commands
+# already carry, so hook-minted tasks and agent-made tasks share one ledger.
+# Cursor spawns shells with no session env, so its hook tasks get cursor-<id>.
+export_cmd_session_id() {
+  local raw safe
+  raw="$(resolve_session_id)"
+  [[ -z "$raw" || "$raw" == "unknown" ]] && return 0
+  safe="$(printf '%s' "$raw" | sed -E 's/[^A-Za-z0-9._-]+//g')"
+  [[ -z "$safe" ]] && return 0
+  if [[ "$PLATFORM" == "claude" ]]; then
+    CMD_SESSION_ID="${safe:0:128}"
+  else
+    safe="${PLATFORM}-${safe}"
+    CMD_SESSION_ID="${safe:0:128}"
+  fi
+  export CMD_SESSION_ID
+}
+export_cmd_session_id
+
 truncate() {
   local text="$1"
   local max="$2"
@@ -96,14 +117,37 @@ one_line() {
   printf '%s' "$1" | tr '\r\n\t' '   ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
 }
 
+# True when the prompt contains something that looks like a credential/secret.
+# Pasted API keys must never be turned into a (persisted, plaintext) cmd task.
+looks_like_secret() {
+  local prompt="$1" tok
+  if printf '%s' "$prompt" | grep -Eqi \
+    'mcp_live_[a-z0-9_-]{8,}|sk-(ant-)?[a-z0-9_-]{16,}|gh[psoru]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|AKIA[0-9A-Z]{12,}|xox[baprs]-[a-z0-9-]{10,}|AIza[0-9a-z_-]{30,}|eyJ[a-z0-9_-]{18,}\.[a-z0-9_-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'; then
+    return 0
+  fi
+  # Any single very long unbroken token mixing letters+digits (opaque keys, hashes);
+  # skip paths/urls/dotted identifiers which are legitimately long.
+  for tok in $prompt; do
+    if ((${#tok} >= 40)); then
+      case "$tok" in
+        */*|http*|*.*) : ;;
+        *) [[ "$tok" == *[A-Za-z]* && "$tok" == *[0-9]* ]] && return 0 ;;
+      esac
+    fi
+  done
+  return 1
+}
+
 should_skip_prompt() {
   local prompt="$1"
+  looks_like_secret "$prompt" && return 0
   local normalized
   normalized="$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g')"
   [[ -z "$normalized" ]] && return 0
   ((${#normalized} < 4)) && return 0
   case "$normalized" in
-    yes|yep|ok|okay|continue|go|thanks|thankyou|stop|done|next) return 0 ;;
+    yes|yep|yeah|ok|okay|kk|continue|go|goon|proceed|thanks|thankyou|ty|thx|stop|done|next|nvm) return 0 ;;
+    test|testing|tst|hi|hey|hello|sup|yo|lgtm|shipit|nice|cool|great|perfect) return 0 ;;
   esac
   return 1
 }
@@ -318,16 +362,18 @@ handle_stop() {
   status="$(printf '%s' "$status_json" | jq -r '.status // empty' | tr '[:upper:]' '[:lower:]')"
   case "$status" in
     working|in-progress|in_progress|pending|open)
-      context=$'Before stopping, finish cmd task discipline for this prompt:\n'
-      context+="- Open task: #${task_id}"
-      [[ -n "$ref" ]] && context+=" (${ref})"
-      context+=$'\n- Current status: '"${status:-unknown}"
-      context+=$'\n\nRun the appropriate cmd update now, then stop:\n'
-      context+="- Completed: \`cmd task update ${task_id} --status completed --runtime ${runtime} --model ${model}\`"$'\n'
-      context+="- Still in progress: \`cmd task comment ${task_id} \"<where you left off>\" --type handoff --runtime ${runtime} --model ${model}\`"$'\n'
-      context+="- Failed/cancelled: update status and leave an \`--type error\` comment explaining why."$'\n'
-      context+=$'\nAfter updating the cmd task, you may stop.'
-      emit_stop_nudge "$context"
+      # Auto-complete the hook-created task so it can never be left orphaned.
+      # The agent may forget to close it; the lifecycle of a per-prompt tracking
+      # task ends with the prompt, so closing it on stop is the safe default.
+      cmd task comment "$task_id" "Auto-completed by cmd task hook on stop (per-prompt tracking task)." \
+        --type progress --runtime "$runtime" --model "$model" >/dev/null 2>&1 || true
+      if cmd task update "$task_id" --status completed --runtime "$runtime" --model "$model" >/dev/null 2>&1; then
+        log "auto-completed task #${task_id} on stop"
+        rm -f "$(session_file "$session_id")" 2>/dev/null || true
+      else
+        log "auto-complete failed for #${task_id} on stop — left for housekeep"
+      fi
+      emit_stop_ok
       return
       ;;
   esac
