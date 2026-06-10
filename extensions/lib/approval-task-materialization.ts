@@ -1,7 +1,8 @@
 // ABOUTME: Converts approved plan/spec/investigation/debug markdown tasks into Commander task groups.
 // ABOUTME: Keeps Commander board tasks as the source of truth before IMPLEMENT mode starts.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { getCommanderCliClient, isCommanderAvailable } from "./commander/commander-cli-client.ts";
 
@@ -33,6 +34,8 @@ export interface CommanderTaskMaterializationResult {
 	groupId?: number;
 	taskIds?: number[];
 	warning?: string;
+	/** True when an identical approval was already materialized and group:create was skipped. */
+	deduped?: boolean;
 }
 
 export interface CommanderTaskClient {
@@ -129,6 +132,50 @@ export function buildCommanderTaskGroupPayload(input: CommanderTaskMaterializati
 	};
 }
 
+interface ApprovalLedgerEntry {
+	groupId?: number;
+	taskCount: number;
+	at: string;
+}
+
+function approvalLedgerPath(cwd: string): string {
+	return join(cwd, ".commander", "pi-materialized-approvals.json");
+}
+
+/**
+ * Fingerprint of one approval: source kind + path + the exact unchecked task
+ * set. A changed task list (plan grew, items checked off) changes the
+ * fingerprint, so genuine revisions still materialize.
+ */
+function approvalFingerprint(input: CommanderTaskMaterializationInput, taskDescriptions: string[]): string {
+	const hash = createHash("sha1");
+	hash.update(`${input.sourceKind}\n${input.sourcePath}\n${taskDescriptions.join("\n")}`);
+	return hash.digest("hex");
+}
+
+function loadApprovalLedger(cwd: string): Record<string, ApprovalLedgerEntry> {
+	try {
+		const raw = readFileSync(approvalLedgerPath(cwd), "utf-8");
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch {
+		return {};
+	}
+}
+
+function recordApprovalLedger(cwd: string, fingerprint: string, entry: ApprovalLedgerEntry): void {
+	try {
+		const ledger = loadApprovalLedger(cwd);
+		ledger[fingerprint] = entry;
+		const path = approvalLedgerPath(cwd);
+		mkdirSync(join(cwd, ".commander"), { recursive: true });
+		writeFileSync(path, JSON.stringify(ledger, null, 2) + "\n", "utf-8");
+	} catch {
+		// Ledger write failure must never fail the materialization itself —
+		// the worst case is one duplicate group on a future re-trigger.
+	}
+}
+
 export async function materializeApprovedTasksToCommander(
 	input: CommanderTaskMaterializationInput,
 	client: CommanderTaskClient = getCommanderCliClient(),
@@ -141,6 +188,21 @@ export async function materializeApprovedTasksToCommander(
 			taskCount: 0,
 			source: input.sourcePath,
 			warning: "No unchecked implementation tasks were found to record in Commander.",
+		};
+	}
+
+	// Dedupe: the same approval (same source + identical unchecked task set)
+	// must not create a second Commander group when the viewer or a retry path
+	// fires materialization twice.
+	const fingerprint = approvalFingerprint(input, tasks.map((task: any) => String(task.description ?? "")));
+	const prior = loadApprovalLedger(input.cwd)[fingerprint];
+	if (prior) {
+		return {
+			ok: true,
+			deduped: true,
+			taskCount: tasks.length,
+			source: input.sourcePath,
+			...(Number.isFinite(prior.groupId) ? { groupId: prior.groupId } : {}),
 		};
 	}
 
@@ -159,6 +221,11 @@ export async function materializeApprovedTasksToCommander(
 		const parsed = typeof text === "string" ? JSON.parse(text) : result;
 		const groupId = Number(parsed?.group_id ?? parsed?.id);
 		const taskIds = Array.isArray(parsed?.task_ids) ? parsed.task_ids.map((id: unknown) => Number(id)).filter(Number.isFinite) : [];
+		recordApprovalLedger(input.cwd, fingerprint, {
+			...(Number.isFinite(groupId) ? { groupId } : {}),
+			taskCount: tasks.length,
+			at: new Date().toISOString(),
+		});
 		return {
 			ok: true,
 			taskCount: tasks.length,
@@ -177,6 +244,10 @@ export async function materializeApprovedTasksToCommander(
 }
 
 export function summarizeMaterialization(result: CommanderTaskMaterializationResult): string {
+	if (result.ok && result.deduped) {
+		const group = result.groupId ? ` (Commander group #${result.groupId})` : "";
+		return ` Commander tasks were already recorded for this approval${group} — skipped duplicate creation.`;
+	}
 	if (result.ok) {
 		const group = result.groupId ? ` in Commander group #${result.groupId}` : "";
 		return ` Commander tasks are now the source of truth: ${result.taskCount} task(s) recorded${group}.`;

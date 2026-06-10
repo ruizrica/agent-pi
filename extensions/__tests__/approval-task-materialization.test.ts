@@ -1,9 +1,18 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildCommanderTaskGroupPayload,
 	extractMarkdownCheckboxTasks,
 	materializeApprovedTasksToCommander,
+	summarizeMaterialization,
 } from "../lib/approval-task-materialization.ts";
+
+vi.mock("../lib/commander/commander-cli-client.ts", () => ({
+	getCommanderCliClient: () => ({ callTool: vi.fn() }),
+	isCommanderAvailable: () => true,
+}));
 
 describe("approval task materialization", () => {
 	it("extracts unchecked markdown checkbox tasks", () => {
@@ -170,5 +179,76 @@ Narrative only.
 		}, { callTool: vi.fn() });
 		expect(result.ok).toBe(false);
 		expect(result.warning).toContain("No unchecked implementation tasks");
+	});
+
+	describe("dedupe across repeated materialization", () => {
+		const groupCreateResponse = {
+			content: [{ text: JSON.stringify({ group_id: 77, task_ids: [101, 102] }) }],
+		};
+
+		function input(cwd: string, markdown = "- [ ] Build it\n- [ ] Test it") {
+			return {
+				title: "Dedup Plan",
+				sourceKind: "plan" as const,
+				sourcePath: ".context/todo.md",
+				cwd,
+				markdown,
+			};
+		}
+
+		it("skips group:create when the same approval was already materialized", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "approval-dedupe-"));
+			try {
+				const first = vi.fn().mockResolvedValue(groupCreateResponse);
+				const r1 = await materializeApprovedTasksToCommander(input(cwd), { callTool: first });
+				expect(r1.ok).toBe(true);
+				expect(r1.groupId).toBe(77);
+				expect(first).toHaveBeenCalledTimes(1);
+
+				const second = vi.fn().mockResolvedValue(groupCreateResponse);
+				const r2 = await materializeApprovedTasksToCommander(input(cwd), { callTool: second });
+				expect(second).not.toHaveBeenCalled();
+				expect(r2.ok).toBe(true);
+				expect(r2.deduped).toBe(true);
+				expect(r2.groupId).toBe(77);
+				expect(summarizeMaterialization(r2)).toContain("already");
+			} finally {
+				rmSync(cwd, { recursive: true, force: true });
+			}
+		});
+
+		it("re-materializes when the task set changed", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "approval-dedupe-"));
+			try {
+				const first = vi.fn().mockResolvedValue(groupCreateResponse);
+				await materializeApprovedTasksToCommander(input(cwd), { callTool: first });
+
+				const second = vi.fn().mockResolvedValue(groupCreateResponse);
+				const r2 = await materializeApprovedTasksToCommander(
+					input(cwd, "- [ ] Build it\n- [ ] Test it\n- [ ] Ship it"),
+					{ callTool: second },
+				);
+				expect(second).toHaveBeenCalledTimes(1);
+				expect(r2.deduped).toBeUndefined();
+			} finally {
+				rmSync(cwd, { recursive: true, force: true });
+			}
+		});
+
+		it("does not record a failed materialization (retry still creates)", async () => {
+			const cwd = mkdtempSync(join(tmpdir(), "approval-dedupe-"));
+			try {
+				const failing = vi.fn().mockRejectedValue(new Error("cmd exploded"));
+				const r1 = await materializeApprovedTasksToCommander(input(cwd), { callTool: failing });
+				expect(r1.ok).toBe(false);
+
+				const retry = vi.fn().mockResolvedValue(groupCreateResponse);
+				const r2 = await materializeApprovedTasksToCommander(input(cwd), { callTool: retry });
+				expect(retry).toHaveBeenCalledTimes(1);
+				expect(r2.ok).toBe(true);
+			} finally {
+				rmSync(cwd, { recursive: true, force: true });
+			}
+		});
 	});
 });
