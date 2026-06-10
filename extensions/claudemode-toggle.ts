@@ -1,5 +1,5 @@
-// ABOUTME: Ensures Claude uses direct API mode instead of Claude Code CLI mode
-// ABOUTME: Provides a /claude-mode command that persists direct API routing
+// ABOUTME: Honest Claude routing toggle: direct-api (default) or code-cli.
+// ABOUTME: /claude-mode [direct-api|code-cli] persists the choice; bridge tools read it to declare their path.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,25 +11,32 @@ const MODE_FILE = join(homedir(), ".pi", "claudemode");
 export default function (pi: ExtensionAPI) {
 	let currentMode: "code-cli" | "direct-api" = "direct-api"; // default to direct provider/API routing
 	
-	pi.on("session_start", async (_event, ctx) => {
-		// Keep direct API mode even if an older install persisted code-cli.
+	pi.on("session_start", async (_event, _ctx) => {
+		// Respect the persisted choice (no forced overwrite — the old behavior
+		// silently disabled CLI routing even when the user opted into it).
 		try {
 			if (existsSync(MODE_FILE)) {
 				const savedMode = readFileSync(MODE_FILE, "utf-8").trim();
-				if (savedMode !== "direct-api") {
-					writeFileSync(MODE_FILE, "direct-api\n", "utf-8");
-				}
+				currentMode = savedMode === "code-cli" ? "code-cli" : "direct-api";
 			}
-			currentMode = "direct-api";
 		} catch {
 			// If there's an error reading the file, keep direct API default mode
 		}
 	});
 	
 	pi.registerCommand("claude-mode", {
-		description: "Ensure Claude uses Direct API mode",
+		description: "Toggle Claude routing: /claude-mode [direct-api|code-cli] (no arg shows current)",
 		handler: async (_args, ctx) => {
-			currentMode = "direct-api";
+			const requested = String(_args ?? "").trim();
+			if (!requested) {
+				ctx.ui.notify(`Claude mode: ${currentMode}`, "info");
+				return;
+			}
+			if (requested !== "direct-api" && requested !== "code-cli") {
+				ctx.ui.notify(`Unknown mode '${requested}' — use direct-api or code-cli`, "error");
+				return;
+			}
+			currentMode = requested;
 			
 			// Save the direct-API preference to persistent storage
 			try {
@@ -45,7 +52,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 			
-			ctx.ui.notify("Claude mode set to: Direct API (Claude CLI disabled)", "success");
+			ctx.ui.notify(`Claude mode set to: ${currentMode === "direct-api" ? "Direct API" : "Claude Code CLI"}`, "success");
 		},
 	});
 }
