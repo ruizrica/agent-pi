@@ -75,3 +75,7 @@ tests/*.spec.ts
 .beads/cmd-writer.log
 .beads/metadata.json
 
+# Node Modules
+node_modules/
+
+extensions/private/.tmp/
