@@ -87,6 +87,13 @@ import {
 import { storeDrafts } from "./lib/gopher-draft-storage.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
+import {
+  appendLmStudioExtensionArgs,
+  applyLmStudioSpawnEnv,
+  getLmStudioGemmaModelId,
+  getLmStudioQwenModelId,
+  toLmStudioCliModel,
+} from "./lib/lmstudio-spawn.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -394,14 +401,14 @@ export default function (pi: ExtensionAPI) {
       (globalThis as any).__piGemmaOverlay &&
       agentDef.name.toLowerCase().startsWith("builder")
     ) {
-      model = "lmstudio/google/gemma-4-26b-a4b";
+      model = toLmStudioCliModel(getLmStudioGemmaModelId());
       modelCliArgs = buildModelCliArgs(undefined, model);
     }
     if (
       (globalThis as any).__piQwenOverlay &&
       agentDef.name.toLowerCase().startsWith("builder")
     ) {
-      model = "lmstudio/qwen/qwen3.6-27b";
+      model = toLmStudioCliModel(getLmStudioQwenModelId());
       modelCliArgs = buildModelCliArgs(undefined, model);
     }
 
@@ -413,7 +420,7 @@ export default function (pi: ExtensionAPI) {
     const tasksExtPath = join(extDir, "tasks.ts");
     const footerExtPath = join(extDir, "footer.ts");
     const memoryCycleExtPath = join(extDir, "memory-cycle.ts");
-    const args = [
+    const args = appendLmStudioExtensionArgs([
       "--mode",
       "json",
       "-p",
@@ -433,7 +440,7 @@ export default function (pi: ExtensionAPI) {
       agentDef.systemPrompt,
       "--session",
       agentSessionFile,
-    ];
+    ], extDir, model);
 
     if (hasSession) {
       args.push("-c");
@@ -447,7 +454,7 @@ export default function (pi: ExtensionAPI) {
 
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setInterval> | null = null;
-      const spawnEnv = {
+      const spawnEnv: Record<string, string | undefined> = {
         ...process.env,
         PI_SUBAGENT: "1",
         ...((globalThis as any).__piClaudeOverlay
@@ -460,6 +467,7 @@ export default function (pi: ExtensionAPI) {
           ? { PI_QWEN_OVERLAY_ACTIVE: "1" }
           : {}),
       };
+      applyLmStudioSpawnEnv(spawnEnv, model);
       if (
         shouldUseClaudeCliForAgent(
           agentDef.name,

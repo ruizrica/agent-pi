@@ -48,6 +48,7 @@ import { renderTaskList, navDown, navUp, navExit, navEnter, type TaskListInfo, t
 import { renderSubagentWidget } from "./lib/subagent-render.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
+import { appendLmStudioExtensionArgs, applyLmStudioSpawnEnv, getLmStudioGemmaModelId, getLmStudioQwenModelId, toLmStudioCliModel } from "./lib/lmstudio-spawn.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -504,13 +505,13 @@ export default function (pi: ExtensionAPI) {
 			? modelResolution.cliArgs
 			: buildModelCliArgs(undefined, model);
 
-		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		// Local overlays: reroute builder/worker agents to LM Studio models.
 		if ((globalThis as any).__piGemmaOverlay && state.def.name.toLowerCase().startsWith("builder")) {
-			model = "lmstudio/google/gemma-4-26b-a4b";
+			model = toLmStudioCliModel(getLmStudioGemmaModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && state.def.name.toLowerCase().startsWith("builder")) {
-			model = "lmstudio/qwen/qwen3.6-27b";
+			model = toLmStudioCliModel(getLmStudioQwenModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		state.resolvedModel = model;
@@ -562,7 +563,7 @@ export default function (pi: ExtensionAPI) {
 			});
 		}
 
-		const args = [
+		const args = appendLmStudioExtensionArgs([
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
@@ -574,7 +575,7 @@ export default function (pi: ExtensionAPI) {
 			"--thinking", "off",
 			"--append-system-prompt", systemPrompt,
 			"--session", agentSessionFile,
-		];
+		], extDir, model);
 
 		// Continue existing session if we have one
 		if (state.sessionFile) {
@@ -602,6 +603,7 @@ export default function (pi: ExtensionAPI) {
 			if ((globalThis as any).__piQwenOverlay) {
 				spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
 			}
+			applyLmStudioSpawnEnv(spawnEnv, model);
 			if (commanderAvailableAtSpawn) {
 				const currentTask = g.__piCurrentTask as { commanderTaskId?: number } | null;
 				if (currentTask?.commanderTaskId !== undefined) {

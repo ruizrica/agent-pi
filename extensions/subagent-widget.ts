@@ -37,6 +37,7 @@ import { isClaudeCliAgent } from "./lib/claude/claude-config.ts";
 import { isClaudeDisplayNoise } from "./lib/claude/claude-cli.ts";
 import { normalizeAgentFinalOutput } from "./lib/agent-output.ts";
 import { resolveToolkitWorkerModel, isToolkitCliAgent, spawnToolkitWorker, shouldUseClaudeCliForAgent } from "./lib/toolkit-cli.ts";
+import { appendLmStudioExtensionArgs, applyLmStudioSpawnEnv, getLmStudioGemmaModelId, getLmStudioQwenModelId, toLmStudioCliModel } from "./lib/lmstudio-spawn.ts";
 
 // ── Commander client accessor ────────────────────────────────────────────────
 // Commander is now backed by the local `cmd` CLI via CommanderCliClient.
@@ -510,14 +511,14 @@ export default function (pi: ExtensionAPI) {
 			? modelResolution.cliArgs
 			: buildModelCliArgs(undefined, model);
 
-		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4.
+		// Gemma overlay: reroute builder/worker agents to local LM Studio Gemma.
 		// Only builders are rerouted — scouts, reviewers, planners keep their models.
 		if ((globalThis as any).__piGemmaOverlay && isGemmaEligibleRole(state.name)) {
-			model = "lmstudio/google/gemma-4-26b-a4b";
+			model = toLmStudioCliModel(getLmStudioGemmaModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && isGemmaEligibleRole(state.name)) {
-			model = "lmstudio/qwen/qwen3.6-27b";
+			model = toLmStudioCliModel(getLmStudioQwenModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		state.model = model;
@@ -549,11 +550,11 @@ export default function (pi: ExtensionAPI) {
 			model,
 			tools,
 		});
-		const extensions = [
+		const extensions = appendLmStudioExtensionArgs([
 			"-e", tasksExtPath,
 			"-e", footerExtPath,
 			"-e", memoryCycleExtPath,
-		];
+		], extDir, model);
 		const claudeAdvisorDeps = [path.join(extDir, "lib", "claude-cli.ts")];
 		const missingClaudeAdvisorDep = claudeAdvisorDeps.find(dep => !fs.existsSync(dep));
 		if (fs.existsSync(claudeAdvisorExtPath) && !missingClaudeAdvisorDep) {
@@ -605,6 +606,7 @@ export default function (pi: ExtensionAPI) {
 		if ((globalThis as any).__piQwenOverlay) {
 			spawnEnv.PI_QWEN_OVERLAY_ACTIVE = "1";
 		}
+		applyLmStudioSpawnEnv(spawnEnv, model);
 		if (commanderAvailAtSpawn && cmdTaskId !== undefined) {
 			spawnEnv.PI_COMMANDER_TASK_ID = String(cmdTaskId);
 		}

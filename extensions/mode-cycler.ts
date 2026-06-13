@@ -311,7 +311,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("gemma", {
-		description: "Toggle Gemma overlay — route builders to local LM Studio Gemma 4",
+		description: "Toggle Gemma overlay — route builders to the configured local LM Studio Gemma model",
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 			if (["on", "enable", "enabled"].includes(arg)) {
@@ -341,7 +341,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("qwen", {
-		description: "Toggle Qwen overlay — route builders to local LM Studio Qwen 3.6",
+		description: "Toggle Qwen overlay — route builders to the configured local LM Studio Qwen model",
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 			if (["on", "enable", "enabled"].includes(arg)) {

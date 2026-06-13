@@ -163,7 +163,7 @@ describe("subagent model resolution (end-to-end)", () => {
 	): string {
 		const normalized = agentName.toLowerCase();
 		const localEligible = normalized === "builder" || normalized === "worker" || normalized === "claude-worker" || normalized.startsWith("builder");
-		if (overlay === "gemma" && localEligible) return "lmstudio/google/gemma-4-26b-a4b";
+		if (overlay === "gemma" && localEligible) return "lmstudio/google/gemma-4-12b-qat";
 		if (overlay === "qwen" && localEligible) return "lmstudio/qwen/qwen3.6-27b";
 		const agentDef = resolveAgentByName(agentName, knownAgents);
 		const configModel = resolveAgentModelString(agentName, config);
@@ -190,7 +190,7 @@ describe("subagent model resolution (end-to-end)", () => {
 		});
 
 		it("reroutes to local Gemma when Gemma overlay is active", () => {
-			expect(resolveModel(undefined, "BUILDER", "gemma")).toBe("lmstudio/google/gemma-4-26b-a4b");
+			expect(resolveModel(undefined, "BUILDER", "gemma")).toBe("lmstudio/google/gemma-4-12b-qat");
 		});
 
 		it("reroutes to local Qwen when Qwen overlay is active", () => {
@@ -226,7 +226,7 @@ describe("subagent model resolution (end-to-end)", () => {
 
 	describe("worker eligibility", () => {
 		it("reroutes dynamic builder variants under local overlays", () => {
-			expect(resolveModel(undefined, "builder-kimi-k2-5", "gemma")).toBe("lmstudio/google/gemma-4-26b-a4b");
+			expect(resolveModel(undefined, "builder-kimi-k2-5", "gemma")).toBe("lmstudio/google/gemma-4-12b-qat");
 			expect(resolveModel(undefined, "builder-kimi-k2-5", "qwen")).toBe("lmstudio/qwen/qwen3.6-27b");
 		});
 

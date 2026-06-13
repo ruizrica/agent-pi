@@ -41,6 +41,7 @@ import { parsePipelineYaml, type PhaseAgentDef, type PhaseDef, type PipelineConf
 import { assignWorktrees, buildMergeOrder, type PipelineMicroTask, type WorktreeAssignment } from "./lib/pipeline-worktrees.ts";
 import { buildWardenTaskConfirmationSection } from "./lib/warden-prompt-section.ts";
 import { buildDelegateEverythingSection } from "./lib/mode-prompts.ts";
+import { appendLmStudioExtensionArgs, applyLmStudioSpawnEnv, getLmStudioGemmaModelId, getLmStudioQwenModelId, toLmStudioCliModel } from "./lib/lmstudio-spawn.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -381,13 +382,13 @@ export default function (pi: ExtensionAPI) {
 			? modelResolution.cliArgs
 			: buildModelCliArgs(undefined, model);
 
-		// Gemma overlay: reroute builder/worker agents to local Ollama Gemma 4
+		// Local overlays: reroute builder/worker agents to LM Studio models.
 		if ((globalThis as any).__piGemmaOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
-			model = "lmstudio/google/gemma-4-26b-a4b";
+			model = toLmStudioCliModel(getLmStudioGemmaModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 		if ((globalThis as any).__piQwenOverlay && agentDef.name.toLowerCase().startsWith("builder")) {
-			model = "lmstudio/qwen/qwen3.6-27b";
+			model = toLmStudioCliModel(getLmStudioQwenModelId());
 			modelCliArgs = buildModelCliArgs(undefined, model);
 		}
 
@@ -398,7 +399,7 @@ export default function (pi: ExtensionAPI) {
 		const tasksExtPath = join(extDir, "tasks.ts");
 		const footerExtPath = join(extDir, "footer.ts");
 		const memoryCycleExtPath = join(extDir, "memory-cycle.ts");
-		const args = [
+		const args = appendLmStudioExtensionArgs([
 			"--mode", "json",
 			"-p",
 			"--no-extensions",
@@ -410,13 +411,14 @@ export default function (pi: ExtensionAPI) {
 			"--thinking", "off",
 			"--append-system-prompt", agentDef.systemPrompt,
 			"--session", agentSessionFile,
-			task,
-		];
+		], extDir, model);
+		args.push(task);
 
 		const textChunks: string[] = [];
 
 		return new Promise((resolvePromise) => {
-			const spawnEnv = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piGemmaOverlay ? { PI_GEMMA_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piQwenOverlay ? { PI_QWEN_OVERLAY_ACTIVE: "1" } : {}) };
+			const spawnEnv: Record<string, string | undefined> = { ...process.env, PI_SUBAGENT: "1", ...((globalThis as any).__piClaudeOverlay ? { PI_CLAUDE_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piGemmaOverlay ? { PI_GEMMA_OVERLAY_ACTIVE: "1" } : {}), ...((globalThis as any).__piQwenOverlay ? { PI_QWEN_OVERLAY_ACTIVE: "1" } : {}) };
+			applyLmStudioSpawnEnv(spawnEnv, model);
 			if (shouldUseClaudeCliForAgent(agentDef.name, model, !!(globalThis as any).__piClaudeOverlay)) {
 				let toolkitFinalOutput = "";
 				spawnToolkitWorker(agentDef, {
