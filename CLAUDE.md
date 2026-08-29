@@ -74,3 +74,11 @@ The following actions always require explicit user confirmation:
 
 ## When In Doubt
 If a user instruction is ambiguous, **ask for clarification**. Do not assume the most aggressive interpretation. "Do it" means "do the local work" — not "deploy to the world."
+
+## Workspace rule: worktrees and large files
+
+This repo is under `/Users/ricardo/Workshop/GitHub`. The workspace rule in `/Users/ricardo/Workshop/GitHub/AGENTS.md` applies here and wins over any worktree path in this file.
+
+- New worktree: `/Volumes/StorageSSD/Github/worktrees/<repo>/<branch-slug>`. Never on the main drive.
+- Heavy dirs (`node_modules`, build output, binaries): on the SSD. A main-drive checkout links to `/Volumes/StorageSSD/Github/mirror/<repo>/<path>` when it needs one.
+- SSD not mounted (`mount | grep ' /Volumes/StorageSSD '` finds nothing): no installs, no builds, tell Ricardo. Do not prune SSD worktrees.
