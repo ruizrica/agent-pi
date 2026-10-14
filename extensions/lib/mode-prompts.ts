@@ -14,12 +14,22 @@ Commander is connected. ALWAYS use these tools for dashboard visibility:
 - Warm, professional, collaborative tone — no emojis anywhere`;
 }
 
+/** Parent workflow instructions must not override a restricted child's assignment. */
+export function shouldInjectParentMode(
+	env: { PI_SUBAGENT?: string; PI_SUBAGENT_CHILD?: string },
+	activeTools: readonly string[],
+): boolean {
+	return env.PI_SUBAGENT !== "1" && env.PI_SUBAGENT_CHILD !== "1"
+		&& activeTools.includes("set_mode");
+}
+
 /** Options for building the NORMAL mode prompt. */
 export interface NormalPromptOpts {
 	commanderAvailable: boolean;
 	activeChain: string | null;
 	activePipeline: string | null;
 	scoutId?: number | null;
+	canContinueScout?: boolean;
 }
 
 /** NORMAL mode prompt — teaches the agent to classify tasks and call set_mode. */
@@ -37,7 +47,8 @@ export function buildNormalPrompt(opts: NormalPromptOpts): string {
 Commander is offline. Tasks are tracked locally only. Commander tools will soft-fail silently.`;
 
 	// Scout delegation section — when a scout is pre-spawned and ready
-	const scoutSection = opts.scoutId != null ? `
+	const canDelegateScout = opts.scoutId != null && opts.canContinueScout === true;
+	const scoutSection = canDelegateScout ? `
 
 ## Scout Agent (ALWAYS use for context gathering)
 A scout subagent (SA${opts.scoutId}) is pre-spawned and ready. **ALWAYS delegate context-gathering work to the scout** instead of doing it yourself.
@@ -83,7 +94,7 @@ ${scoutSection}
 ## How to Decide
 
 1. Read the user's request.
-2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.${opts.scoutId != null ? "\n   - For simple reads/lookups, delegate to the scout and relay the answer." : ""}
+2. If SIMPLE (read, answer, single edit) — work directly, do NOT call set_mode.${canDelegateScout ? "\n   - For simple reads/lookups, delegate to the scout and relay the answer." : ""}
 3. Otherwise, call \`set_mode\` immediately with the best mode and include a \`reason\`.
    Explain your choice in your response — no need to ask for permission first.
 4. After calling set_mode, define your tasks with \`tasks new-list\` + \`tasks add\`.
