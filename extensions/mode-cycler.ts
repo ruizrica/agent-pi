@@ -7,7 +7,7 @@ import { Text } from "@mariozechner/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, type Mode } from "./lib/mode-cycler-logic.ts";
-import { PLAN_PROMPT, SPEC_PROMPT, buildNormalPrompt } from "./lib/mode-prompts.ts";
+import { PLAN_PROMPT, SPEC_PROMPT, buildNormalPrompt, shouldInjectParentMode } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { showBanner, isBannerVisible } from "./agent-banner.ts";
 
@@ -15,6 +15,11 @@ const MODE_FILE = "/tmp/pi-current-mode.txt";
 
 
 export default function (pi: ExtensionAPI) {
+	// Capture process identity at registration; SDK children may share a process.
+	const childIdentity = {
+		PI_SUBAGENT: process.env.PI_SUBAGENT,
+		PI_SUBAGENT_CHILD: process.env.PI_SUBAGENT_CHILD,
+	};
 	let currentMode: Mode = "NORMAL";
 
 	function updateWidgets(mode: Mode, ctx: ExtensionContext) {
@@ -212,6 +217,8 @@ export default function (pi: ExtensionAPI) {
 	// ── System prompt injection per mode ─────────
 
 	pi.on("before_agent_start", async (_event, _ctx) => {
+		const activeTools = pi.getActiveTools();
+		if (!shouldInjectParentMode(childIdentity, activeTools)) return {};
 		if (currentMode === "NORMAL") {
 			const g = globalThis as any;
 			const scoutId = typeof g.__piScoutId === "number" ? g.__piScoutId : null;
@@ -220,6 +227,7 @@ export default function (pi: ExtensionAPI) {
 				activeChain: g.__piActiveChain || null,
 				activePipeline: g.__piActivePipeline || null,
 				scoutId,
+				canContinueScout: activeTools.includes("subagent_continue"),
 			})};
 		}
 		if (currentMode === "PLAN") return { systemPrompt: PLAN_PROMPT };

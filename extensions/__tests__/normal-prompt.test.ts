@@ -111,32 +111,32 @@ describe("buildNormalPrompt — Scout delegation", () => {
 		expect(result).not.toContain("subagent_continue");
 	});
 
-	it("with scoutId set, contains scout delegation section", () => {
-		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
+	it("with scoutId and continuation tool, contains scout delegation section", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1, canContinueScout: true });
 		expect(result).toContain("Scout Agent");
 		expect(result).toContain("subagent_continue");
 	});
 
-	it("with scoutId set, references the correct SA ID", () => {
-		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 42 });
+	it("with scoutId and continuation tool, references the correct SA ID", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 42, canContinueScout: true });
 		expect(result).toContain("SA42");
 		expect(result).toContain("id: 42");
 	});
 
-	it("with scoutId set, instructs agent to delegate reads to scout", () => {
-		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
+	it("with scoutId and continuation tool, instructs agent to delegate reads to scout", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1, canContinueScout: true });
 		expect(result).toContain("delegate");
 		expect(result.toLowerCase()).toContain("read");
 	});
 
-	it("with scoutId set, instructs agent to still handle edits directly", () => {
-		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
+	it("with scoutId and continuation tool, instructs agent to still handle edits directly", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1, canContinueScout: true });
 		expect(result.toLowerCase()).toContain("edit");
 		expect(result).toContain("YOU still do directly");
 	});
 
-	it("with scoutId set, mentions fallback if scout errors", () => {
-		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1 });
+	it("with scoutId and continuation tool, mentions fallback if scout errors", () => {
+		const result = buildNormalPrompt({ commanderAvailable: false, activeChain: null, activePipeline: null, scoutId: 1, canContinueScout: true });
 		expect(result.toLowerCase()).toContain("fall back");
 	});
 });
