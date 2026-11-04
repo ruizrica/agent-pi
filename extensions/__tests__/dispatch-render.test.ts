@@ -183,11 +183,26 @@ describe("dispatch renderResult — rendered output via renderSubagentWidget", (
 			task: longTask,
 			status: "dispatching",
 		});
-		const result = renderSubagentWidget(state, 100, theme);
+		// Narrow width forces truncation now that the preview is width-aware.
+		const result = renderSubagentWidget(state, 40, theme);
 
-		// Line 2 should be truncated (40 char limit from renderSubagentWidget)
+		// Line 2 should be truncated to fit the available widget width.
 		expect(result.lines[1]).toContain("...");
 		expect(result.lines[1].length).toBeLessThan(longTask.length);
+	});
+
+	it("uses available width and does not truncate when the summary fits", () => {
+		const task = "Trace mount/view + project + tombstone reconciliation";
+		const state = buildDispatchRenderState({
+			agent: "scout",
+			task,
+			status: "dispatching",
+		});
+		// Wide width leaves ample room, so the full summary should render.
+		const result = renderSubagentWidget(state, 120, theme);
+
+		expect(result.lines[1]).toContain(task);
+		expect(result.lines[1]).not.toContain("...");
 	});
 
 	it("does not show turn label (turnCount is always 1 for dispatch)", () => {

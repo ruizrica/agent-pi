@@ -185,7 +185,8 @@ describe("renderSubagentWidget", () => {
 				toolCount: 4,
 				model: "anthropic/claude-haiku-4-5-20251001",
 			});
-			const result = renderSubagentWidget(state, 80, theme);
+			// Narrow width forces truncation now that the preview is width-aware.
+			const result = renderSubagentWidget(state, 40, theme);
 
 			expect(result.lines[0]).toContain(name.toUpperCase());
 			expect(result.lines).toHaveLength(2);

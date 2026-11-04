@@ -1,5 +1,7 @@
 // ABOUTME: Pure state machine for the /tool-advisor on|off toggle — session-scoped enable/disable.
 // ABOUTME: Default ON when configured (models.json has entry); refuses 'on' when not configured.
+// ABOUTME: Fail-open: if the reviewer is unavailable (timeout, API error, parse failure), the gate
+// ABOUTME: does NOT block — the tool call passes through unchanged.
 
 export interface ToggleState {
 	/** Whether the gate fires on tool calls this session. */
@@ -24,6 +26,9 @@ const NOT_CONFIGURED_MESSAGE =
  * Default to ON when the user has configured a model — the entry is a signal
  * of intent. Stay OFF when unconfigured, so removing the entry is a clean way
  * to permanently disable without code changes.
+ *
+ * Fail-open: even when enabled, the gate never blocks if the reviewer is
+ * unavailable. See tool-advisor-runner.ts → reviewToolCall → failOpen().
  */
 export function initialToggleState(configured: boolean): ToggleState {
 	return { enabled: configured, configured };

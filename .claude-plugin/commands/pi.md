@@ -10,4 +10,4 @@ Run the bridge with the user's arguments (modes **plan**, **spec**, **team**, **
 node scripts/pi-agent-orchestrator.mjs $ARGUMENTS
 ```
 
-The bridge supports **dispatch** (single agent), **batch** (parallel agents), and **chain** (sequential chain execution). See `skills/pi-agent-orchestrator/SKILL.md` for full flags and examples.
+The bridge supports **dispatch** (single agent), **batch** (parallel agents), and **chain** (sequential chain execution). Run `node scripts/pi-agent-orchestrator.mjs inspect` for available agents, chains, and examples.

@@ -415,10 +415,21 @@ export default function (pi: ExtensionAPI) {
 						);
 						const taskBg = "\x1b[48;5;236m";
 						const taskReset = "\x1b[0m";
-						const emptyPad = taskBg + padRight("", width) + taskReset;
+						// Pad to full width while re-asserting the bg before the trailing
+						// spaces. The rendered line content ends with a full \x1b[0m reset
+						// (truncateToWidth emits one), which clears the bg-236 fill — so any
+						// spaces appended after it would render with the terminal bg, giving
+						// the widget a ragged right edge. Re-applying taskBg before the pad
+						// keeps the gray box solid across the whole width.
+						const padBg = (l: string): string => {
+							const vis = visibleWidth(l);
+							if (vis >= width) return truncateToWidth(l, width, "");
+							return l + taskBg + " ".repeat(width - vis);
+						};
+						const emptyPad = taskBg + padBg("") + taskReset;
 						const allLines: string[] = [];
 						allLines.push(emptyPad);
-						allLines.push(...taskLines.map(l => taskBg + padRight(l, width) + taskReset));
+						allLines.push(...taskLines.map(l => taskBg + padBg(l) + taskReset));
 						allLines.push(emptyPad);
 
 						text.setText(allLines.join("\n"));

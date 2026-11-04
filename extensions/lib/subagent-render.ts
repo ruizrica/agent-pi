@@ -1,6 +1,7 @@
 // ABOUTME: Pure render logic for subagent widget — title, summary, border count
 // ABOUTME: Extracted from subagent-widget.ts for testability
 
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { hideToolkitWidgetMetadata } from "./toolkit-cli.ts";
 
 export interface SubRenderState {
@@ -95,10 +96,13 @@ export function renderSubagentWidget(
 	);
 
 	// Line 2: summary (current activity) or task preview as fallback.
+	// Use the available widget width instead of a fixed character cap so the
+	// preview fills the horizontal space and only truncates when it genuinely
+	// overflows. Account for the box's 1-col padding each side plus the 2-space
+	// indent on this line.
 	const detail = state.summary || state.task;
-	const detailPreview = detail.length > 40
-		? detail.slice(0, 37) + "..."
-		: detail;
+	const detailMaxWidth = Math.max(10, width - 4);
+	const detailPreview = truncateToWidth(detail, detailMaxWidth, "...");
 	lines.push(`  ${detailPreview}`);
 
 	if (state.status === "error") {

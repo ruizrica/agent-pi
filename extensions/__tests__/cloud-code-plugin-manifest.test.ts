@@ -39,13 +39,4 @@ describe("Cloud Code plugin packaging", () => {
 		expect(marketplace.plugins[0].source).toBe("./");
 	});
 
-	it("ships a skill whose frontmatter matches its directory", () => {
-		const skillPath = join(repoRoot, "skills", "pi-agent-orchestrator", "SKILL.md");
-		const raw = readFileSync(skillPath, "utf-8");
-		const frontmatter = parseFrontmatter(raw);
-
-		expect(frontmatter.name).toBe("pi-agent-orchestrator");
-		expect(frontmatter.description).toBeTruthy();
-		expect(frontmatter.compatibility).toContain("Claude Code");
-	});
 });

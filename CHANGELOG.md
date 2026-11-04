@@ -6,7 +6,7 @@ All notable changes to agent-pi will be documented in this file.
 
 ### Toolkit + Pi Unification (2026-06-10)
 
-- agent-toolkit is now the canonical home for portable skills; pi consumes it as a user package (pi manifest in toolkit `package.json`). 22 portable skills migrated out of `skills/` (quarantined in `skills/.migrated/`), 13 off-mission skills retired (`skills/.retired/`): 11 Expo/RN + nano-banana + slack-web.
+- Agent Pi now uses `skills/` as the main categorized public skills folder (`core/`, `workflows/`, `engineering/`, `design/`, `testing/`, `automation/`). Retired/quarantined skill folders were removed from active discovery, `/Users/ricardo/Desktop/build` was installed as `skills/engineering/build`, and redundant `pi-agent-orchestrator`, `agent-plan`, `agent-spec`, and Reco-specific skills were removed from the public registry.
 - Added `/onboard` — project doc-pack onboarding (AGENTS.md hub, CLAUDE.md pointer, DESIGN.md, STATE.md) with brownfield scan + absorb; single implementation in toolkit `onboard.sh`.
 - Added `extensions/claude-link.ts` — a2a-link v2 pi side: `claude_send` tool (cmd-mailbox async + `claude -p` sync with nesting guard) and session-start inbox surfacing.
 - Added `extensions/project-docs-guard.ts` — session-boundary doc-freshness check for doc-pack projects.

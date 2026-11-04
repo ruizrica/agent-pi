@@ -57,9 +57,11 @@ describe("slash command inventory", () => {
 		const entries = [...extensionCommandEntries(), ...markdownCommandEntries()];
 		const names = entries.map((entry) => entry.name).sort();
 
-		expect(names.filter((name) => name === "claude")).toEqual(["claude"]);
 		expect(names).toContain("claude-mode");
+		expect(names).not.toContain("claude");
 		expect(names).not.toContain("claudemode");
+		expect(names).not.toContain("qwen");
+		expect(names).not.toContain("gemma");
 	});
 
 	it("keeps consolidated command families behind canonical names", () => {

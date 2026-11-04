@@ -319,17 +319,17 @@ fi
 # ═══════════════════════════════════════════════════════════════════
 section "Skills"
 
-SKILL_COUNT=0
-for skill_dir in skills/*/; do
-    if [ -f "${skill_dir}SKILL.md" ] || [ -f "${skill_dir}SKILL.md.disabled" ]; then
-        SKILL_COUNT=$((SKILL_COUNT + 1))
-    fi
-done 2>/dev/null
+SKILL_COUNT=$(find skills -path 'skills/private' -prune -o -name "SKILL.md" -type f -print 2>/dev/null | wc -l | xargs)
+LOWERCASE_SKILL_COUNT=$(find skills -path 'skills/private' -prune -o -name "skill.md" -type f -print 2>/dev/null | wc -l | xargs)
 
 if [ "$SKILL_COUNT" -gt 0 ]; then
     pass "Skills available ${DIM}(${SKILL_COUNT})${NC}"
 else
     warn "No skill packs found"
+fi
+
+if [ "$LOWERCASE_SKILL_COUNT" -gt 0 ]; then
+    warn "Found lowercase skill.md files; rename to SKILL.md for portable discovery"
 fi
 
 # ═══════════════════════════════════════════════════════════════════

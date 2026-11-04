@@ -7,7 +7,6 @@ import { Text } from "@earendil-works/pi-tui";
 import { outputLine } from "./lib/output-box.ts";
 import { applyExtensionDefaults } from "./lib/themeMap.ts";
 import { MODES, nextMode, modeLabel, modeBgAnsi, modeTextAnsi, modeDisplayName, modeHintBgAnsi, modeHintText, modeHintTextAnsi, DEFAULT_MODE_OVERLAY, type Mode, type ModeOverlayState } from "./lib/mode-cycler-logic.ts";
-import { checkGemmaHealth, checkQwenHealth } from "./lmstudio-overlay.ts";
 import { buildPlanPrompt, buildSpecPrompt, buildNormalPrompt, buildInvestigatePrompt, buildDebugPrompt, buildGoalPrompt, buildImplementPrompt } from "./lib/mode-prompts.ts";
 import { writeFileSync } from "fs";
 import { persistModeHintsEnabled, resolveModeHintsEnabled } from "./lib/mode-hints-settings.ts";
@@ -285,90 +284,6 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ── /mode command ─────────────────────────────
-
-	pi.registerCommand("claude", {
-		description: "Toggle Claude overlay for the current operational mode",
-		handler: async (args, ctx) => {
-			const arg = args.trim().toLowerCase();
-			if (["on", "enable", "enabled"].includes(arg)) {
-				setClaudeOverlay(true, ctx);
-				ctx.ui.notify(`Claude overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
-				return;
-			}
-			if (["off", "disable", "disabled"].includes(arg)) {
-				setClaudeOverlay(false, ctx);
-				ctx.ui.notify("Claude overlay disabled");
-				return;
-			}
-			if (arg && arg !== "toggle") {
-				ctx.ui.notify("Usage: /claude [on|off|toggle]", "error");
-				return;
-			}
-			const next = !currentOverlay.claude;
-			setClaudeOverlay(next, ctx);
-			ctx.ui.notify(next ? `Claude overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Claude overlay disabled");
-		},
-	});
-
-	pi.registerCommand("gemma", {
-		description: "Toggle Gemma overlay — route builders to the configured local LM Studio Gemma model",
-		handler: async (args, ctx) => {
-			const arg = args.trim().toLowerCase();
-			if (["on", "enable", "enabled"].includes(arg)) {
-				const ok = await checkGemmaHealth(ctx);
-				if (!ok) return;
-				setGemmaOverlay(true, ctx);
-				ctx.ui.notify(`Gemma overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
-				return;
-			}
-			if (["off", "disable", "disabled"].includes(arg)) {
-				setGemmaOverlay(false, ctx);
-				ctx.ui.notify("Gemma overlay disabled");
-				return;
-			}
-			if (arg && arg !== "toggle") {
-				ctx.ui.notify("Usage: /gemma [on|off|toggle]", "error");
-				return;
-			}
-			const next = !currentOverlay.gemma;
-			if (next) {
-				const ok = await checkGemmaHealth(ctx);
-				if (!ok) return;
-			}
-			setGemmaOverlay(next, ctx);
-			ctx.ui.notify(next ? `Gemma overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Gemma overlay disabled");
-		},
-	});
-
-	pi.registerCommand("qwen", {
-		description: "Toggle Qwen overlay — route builders to the configured local LM Studio Qwen model",
-		handler: async (args, ctx) => {
-			const arg = args.trim().toLowerCase();
-			if (["on", "enable", "enabled"].includes(arg)) {
-				const ok = await checkQwenHealth(ctx);
-				if (!ok) return;
-				setQwenOverlay(true, ctx);
-				ctx.ui.notify(`Qwen overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}`);
-				return;
-			}
-			if (["off", "disable", "disabled"].includes(arg)) {
-				setQwenOverlay(false, ctx);
-				ctx.ui.notify("Qwen overlay disabled");
-				return;
-			}
-			if (arg && arg !== "toggle") {
-				ctx.ui.notify("Usage: /qwen [on|off|toggle]", "error");
-				return;
-			}
-			const next = !currentOverlay.qwen;
-			if (next) {
-				const ok = await checkQwenHealth(ctx);
-				if (!ok) return;
-			}
-			setQwenOverlay(next, ctx);
-			ctx.ui.notify(next ? `Qwen overlay enabled${currentMode === "NORMAL" ? "" : ` for ${modeDisplayName(currentMode, currentOverlay)}`}` : "Qwen overlay disabled");
-		},
-	});
 
 	pi.registerCommand("mode", {
 		description: "Set mode: /mode or /mode <MODE>",

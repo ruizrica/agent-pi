@@ -7,14 +7,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-TARGETS=(
+CANDIDATE_TARGETS=(
   "prompts/cmd"
-  "skills/cmd"
-  "skills/pi"
+  "skills/core/cmd"
+  "skills/core/pi"
   "COMMANDER_AGENTS.md"
   "CLAUDE.md"
   "AGENTS.md"
 )
+
+TARGETS=()
+for target in "${CANDIDATE_TARGETS[@]}"; do
+  if [ -e "$target" ]; then
+    TARGETS+=("$target")
+  fi
+done
 
 # Agent-facing docs should not teach agents to invoke the raw backend directly.
 # Keep implementation-only backend references inside scripts/cmd and scripts/cmd.test.sh instead.

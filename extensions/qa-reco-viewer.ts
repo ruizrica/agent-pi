@@ -425,7 +425,7 @@ function buildQARecoRunInstructions(config: SetupConfig): string {
 		const platformArg = config.platform === "both" ? "both" : config.platform;
 		e2eInstruction = [
 			`Run public Reco pre-release flows for: ${selectedLabels}.`,
-			`Command: bash /Users/ricardo/Workshop/GitHub/reco/mobile/.pi/skills/qa-automation/qa-test-flows/run-all.sh reco-prerelease --platform ${platformArg}${sectionArg}`,
+			`Command: bash skills/testing/qa-automation/qa-test-flows/run-all.sh reco-prerelease --platform ${platformArg}${sectionArg}`,
 		].join("\n");
 	}
 
@@ -440,7 +440,7 @@ function buildQARecoRunInstructions(config: SetupConfig): string {
 		"Instructions:",
 		`1. ${unitInstruction}`,
 		`2. ${e2eInstruction}`,
-		"3. Assemble results with: node skills/qa-automation/qa-test-flows/lib/build-qa-reco-report.mjs --input /tmp/qa-tests --output /tmp/qa-tests/qa-reco-prerelease-report.json",
+		"3. Assemble results with: node skills/testing/qa-automation/qa-test-flows/lib/build-qa-reco-report.mjs --input /tmp/qa-tests --output /tmp/qa-tests/qa-reco-prerelease-report.json",
 		"4. Call show_qa_reco with mode='report' and report_data set to the assembled QAReportData JSON.",
 		"5. If auth/backend/simulator dependencies block liking or commenting, mark those checks blocked with concrete reasons rather than passing them.",
 	].join("\n");

@@ -283,12 +283,12 @@
           "id": "rem-eco-qa-skill",
           "priority": "P3",
           "effort": "XS",
-          "title": "Add SKILL.md to qa-automation (or move it out of skills/)",
-          "rationale": "qa-automation/ is 252KB but has README.md instead of SKILL.md, so the standard skill resolver can't find it.",
-          "action": "Either create a SKILL.md pointing to the README, or relocate qa-automation outside skills/ if it isn't actually a skill.",
+          "title": "Document qa-automation as a nested skill package",
+          "rationale": "qa-automation is a package container with nested SKILL.md files under the categorized testing skills tree.",
+          "action": "Keep qa-automation documented as a container and validate its nested skill roots through the skills inventory test.",
           "owner_hint": "qa-automation maintainer",
           "files": [
-            "skills/qa-automation/"
+            "skills/testing/qa-automation/"
           ]
         },
         {

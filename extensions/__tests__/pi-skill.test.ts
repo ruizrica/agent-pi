@@ -20,7 +20,7 @@ function parseFrontmatter(raw: string): Record<string, string> {
 	return fields;
 }
 
-const skillPath = join(repoRoot, "skills", "pi", "SKILL.md");
+const skillPath = join(repoRoot, "skills", "core", "pi", "SKILL.md");
 
 describe("/pi skill", () => {
 	const raw = readFileSync(skillPath, "utf-8");
